@@ -6,36 +6,34 @@
 <meta name="theme-color" content="#0b0b12">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>학원 진도 관리 v4</title>
+<title>학원 진도 관리</title>
 <link rel="manifest" href="manifest.json">
-<!-- Google Fonts -->
-<link id="gfont" rel="stylesheet"
-  href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Nanum+Gothic:wght@400;700;800&family=Nanum+Myeongjo:wght@400;700;800&family=IBM+Plex+Sans+KR:wght@300;400;500;700&display=swap">
-<!-- Firebase SDK -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Nanum+Gothic:wght@400;700;800&family=Nanum+Myeongjo:wght@400;700;800&family=IBM+Plex+Sans+KR:wght@300;400;500;700&display=swap">
+<!-- Firebase compat SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-<!-- SheetJS (Excel) -->
+<!-- SheetJS -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<!-- SPLASH -->
+<!-- SPLASH: 항상 먼저 보이고, 앱 준비 후 사라짐 -->
 <div id="splash">
   <div class="spl">
     <div class="spl-ico">📚</div>
     <div class="spl-ttl">학원 진도 관리</div>
-    <div class="spl-sub">ACADEMY PROGRESS v4</div>
+    <div class="spl-sub">ACADEMY PROGRESS v5</div>
+    <div id="spl-status" style="margin-top:16px;font-size:11px;color:var(--tx3)">연결 중...</div>
   </div>
 </div>
 
-<!-- SHARE VIEW (read-only) -->
+<!-- SHARE VIEW -->
 <div id="share-view"></div>
 
-<!-- APP -->
+<!-- APP (초기에 숨김, 준비 완료 후 표시) -->
 <div id="app" class="hidden">
 
-  <!-- Bottom Nav -->
   <nav class="bnav">
     <button class="bni on" data-pg="operate" onclick="App.go('operate')">
       <span class="ico">📅</span>운용
@@ -45,7 +43,7 @@
     </button>
   </nav>
 
-  <!-- ══ 운용 PAGE ══ -->
+  <!-- 운용 PAGE -->
   <div id="page-operate" class="page on">
     <div class="ph">
       <div class="phl">
@@ -56,8 +54,8 @@
         </div>
       </div>
       <div class="phr">
-        <!-- 달력 팝업 버튼 -->
-        <button class="cal-btn" onclick="App.openCalendar()" title="날짜 선택">
+        <div id="sync-dot" title="동기화 상태" style="width:8px;height:8px;border-radius:50%;background:var(--tx3);transition:background .4s;margin-right:4px" title=""></div>
+        <button class="cal-btn" onclick="App.openCal()" title="날짜 선택">
           <span class="cal-ico">📆</span><span>날짜</span>
         </button>
       </div>
@@ -84,7 +82,7 @@
     <div class="days-scroll" id="days-scroll"></div>
   </div>
 
-  <!-- ══ 관리 PAGE ══ -->
+  <!-- 관리 PAGE -->
   <div id="page-manage" class="page">
     <div class="ph">
       <div class="phl">
@@ -120,7 +118,7 @@
     </div>
   </div>
 
-</div>
+</div><!-- /app -->
 
 <!-- LOGIN -->
 <div id="login-gate" class="ov hidden">
@@ -145,11 +143,11 @@
   </div>
 </div>
 
-<!-- MODAL: 반 추가/수정 -->
+<!-- MODAL: 반 -->
 <div id="modal-cls" class="ov hidden">
   <div class="sh">
     <div class="sh-handle"></div>
-    <div class="sh-title" id="mcls-title">반 추가</div>
+    <div class="sh-title" id="mcls-t">반 추가</div>
     <div class="f-grp">
       <label class="f-lbl">반 이름</label>
       <input class="f-inp" id="f-cname" placeholder="예: H1, T2" maxlength="10">
@@ -175,7 +173,7 @@
 <div id="modal-acc" class="ov hidden">
   <div class="sh">
     <div class="sh-handle"></div>
-    <div class="sh-title" id="macc-title">계정 추가</div>
+    <div class="sh-title" id="macc-t">계정 추가</div>
     <div class="f-grp">
       <label class="f-lbl">아이디</label>
       <input class="f-inp" id="f-aid" placeholder="아이디" maxlength="20">
@@ -197,12 +195,10 @@
     <div class="cal-handle"></div>
     <div class="cal-hdr">
       <button class="cal-nav-btn" onclick="App.calPrev()">‹</button>
-      <div>
-        <div class="cal-hdr-title" id="cal-title"></div>
-      </div>
+      <div class="cal-hdr-title" id="cal-title"></div>
       <div style="display:flex;gap:6px">
         <button class="cal-today-btn" onclick="App.calToday()">오늘</button>
-        <button class="cal-nav-btn" onclick="App.calNext()">›</button>
+        <button class="cal-nav-btn"   onclick="App.calNext()">›</button>
       </div>
     </div>
     <div class="cal-weekdays">
@@ -215,9 +211,8 @@
   </div>
 </div>
 
-<!-- Hidden file input for Excel import -->
-<input type="file" id="excel-import-input" accept=".xlsx,.xls" style="display:none"
-       onchange="App.handleImport(this)">
+<!-- 숨겨진 파일 입력 -->
+<input type="file" id="xl-in" accept=".xlsx,.xls" style="display:none" onchange="App.handleImport(this)">
 
 <!-- TOAST -->
 <div id="toast" class="hidden"></div>
