@@ -3,35 +3,32 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<meta name="theme-color" content="#0b0b12">
+<meta name="theme-color" content="#f8f9fc">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>학원 진도 관리</title>
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Nanum+Gothic:wght@400;700;800&family=Nanum+Myeongjo:wght@400;700;800&family=IBM+Plex+Sans+KR:wght@300;400;500;700&display=swap">
-<!-- Firebase compat SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-<!-- SheetJS -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<!-- SPLASH: 항상 먼저 보이고, 앱 준비 후 사라짐 -->
 <div id="splash">
   <div class="spl">
     <div class="spl-ico">📚</div>
     <div class="spl-ttl">학원 진도 관리</div>
-    <div class="spl-sub">ACADEMY PROGRESS v5</div>
-    <div id="spl-status" style="margin-top:16px;font-size:11px;color:var(--tx3)">연결 중...</div>
+    <div class="spl-sub">ACADEMY PROGRESS v6</div>
+    <div class="spl-st" id="spl-st">연결 중...</div>
   </div>
 </div>
 
-<!-- SHARE VIEW -->
+<!-- 공유 뷰 -->
 <div id="share-view"></div>
 
-<!-- APP (초기에 숨김, 준비 완료 후 표시) -->
+<!-- 앱 -->
 <div id="app" class="hidden">
 
   <nav class="bnav">
@@ -49,14 +46,18 @@
       <div class="phl">
         <div class="badge">진도</div>
         <div>
-          <div class="ph-title">수업 진도 운용</div>
+          <div class="ph-title">
+            수업 진도 운용
+            <span id="admin-mode-badge" class="admin-badge hidden">🔑 관리자</span>
+          </div>
           <div class="ph-sub" id="op-range">—</div>
         </div>
       </div>
       <div class="phr">
-        <div id="sync-dot" title="동기화 상태" style="width:8px;height:8px;border-radius:50%;background:var(--tx3);transition:background .4s;margin-right:4px" title=""></div>
+        <div id="sync-dot" style="width:8px;height:8px;border-radius:50%;background:var(--tx3);transition:background .4s;flex-shrink:0"></div>
+        <button id="op-share-btn" class="ibtn hidden" onclick="App.shareCurrentClass()" title="진도 현황 공유">🔗</button>
         <button class="cal-btn" onclick="App.openCal()" title="날짜 선택">
-          <span class="cal-ico">📆</span><span>날짜</span>
+          <span>📆</span><span>날짜</span>
         </button>
       </div>
     </div>
@@ -101,7 +102,7 @@
       </div>
     </div>
 
-    <div class="mg-tabs">
+    <div class="mg-tabs" id="mg-tabs">
       <button class="mg-tab on" onclick="App.mgTab('classes')">📋 반</button>
       <button class="mg-tab"   onclick="App.mgTab('accounts')">👤 계정</button>
       <button class="mg-tab"   onclick="App.mgTab('theme')">🎨 테마</button>
@@ -118,13 +119,13 @@
     </div>
   </div>
 
-</div><!-- /app -->
+</div>
 
-<!-- LOGIN -->
+<!-- 로그인 -->
 <div id="login-gate" class="ov hidden">
   <div class="sh">
     <div class="sh-handle"></div>
-    <div class="sh-title">🔐 관리자 로그인</div>
+    <div class="sh-title">🔐 로그인</div>
     <div class="sh-sub">관리 메뉴는 로그인이 필요합니다</div>
     <div class="sh-err" id="li-err"></div>
     <div class="f-grp">
@@ -149,8 +150,8 @@
     <div class="sh-handle"></div>
     <div class="sh-title" id="mcls-t">반 추가</div>
     <div class="f-grp">
-      <label class="f-lbl">반 이름</label>
-      <input class="f-inp" id="f-cname" placeholder="예: H1, T2" maxlength="10">
+      <label class="f-lbl">반 이름 <span style="color:var(--red)">*</span></label>
+      <input class="f-inp" id="f-cname" placeholder="예: H1, T2 (중복 불가)" maxlength="10">
     </div>
     <div class="f-grp">
       <label class="f-lbl">수업 요일</label>
@@ -182,6 +183,13 @@
       <label class="f-lbl">비밀번호</label>
       <input class="f-inp" id="f-apw" type="password" placeholder="비밀번호" maxlength="30">
     </div>
+    <div class="f-grp">
+      <label class="f-lbl">역할</label>
+      <select class="f-sel" id="f-arole">
+        <option value="admin">관리자 (admin) — 모든 기능</option>
+        <option value="operator">운용자 (operator) — 운용화면 진도 입력만</option>
+      </select>
+    </div>
     <div class="sh-acts">
       <button class="btn-x"  onclick="App.closeModal('acc')">취소</button>
       <button class="btn-ok" onclick="App.saveAccount()">저장</button>
@@ -189,7 +197,7 @@
   </div>
 </div>
 
-<!-- CALENDAR POPUP -->
+<!-- CALENDAR -->
 <div id="cal-ov" class="cal-popup-ov hidden" onclick="App.closeCal(event)">
   <div class="cal-popup" onclick="event.stopPropagation()">
     <div class="cal-handle"></div>
@@ -211,10 +219,7 @@
   </div>
 </div>
 
-<!-- 숨겨진 파일 입력 -->
 <input type="file" id="xl-in" accept=".xlsx,.xls" style="display:none" onchange="App.handleImport(this)">
-
-<!-- TOAST -->
 <div id="toast" class="hidden"></div>
 
 <script src="firebase-config.js"></script>
