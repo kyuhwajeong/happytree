@@ -2,152 +2,227 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#111118">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<meta name="theme-color" content="#0b0b12">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>학원 진도 관리</title>
+<title>학원 진도 관리 v4</title>
 <link rel="manifest" href="manifest.json">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+<!-- Google Fonts -->
+<link id="gfont" rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Nanum+Gothic:wght@400;700;800&family=Nanum+Myeongjo:wght@400;700;800&family=IBM+Plex+Sans+KR:wght@300;400;500;700&display=swap">
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<!-- SheetJS (Excel) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<!-- ── SPLASH ── -->
+<!-- SPLASH -->
 <div id="splash">
-  <div class="splash-inner">
-    <div class="splash-logo">📚</div>
-    <div class="splash-title">학원 진도 관리</div>
-    <div class="splash-sub">Academy Progress Manager</div>
+  <div class="spl">
+    <div class="spl-ico">📚</div>
+    <div class="spl-ttl">학원 진도 관리</div>
+    <div class="spl-sub">ACADEMY PROGRESS v4</div>
   </div>
 </div>
 
-<!-- ── APP SHELL ── -->
+<!-- SHARE VIEW (read-only) -->
+<div id="share-view"></div>
+
+<!-- APP -->
 <div id="app" class="hidden">
 
-  <!-- BOTTOM NAV -->
-  <nav class="bottom-nav">
-    <button class="nav-item active" data-page="operate" onclick="App.navigate('operate')">
-      <span class="nav-icon">📅</span>
-      <span class="nav-label">운용</span>
+  <!-- Bottom Nav -->
+  <nav class="bnav">
+    <button class="bni on" data-pg="operate" onclick="App.go('operate')">
+      <span class="ico">📅</span>운용
     </button>
-    <button class="nav-item" data-page="manage" onclick="App.navigate('manage')">
-      <span class="nav-icon">⚙️</span>
-      <span class="nav-label">관리</span>
+    <button class="bni" data-pg="manage" onclick="App.go('manage')">
+      <span class="ico">⚙️</span>관리
     </button>
   </nav>
 
-  <!-- ════ PAGE: 운용 ════ -->
-  <div id="page-operate" class="page active">
-
-    <div class="page-header">
-      <div class="header-left">
-        <div class="app-badge">진도</div>
+  <!-- ══ 운용 PAGE ══ -->
+  <div id="page-operate" class="page on">
+    <div class="ph">
+      <div class="phl">
+        <div class="badge">진도</div>
         <div>
-          <div class="page-title">수업 진도 운용</div>
-          <div class="page-sub" id="op-week-range">주차 정보 로딩중...</div>
+          <div class="ph-title">수업 진도 운용</div>
+          <div class="ph-sub" id="op-range">—</div>
         </div>
       </div>
-      <div class="header-right">
-        <button class="icon-btn" id="save-btn" onclick="App.saveProgress()">
-          <span>💾</span>
+      <div class="phr">
+        <!-- 달력 팝업 버튼 -->
+        <button class="cal-btn" onclick="App.openCalendar()" title="날짜 선택">
+          <span class="cal-ico">📆</span><span>날짜</span>
         </button>
       </div>
     </div>
 
-    <!-- Class selector -->
-    <div class="class-selector-wrap">
-      <div class="class-selector-label">반 선택</div>
-      <div class="class-chips" id="op-class-chips"></div>
+    <div class="chip-bar">
+      <div class="chip-lbl">반 선택</div>
+      <div class="chip-row" id="op-chips"></div>
     </div>
 
-    <!-- Week navigator -->
-    <div class="week-nav">
-      <button class="week-btn" onclick="App.prevWeek()">
-        <span>‹</span><span class="btn-text">이전 주</span>
+    <div class="wk-nav">
+      <button class="wk-btn" onclick="App.prevWeek()">
+        <span class="wk-arr">‹</span><span>이전</span>
       </button>
-      <div class="week-center">
-        <div class="week-num" id="op-week-num">— 주차</div>
-        <div class="week-month" id="op-week-month"></div>
+      <div class="wk-c">
+        <div class="wk-num" id="op-wknum">—</div>
+        <div class="wk-mo"  id="op-wkmo"></div>
       </div>
-      <button class="week-btn" onclick="App.nextWeek()">
-        <span class="btn-text">다음 주</span><span>›</span>
+      <button class="wk-btn" onclick="App.nextWeek()">
+        <span>다음</span><span class="wk-arr">›</span>
       </button>
     </div>
 
-    <!-- Day columns -->
-    <div class="days-container" id="days-container">
-      <div class="empty-state">반을 선택해주세요</div>
-    </div>
-
+    <div class="days-scroll" id="days-scroll"></div>
   </div>
 
-  <!-- ════ PAGE: 관리 ════ -->
+  <!-- ══ 관리 PAGE ══ -->
   <div id="page-manage" class="page">
-
-    <div class="page-header">
-      <div class="header-left">
-        <div class="app-badge" style="background:var(--orange)">관리</div>
+    <div class="ph">
+      <div class="phl">
+        <div class="badge" style="background:var(--orange)">관리</div>
         <div>
-          <div class="page-title">반 · 교재 관리</div>
-          <div class="page-sub">반 정보와 교재를 설정하세요</div>
+          <div class="ph-title">반 · 교재 관리</div>
+          <div class="ph-sub" id="mg-sess">로그인 필요</div>
         </div>
       </div>
-      <button class="add-class-btn" onclick="App.openClassModal()">+ 반 추가</button>
-    </div>
-
-    <div class="manage-list" id="manage-list">
-      <div class="empty-state">등록된 반이 없습니다.<br>+ 반 추가 버튼을 눌러 시작하세요.</div>
-    </div>
-
-  </div>
-
-</div>
-
-<!-- ════ MODAL: 반 추가/수정 ════ -->
-<div id="modal-overlay" class="modal-overlay hidden" onclick="App.closeModal(event)">
-  <div class="modal-sheet" onclick="event.stopPropagation()">
-    <div class="modal-handle"></div>
-    <div class="modal-title" id="modal-title">반 추가</div>
-
-    <div class="form-group">
-      <label class="form-label">반 이름</label>
-      <input class="form-input" id="f-class-name" placeholder="예: H1, T2, A반..." maxlength="10">
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">수업 요일 선택</label>
-      <div class="day-check-group" id="f-days">
-        <label class="day-check"><input type="checkbox" value="월"><span>월</span></label>
-        <label class="day-check"><input type="checkbox" value="화"><span>화</span></label>
-        <label class="day-check"><input type="checkbox" value="수"><span>수</span></label>
-        <label class="day-check"><input type="checkbox" value="목"><span>목</span></label>
-        <label class="day-check"><input type="checkbox" value="금"><span>금</span></label>
+      <div class="phr">
+        <div class="vtog">
+          <button class="vt" id="vt-l" title="리스트" onclick="App.setView('list')">☰</button>
+          <button class="vt on" id="vt-g" title="그리드" onclick="App.setView('grid')">⊞</button>
+        </div>
+        <button class="ibtn" id="mg-logout" onclick="App.logout()" style="display:none" title="로그아웃">🚪</button>
       </div>
     </div>
 
-    <div class="form-group">
-      <label class="form-label">주교재</label>
-      <div class="book-list-form" id="f-main-books"></div>
-      <button class="add-book-btn" onclick="App.addBookField('main')">+ 주교재 추가</button>
+    <div class="mg-tabs">
+      <button class="mg-tab on" onclick="App.mgTab('classes')">📋 반</button>
+      <button class="mg-tab"   onclick="App.mgTab('accounts')">👤 계정</button>
+      <button class="mg-tab"   onclick="App.mgTab('theme')">🎨 테마</button>
+      <button class="mg-tab"   onclick="App.mgTab('io')">📦 백업</button>
+      <button class="mg-tab"   onclick="App.mgTab('share')">🔗 공유</button>
     </div>
 
-    <div class="form-group">
-      <label class="form-label">부교재</label>
-      <div class="book-list-form" id="f-sub-books"></div>
-      <button class="add-book-btn" onclick="App.addBookField('sub')">+ 부교재 추가</button>
+    <div class="mg-body">
+      <div class="mg-sec" id="mg-classes"></div>
+      <div class="mg-sec hidden" id="mg-accounts"></div>
+      <div class="mg-sec hidden" id="mg-theme"></div>
+      <div class="mg-sec hidden" id="mg-io"></div>
+      <div class="mg-sec hidden" id="mg-share"></div>
     </div>
+  </div>
 
-    <div class="modal-actions">
-      <button class="btn-cancel" onclick="App.closeModal()">취소</button>
-      <button class="btn-save-modal" onclick="App.saveClass()">저장</button>
+</div>
+
+<!-- LOGIN -->
+<div id="login-gate" class="ov hidden">
+  <div class="sh">
+    <div class="sh-handle"></div>
+    <div class="sh-title">🔐 관리자 로그인</div>
+    <div class="sh-sub">관리 메뉴는 로그인이 필요합니다</div>
+    <div class="sh-err" id="li-err"></div>
+    <div class="f-grp">
+      <label class="f-lbl">아이디</label>
+      <input class="f-inp" id="li-id" placeholder="아이디" autocomplete="username">
+    </div>
+    <div class="f-grp">
+      <label class="f-lbl">비밀번호</label>
+      <input class="f-inp" id="li-pw" type="password" placeholder="비밀번호"
+             autocomplete="current-password" onkeydown="if(event.key==='Enter')App.doLogin()">
+    </div>
+    <div class="sh-acts">
+      <button class="btn-x"  onclick="App.cancelLogin()">취소</button>
+      <button class="btn-ok" onclick="App.doLogin()">로그인</button>
     </div>
   </div>
 </div>
 
-<!-- ════ TOAST ════ -->
-<div id="toast" class="toast hidden"></div>
+<!-- MODAL: 반 추가/수정 -->
+<div id="modal-cls" class="ov hidden">
+  <div class="sh">
+    <div class="sh-handle"></div>
+    <div class="sh-title" id="mcls-title">반 추가</div>
+    <div class="f-grp">
+      <label class="f-lbl">반 이름</label>
+      <input class="f-inp" id="f-cname" placeholder="예: H1, T2" maxlength="10">
+    </div>
+    <div class="f-grp">
+      <label class="f-lbl">수업 요일</label>
+      <div class="day-cks">
+        <label class="day-ck"><input type="checkbox" value="월"><span>월</span></label>
+        <label class="day-ck"><input type="checkbox" value="화"><span>화</span></label>
+        <label class="day-ck"><input type="checkbox" value="수"><span>수</span></label>
+        <label class="day-ck"><input type="checkbox" value="목"><span>목</span></label>
+        <label class="day-ck"><input type="checkbox" value="금"><span>금</span></label>
+      </div>
+    </div>
+    <div class="sh-acts">
+      <button class="btn-x"  onclick="App.closeModal('cls')">취소</button>
+      <button class="btn-ok" onclick="App.saveClass()">저장</button>
+    </div>
+  </div>
+</div>
 
+<!-- MODAL: 계정 -->
+<div id="modal-acc" class="ov hidden">
+  <div class="sh">
+    <div class="sh-handle"></div>
+    <div class="sh-title" id="macc-title">계정 추가</div>
+    <div class="f-grp">
+      <label class="f-lbl">아이디</label>
+      <input class="f-inp" id="f-aid" placeholder="아이디" maxlength="20">
+    </div>
+    <div class="f-grp">
+      <label class="f-lbl">비밀번호</label>
+      <input class="f-inp" id="f-apw" type="password" placeholder="비밀번호" maxlength="30">
+    </div>
+    <div class="sh-acts">
+      <button class="btn-x"  onclick="App.closeModal('acc')">취소</button>
+      <button class="btn-ok" onclick="App.saveAccount()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- CALENDAR POPUP -->
+<div id="cal-ov" class="cal-popup-ov hidden" onclick="App.closeCal(event)">
+  <div class="cal-popup" onclick="event.stopPropagation()">
+    <div class="cal-handle"></div>
+    <div class="cal-hdr">
+      <button class="cal-nav-btn" onclick="App.calPrev()">‹</button>
+      <div>
+        <div class="cal-hdr-title" id="cal-title"></div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="cal-today-btn" onclick="App.calToday()">오늘</button>
+        <button class="cal-nav-btn" onclick="App.calNext()">›</button>
+      </div>
+    </div>
+    <div class="cal-weekdays">
+      <div class="cal-wd">일</div><div class="cal-wd">월</div><div class="cal-wd">화</div>
+      <div class="cal-wd">수</div><div class="cal-wd">목</div><div class="cal-wd">금</div>
+      <div class="cal-wd">토</div>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
+    <button class="cal-close-btn" onclick="App.closeCal()">닫기</button>
+  </div>
+</div>
+
+<!-- Hidden file input for Excel import -->
+<input type="file" id="excel-import-input" accept=".xlsx,.xls" style="display:none"
+       onchange="App.handleImport(this)">
+
+<!-- TOAST -->
+<div id="toast" class="hidden"></div>
+
+<script src="firebase-config.js"></script>
 <script src="db.js"></script>
 <script src="app.js"></script>
 </body>
