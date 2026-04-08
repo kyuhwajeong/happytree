@@ -25,11 +25,8 @@
   </div>
 </div>
 
-<!-- 공유 뷰 (읽기 전용) -->
+<!-- ★ 공유 뷰: app과 완전 분리, z-index:500 -->
 <div id="share-view"></div>
-
-<!-- 버전 표시 -->
-<div class="ver-badge">v8.0</div>
 
 <!-- APP -->
 <div id="app" class="hidden">
@@ -41,36 +38,37 @@
     <button class="bni" data-pg="manage" onclick="App.go('manage')">
       <span class="ico">⚙️</span>관리
     </button>
+    <!-- ★ 버전 표시: 하단 nav 우하단 -->
+    <span class="ver-lbl">v9.0</span>
   </nav>
 
-  <!-- ★ 운용 PAGE — phr에 로그아웃 포함 (겹침 방지) -->
+  <!-- 운용 PAGE -->
   <div id="page-operate" class="page on">
     <div class="ph">
       <div class="phl">
         <div class="badge">진도</div>
         <div style="min-width:0">
-          <div class="ph-title" style="display:flex;align-items:center;flex-wrap:wrap;gap:2px">
+          <div class="ph-title">
             수업 진도 운용
             <span id="admin-badge" class="admin-badge hidden">🔑 관리자</span>
           </div>
+          <!-- ★ 날짜: 13px bold로 키움 -->
           <div class="ph-sub" id="op-range">—</div>
         </div>
       </div>
       <div class="phr">
         <div id="sync-dot" style="width:8px;height:8px;border-radius:50%;background:var(--tx3);transition:background .4s;flex-shrink:0"></div>
-        <!-- 공유: 관리자만 -->
         <button id="op-share-btn" class="ibtn hidden" onclick="App.shareCurrentClass()" title="진도 공유">🔗</button>
-        <!-- 달력 -->
         <button class="cal-btn" onclick="App.openCal()">
           <span>📆</span><span>날짜</span>
         </button>
-        <!-- ★ 로그아웃: 헤더 내 배치, 로그인 시만 표시 -->
         <button id="op-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>
       </div>
     </div>
 
     <div class="chip-bar">
       <div class="chip-lbl">반 선택</div>
+      <!-- ★ 한 줄 가로 스크롤 -->
       <div class="chip-row" id="op-chips"></div>
     </div>
 
@@ -90,7 +88,7 @@
     <div class="days-scroll" id="days-scroll"></div>
   </div>
 
-  <!-- ★ 관리 PAGE -->
+  <!-- 관리 PAGE -->
   <div id="page-manage" class="page">
     <div class="ph">
       <div class="phl">
@@ -105,7 +103,6 @@
           <button class="vt" id="vt-l" title="리스트" onclick="App.setView('list')">☰</button>
           <button class="vt on" id="vt-g" title="그리드" onclick="App.setView('grid')">⊞</button>
         </div>
-        <!-- ★ 로그아웃: 헤더 내 배치 -->
         <button id="mg-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>
       </div>
     </div>
@@ -127,7 +124,7 @@
     </div>
   </div>
 
-</div><!-- /app -->
+</div>
 
 <!-- LOGIN -->
 <div id="login-gate" class="ov hidden">
@@ -145,6 +142,11 @@
       <input class="f-inp" id="li-pw" type="password" placeholder="비밀번호"
              autocomplete="current-password" onkeydown="if(event.key==='Enter')App.doLogin()">
     </div>
+    <!-- ★ ID 기억하기 -->
+    <label class="remember-row">
+      <input type="checkbox" id="li-remember">
+      <span>아이디 기억하기</span>
+    </label>
     <div class="sh-acts">
       <button class="btn-x"  onclick="App.cancelLogin()">취소</button>
       <button class="btn-ok" onclick="App.doLogin()">로그인</button>
