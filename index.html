@@ -16,19 +16,23 @@
 </head>
 <body>
 
+<!-- SPLASH -->
 <div id="splash">
   <div class="spl">
     <div class="spl-ico">📚</div>
     <div class="spl-ttl">학원 진도 관리</div>
-    <div class="spl-sub">ACADEMY PROGRESS v6</div>
+    <div class="spl-sub">ACADEMY PROGRESS v7</div>
     <div class="spl-st" id="spl-st">연결 중...</div>
   </div>
 </div>
 
-<!-- 공유 뷰 -->
+<!-- 공유 뷰 (읽기 전용) -->
 <div id="share-view"></div>
 
-<!-- 앱 -->
+<!-- ★ 전역 로그아웃 버튼 (로그인 시 항상 표시) -->
+<button id="global-logout" class="ibtn red" onclick="App.logout()" title="로그아웃">🚪</button>
+
+<!-- APP -->
 <div id="app" class="hidden">
 
   <nav class="bnav">
@@ -48,15 +52,16 @@
         <div>
           <div class="ph-title">
             수업 진도 운용
-            <span id="admin-mode-badge" class="admin-badge hidden">🔑 관리자</span>
+            <span id="admin-badge" class="admin-badge hidden">🔑 관리자</span>
           </div>
           <div class="ph-sub" id="op-range">—</div>
         </div>
       </div>
       <div class="phr">
         <div id="sync-dot" style="width:8px;height:8px;border-radius:50%;background:var(--tx3);transition:background .4s;flex-shrink:0"></div>
-        <button id="op-share-btn" class="ibtn hidden" onclick="App.shareCurrentClass()" title="진도 현황 공유">🔗</button>
-        <button class="cal-btn" onclick="App.openCal()" title="날짜 선택">
+        <!-- ★ 공유버튼: 관리자 로그인 시만 표시 -->
+        <button id="op-share-btn" class="ibtn hidden" onclick="App.shareCurrentClass()" title="이번 주 진도 공유">🔗</button>
+        <button class="cal-btn" onclick="App.openCal()">
           <span>📆</span><span>날짜</span>
         </button>
       </div>
@@ -98,11 +103,11 @@
           <button class="vt" id="vt-l" title="리스트" onclick="App.setView('list')">☰</button>
           <button class="vt on" id="vt-g" title="그리드" onclick="App.setView('grid')">⊞</button>
         </div>
-        <button class="ibtn" id="mg-logout" onclick="App.logout()" style="display:none" title="로그아웃">🚪</button>
+        <!-- 관리 화면에도 로그아웃 여기 있지만 global-logout이 항상 커버 -->
       </div>
     </div>
 
-    <div class="mg-tabs" id="mg-tabs">
+    <div class="mg-tabs">
       <button class="mg-tab on" onclick="App.mgTab('classes')">📋 반</button>
       <button class="mg-tab"   onclick="App.mgTab('accounts')">👤 계정</button>
       <button class="mg-tab"   onclick="App.mgTab('theme')">🎨 테마</button>
@@ -119,14 +124,14 @@
     </div>
   </div>
 
-</div>
+</div><!-- /app -->
 
-<!-- 로그인 -->
+<!-- LOGIN -->
 <div id="login-gate" class="ov hidden">
   <div class="sh">
     <div class="sh-handle"></div>
     <div class="sh-title">🔐 로그인</div>
-    <div class="sh-sub">관리 메뉴는 로그인이 필요합니다</div>
+    <div class="sh-sub">계정을 입력해주세요</div>
     <div class="sh-err" id="li-err"></div>
     <div class="f-grp">
       <label class="f-lbl">아이디</label>
@@ -144,14 +149,14 @@
   </div>
 </div>
 
-<!-- MODAL: 반 -->
+<!-- MODAL: 반 추가/수정 -->
 <div id="modal-cls" class="ov hidden">
   <div class="sh">
     <div class="sh-handle"></div>
     <div class="sh-title" id="mcls-t">반 추가</div>
     <div class="f-grp">
-      <label class="f-lbl">반 이름 <span style="color:var(--red)">*</span></label>
-      <input class="f-inp" id="f-cname" placeholder="예: H1, T2 (중복 불가)" maxlength="10">
+      <label class="f-lbl">반 이름 <span style="color:var(--red)">*중복 불가</span></label>
+      <input class="f-inp" id="f-cname" placeholder="예: H1, T2" maxlength="10">
     </div>
     <div class="f-grp">
       <label class="f-lbl">수업 요일</label>
@@ -187,7 +192,7 @@
       <label class="f-lbl">역할</label>
       <select class="f-sel" id="f-arole">
         <option value="admin">관리자 (admin) — 모든 기능</option>
-        <option value="operator">운용자 (operator) — 운용화면 진도 입력만</option>
+        <option value="operator">운용자 (operator) — 진도 입력만</option>
       </select>
     </div>
     <div class="sh-acts">
