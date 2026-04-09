@@ -1,5 +1,5 @@
 /**
- * db.js — v10
+ * db.js — v9
  * 수정:
  * 1. _listenFB: Firebase 리스너가 로컬 monthBooks 덮어쓰지 않도록 merge
  * 2. getMonthBooks: 다음달(+1)만 자동복사, 그 이후는 빈 상태
@@ -8,8 +8,8 @@
  */
 const DB = (() => {
   const LS = {
-    classes:'hk10_cls', progress:'hk10_prog',
-    accounts:'hk10_acc', theme:'hk10_theme', session:'hk10_sess',
+    classes:'hk9_cls', progress:'hk9_prog',
+    accounts:'hk9_acc', theme:'hk9_theme', session:'hk9_sess',
   };
   const lg = k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
   const ls = (k,v) => { try { localStorage.setItem(k,JSON.stringify(v)); } catch {} };

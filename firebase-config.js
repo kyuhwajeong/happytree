@@ -64,8 +64,8 @@ const FireDB = (() => {
   }
 
   const P = {
-    root:'hakwon10', classes:'hakwon10/classes',
-    progress:'hakwon10/progress', accounts:'hakwon10/accounts', theme:'hakwon10/theme',
+    root:'hakwon6', classes:'hakwon6/classes',
+    progress:'hakwon6/progress', accounts:'hakwon6/accounts', theme:'hakwon6/theme',
   };
 
   return { init, ready, get, set, update, remove, listen, debounced, P };
