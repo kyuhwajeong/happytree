@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#f8f9fc">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<title>학원 진도 관리</title>
+<title>해피트리 영어학원 진도 관리</title>
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Nanum+Gothic:wght@400;700;800&family=Nanum+Myeongjo:wght@400;700;800&family=IBM+Plex+Sans+KR:wght@300;400;500;700&display=swap">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -16,16 +16,21 @@
 </head>
 <body>
 
+<!-- ★ Splash: 해피트리 영어학원 인트로 -->
 <div id="splash">
   <div class="spl">
-    <div class="spl-ico">📚</div>
-    <div class="spl-ttl">학원 진도 관리</div>
-    <div class="spl-sub">ACADEMY PROGRESS</div>
+    <div class="spl-logo-wrap">
+      <div class="spl-glow"></div>
+      <img id="spl-logo-img" class="spl-logo-img" src="" alt="해피트리">
+    </div>
+    <div class="spl-academy">해피트리 영어학원</div>
+    <div class="spl-title">진도 관리</div>
+    <div class="spl-sub">PROGRESS MANAGER</div>
     <div class="spl-st" id="spl-st">연결 중...</div>
   </div>
 </div>
 
-<!-- ★ 공유 뷰: app과 완전 분리, z-index:500 -->
+<!-- 공유 뷰 -->
 <div id="share-view"></div>
 
 <!-- APP -->
@@ -38,37 +43,37 @@
     <button class="bni" data-pg="manage" onclick="App.go('manage')">
       <span class="ico">⚙️</span>관리
     </button>
-    <!-- ★ 버전 표시: 하단 nav 우하단 -->
-    <span class="ver-lbl">v9.0</span>
+    <span class="ver-lbl">v10</span>
   </nav>
 
   <!-- 운용 PAGE -->
   <div id="page-operate" class="page on">
     <div class="ph">
       <div class="phl">
-        <div class="badge">진도</div>
+        <!-- ★ 로고 배지 (이미지) -->
+        <div class="logo-badge"><img id="op-logo" src="" alt=""></div>
         <div style="min-width:0">
+          <!-- ★ 타이틀: "수업 진도"로 변경 -->
           <div class="ph-title">
-            수업 진도 운용
+            수업 진도
             <span id="admin-badge" class="admin-badge hidden">🔑 관리자</span>
           </div>
-          <!-- ★ 날짜: 13px bold로 키움 -->
-          <div class="ph-sub" id="op-range">—</div>
+          <!-- ★ 날짜 + 달력 버튼 인라인 -->
+          <div class="ph-sub">
+            <span id="op-range">—</span>
+            <button class="cal-inline-btn" onclick="App.openCal()" title="날짜 선택">📆</button>
+          </div>
         </div>
       </div>
       <div class="phr">
         <div id="sync-dot" style="width:8px;height:8px;border-radius:50%;background:var(--tx3);transition:background .4s;flex-shrink:0"></div>
         <button id="op-share-btn" class="ibtn hidden" onclick="App.shareCurrentClass()" title="진도 공유">🔗</button>
-        <button class="cal-btn" onclick="App.openCal()">
-          <span>📆</span><span>날짜</span>
-        </button>
         <button id="op-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>
       </div>
     </div>
 
     <div class="chip-bar">
       <div class="chip-lbl">반 선택</div>
-      <!-- ★ 한 줄 가로 스크롤 -->
       <div class="chip-row" id="op-chips"></div>
     </div>
 
@@ -92,17 +97,15 @@
   <div id="page-manage" class="page">
     <div class="ph">
       <div class="phl">
-        <div class="badge" style="background:var(--orange)">관리</div>
+        <div class="badge" style="width:36px;height:36px;border-radius:10px;background:var(--orange);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#fff;flex-shrink:0">관리</div>
         <div>
           <div class="ph-title">반 · 교재 관리</div>
-          <div class="ph-sub" id="mg-sess">로그인 필요</div>
+          <div class="ph-sub" id="mg-sess" style="display:block;margin-top:2px">로그인 필요</div>
         </div>
       </div>
       <div class="phr">
-        <div class="vtog">
-          <button class="vt" id="vt-l" title="리스트" onclick="App.setView('list')">☰</button>
-          <button class="vt on" id="vt-g" title="그리드" onclick="App.setView('grid')">⊞</button>
-        </div>
+        <!-- ★ 단일 토글 버튼 -->
+        <button class="toggle-view-btn" id="toggle-view-btn" onclick="App.toggleView()" title="보기 전환">⊞</button>
         <button id="mg-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>
       </div>
     </div>
@@ -142,10 +145,10 @@
       <input class="f-inp" id="li-pw" type="password" placeholder="비밀번호"
              autocomplete="current-password" onkeydown="if(event.key==='Enter')App.doLogin()">
     </div>
-    <!-- ★ ID 기억하기 -->
+    <!-- ★ ID+PW 기억하기 -->
     <label class="remember-row">
       <input type="checkbox" id="li-remember">
-      <span>아이디 기억하기</span>
+      <span>아이디 · 비밀번호 기억하기</span>
     </label>
     <div class="sh-acts">
       <button class="btn-x"  onclick="App.cancelLogin()">취소</button>
@@ -234,6 +237,7 @@
 <div id="drag-ghost" class="drag-ghost hidden"></div>
 
 <script src="firebase-config.js"></script>
+<script src="logo.js"></script>
 <script src="db.js"></script>
 <script src="app.js"></script>
 </body>
