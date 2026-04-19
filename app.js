@@ -27,7 +27,7 @@ const App = (() => {
     {key:'IBM Plex Sans KR',label:'IBM Plex KR',sample:'가나다 Aa'},
   ];
   const LS_REM='hk10b_rem_id', LS_REM_PW='hk10b_rem_pw';
-  const AUTO_LOGOUT_MS=30*60*1000;
+  const AUTO_LOGOUT_MS=3*60*60*1000; // 3시간
 
   const S={
     page:'operate', mgTab:'classes',
@@ -49,7 +49,7 @@ const App = (() => {
     clearTimeout(_autoLogoutTimer);
     if(!DB.isLoggedIn())return;
     _autoLogoutTimer=setTimeout(()=>{
-      if(DB.isLoggedIn()){DB.clearSession();_refreshAuthUI();go('operate');_toast('⏰ 30분 자동 로그아웃');}
+      if(DB.isLoggedIn()){DB.clearSession();_refreshAuthUI();go('operate');_toast('⏰ 3시간 미사용으로 자동 로그아웃되었습니다');}
     },AUTO_LOGOUT_MS);
   }
 
@@ -75,7 +75,7 @@ const App = (() => {
       _applyTheme(DB.getTheme());
       DB.on('progress',_refreshShareProgress);
       DB.on('classes',()=>{if(_shareRenderData)_refreshShareProgress();});
-      _renderShareView(p.get('share'),p.get('wk'));
+      _renderShareView(p.get('share'),p.get('mon')); // ★ mon=날짜 파라미터
       return;
     }
 
@@ -280,6 +280,7 @@ const App = (() => {
       container.appendChild(card);
     });
     wrap.appendChild(container);
+    _initSwipe(); // ★ 스와이프 이벤트 등록
   }
 
   function _mkBookRow(b,btype,clsId,weekKey,dayName,saved,canEdit){
@@ -315,10 +316,28 @@ const App = (() => {
   function prevWeek(){S.monday=_addDays(S.monday,-7);_renderWeekNav();_renderChips();_renderDays();}
   function nextWeek(){S.monday=_addDays(S.monday, 7);_renderWeekNav();_renderChips();_renderDays();}
 
+  // ★ 모바일 스와이프로 주차 이동
+  function _initSwipe(){
+    const el=_q('days-scroll'); if(!el||el._swipeInit)return; el._swipeInit=true;
+    let sx=0,sy=0,moved=false;
+    el.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;moved=false;},{passive:true});
+    el.addEventListener('touchmove',e=>{
+      const dx=e.touches[0].clientX-sx, dy=e.touches[0].clientY-sy;
+      if(!moved&&Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>12){moved=true;}
+    },{passive:true});
+    el.addEventListener('touchend',e=>{
+      if(!moved)return;
+      const dx=e.changedTouches[0].clientX-sx;
+      if(Math.abs(dx)>50){if(dx<0)nextWeek();else prevWeek();}
+    },{passive:true});
+  }
+
   async function shareCurrentClass(){
     const cls=S.selCls; if(!cls){_toast('⚠️ 반을 선택해주세요','error');return;}
-    const url=`${location.origin}${location.pathname}?share=${cls.id}&wk=${DB.toWeekKey(S.monday)}`;
-    const sd={title:`${cls.name}반 진도 현황`,text:`${cls.name}반 이번 주(${_wom(S.monday)}주차) 진도를 확인하세요.`,url};
+    // ★ 관리자가 현재 보는 주차를 URL에 포함
+    const monStr=S.monday.toISOString().slice(0,10); // YYYY-MM-DD
+    const url=`${location.origin}${location.pathname}?share=${cls.id}&mon=${monStr}`;
+    const sd={title:`${cls.name}반 진도 현황`,text:`${cls.name}반 ${_wom(S.monday)}주차(${S.monday.getMonth()+1}/${S.monday.getDate()}~) 진도를 확인하세요.`,url};
     if(navigator.share&&navigator.canShare?.(sd)){try{await navigator.share(sd);_toast('📤 공유 완료','success');}catch(e){if(e.name!=='AbortError')_copyUrl(url);}}
     else _copyUrl(url);
   }
@@ -423,11 +442,9 @@ const App = (() => {
     const bar=document.createElement('div'); bar.className='mg-month-bar';
     const [mkY,mkM]=S.mgMk.split('-').map(Number);
     bar.innerHTML=`
+      <button class="mg-cal-btn" onclick="App.openMgCal()" title="달력으로 이동">📆</button>
       <button onclick="App.mgPrev()" title="이전 달">‹</button>
-      <div style="display:flex;align-items:center;gap:6px">
-        <span class="mg-month-lbl">📅 ${mkY}년 ${mkM}월</span>
-        <button class="mg-cal-btn" onclick="App.openMgCal()" title="달력으로 이동">📆</button>
-      </div>
+      <span class="mg-month-lbl">${mkY}년 ${mkM}월</span>
       <button onclick="App.mgNext()" title="다음 달">›</button>`;
     top.appendChild(bar);
     wrap.appendChild(top);
@@ -798,26 +815,65 @@ const App = (() => {
     if(!unique.length){card.innerHTML='<div class="empty">등록된 반이 없습니다</div>';wrap.appendChild(card);return;}
     unique.forEach(cls=>{
       const row=document.createElement('div');row.className='share-cls-row';
-      const url=`${location.origin}${location.pathname}?share=${cls.id}&wk=${DB.toWeekKey(S.monday)}`;
-      row.innerHTML=`<div class="share-cls-name">${_esc(cls.name)}</div><div class="share-btns"><button class="share-btn copy" onclick="App.shareUrl('${_esc(url)}','${_esc(cls.name)}')">📤 공유</button><button class="share-btn sms" onclick="App.sendSms('${_esc(url)}','${_esc(cls.name)}')">💬 문자</button></div>`;
+      // ★ URL을 innerHTML에 굽지 않고, 클릭 시점에 동적 생성
+      const nameDiv=document.createElement('div');nameDiv.className='share-cls-name';nameDiv.textContent=cls.name;
+      const btns=document.createElement('div');btns.className='share-btns';
+      const copyBtn=document.createElement('button');copyBtn.className='share-btn copy';copyBtn.textContent='📤 공유';
+      // ★ _doShareCls 이벤트 리스너 사용 (클릭 순간 S.monday 날짜 직접 전달)
+      copyBtn.dataset.clsid=cls.id; copyBtn.dataset.clsnm=cls.name; copyBtn.dataset.mode='share';
+      copyBtn.addEventListener('click',_doShareCls);
+      const smsBtn=document.createElement('button');smsBtn.className='share-btn sms';smsBtn.textContent='💬 문자';
+      smsBtn.dataset.clsid=cls.id; smsBtn.dataset.clsnm=cls.name; smsBtn.dataset.mode='sms';
+      smsBtn.addEventListener('click',_doShareCls);
+      btns.appendChild(copyBtn);btns.appendChild(smsBtn);
+      row.appendChild(nameDiv);row.appendChild(btns);
       card.appendChild(row);
     });
     wrap.appendChild(card);
   }
+  // ★ 공유 버튼 클릭 핸들러: 클릭 순간 S.monday에서 주차 읽음
+  async function _doShareCls(e){
+    const btn=e.currentTarget;
+    const clsId=btn.dataset.clsid;
+    const name=btn.dataset.clsnm;
+    const mode=btn.dataset.mode;
+    const monStr=S.monday.toISOString().slice(0,10); // YYYY-MM-DD
+    const url=`${location.origin}${location.pathname}?share=${clsId}&mon=${monStr}`;
+    if(mode==='sms') sendSms(url,name);
+    else await shareUrl(url,name);
+  }
+
   async function shareUrl(url,name){const sd={title:`${name}반 진도 현황`,text:`${name}반 이번 주 수업 진도를 확인하세요.`,url};if(navigator.share&&navigator.canShare?.(sd)){try{await navigator.share(sd);_toast('📤 공유 완료','success');}catch(e){if(e.name!=='AbortError')_copyUrl(url);}}else _copyUrl(url);}
   function sendSms(url,name){location.href=`sms:?body=${encodeURIComponent(`[학원 진도] ${name}반\n${url}`)}`;}
 
   /* 공유 뷰 */
   let _shareRenderData=null;
+  let _svMonday=null; // ★ 공유뷰에서 현재 보는 주의 월요일 (이전/다음 주 이동용)
+
+  function _svPrevWeek(classId){_svMonday=_addDays(_svMonday,-7);_renderShareView(classId,null);}
+  function _svNextWeek(classId){_svMonday=_addDays(_svMonday, 7);_renderShareView(classId,null);}
+  function _svGoToday(classId){_svMonday=_mon(new Date());_renderShareView(classId,null);}
+
   function _renderShareView(classId,wkParam){
     _shareRenderData={classId,wkParam};
-    const monday=wkParam?_wkToMon(wkParam):_mon(new Date());
+    // ★ mon=YYYY-MM-DD 파라미터를 날짜로 직접 변환 (ISO주차 변환 오류 회피)
+    if(wkParam){
+      // mon 파라미터: "2026-04-13" 형식 날짜 → 직접 Date 생성
+      const parsed=new Date(wkParam+'T00:00:00');
+      if(!isNaN(parsed.getTime())) _svMonday=_mon(parsed); // 해당 주 월요일
+    } else if(!_svMonday){
+      _svMonday=_mon(new Date()); // 초기값 없으면 현재 주
+    }
+    // 이전/다음 주 이동(wkParam=null) 시에는 기존 _svMonday 유지
+    const monday=_svMonday;
     const view=_q('share-view'); view.style.cssText='';
     const cls=DB.getClassById(classId);
     if(!cls){view.innerHTML='<div class="empty" style="margin-top:80px">반 정보를 찾을 수 없습니다.</div>';return;}
     const wk=DB.toWeekKey(monday);
-    const fri=_addDays(monday,4);const fmt=d=>`${d.getMonth()+1}/${d.getDate()}`;
+    const fri=_addDays(monday,4);
+    const fmt=d=>`${d.getMonth()+1}/${d.getDate()}`;
     const t=DB.getTheme();
+    const isCurrentWeek=(DB.toWeekKey(_mon(new Date()))===wk);
     view.innerHTML=`
       <div class="sv-header">
         <div class="sv-header-top">
@@ -827,12 +883,19 @@ const App = (() => {
             <div class="sv-wk-info">${fmt(monday)} – ${fmt(fri)} · ${_wom(monday)}주차</div>
           </div>
         </div>
-        <div class="sv-badges"><span class="sv-ro-badge">🔒 읽기 전용</span></div>
+        <div class="sv-badges">
+          <span class="sv-ro-badge">🔒 읽기 전용</span>
+          ${!isCurrentWeek?`<span class="sv-cur-btn" onclick="_svGoToday('${classId}')">📅 현재 주</span>`:''}
+        </div>
       </div>
-      <div id="sv-body" style="padding:11px;display:flex;flex-direction:column;gap:9px;background:var(--bg)"></div>`;
+      <!-- 읽기전용 뷰: 주차 이동 버튼 없음 -->
+      <div id="sv-body" style="padding:11px;background:var(--bg)"></div>`;
     if(typeof LOGO!=='undefined'){const li=document.getElementById('sv-logo-img');if(li)li.src=LOGO.small;}
     const body=_q('sv-body');
+    body.className=(t.operateView||'list')==='grid'?'op-grid':'op-list';
+    body.style.padding='10px';
     const today=new Date(); today.setHours(0,0,0,0);
+    // ★ 해당 주차 진도만 정확히 표시 (혼합 없음)
     const saved=DB.getWeekProgress(cls.id,wk);
     (cls.days||[]).filter(d=>DAYS.includes(d)).forEach(dayName=>{
       const i=DAYS.indexOf(dayName); if(i<0)return;
@@ -841,19 +904,20 @@ const App = (() => {
       const dc=DC[dayName]; const isToday=date.toDateString()===today.toDateString();
       const mainBooks=books.main||[], subBooks=books.sub||[];
       const card=document.createElement('div');
-      card.style.cssText=`background:var(--card);border:1px solid ${isToday?'var(--a)':'var(--bdr)'};border-radius:14px;overflow:hidden;box-shadow:${isToday?'0 0 0 2px var(--a20),var(--sh2)':'var(--sh)'}`;
-      card.innerHTML=`<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--bdr);background:${isToday?'linear-gradient(135deg,var(--a10),var(--a20))':'var(--surf2)'}"><div class="bg-${dc}" style="width:4px;height:28px;border-radius:3px;flex-shrink:0"></div><div><div class="col-${dc}" style="font-size:15px;font-weight:700">${dayName}요일</div><div style="font-size:11px;color:var(--tx2)">${date.getMonth()+1}월 ${date.getDate()}일</div></div>${isToday?'<div style="background:rgba(217,119,6,.15);border:1px solid rgba(217,119,6,.35);color:var(--orange);font-size:9px;font-weight:700;padding:3px 8px;border-radius:7px;margin-left:auto">오늘</div>':''}</div>`;
+      // ★ 운용화면과 동일한 CSS 클래스 사용 (그리드 대응)
+      card.className='day-card'+(isToday?' is-today':'');
+      card.innerHTML=`<div class="day-hdr"><div class="day-stripe bg-${dc}"></div><div class="day-info"><div class="day-name col-${dc}">${dayName}요일</div><div class="day-date">${date.getMonth()+1}월 ${date.getDate()}일</div></div>${isToday?'<div class="today-pip">오늘</div>':''}</div>`;
       if(mainBooks.length||subBooks.length){
-        const rows=document.createElement('div'); rows.style.cssText='padding:8px 10px;display:flex;flex-direction:column;gap:5px;background:var(--card)';
+        const rows=document.createElement('div'); rows.className='bk-rows';
         if(mainBooks.length){const sl=document.createElement('div');sl.style.cssText='font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:1px;padding:3px 2px';sl.textContent='📘 주교재';rows.appendChild(sl);mainBooks.forEach(b=>rows.appendChild(_mkSvRow(b,'main',saved,dayName,t)));}
         if(subBooks.length){const sl=document.createElement('div');sl.style.cssText='font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:1px;padding:5px 2px 3px';sl.textContent='📗 부교재';rows.appendChild(sl);subBooks.forEach(b=>rows.appendChild(_mkSvRow(b,'sub',saved,dayName,t)));}
-        const memo=saved[`${dayName}__MEMO`]||'';if(memo){const mr=document.createElement('div');mr.className='sv-memo';mr.textContent=`✏️ ${memo}`;rows.appendChild(mr);}
+        // ★ 공유(읽기전용) 뷰에서는 메모 표시 안 함
         card.appendChild(rows);
       }
       body.appendChild(card);
     });
   }
-  function _refreshShareProgress(){if(!_shareRenderData)return;_renderShareView(_shareRenderData.classId,_shareRenderData.wkParam);}
+  function _refreshShareProgress(){if(!_shareRenderData)return;_renderShareView(_shareRenderData.classId,null);} // ★ wkParam 무시, _svMonday 유지
   function _mkSvRow(b,type,saved,dayName,t){const val=saved[`${dayName}__${b.id}__progress`]||'';const savedAt=saved[`${dayName}__${b.id}__savedAt`]||'';const dateStr=savedAt?_fmtDateTime(savedAt):'';const nmFs=type==='main'?`${t.mainFontSize||t.fontSize||14}px`:`${t.subFontSize||Math.max((t.fontSize||14)-1,10)}px`;const brow=document.createElement('div');brow.style.cssText='display:flex;align-items:center;gap:7px;background:var(--card2);border:1px solid var(--bdr);border-radius:9px;padding:8px 10px';brow.innerHTML=`<span class="bk-tag ${type}">${type==='main'?'주':'부'}</span><span style="flex:1;font-size:${nmFs};font-weight:600;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(b.name)}</span><div style="text-align:right;flex-shrink:0"><div class="sv-bk-range ${val?'':'sv-bk-empty'}">${_esc(val)||'미입력'}</div>${dateStr?`<div style="font-size:9px;color:var(--tx3);margin-top:1px">${dateStr}</div>`:''}</div>`;return brow;}
 
   function closeModal(w){_q('modal-'+w)?.classList.add('hidden');}
