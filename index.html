@@ -182,13 +182,17 @@
     </div>
     <div class="f-grp">
       <label class="f-lbl">수업 요일</label>
-      <div class="day-cks">
-        <label class="day-ck"><input type="checkbox" value="월"><span>월</span></label>
-        <label class="day-ck"><input type="checkbox" value="화"><span>화</span></label>
-        <label class="day-ck"><input type="checkbox" value="수"><span>수</span></label>
-        <label class="day-ck"><input type="checkbox" value="목"><span>목</span></label>
-        <label class="day-ck"><input type="checkbox" value="금"><span>금</span></label>
+      <div class="day-cks" id="modal-day-cks">
+        <label class="day-ck"><input type="checkbox" value="월" onchange="App._onDayCkChange()"><span>월</span></label>
+        <label class="day-ck"><input type="checkbox" value="화" onchange="App._onDayCkChange()"><span>화</span></label>
+        <label class="day-ck"><input type="checkbox" value="수" onchange="App._onDayCkChange()"><span>수</span></label>
+        <label class="day-ck"><input type="checkbox" value="목" onchange="App._onDayCkChange()"><span>목</span></label>
+        <label class="day-ck"><input type="checkbox" value="금" onchange="App._onDayCkChange()"><span>금</span></label>
       </div>
+    </div>
+    <div class="f-grp" id="f-daytimes-grp" style="display:none">
+      <label class="f-lbl">⏰ 요일별 수업 시간 <span style="font-weight:400;font-size:10px;color:var(--tx3)">(선택사항)</span></label>
+      <div id="f-daytimes-list"></div>
     </div>
     <div class="f-grp">
       <label class="f-lbl">편성 시작 월 (선택)</label>
