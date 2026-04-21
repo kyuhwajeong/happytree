@@ -75,7 +75,7 @@ const App = (() => {
       _applyTheme(DB.getTheme());
       DB.on('progress',_refreshShareProgress);
       DB.on('classes',()=>{if(_shareRenderData)_refreshShareProgress();});
-      _renderShareView(p.get('share'),p.get('mon')); // ★ mon=날짜 파라미터
+      _renderShareView(p.get('share'),p.get('mon')); // mon=YYYY-MM-DD 파라미터
       return;
     }
 
@@ -280,7 +280,6 @@ const App = (() => {
       container.appendChild(card);
     });
     wrap.appendChild(container);
-    _initSwipe(); // ★ 스와이프 이벤트 등록
   }
 
   function _mkBookRow(b,btype,clsId,weekKey,dayName,saved,canEdit){
@@ -316,26 +315,10 @@ const App = (() => {
   function prevWeek(){S.monday=_addDays(S.monday,-7);_renderWeekNav();_renderChips();_renderDays();}
   function nextWeek(){S.monday=_addDays(S.monday, 7);_renderWeekNav();_renderChips();_renderDays();}
 
-  // ★ 모바일 스와이프로 주차 이동
-  function _initSwipe(){
-    const el=_q('days-scroll'); if(!el||el._swipeInit)return; el._swipeInit=true;
-    let sx=0,sy=0,moved=false;
-    el.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;moved=false;},{passive:true});
-    el.addEventListener('touchmove',e=>{
-      const dx=e.touches[0].clientX-sx, dy=e.touches[0].clientY-sy;
-      if(!moved&&Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>12){moved=true;}
-    },{passive:true});
-    el.addEventListener('touchend',e=>{
-      if(!moved)return;
-      const dx=e.changedTouches[0].clientX-sx;
-      if(Math.abs(dx)>50){if(dx<0)nextWeek();else prevWeek();}
-    },{passive:true});
-  }
-
   async function shareCurrentClass(){
     const cls=S.selCls; if(!cls){_toast('⚠️ 반을 선택해주세요','error');return;}
     // ★ 관리자가 현재 보는 주차를 URL에 포함
-    const monStr=S.monday.toISOString().slice(0,10); // YYYY-MM-DD
+    const monStr=_localDate(S.monday);
     const url=`${location.origin}${location.pathname}?share=${cls.id}&mon=${monStr}`;
     const sd={title:`${cls.name}반 진도 현황`,text:`${cls.name}반 ${_wom(S.monday)}주차(${S.monday.getMonth()+1}/${S.monday.getDate()}~) 진도를 확인하세요.`,url};
     if(navigator.share&&navigator.canShare?.(sd)){try{await navigator.share(sd);_toast('📤 공유 완료','success');}catch(e){if(e.name!=='AbortError')_copyUrl(url);}}
@@ -442,9 +425,11 @@ const App = (() => {
     const bar=document.createElement('div'); bar.className='mg-month-bar';
     const [mkY,mkM]=S.mgMk.split('-').map(Number);
     bar.innerHTML=`
-      <button class="mg-cal-btn" onclick="App.openMgCal()" title="달력으로 이동">📆</button>
       <button onclick="App.mgPrev()" title="이전 달">‹</button>
-      <span class="mg-month-lbl">${mkY}년 ${mkM}월</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="mg-month-lbl">📅 ${mkY}년 ${mkM}월</span>
+        <button class="mg-cal-btn" onclick="App.openMgCal()" title="달력으로 이동">📆</button>
+      </div>
       <button onclick="App.mgNext()" title="다음 달">›</button>`;
     top.appendChild(bar);
     wrap.appendChild(top);
@@ -815,34 +800,25 @@ const App = (() => {
     if(!unique.length){card.innerHTML='<div class="empty">등록된 반이 없습니다</div>';wrap.appendChild(card);return;}
     unique.forEach(cls=>{
       const row=document.createElement('div');row.className='share-cls-row';
-      // ★ URL을 innerHTML에 굽지 않고, 클릭 시점에 동적 생성
       const nameDiv=document.createElement('div');nameDiv.className='share-cls-name';nameDiv.textContent=cls.name;
       const btns=document.createElement('div');btns.className='share-btns';
       const copyBtn=document.createElement('button');copyBtn.className='share-btn copy';copyBtn.textContent='📤 공유';
-      // ★ _doShareCls 이벤트 리스너 사용 (클릭 순간 S.monday 날짜 직접 전달)
-      copyBtn.dataset.clsid=cls.id; copyBtn.dataset.clsnm=cls.name; copyBtn.dataset.mode='share';
-      copyBtn.addEventListener('click',_doShareCls);
       const smsBtn=document.createElement('button');smsBtn.className='share-btn sms';smsBtn.textContent='💬 문자';
-      smsBtn.dataset.clsid=cls.id; smsBtn.dataset.clsnm=cls.name; smsBtn.dataset.mode='sms';
-      smsBtn.addEventListener('click',_doShareCls);
+      // ★ 클릭 시점에 S.monday 읽어 URL 생성 (탭 렌더 시점의 주차 고정 방지)
+      copyBtn.addEventListener('click',()=>{
+        const liveUrl=`${location.origin}${location.pathname}?share=${cls.id}&mon=${_localDate(S.monday)}`;
+        App.shareUrl(liveUrl,cls.name);
+      });
+      smsBtn.addEventListener('click',()=>{
+        const liveUrl=`${location.origin}${location.pathname}?share=${cls.id}&mon=${_localDate(S.monday)}`;
+        App.sendSms(liveUrl,cls.name);
+      });
       btns.appendChild(copyBtn);btns.appendChild(smsBtn);
       row.appendChild(nameDiv);row.appendChild(btns);
       card.appendChild(row);
     });
     wrap.appendChild(card);
   }
-  // ★ 공유 버튼 클릭 핸들러: 클릭 순간 S.monday에서 주차 읽음
-  async function _doShareCls(e){
-    const btn=e.currentTarget;
-    const clsId=btn.dataset.clsid;
-    const name=btn.dataset.clsnm;
-    const mode=btn.dataset.mode;
-    const monStr=S.monday.toISOString().slice(0,10); // YYYY-MM-DD
-    const url=`${location.origin}${location.pathname}?share=${clsId}&mon=${monStr}`;
-    if(mode==='sms') sendSms(url,name);
-    else await shareUrl(url,name);
-  }
-
   async function shareUrl(url,name){const sd={title:`${name}반 진도 현황`,text:`${name}반 이번 주 수업 진도를 확인하세요.`,url};if(navigator.share&&navigator.canShare?.(sd)){try{await navigator.share(sd);_toast('📤 공유 완료','success');}catch(e){if(e.name!=='AbortError')_copyUrl(url);}}else _copyUrl(url);}
   function sendSms(url,name){location.href=`sms:?body=${encodeURIComponent(`[학원 진도] ${name}반\n${url}`)}`;}
 
@@ -856,15 +832,12 @@ const App = (() => {
 
   function _renderShareView(classId,wkParam){
     _shareRenderData={classId,wkParam};
-    // ★ mon=YYYY-MM-DD 파라미터를 날짜로 직접 변환 (ISO주차 변환 오류 회피)
+    // ★ mon=YYYY-MM-DD 파라미터가 있으면 항상 그 날짜의 주로 초기화
     if(wkParam){
-      // mon 파라미터: "2026-04-13" 형식 날짜 → 직접 Date 생성
       const parsed=new Date(wkParam+'T00:00:00');
-      if(!isNaN(parsed.getTime())) _svMonday=_mon(parsed); // 해당 주 월요일
-    } else if(!_svMonday){
-      _svMonday=_mon(new Date()); // 초기값 없으면 현재 주
+      if(!isNaN(parsed.getTime())) _svMonday=_mon(parsed);
     }
-    // 이전/다음 주 이동(wkParam=null) 시에는 기존 _svMonday 유지
+    if(!_svMonday) _svMonday=_mon(new Date());
     const monday=_svMonday;
     const view=_q('share-view'); view.style.cssText='';
     const cls=DB.getClassById(classId);
@@ -888,7 +861,11 @@ const App = (() => {
           ${!isCurrentWeek?`<span class="sv-cur-btn" onclick="_svGoToday('${classId}')">📅 현재 주</span>`:''}
         </div>
       </div>
-      <!-- 읽기전용 뷰: 주차 이동 버튼 없음 -->
+      <div class="sv-wk-nav">
+        <button onclick="_svPrevWeek('${classId}')">‹ 이전 주</button>
+        <span>${_wom(monday)}주차</span>
+        <button onclick="_svNextWeek('${classId}')">다음 주 ›</button>
+      </div>
       <div id="sv-body" style="padding:11px;background:var(--bg)"></div>`;
     if(typeof LOGO!=='undefined'){const li=document.getElementById('sv-logo-img');if(li)li.src=LOGO.small;}
     const body=_q('sv-body');
@@ -928,6 +905,11 @@ const App = (() => {
   function _sameM(a,b){return a.getMonth()===b.getMonth()&&a.getFullYear()===b.getFullYear();}
   function _wom(mon){const f=new Date(mon.getFullYear(),mon.getMonth(),1);return Math.round((mon-_mon(f))/(7*86400000))+1;}
   function _wkToMon(wk){const[y,w]=wk.split('-W').map(Number);const j=new Date(y,0,4);const m=new Date(j);m.setDate(j.getDate()-((j.getDay()+6)%7)+(w-1)*7);return m;}
+  function _localDate(d){
+    // toISOString()은 UTC 변환으로 한국 자정이 전날이 됨 → 로컬 날짜 직접 생성
+    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+    return y+'-'+m+'-'+day;
+  }
   function _esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
   function _hrgb(h){const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(h);return m?{r:parseInt(m[1],16),g:parseInt(m[2],16),b:parseInt(m[3],16)}:{r:79,g:70,b:229};}
   let _tt;function _toast(msg,type='',dur=2600){const el=_q('toast');if(!el)return;el.textContent=msg;el.className='toast'+(type?` ${type}`:'');el.classList.remove('hidden');clearTimeout(_tt);_tt=setTimeout(()=>el.classList.add('hidden'),dur);}
