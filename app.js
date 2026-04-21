@@ -186,6 +186,76 @@ const App = (() => {
   function logout(){if(!confirm('로그아웃 하시겠습니까?'))return;DB.clearSession();clearTimeout(_autoLogoutTimer);_refreshAuthUI();go('operate');_toast('로그아웃 되었습니다');}
 
   /* ══ 운용 - 칩 ══ */
+  // ════════════════════════════════════════
+  // 수업 시간 기준 반/요일 자동 포커스
+  // ════════════════════════════════════════
+
+  // HH:MM 문자열 → 분(int) 변환
+  function _timeToMin(t){
+    if(!t||!t.includes(':'))return null;
+    const [h,m]=t.split(':').map(Number);
+    return h*60+m;
+  }
+
+  // 현재 시각(분)과 반의 오늘 수업 시간 거리 계산
+  // 수업 중이면 -1(최우선), 없으면 Infinity
+  function _clsTimeDist(cls,todayDow,nowMin){
+    const dt=cls.dayTimes?.[todayDow];
+    if(!dt)return Infinity;
+    const s=_timeToMin(dt.start), e=_timeToMin(dt.end);
+    if(s!==null&&e!==null){
+      if(nowMin>=s&&nowMin<=e)return -1; // 수업 중
+      if(nowMin<s)return s-nowMin;       // 수업 전
+      return nowMin-e;                   // 수업 후
+    }
+    if(s!==null)return Math.abs(nowMin-s);
+    if(e!==null)return Math.abs(nowMin-e);
+    return Infinity;
+  }
+
+  // unique 반 목록 중 오늘 기준 가장 근접한 반 반환
+  function _pickClassByTime(unique){
+    const DAYS_KO=['일','월','화','수','목','금','토'];
+    const now=new Date();
+    const todayDow=DAYS_KO[now.getDay()];
+    const nowMin=now.getHours()*60+now.getMinutes();
+    let best=null, bestDist=Infinity;
+    unique.forEach(cls=>{
+      if(!(cls.days||[]).includes(todayDow))return; // 오늘 수업 없는 반 제외
+      const d=_clsTimeDist(cls,todayDow,nowMin);
+      if(d<bestDist){bestDist=d;best=cls;}
+    });
+    return best; // null이면 오늘 수업 없는 날
+  }
+
+  // 오늘 요일 카드로 스크롤 + 수업 중/근접 카드 하이라이트
+  function _scrollToFocusDay(container){
+    const DAYS_KO=['일','월','화','수','목','금','토'];
+    const now=new Date();
+    const todayDow=DAYS_KO[now.getDay()];
+    const nowMin=now.getHours()*60+now.getMinutes();
+    const cls=S.selCls; if(!cls)return;
+    const dt=cls.dayTimes?.[todayDow];
+    // 오늘 카드 찾기 (is-today 클래스)
+    const todayCard=container.querySelector('.day-card.is-today');
+    if(!todayCard)return;
+    // 수업 중이거나 가까운 경우 하이라이트 링 추가
+    if(dt){
+      const s=_timeToMin(dt.start), e=_timeToMin(dt.end);
+      const inSession=s!==null&&e!==null&&nowMin>=s&&nowMin<=e;
+      const nearSession=s!==null&&nowMin<s&&(s-nowMin)<=60; // 1시간 이내
+      if(inSession){
+        todayCard.classList.add('cls-in-session');
+      } else if(nearSession){
+        todayCard.classList.add('cls-near-session');
+      }
+    }
+    // 오늘 카드로 부드럽게 스크롤
+    setTimeout(()=>{
+      todayCard.scrollIntoView({behavior:'smooth',block:'nearest',inline:'start'});
+    },120);
+  }
+
   function _renderChips(){
     const wrap=_q('op-chips'); if(!wrap)return; wrap.innerHTML='';
     // ★ 현재 주의 년월 기준 반만 표시 (삭제/종료된 반 포함 안 함)
@@ -201,11 +271,19 @@ const App = (() => {
     const seen=new Set();
     const unique=classes.filter(c=>{if(seen.has(c.name))return false;seen.add(c.name);return true;});
     if(S.selCls&&!unique.find(c=>c.id===S.selCls.id))S.selCls=null;
-    if(!S.selCls)S.selCls=unique[0];
+    // ★ 처음 진입(selCls 없음)이면 시간 기준 가장 근접 반 자동 선택
+    if(!S.selCls) S.selCls=_pickClassByTime(unique)||unique[0];
 
     unique.forEach(cls=>{
       const b=document.createElement('button');
-      b.className='chip'+(S.selCls?.id===cls.id?' on':'');
+      // ★ 오늘 수업 있는 반은 chip에 'has-today' 클래스 추가 (선택된 반 제외)
+      const _hasTodayCls=(()=>{
+        const DAYS_KO2=['일','월','화','수','목','금','토'];
+        const todayDow2=DAYS_KO2[new Date().getDay()];
+        return (cls.days||[]).includes(todayDow2);
+      })();
+      const isSelected=S.selCls?.id===cls.id;
+      b.className='chip'+(isSelected?' on':_hasTodayCls?' has-today':'');
       b.textContent=cls.name; // ★ 이름만 표시
       b.onclick=()=>{
         S.selCls=cls;
@@ -256,7 +334,9 @@ const App = (() => {
       const mainBooks=books.main||[], subBooks=books.sub||[];
       const card=document.createElement('div'); card.className='day-card'+(isToday?' is-today':'');
       const hdr=document.createElement('div'); hdr.className='day-hdr';
-      hdr.innerHTML=`<div class="day-stripe bg-${dc}"></div><div class="day-info"><div class="day-name col-${dc}">${dayName}요일</div><div class="day-date">${date.getMonth()+1}월 ${date.getDate()}일</div></div>${isToday?'<div class="today-pip">오늘</div>':''}`;
+      // 수업 시간 표시
+      const _dtStr=_fmtTime(cls.dayTimes?.[dayName]);
+      hdr.innerHTML=`<div class="day-stripe bg-${dc}"></div><div class="day-info"><div class="day-name col-${dc}">${dayName}요일</div><div class="day-date-row"><span class="day-date">${date.getMonth()+1}월 ${date.getDate()}일</span>${_dtStr?`<span class="day-time-chip">${_dtStr}</span>`:''}</div></div>${isToday?'<div class="today-pip">오늘</div>':''}`;
       card.appendChild(hdr);
       if(!mainBooks.length&&!subBooks.length){card.innerHTML+='<div class="no-bk">이 월에 배정된 교재가 없습니다</div>';}
       else{
@@ -280,6 +360,8 @@ const App = (() => {
       container.appendChild(card);
     });
     wrap.appendChild(container);
+    // ★ 오늘 요일 카드에 포커스 스크롤 (초기 렌더 시)
+    _scrollToFocusDay(container);
   }
 
   function _mkBookRow(b,btype,clsId,weekKey,dayName,saved,canEdit){
@@ -425,11 +507,9 @@ const App = (() => {
     const bar=document.createElement('div'); bar.className='mg-month-bar';
     const [mkY,mkM]=S.mgMk.split('-').map(Number);
     bar.innerHTML=`
+      <button class="mg-cal-btn" onclick="App.openMgCal()" title="달력으로 이동">📆</button>
       <button onclick="App.mgPrev()" title="이전 달">‹</button>
-      <div style="display:flex;align-items:center;gap:6px">
-        <span class="mg-month-lbl">📅 ${mkY}년 ${mkM}월</span>
-        <button class="mg-cal-btn" onclick="App.openMgCal()" title="달력으로 이동">📆</button>
-      </div>
+      <span class="mg-month-lbl">${mkY}년 ${mkM}월</span>
       <button onclick="App.mgNext()" title="다음 달">›</button>`;
     top.appendChild(bar);
     wrap.appendChild(top);
@@ -456,7 +536,10 @@ const App = (() => {
   function _buildClsCard(cls,isAdmin){
     const card=document.createElement('div'); card.className='cls-card';
     const mk=S.mgMk; const books=DB.getMonthBooks(cls.id,mk);
-    const dayBadges=(cls.days||[]).map(d=>`<span class="dbdg ${DC[d]}">${d}</span>`).join('');
+    const dayBadges=(cls.days||[]).map(d=>{
+      const ts=_fmtTime(cls.dayTimes?.[d]);
+      return `<span class="dbdg ${DC[d]}">${d}</span>${ts?`<span class="dt-badge">${ts}</span>`:''}`;
+    }).join('');
     const termStr=`${cls.termStart||'?'}~${cls.termEnd||'현재'}`;
     // 같은 이름 다른 편성 목록
     const otherTerms=DB.getClasses()
@@ -683,6 +766,65 @@ const App = (() => {
   function mgNext(){S.mgMk=DB.nextMonthKey(S.mgMk);_renderMgCls();}
 
   /* 반 추가/수정 */
+  // ── 요일 체크박스 변경 → 시간 입력 행 갱신 ──
+  function _onDayCkChange(){
+    const DAYS_ORD=['월','화','수','목','금'];
+    const DC2={월:'mon',화:'tue',수:'wed',목:'thu',금:'fri'};
+    const checked=[...document.querySelectorAll('#modal-day-cks input:checked')].map(c=>c.value);
+    const grp=_q('f-daytimes-grp'), list=_q('f-daytimes-list');
+    if(!grp||!list)return;
+    // 기존 입력값 보존
+    const prev={};
+    list.querySelectorAll('.dt-row').forEach(r=>{
+      prev[r.dataset.day]={s:r.querySelector('.dt-s').value,e:r.querySelector('.dt-e').value};
+    });
+    if(!checked.length){grp.style.display='none';list.innerHTML='';return;}
+    grp.style.display='';
+    list.innerHTML='';
+    DAYS_ORD.filter(d=>checked.includes(d)).forEach(d=>{
+      const s=prev[d]?.s||'', e=prev[d]?.e||'';
+      const row=document.createElement('div');
+      row.className='dt-row'; row.dataset.day=d;
+      row.innerHTML=
+        `<span class="dt-label col-${DC2[d]}">${d}</span>`+
+        `<input class="dt-inp dt-s" type="time" value="${s}" placeholder="시작">`+
+        `<span class="dt-sep">~</span>`+
+        `<input class="dt-inp dt-e" type="time" value="${e}" placeholder="종료">`;
+      list.appendChild(row);
+    });
+  }
+
+  // ── dayTimes 객체 읽기 (모달 → 저장용) ──
+  function _readDayTimes(){
+    const dt={};
+    document.querySelectorAll('#f-daytimes-list .dt-row').forEach(r=>{
+      const d=r.dataset.day, s=r.querySelector('.dt-s').value, e=r.querySelector('.dt-e').value;
+      if(s||e) dt[d]={start:s,end:e};
+    });
+    return Object.keys(dt).length?dt:null;
+  }
+
+  // ── dayTimes 모달에 채우기 ──
+  function _fillDayTimes(dayTimes){
+    if(!dayTimes)return;
+    Object.entries(dayTimes).forEach(([d,t])=>{
+      const row=document.querySelector(`#f-daytimes-list [data-day="${d}"]`);
+      if(row){
+        if(t.start)row.querySelector('.dt-s').value=t.start;
+        if(t.end)  row.querySelector('.dt-e').value=t.end;
+      }
+    });
+  }
+
+  // ── 시간 문자열 포맷: "15:00"~"16:30" → "15:00~16:30" ──
+  function _fmtTime(dt){
+    if(!dt)return '';
+    const s=dt.start||'', e=dt.end||'';
+    if(!s&&!e)return '';
+    if(s&&e)return `${s}~${e}`;
+    return s||e;
+  }
+
   function openClassModal(id=null){
     S.editClsId=id; const cls=id?DB.getClassById(id):null;
     _q('mcls-t').textContent=id?'반 수정':'반 추가 / 재편성';
@@ -692,6 +834,9 @@ const App = (() => {
     if(id){sub.style.display='';sub.style.color='var(--a)';sub.textContent=`현재: ${(cls?.days||[]).join(',')} (${cls?.termStart||'?'}~)\n요일 변경 시 재편성됩니다.`;}
     else{sub.style.display='';sub.style.color='var(--orange)';sub.textContent='같은 이름+같은 시작월이면 중복 반 추가가 안됩니다.';}
     document.querySelectorAll('#modal-cls .day-ck input').forEach(cb=>{cb.checked=cls?(cls.days||[]).includes(cb.value):false;});
+    // 시간 입력 행 갱신 + 기존 시간 채우기
+    _onDayCkChange();
+    if(cls?.dayTimes) _fillDayTimes(cls.dayTimes);
     _q('modal-cls').classList.remove('hidden'); history.pushState({pg:'modal'},'');
   }
   async function saveClass(){
@@ -699,6 +844,8 @@ const App = (() => {
     const days=[...document.querySelectorAll('#modal-cls .day-ck input:checked')].map(c=>c.value);
     if(!days.length){_toast('⚠️ 요일을 선택해주세요','error');return;}
     const termStart=_q('f-cterm').value||DB.monthKey(new Date());
+    // ★ 요일별 수업 시간 수집
+    const dayTimes=_readDayTimes();
     if(S.editClsId){
       const cls=DB.getClassById(S.editClsId);
       const oldDays=(cls?.days||[]).sort().join(',');
@@ -706,14 +853,18 @@ const App = (() => {
       if(oldDays!==newDays){
         const ok=confirm(`요일이 변경되었습니다.\n기존 (${oldDays}) 데이터 보존 후\n${termStart}부터 새 편성 (${newDays})으로 재편성합니다.\n계속하시겠습니까?`);
         if(!ok)return;
+        // 재편성: dayTimes 미입력 시 이전 편성 시간 참고
+        const prevDt=dayTimes||cls?.dayTimes||null;
         await DB.terminateClass(S.editClsId);
-        const r=await DB.addClassNew({name,days,termStart});
+        const r=await DB.addClassNew({name,days,termStart,dayTimes:prevDt});
         if(!r){_toast('⚠️ 재편성 실패','error');return;}
         S.selCls=r; _toast(`✅ ${name}반 재편성 완료`,'success');
       } else {
-        await DB.updateClass(S.editClsId,{name});
+        // dayTimes가 null이면 기존값 유지, 있으면 교체
+        const updateData=dayTimes?{name,dayTimes}:{name};
+        await DB.updateClass(S.editClsId,updateData);
         if(S.selCls?.id===S.editClsId)S.selCls=DB.getClassById(S.editClsId);
-        _toast('✅ 반 이름 수정 완료','success');
+        _toast('✅ 반 수정 완료','success');
       }
     } else {
       const existing=DB.getActiveClasses().find(c=>c.name.trim()===name.trim());
@@ -721,7 +872,7 @@ const App = (() => {
         const ok=confirm(`"${name}" 반이 이미 운용 중입니다.\n기존 (${(existing.days||[]).join(',')}) 데이터 보존 후\n${termStart}부터 새 편성 (${days.join(',')})으로 재편성합니다.\n계속하시겠습니까?`);
         if(!ok)return;
       }
-      const r=await DB.addClass({name,days,termStart});
+      const r=await DB.addClass({name,days,termStart,dayTimes});
       if(!r){_toast('⚠️ 반 추가 실패','error');return;}
       if(r.duplicate){_toast(`⚠️ "${name}" 반 ${termStart}월 편성이 이미 존재합니다.`,'error',4000);return;}
       _toast('✅ 반 추가 완료','success');
@@ -861,11 +1012,7 @@ const App = (() => {
           ${!isCurrentWeek?`<span class="sv-cur-btn" onclick="_svGoToday('${classId}')">📅 현재 주</span>`:''}
         </div>
       </div>
-      <div class="sv-wk-nav">
-        <button onclick="_svPrevWeek('${classId}')">‹ 이전 주</button>
-        <span>${_wom(monday)}주차</span>
-        <button onclick="_svNextWeek('${classId}')">다음 주 ›</button>
-      </div>
+      <!-- 공유뷰: 주차 이동 버튼 없음 -->
       <div id="sv-body" style="padding:11px;background:var(--bg)"></div>`;
     if(typeof LOGO!=='undefined'){const li=document.getElementById('sv-logo-img');if(li)li.src=LOGO.small;}
     const body=_q('sv-body');
@@ -883,7 +1030,8 @@ const App = (() => {
       const card=document.createElement('div');
       // ★ 운용화면과 동일한 CSS 클래스 사용 (그리드 대응)
       card.className='day-card'+(isToday?' is-today':'');
-      card.innerHTML=`<div class="day-hdr"><div class="day-stripe bg-${dc}"></div><div class="day-info"><div class="day-name col-${dc}">${dayName}요일</div><div class="day-date">${date.getMonth()+1}월 ${date.getDate()}일</div></div>${isToday?'<div class="today-pip">오늘</div>':''}</div>`;
+      const _svDtStr=_fmtTime(cls.dayTimes?.[dayName]);
+      card.innerHTML=`<div class="day-hdr"><div class="day-stripe bg-${dc}"></div><div class="day-info"><div class="day-name col-${dc}">${dayName}요일</div><div class="day-date-row"><span class="day-date">${date.getMonth()+1}월 ${date.getDate()}일</span>${_svDtStr?`<span class="day-time-chip">${_svDtStr}</span>`:''}</div></div>${isToday?'<div class="today-pip">오늘</div>':''}</div>`;
       if(mainBooks.length||subBooks.length){
         const rows=document.createElement('div'); rows.className='bk-rows';
         if(mainBooks.length){const sl=document.createElement('div');sl.style.cssText='font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:1px;padding:3px 2px';sl.textContent='📘 주교재';rows.appendChild(sl);mainBooks.forEach(b=>rows.appendChild(_mkSvRow(b,'main',saved,dayName,t)));}
@@ -920,7 +1068,7 @@ const App = (() => {
     prevWeek,nextWeek,
     openCal,closeCal,calPrev,calNext,calToday,
     openMgCal,closeMgCal,mgCalPrev,mgCalNext,
-    openClassModal,saveClass,delClass,
+    openClassModal,saveClass,delClass,_onDayCkChange,
     openCopyModal,doCopyBooks,
     mgPrev,mgNext,
     openAccModal,saveAccount,delAcc,
