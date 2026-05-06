@@ -365,7 +365,7 @@ const BooklibApp = (() => {
             <span class="bl-badge" style="${chLabelStyle}">${chLabel}</span>
             ${clsNames?`<span class="bl-badge hi">🏫 ${_e(clsNames)}</span>`:`<span class="bl-badge" style="color:var(--tx3)">반 미배정</span>`}
             ${stuNames?`<span class="bl-badge" style="background:rgba(59,130,246,.1);border-color:rgba(59,130,246,.3);color:#3b82f6">👤 ${_e(stuNames)}</span>`:''}
-            ${hasGrade?`<span class="bl-badge" style="background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3);color:#d97706;cursor:pointer" onclick="event.stopPropagation();BooklibApp._openEvalTab('${b.id}')" title="평가 설정">📝 성적설정</span>`:''}
+            ${!isArchived?`<span class="bl-badge" style="background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3);color:#d97706;cursor:pointer" onclick="event.stopPropagation();BooklibApp._openEvalTab('${b.id}')" title="평가 설정">📝 평가 설정</span>`:''}
             ${isArchived?`<span class="bl-badge" style="color:var(--tx3)">📦 완결 ${b.archivedAt?b.archivedAt.slice(0,10):''}</span>`:''}
           </div>
         </div>
@@ -641,8 +641,23 @@ const BooklibApp = (() => {
     await BookLibDB.archiveBook(id); _renderLibrary(); _toast(`📦 "${b.name}" 완결 처리`,'success');
   }
   async function _unarchiveBook(id){
-    const b=BookLibDB.getBookById(id); if(!b)return;
-    await BookLibDB.unarchiveBook(id); _renderLibrary(); _toast(`↩️ "${b.name}" 복원`,'success');
+    const b=BookLibDB.getBookById(id); if(!b) return;
+    // ★ 동일 이름 교재가 활성 목록에 이미 있는지 확인
+    const dupName = BookLibDB.getBooks().find(bk=>!bk.archived && bk.name===b.name);
+    let finalName = b.name;
+    if(dupName){
+      const ans = confirm('"'+b.name+'" 과 동일한 교재명이 이미 있습니다.\n다른 이름으로 복원하시겠습니까?');
+      if(!ans) return;
+      const newName = window.prompt('복원할 새 교재명을 입력하세요:', b.name+'_복원');
+      if(!newName || !newName.trim()) return;
+      finalName = newName.trim();
+    } else {
+      if(!confirm('"'+b.name+'" 을 교재 목록으로 복원하시겠습니까?')) return;
+    }
+    await BookLibDB.unarchiveBook(id);
+    if(finalName !== b.name) await BookLibDB.updateBook(id, {name: finalName});
+    _renderLibrary();
+    _toast('↩️ "'+finalName+'" 복원됐습니다', 'success');
   }
   async function _copyBook(id){
     const src = BookLibDB.getBookById(id); if(!src) return;
@@ -889,6 +904,15 @@ const BooklibApp = (() => {
   /* 저장 (챕터 + 성적 설정 동시 저장) */
   async function saveEditor(){
     const bookId=_st.editBookId;
+    // ★ 교재명 변경 저장
+    const _nameInp = document.getElementById('ed-book-name-inp');
+    if(_nameInp){
+      const _newName = _nameInp.value.trim();
+      const _curBook = BookLibDB.getBookById(bookId);
+      if(_newName && _curBook && _newName !== _curBook.name){
+        await BookLibDB.updateBook(bookId, {name: _newName});
+      }
+    }
     // 성적 설정 수집
     const wq  = Number(document.getElementById('bl-cfg-wq')?.value||0);
     const rdOn= document.getElementById('bl-cfg-rd-on')?.checked||false;
@@ -1209,6 +1233,24 @@ const BooklibApp = (() => {
     sh.innerHTML=`<div class="sh-handle"></div>
       <div class="sh-title">📋 전체 미수행 현황</div>
       <div class="sh-sub">${_e(cls.name)}반 · ${_e(book.name)}</div>
+      <!-- ★ 출력 항목 선택 체크박스 -->
+      <div style="background:var(--surf2);border-radius:10px;padding:10px 14px;margin:6px 0 10px;border:1px solid var(--bdr)">
+        <div style="font-size:11px;font-weight:800;color:var(--tx3);margin-bottom:8px">🖨️ 출력할 항목 선택</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:700;color:var(--tx)">
+            <input type="checkbox" id="bl-prn-ck1" checked style="width:16px;height:16px;accent-color:var(--a)">
+            1. 반 · 교재 헤더 (출력일 포함)
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:700;color:var(--tx)">
+            <input type="checkbox" id="bl-prn-ck2" checked style="width:16px;height:16px;accent-color:var(--a)">
+            2. 학생별 요약 테이블
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:700;color:var(--tx)">
+            <input type="checkbox" id="bl-prn-ck3" checked style="width:16px;height:16px;accent-color:var(--a)">
+            3. 상세 미수행 항목 목록
+          </label>
+        </div>
+      </div>
       <div class="bl-share-scroll">
         <div style="margin:10px 0 6px;font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:1px">학생별 요약</div>
         <table style="width:100%;border-collapse:collapse;border:1px solid var(--bdr);border-radius:8px;overflow:hidden;margin-bottom:10px;font-size:13px">
@@ -1226,8 +1268,51 @@ const BooklibApp = (() => {
       <div style="margin-top:8px"><button class="btn-x" style="width:100%" onclick="BooklibApp.closeReport()">닫기</button></div>`;
     ov.classList.remove('hidden');history.pushState({pg:'booklib',modal:'report'},'');
   }
-  function _printReport(){const book=BookLibDB.getBookById(_st.matrixBookId),cls=_getCls(_st.matrixClassId);let frame=document.getElementById('bl-pf');if(!frame){frame=document.createElement('div');frame.id='bl-pf';document.body.appendChild(frame);}frame.innerHTML=`<h2>📋 ${_e(book?.name||'')} — ${_e(cls?.name||'')}반 미수행 현황</h2><pre>${_e(_st.reportText)}</pre>`;window.print();setTimeout(()=>frame.remove(),1000);}
+  function _printReport(){
+    const book=BookLibDB.getBookById(_st.matrixBookId),cls=_getCls(_st.matrixClassId);
+    if(!book||!cls){_toast('⚠️ 반과 교재를 선택해주세요','error');return;}
 
+    const prn1=document.getElementById('bl-prn-ck1')?.checked!==false;
+    const prn2=document.getElementById('bl-prn-ck2')?.checked!==false;
+    const prn3=document.getElementById('bl-prn-ck3')?.checked!==false;
+    if(!prn1&&!prn2&&!prn3){_toast('⚠️ 출력할 항목을 하나 이상 선택해주세요','error');return;}
+
+    const today=new Date().toLocaleDateString('ko-KR');
+    let body='';
+    if(prn1) body+='<div class="ph"><h1>📋 '+_e(cls.name)+'반 · '+_e(book.name)+' — 미수행 현황</h1><p>출력일: '+today+'</p></div>';
+    if(prn2) body+='<h2>학생별 요약</h2>'+(document.getElementById('bl-rpt-summary-tbl')?.outerHTML||'');
+    if(prn3) body+='<h2>상세 미수행 항목</h2><pre>'+_e(_st.reportText||'')+'</pre>';
+
+    const w=window.open('','_blank','width=900,height=700');
+    if(!w){_toast('⚠️ 팝업이 차단됐습니다. 팝업을 허용해주세요.','error');return;}
+    w.document.open();
+    w.document.write('<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">'+
+      '<style>'+
+      '@page{size:A4 portrait;margin:15mm}'+
+      'body{font-family:"Noto Sans KR","맑은 고딕",sans-serif;font-size:12px;color:#111;margin:0;padding:16px;background:#fff}'+
+      '.ph{border-bottom:2px solid #334155;margin-bottom:14px;padding-bottom:8px}'+
+      '.ph h1{font-size:18px;font-weight:900;margin:0 0 4px;color:#1e293b}'+
+      '.ph p{font-size:11px;color:#64748b;margin:0}'+
+      'h2{font-size:13px;font-weight:800;color:#334155;margin:16px 0 6px;letter-spacing:.5px;border-left:3px solid #6366f1;padding-left:8px}'+
+      'table{width:100%;border-collapse:collapse;margin-bottom:12px}'+
+      'th{background:#f1f5f9;font-size:11px;font-weight:700;padding:7px 10px;border:1px solid #cbd5e1;text-align:left}'+
+      'td{padding:7px 10px;border:1px solid #cbd5e1;font-size:12px}'+
+      'tr:nth-child(even) td{background:#f8fafc}'+
+      'pre{white-space:pre-wrap;word-break:break-all;font-family:inherit;font-size:11px;line-height:1.8;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin:0}'+
+      '</style></head><body>'+
+      body+
+      '</body></html>');
+    w.document.close();
+    w.focus();
+    // 렌더링 완료 후 인쇄 (이미지/폰트 로딩 대기)
+    w.onload=function(){w.print();};
+    // onload가 이미 완료된 경우 대비
+    if(w.document.readyState==='complete'){
+      setTimeout(function(){w.print();},400);
+    }
+  }
+
+  
   const _getShareText=()=>_st.shareText;
   const _getReportText=()=>_st.reportText;
   async function _copyText(text){try{await navigator.clipboard.writeText(text);_toast('📋 복사됐습니다','success');}catch{_toast('⚠️ 복사 실패');}}
@@ -1541,29 +1626,43 @@ const BooklibApp = (() => {
    * 앞 위치 우선 탐색 → 뒤 위치 폴백 (행 단위 탐색)
    */
   function _findMatchRow(chRows, dbFullName, dupGivens) {
-    const gn      = _givenName(dbFullName);
+    const gn = _givenName(dbFullName); // 예: "손세연" → "세연"
     const useFullName = dupGivens && dupGivens.has(gn);
     const cmpName = useFullName ? dbFullName : gn;
 
-    function nameHit(n) {
-      if (useFullName) return n === cmpName;
-      return n === cmpName || n.includes(cmpName) || cmpName.includes(n);
+    // ★ 가명 매칭: exceptions에서 조회 (fullName, givenName 두 가지 모두 체크)
+    const _excMap = _csvImportState.exceptions || {};
+    const _excInfo = _excMap[dbFullName] || _excMap[gn];
+    const aliasName = (_excInfo && typeof _excInfo==='object' && _excInfo.useAlias && _excInfo.alias)
+      ? _excInfo.alias.trim() : null;
+
+    function nameHit(rawCsv) {
+      const n = rawCsv.trim();
+      if (aliasName) {
+        if (n === aliasName) return true;
+        // "소율/Seri" 형식: "/" 분리 후 각각 비교
+        if (n.split('/').map(p=>p.trim()).some(p => p === aliasName)) return true;
+      }
+      if (useFullName) return n === cmpName || n.split('/').some(p=>p.trim()===cmpName);
+      return n===cmpName || n.includes(cmpName) || cmpName.includes(n)
+        || n.split('/').some(p => { const t=p.trim(); return t===cmpName||t.includes(cmpName)||cmpName.includes(t); });
     }
 
-    // 1차: 학생명 앞 위치('/')에서 매칭되는 행
-    const frontMatch = chRows.find(r => {
-      const names = _extractNamesFromCsv(r['학생명'] || '');
-      return names.length > 0 && nameHit(names[0]);
+    // 1차: 앞 위치('/') 우선
+    const front = chRows.find(r => {
+      const names = _extractNamesFromCsv(r['학생명']||'');
+      return names.length>0 && nameHit(names[0]);
     });
-    if (frontMatch) return frontMatch;
+    if (front) return front;
 
-    // 2차: 학생명 뒤 위치에서 매칭되는 행 (폴백)
+    // 2차: 뒤 위치 폴백
     return chRows.find(r => {
-      const names = _extractNamesFromCsv(r['학생명'] || '');
-      return names.length > 1 && nameHit(names[1]);
+      const names = _extractNamesFromCsv(r['학생명']||'');
+      return names.length>1 && nameHit(names[1]);
     }) || null;
   }
 
+  
   /* ── 신규학생 예외 조건 ──
    * 미완료 + 게임만 공란 + 암기·리콜·스펠·스피킹·테스트 모두 공란
    */
@@ -1594,13 +1693,18 @@ const BooklibApp = (() => {
   function _getExemptItems(givenName) {
     if (!givenName) return [];
     const excs = _csvImportState.exceptions || {};
-    // 성 제외 이름으로 매칭 (이름이 포함되면 적용)
-    for (const [name, items] of Object.entries(excs)) {
-      if (givenName.includes(name) || name.includes(givenName)) return items || [];
+    for (const [name, val] of Object.entries(excs)) {
+      // fullName 또는 givenName 포함 관계로 매칭
+      const nameGiven = name.length>1 && /[가-힣]/.test(name[0]) ? name.slice(1) : name;
+      if (givenName===name || givenName===nameGiven || name.includes(givenName) || givenName.includes(name)) {
+        // ★ val이 배열이면 그대로, 객체이면 .items 배열 추출
+        return Array.isArray(val) ? val : (Array.isArray(val?.items) ? val.items : []);
+      }
     }
     return [];
   }
 
+  
   // ★ 면제 항목을 고려한 예외 체크
   // 미완료이고, 모든 공란 항목이 면제 항목이면 → 완료로 처리
   function _checkException(row, exemptItems) {
@@ -1763,7 +1867,9 @@ const BooklibApp = (() => {
       Object.entries(_dbExcs).forEach(([name, v]) => {
         const items = Array.isArray(v) ? v : (v.items || []);
         const enabled = typeof v === 'object' ? (v.enabled !== false) : true;
-        _addExcRow(name, items, enabled);
+        const alias = typeof v === 'object' ? (v.alias||'') : '';
+        const useAlias = typeof v === 'object' ? !!v.useAlias : false;
+        _addExcRow(name, items, enabled, alias, useAlias);
       });
     } else {
       const savedExcs = _csvImportState.exceptions || {};
@@ -1785,7 +1891,7 @@ const BooklibApp = (() => {
   }
 
   // ★ 예외 학생 행 추가
-    function _addExcRow(name='', items=[], enabled=true) {
+    function _addExcRow(name='', items=[], enabled=true, alias='', useAlias=false) {
     const list = document.getElementById('bl-exc-list'); if (!list) return;
     const ALL_ITEMS = ['암기','리콜','스펠','스피킹','게임','테스트'];
     const rowId = 'exc-row-' + Date.now();
@@ -1801,13 +1907,25 @@ const BooklibApp = (() => {
           style="width:16px;height:16px;accent-color:var(--a);cursor:pointer;flex-shrink:0"
           onchange="const d=document.getElementById('${rowId}');d.style.opacity=this.checked?'1':'0.55';d._enabled=this.checked;d.style.borderColor=this.checked?'var(--a40)':'var(--bdr2)'">
         <div style="position:relative;flex:1">
-          <input id="${rowId}-inp" class="f-inp" placeholder="이름(성 제외, 예: 도현)" value="${_e(name)}"
+          <input id="${rowId}-inp" type="text" class="f-inp" placeholder="실제 학생 이름 (예: 세연)" value="${_e(name)}"
             style="width:100%;padding:6px 10px;font-size:12px" autocomplete="off"
             oninput="document.getElementById('${rowId}')._name=this.value;BooklibApp._excAutoComplete('${rowId}',this.value)">
           <div id="${rowId}-ac" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card);border:1px solid var(--a40);border-radius:8px;z-index:200;max-height:140px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
         </div>
         <button onclick="BooklibApp._deleteExcRow('${rowId}')"
           style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#dc2626;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:13px;flex-shrink:0">🗑</button>
+      </div>
+      <!-- ★ 가명 매칭 -->
+      <div style="display:flex;align-items:center;gap:6px;margin-top:6px;margin-bottom:6px">
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--tx3);white-space:nowrap;cursor:pointer">
+          <input type="checkbox" id="${rowId}-alias-ck" style="width:13px;height:13px;accent-color:var(--a);cursor:pointer"
+            onchange="const inp=document.getElementById('${rowId}-alias-inp');inp.style.display=this.checked?'block':'none';document.getElementById('${rowId}')._useAlias=this.checked;">
+          <span style="color:var(--a);font-weight:700">xlsx 가명</span>
+        </label>
+        <input id="${rowId}-alias-inp" type="text" placeholder="xlsx에서 찾을 가명/영문명 (예: Seri)" value=""
+          style="display:none;flex:1;padding:4px 8px;border:1px solid var(--a40);border-radius:6px;font-size:12px;background:var(--surf2)"
+          oninput="document.getElementById('${rowId}')._alias=this.value.trim()">
+      </div>
       </div>
       <div style="font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:.5px;margin-bottom:6px">면제 항목 선택 (체크된 항목은 비어있어도 완료 처리)</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -1822,27 +1940,41 @@ const BooklibApp = (() => {
     div._name = name;
     div._enabled = enabled;
     div._clsStudents = clsStudents;
+    div._alias = alias;
+    div._useAlias = useAlias;
     list.appendChild(div);
     if(!enabled) div.style.opacity='0.6';
+    // ★ 가명 복원
+    if(alias){
+      const aliasCk = document.getElementById(rowId+'-alias-ck');
+      const aliasInp = document.getElementById(rowId+'-alias-inp');
+      if(aliasCk && useAlias){ aliasCk.checked=true; }
+      if(aliasInp){ aliasInp.value=alias; aliasInp.style.display=(useAlias?'block':'none'); }
+    }
   }
 
   // ★ 면제 학생 행 삭제 (UI + DB)
   function _deleteExcRow(rowId) {
     const row = document.getElementById(rowId); if(!row) return;
-    const nameInput = row.querySelector('input[type="text"]');
+    const nameInput = document.getElementById(row.id+'-inp'); // ★ id로 정확히 지정
     const name = (nameInput?.value || row._name || '').trim();
-    // DB에서 삭제
-    if (name && _st.matrixClassId && typeof BookLibDB!=='undefined' && BookLibDB.loadClassExempts && BookLibDB.saveClassExempts) {
-      const dbExcs = BookLibDB.loadClassExempts(_st.matrixClassId) || {};
-      delete dbExcs[name];
-      BookLibDB.saveClassExempts(_st.matrixClassId, dbExcs);
-      // _csvImportState.exceptions에서도 제거
-      if (_csvImportState.exceptions) delete _csvImportState.exceptions[name];
+    if (!name) { row.remove(); return; }
+    const gn = name.length>1 && /[가-힣]/.test(name[0]) ? name.slice(1) : name;
+    // DB에서 완전 삭제 (fullName + givenName 두 key 모두)
+    if (_st.matrixClassId && typeof BookLibDB!=='undefined' && BookLibDB.loadClassExempts && BookLibDB.saveClassExempts) {
+      const db = BookLibDB.loadClassExempts(_st.matrixClassId) || {};
+      delete db[name]; delete db[gn];
+      BookLibDB.saveClassExempts(_st.matrixClassId, db);
+    }
+    if (_csvImportState.exceptions) {
+      delete _csvImportState.exceptions[name];
+      delete _csvImportState.exceptions[gn];
     }
     row.remove();
-    _toast(`🗑 "${name}" 면제 학생 삭제`, 'success');
+    _toast('🗑 "'+name+'" 면제 학생 삭제', 'success');
   }
 
+  
   // ★ AutoComplete for 면제 학생 이름
   function _excAutoComplete(rowId, val) {
     const ac = document.getElementById(rowId+'-ac'); if(!ac) return;
@@ -1865,16 +1997,22 @@ const BooklibApp = (() => {
     const result = {};
     const list = document.getElementById('bl-exc-list'); if (!list) return result;
     list.querySelectorAll('[id^="exc-row-"]').forEach(row => {
-      const enableCk = row.querySelector('[id$="-ck"]');
-      const isEnabled = enableCk ? enableCk.checked : (row._enabled !== false);
-      if (!isEnabled) return;
-      const nameInput = row.querySelector('input[type="text"]');
+      const enableCk = row.querySelector('[id$="-ck"]:not([id$="-alias-ck"])');
+      if (enableCk && !enableCk.checked) return; // 비활성 면제 학생 제외
+      const nameInput = document.getElementById(row.id+'-inp'); // ★ id로 정확히 지정
       const name = (nameInput?.value || row._name || '').trim();
       if (!name) return;
-      const checked = [...row.querySelectorAll('input[type="checkbox"]:checked')]
-        .filter(c => c.type==='checkbox' && !c.id?.endsWith('-ck'))
+      const aliasCk  = row.querySelector('[id$="-alias-ck"]');
+      const aliasInp = row.querySelector('[id$="-alias-inp"]');
+      const useAlias = aliasCk ? aliasCk.checked : !!row._useAlias;
+      const alias    = (aliasInp?.value || row._alias || '').trim();
+      const checked  = [...row.querySelectorAll('input[type="checkbox"]:checked')]
+        .filter(c => !c.id?.endsWith('-ck') && !c.id?.endsWith('-alias-ck'))
         .map(c => c.value).filter(Boolean);
-      if (checked.length) result[name] = checked;
+      if (checked.length || (useAlias && alias)) {
+        // ★ fullName으로만 저장 (givenName은 _findMatchRow에서 동적 계산)
+        result[name] = { items: checked, useAlias, alias: alias || null };
+      }
     });
     return result;
   }
@@ -1883,22 +2021,29 @@ const BooklibApp = (() => {
     const result = {};
     const list = document.getElementById('bl-exc-list'); if (!list) return result;
     list.querySelectorAll('[id^="exc-row-"]').forEach(row => {
-      const enableCk = row.querySelector('[id$="-ck"]');
+      const enableCk = row.querySelector('[id$="-ck"]:not([id$="-alias-ck"])');
       const isEnabled = enableCk ? enableCk.checked : (row._enabled !== false);
-      const nameInput = row.querySelector('input[type="text"]');
+      const nameInput = document.getElementById(row.id+'-inp'); // ★ id로 정확히 지정
       const name = (nameInput?.value || row._name || '').trim();
       if (!name) return;
-      const checked = [...row.querySelectorAll('input[type="checkbox"]:checked')]
-        .filter(c => c.type==='checkbox' && !c.id?.endsWith('-ck'))
+      const aliasCk  = row.querySelector('[id$="-alias-ck"]');
+      const aliasInp = document.getElementById(row.id+'-alias-inp');
+      const useAlias = aliasCk ? aliasCk.checked : !!row._useAlias;
+      const alias    = (aliasInp?.value || row._alias || '').trim();
+      const checked  = [...row.querySelectorAll('input[type="checkbox"]:checked')]
+        .filter(c => !c.id?.endsWith('-ck') && !c.id?.endsWith('-alias-ck'))
         .map(c => c.value).filter(Boolean);
-      result[name] = { items: checked, enabled: isEnabled };
+      // ★ fullName 하나의 key만 저장 (이중저장 제거 → 모달 복원 시 중복 행 방지)
+      result[name] = { items: checked, enabled: isEnabled, alias: alias || null, useAlias };
     });
     return result;
   }
 
   
+  
   async function _confirmCsvImport() {
     // ★ 학생별 예외 항목 수집 + DB 저장 (반 기준)
+    // ★ exceptions에 alias 정보 포함 버전으로 수집
     _csvImportState.exceptions = _collectExceptions();
     _csvImportState.exceptionOn = Object.keys(_csvImportState.exceptions).length > 0;
     const fullExcs = _collectExceptionsForSave();
