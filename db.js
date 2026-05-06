@@ -142,7 +142,11 @@ const DB = (() => {
   const setSession   = a  => ls(LS.session,a);
   const clearSession = () => localStorage.removeItem(LS.session);
   const isLoggedIn   = () => !!lg(LS.session);
-  const isAdmin      = () => lg(LS.session)?.role === 'admin';
+  const isAdmin      = () => ['admin','manager'].includes(lg(LS.session)?.role||'');
+  const isManager    = () => isAdmin();  // admin + manager
+  const isOperator   = () => ['admin','manager','operator'].includes(lg(LS.session)?.role||'');
+  const isTeacher    = () => lg(LS.session)?.role === 'teacher';
+  const getRole      = () => lg(LS.session)?.role || '';
   const canOperate   = () => !!lg(LS.session);
   function login(username, pw) {
     const acc = C.accounts.find(a=>a.username===username && a.password===pw);
@@ -162,7 +166,7 @@ const DB = (() => {
     if(FireDB.ready()) await FireDB.set(`${FireDB.P.accounts}/${acc.id}`,acc);
     return acc;
   }
-  async function addAccount(username,pw,role='operator') {
+  async function addAccount(username,pw,role='teacher') {
     if (C.accounts.find(a=>a.username===username)) return null;
     return _addAcc(username,pw,role);
   }
@@ -541,6 +545,7 @@ const DB = (() => {
     monthKey, prevMonthKey, nextMonthKey, toWeekKey,
     getSession, setSession, clearSession, isLoggedIn, isAdmin, canOperate, login, _forceAdminLogin,
     getAccounts, addAccount, updateAccount, deleteAccount,
+  isManager, isOperator, isTeacher, getRole,
     getClasses, getActiveClasses, getClassesForMonth, getClassById, classExists,
     addClass, addClassNew, terminateClass, updateClass, deleteClass,
     getMonthBooks, addToPool, moveBook, copyBooksToClass, renameBook, deleteBook, clearZone,

@@ -53,6 +53,14 @@ const App = (() => {
     },AUTO_LOGOUT_MS);
   }
 
+  // ★ operator 세부 권한 조회 (localStorage에 저장된 계정 권한 설정)
+  function _getPermission(type) {
+    const sess = typeof DB.getSession==='function' ? DB.getSession() : null;
+    if (!sess) return false;
+    const perms = sess.permissions || {};
+    return !!perms[type];
+  }
+
   /* ══ INIT ══ */
   async function init(){
     _setLogoImages();
@@ -65,6 +73,9 @@ const App = (() => {
     });
 
     const p=new URLSearchParams(location.search);
+    // ★ 저장된 탭 순서 적용
+    try{const order=JSON.parse(localStorage.getItem('hk10_nav_order')||'[]');if(order.length)_applyNavOrder(order);}catch{}
+
     if(p.has('share')){
       _setSt('로딩 중...');
       await DB.init();
@@ -82,6 +93,13 @@ const App = (() => {
     _setSt('연결 중...');
     try{await DB.init();}catch(e){console.error(e);}
     _setSt('준비 완료!');
+
+    // ★ 학생 관리 모듈 초기화 (독립 모듈 — 오류 시 기존 기능 영향 없음)
+    if (typeof StudentApp  !== 'undefined') StudentApp.init().catch(e=>console.warn('[StudentApp]',e));
+    // ★ 교재 학습 관리 모듈 초기화 (독립 모듈 — 오류 시 기존 기능 영향 없음)
+    if (typeof BooklibApp  !== 'undefined') BooklibApp.init().catch(e=>console.warn('[BooklibApp]',e));
+    if (typeof StaffApp    !== 'undefined') StaffApp.init().catch(e=>console.warn('[StaffApp]',e));
+    if (typeof GradeApp    !== 'undefined') GradeApp.init().catch(e=>console.warn('[GradeApp]',e));
 
     DB.on('classes',()=>{_renderChips();if(S.page==='operate')_renderDays();if(S.page==='manage'&&S.mgTab==='classes')_renderMgCls();});
     DB.on('progress',()=>{if(S.page==='operate')_renderDays();if(S.shareActive)_refreshShareProgress();});
@@ -127,7 +145,13 @@ const App = (() => {
 
   /* ══ PAGE NAV ══ */
   function go(page){
-    if(page==='manage'&&!DB.isLoggedIn()){_showLogin();return;}
+    if(page==='manage'  &&!DB.isLoggedIn()){_showLogin();return;}
+    const _role = typeof DB.getRole==='function'?DB.getRole():(DB.isAdmin()?'admin':'operator');
+    const _isFullAdmin = ['admin','manager'].includes(_role);
+    if(page==='students'&&!_isFullAdmin&&!_getPermission('student')){_showLogin();return;}
+    if(page==='booklib' &&!_isFullAdmin&&!_getPermission('booklib')){_showLogin();return;}
+    if(page==='staff'   &&!_isFullAdmin)  {_showLogin();return;}
+    if(page==='grade'   &&!_isFullAdmin&&!_getPermission('grade')){_showLogin();return;}
     S.page=page;
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
     document.querySelectorAll('.bni').forEach(n=>n.classList.remove('on'));
@@ -135,16 +159,26 @@ const App = (() => {
     document.querySelector(`[data-pg="${page}"]`)?.classList.add('on');
     _refreshAuthUI();
     history.pushState({pg:page},'');
-    if(page==='operate'){_renderChips();_renderWeekNav();_renderDays();}
-    if(page==='manage')_renderManage();
+    if(page==='operate') {_renderChips();_renderWeekNav();_renderDays();}
+    if(page==='manage')  _renderManage();
+    if(page==='students'&&typeof StudentApp!=='undefined') StudentApp.render();
+    if(page==='booklib' &&typeof BooklibApp!=='undefined') BooklibApp.render();
+    if(page==='staff'   &&typeof StaffApp  !=='undefined') StaffApp.render();
+    if(page==='grade'   &&typeof GradeApp  !=='undefined') GradeApp.render();
   }
 
   function _onBack(e){
     const state=e.state;
     if(!state){history.pushState({pg:S.page},'');return;}
-    const modals=['login-gate','modal-cls','modal-acc','modal-copy','cal-ov','mg-cal-ov'];
+    const modals=['login-gate','modal-cls','modal-acc','modal-copy','cal-ov','mg-cal-ov',
+                  'st-detail-ov','bl-editor-ov','bl-share-ov','bl-report-ov',
+                  'sf-edit-ov','sf-cal-ov','sf-work-ov','gr-cfg-ov','gr-rpt-ov'];
     for(const id of modals){const el=_q(id);if(el&&!el.classList.contains('hidden')){el.classList.add('hidden');history.pushState({pg:S.page},'');return;}}
-    if(S.page==='manage'){go('operate');return;}
+    if(S.page==='manage'  ){go('operate');return;}
+    if(S.page==='students'){go('operate');return;}
+    if(S.page==='booklib' ){go('operate');return;}
+    if(S.page==='staff'   ){go('operate');return;}
+    if(S.page==='grade'   ){go('operate');return;}
     history.pushState({pg:'operate'},'');
   }
 
@@ -154,6 +188,16 @@ const App = (() => {
     _q('op-share-btn')?.classList.toggle('hidden',!(isAdmin&&S.page==='operate'));
     _q('admin-badge')?.classList.toggle('hidden',!isAdmin);
     _q('mg-logout-btn')?.classList.toggle('hidden',!loggedIn);
+    // ★ admin 전용 탭 표시/숨김
+    const _role = typeof DB.getRole==='function'?DB.getRole():(isAdmin?'admin':'operator');
+    const showAll   = ['admin','manager'].includes(_role);
+    const showGrade = showAll || (_role==='operator' && (typeof DB.getSession==='function'?DB.getSession()?.permissions?.grade:false));
+    const showStu   = showAll || (_role==='operator' && (typeof DB.getSession==='function'?DB.getSession()?.permissions?.student:false));
+    const showBook  = showAll || (_role==='operator' && (typeof DB.getSession==='function'?DB.getSession()?.permissions?.booklib:false));
+    _q('nav-students-btn')?.classList.toggle('hidden',!showStu);
+    _q('nav-booklib-btn') ?.classList.toggle('hidden',!showBook);
+    _q('nav-staff-btn')   ?.classList.toggle('hidden',!showAll);
+    _q('nav-grade-btn')   ?.classList.toggle('hidden',!showGrade);
     if(loggedIn)_resetAutoLogout();
   }
 
@@ -180,7 +224,7 @@ const App = (() => {
       if(_q('li-remember').checked){localStorage.setItem(LS_REM,id);localStorage.setItem(LS_REM_PW,pw);}
       else{localStorage.removeItem(LS_REM);localStorage.removeItem(LS_REM_PW);}
       _q('login-gate').classList.add('hidden'); _refreshAuthUI(); go('manage');
-      _toast(`✅ ${acc.username} (${acc.role==='admin'?'관리자':'운용자'}) 로그인`,'success');
+      _toast(`✅ ${acc.username} (${{'admin':'admin','manager':'관리자','operator':'일반','teacher':'강사'}[acc.role]||acc.role}) 로그인`,'success');
     } else {_q('li-err').textContent='⚠️ 아이디 또는 비밀번호가 올바르지 않습니다';_q('li-pw').value='';}
   }
   function logout(){if(!confirm('로그아웃 하시겠습니까?'))return;DB.clearSession();clearTimeout(_autoLogoutTimer);_refreshAuthUI();go('operate');_toast('로그아웃 되었습니다');}
@@ -481,7 +525,8 @@ const App = (() => {
 
   function mgTab(tab){
     S.mgTab=tab;
-    const TABS=['classes','accounts','theme','io','share'];
+    const TABS=['classes','accounts','theme','io','share','navorder'];
+    const LABELS={'classes':'반 관리','accounts':'계정','theme':'테마','io':'데이터','share':'공유','navorder':'탭 순서'};
     document.querySelectorAll('.mg-tab').forEach((t,i)=>t.classList.toggle('on',TABS[i]===tab));
     TABS.forEach(id=>{const el=_q('mg-'+id);if(el)el.classList.toggle('hidden',id!==tab);});
     if(tab==='classes')       _renderMgCls();
@@ -917,9 +962,102 @@ const App = (() => {
   }
 
   /* 계정 */
-  function _renderMgAcc(){const wrap=document.getElementById('mg-accounts');if(!wrap)return;wrap.innerHTML='';const isAdmin=DB.isAdmin(),sess=DB.getSession();if(isAdmin){const b=document.createElement('button');b.className='add-cls';b.style.marginBottom='6px';b.innerHTML='<span>＋</span> 계정 추가';b.onclick=()=>openAccModal();wrap.appendChild(b);}const note=document.createElement('div');note.style.cssText='font-size:11px;color:var(--tx2);margin-bottom:8px;line-height:1.65;padding:8px 10px;background:var(--card2);border-radius:var(--rs)';note.innerHTML='<b style="color:var(--tx)">admin</b>: 관리메뉴 전체 + 진도입력<br><b style="color:var(--tx)">operator</b>: 진도 입력만';wrap.appendChild(note);const card=document.createElement('div');card.className='acc-card';DB.getAccounts().forEach(acc=>{const isMe=sess?.id===acc.id,row=document.createElement('div');row.className='acc-row';row.innerHTML=`<div><div class="acc-nm">${_esc(acc.username)}${isMe?'&nbsp;<span style="color:var(--green);font-size:10px">●</span>':''}<span class="role-badge ${acc.role}">${acc.role==='admin'?'관리자':'운용자'}</span></div><div class="acc-role">${acc.role==='admin'?'모든 기능':'진도 입력만'}</div></div><div class="acc-acts">${isAdmin?`<button class="ibtn" onclick="App.openAccModal('${acc.id}')">✏️</button>`:''}${isAdmin&&!isMe?`<button class="ibtn red" onclick="App.delAcc('${acc.id}','${_esc(acc.username)}')">🗑</button>`:''}</div>`;card.appendChild(row);});wrap.appendChild(card);}
-  function openAccModal(id=null){S.editAccId=id;const acc=id?DB.getAccounts().find(a=>a.id===id):null;_q('macc-t').textContent=id?'계정 수정':'계정 추가';_q('f-aid').value=acc?.username||'';_q('f-aid').readOnly=!!id;_q('f-apw').value='';_q('f-arole').value=acc?.role||'operator';_q('modal-acc').classList.remove('hidden');}
-  async function saveAccount(){const u=_q('f-aid').value.trim(),p=_q('f-apw').value,role=_q('f-arole').value;if(!u){_toast('⚠️ 아이디를 입력해주세요','error');return;}if(!S.editAccId&&!p){_toast('⚠️ 비밀번호를 입력해주세요','error');return;}if(S.editAccId){const d=p?{password:p,role}:{role};await DB.updateAccount(S.editAccId,d);_toast('✅ 계정 수정 완료','success');}else{if(!await DB.addAccount(u,p,role)){_toast('⚠️ 이미 존재하는 아이디','error');return;}_toast('✅ 계정 추가 완료','success');}closeModal('acc');_renderMgAcc();}
+  // ★ 탭 순서 변경
+  const NAV_ITEMS = [
+    {id:'operate', label:'운용', icon:'📅'},
+    {id:'manage',  label:'관리', icon:'⚙️'},
+    {id:'students',label:'학생', icon:'👨‍🎓'},
+    {id:'booklib', label:'교재', icon:'📖'},
+    {id:'staff',   label:'직원', icon:'👩‍💼'},
+    {id:'grade',   label:'성적', icon:'📝'},
+  ];
+  function _renderMgNavOrder(){
+    const wrap=document.getElementById('mg-accounts');if(!wrap)return;
+    let order=[];
+    try{order=JSON.parse(localStorage.getItem('hk10_nav_order')||'[]');}catch{}
+    if(!order.length) order=NAV_ITEMS.map(n=>n.id);
+    wrap.innerHTML='';
+    const hint=document.createElement('div');
+    hint.style.cssText='font-size:12px;color:var(--tx3);margin-bottom:10px';
+    hint.textContent='드래그하여 탭 순서를 변경합니다';
+    wrap.appendChild(hint);
+    const list=document.createElement('div');
+    list.id='nav-order-list';
+    list.style.cssText='display:flex;flex-direction:column;gap:6px';
+    order.forEach(id=>{
+      const item=NAV_ITEMS.find(n=>n.id===id);if(!item)return;
+      const row=document.createElement('div');
+      row.className='nav-order-item'; row.dataset.id=item.id; row.draggable=true;
+      row.style.cssText='display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--card2);border:1px solid var(--bdr);border-radius:8px;cursor:grab';
+      row.innerHTML=item.icon+' <span style="font-weight:700;font-size:13px">'+item.label+'</span><span style="margin-left:auto;color:var(--tx3);font-size:16px">⠿</span>';
+      list.appendChild(row);
+    });
+    wrap.appendChild(list);
+    const btn=document.createElement('button');
+    btn.style.cssText='margin-top:12px;width:100%;padding:10px;border-radius:10px;background:var(--a);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font)';
+    btn.textContent='✅ 순서 저장'; btn.onclick=App._saveNavOrder;
+    wrap.appendChild(btn);
+    // 드래그 이벤트
+    let dragId=null;
+    list.querySelectorAll('.nav-order-item').forEach(item=>{
+      item.addEventListener('dragstart',e=>{dragId=item.dataset.id;item.style.opacity='.4';e.dataTransfer.effectAllowed='move';});
+      item.addEventListener('dragend',()=>{item.style.opacity='';});
+      item.addEventListener('dragover',e=>{e.preventDefault();list.querySelectorAll('.nav-order-item').forEach(c=>c.style.borderColor='var(--bdr)');item.style.borderColor='var(--a)';});
+      item.addEventListener('dragleave',()=>item.style.borderColor='var(--bdr)');
+      item.addEventListener('drop',e=>{
+        e.preventDefault();item.style.borderColor='var(--bdr)';
+        if(!dragId||dragId===item.dataset.id)return;
+        const items=[...list.querySelectorAll('.nav-order-item')];
+        const from=items.findIndex(c=>c.dataset.id===dragId);
+        const to=items.findIndex(c=>c===item);
+        if(from<0||to<0)return;
+        const [moved]=items.splice(from,1); items.splice(to,0,moved);
+        moved.parentNode.insertBefore(moved,items[to+1]||null);
+      });
+    });
+  }
+    function _saveNavOrder(){
+    const items=[...document.querySelectorAll('.nav-order-item')];
+    const order=items.map(c=>c.dataset.id);
+    localStorage.setItem('hk10_nav_order',JSON.stringify(order));
+    _applyNavOrder(order);
+    _toast('✅ 탭 순서 저장 완료','success');
+  }
+  function _applyNavOrder(order){
+    const nav=document.querySelector('.bnav');if(!nav)return;
+    order.forEach(id=>{
+      const btn=nav.querySelector('[data-pg="'+id+'"]');
+    });
+  }
+
+  function _renderMgAcc(){const wrap=document.getElementById('mg-accounts');if(!wrap)return;wrap.innerHTML='';const isAdmin=DB.isAdmin(),sess=DB.getSession();if(isAdmin){const b=document.createElement('button');b.className='add-cls';b.style.marginBottom='6px';b.innerHTML='<span>＋</span> 계정 추가';b.onclick=()=>openAccModal();wrap.appendChild(b);}const note=document.createElement('div');note.style.cssText='font-size:11px;color:var(--tx2);margin-bottom:8px;line-height:1.65;padding:8px 10px;background:var(--card2);border-radius:var(--rs)';note.innerHTML='<b style="color:var(--tx)">admin</b>: 관리메뉴 전체 + 진도입력<br><b style="color:var(--tx)">operator</b>: 진도 입력만';wrap.appendChild(note);const card=document.createElement('div');card.className='acc-card';DB.getAccounts().forEach(acc=>{const isMe=sess?.id===acc.id,row=document.createElement('div');row.className='acc-row';row.innerHTML=`<div><div class="acc-nm">${_esc(acc.username)}${isMe?'&nbsp;<span style="color:var(--green);font-size:10px">●</span>':''}<span class="role-badge ${acc.role}">${{'admin':'admin','manager':'관리자','operator':'일반','teacher':'강사'}[acc.role]||acc.role}</span></div><div class="acc-role">${{'admin':'모든 기능','manager':'모든 기능','operator':'권한 선택','teacher':'진도 입력만'}[acc.role]||acc.role}</div></div><div class="acc-acts">${isAdmin?`<button class="ibtn" onclick="App.openAccModal('${acc.id}')">✏️</button>`:''}${isAdmin&&!isMe?`<button class="ibtn red" onclick="App.delAcc('${acc.id}','${_esc(acc.username)}')">🗑</button>`:''}</div>`;card.appendChild(row);});wrap.appendChild(card);}
+  function openAccModal(id=null){S.editAccId=id;const acc=id?DB.getAccounts().find(a=>a.id===id):null;_q('macc-t').textContent=id?'계정 수정':'계정 추가';_q('f-aid').value=acc?.username||'';_q('f-aid').readOnly=!!id;_q('f-apw').value='';_q('f-arole').value=acc?.role||'teacher';_q('modal-acc').classList.remove('hidden');}
+  function _onRoleChange(role){
+    const wrap=document.getElementById('f-perm-wrap');
+    if(wrap) wrap.style.display=role==='operator'?'block':'none';
+  }
+  async function saveAccount(){
+    const u=_q('f-aid').value.trim(),p=_q('f-apw').value,role=_q('f-arole').value;
+    if(!u){_toast('⚠️ 아이디를 입력해주세요','error');return;}
+    if(!S.editAccId&&!p){_toast('⚠️ 비밀번호를 입력해주세요','error');return;}
+    // ★ operator 세부 권한 수집
+    const permissions = role==='operator'?{
+      grade:   !!_q('f-perm-grade')?.checked,
+      student: !!_q('f-perm-student')?.checked,
+      booklib: !!_q('f-perm-booklib')?.checked,
+    }:{};
+    if(S.editAccId){
+      const d=p?{password:p,role,permissions}:{role,permissions};
+      await DB.updateAccount(S.editAccId,d);_toast('✅ 계정 수정 완료','success');
+    }else{
+      if(!await DB.addAccount(u,p,role)){_toast('⚠️ 이미 존재하는 아이디','error');return;}
+      // 권한 업데이트
+      const acc=DB.getAccounts().find(a=>a.username===u);
+      if(acc&&role==='operator') await DB.updateAccount(acc.id,{permissions});
+      _toast('✅ 계정 추가 완료','success');
+    }
+    closeModal('acc');_renderMgAcc();
+  }
   async function delAcc(id,u){if(DB.getSession()?.id===id){_toast('⚠️ 현재 계정은 삭제 불가','error');return;}if(!confirm(`"${u}" 계정을 삭제하시겠습니까?`))return;await DB.deleteAccount(id);_renderMgAcc();_toast('🗑 삭제 완료');}
 
   /* 테마 */
@@ -1071,7 +1209,7 @@ const App = (() => {
     openClassModal,saveClass,delClass,_onDayCkChange,
     openCopyModal,doCopyBooks,
     mgPrev,mgNext,
-    openAccModal,saveAccount,delAcc,
+    openAccModal,saveAccount,delAcc,_onRoleChange,_saveNavOrder,
     handleImport,shareUrl,sendSms,shareCurrentClass,
     closeModal,
   };
