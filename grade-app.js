@@ -34,9 +34,9 @@ const GradeApp = (() => {
     slideIdx:  0,
     reportLayout: 1,
     reportGraph:  true,
-    pageSize:        'A4',
-    reportTitleSize: 18,
-    reportBodySize:  12,
+    pageSize:        localStorage.getItem('gr_pageSize') || 'A4',
+    reportTitleSize: Number(localStorage.getItem('gr_titleSz')) || 18,
+    reportBodySize:  Number(localStorage.getItem('gr_bodySz'))  || 12,
     dividerColor:    '#e2e8f0',
     dividerWidth:    1,
     fontFamily:      'Noto Sans KR', // 리포트 글자체
@@ -306,9 +306,9 @@ const GradeApp = (() => {
           <option value="">— 교재 선택 —</option>
         </select>
         <div class="gr-view-toggle">
-          <button class="gr-vbtn ${_st.viewMode==='excel'?'on':''}"  onclick="GradeApp._setView('excel')">🔲 엑셀</button>
-          <button class="gr-vbtn ${_st.viewMode==='card'?'on':''}"   onclick="GradeApp._setView('card')">👤 카드</button>
-          <button class="gr-vbtn ${_st.viewMode==='report'?'on':''}" onclick="GradeApp._setView('report')">📄 리포트</button>
+          <button class="gr-vbtn ${_st.viewMode==='excel'?'on':''}"  data-mode="excel"  onclick="GradeApp._setView('excel')">🔲 엑셀</button>
+          <button class="gr-vbtn ${_st.viewMode==='card'?'on':''}"   data-mode="card"   onclick="GradeApp._setView('card')">👤 카드</button>
+          <button class="gr-vbtn ${_st.viewMode==='report'?'on':''}" data-mode="report" onclick="GradeApp._setView('report')">📄 리포트</button>
         </div>
         <!-- 헤더 글자 크기 히든 설정 (엑셀 모드 전용) -->
         ${_st.viewMode==='excel' && hasData ? `
@@ -1032,8 +1032,10 @@ const GradeApp = (() => {
         </div></div>
       </div>
       </div>
-      <div class="gr-rpt-preview">
-        <div class="rpt-wrap" id="gr-rpt-preview" style="background:${_st.rptBg||'#ffffff'};font-size:${_st.reportBodySize}px;width:${({A4:794,A5:559,B5:665}[_st.pageSize]||794)}px;max-width:${({A4:794,A5:559,B5:665}[_st.pageSize]||794)}px;margin:0 auto">${_buildReport(s)}</div>
+      <div class="gr-rpt-preview" style="overflow-x:auto;overflow-y:auto;background:var(--surf2);flex:1;min-height:0;display:flex;justify-content:center;padding:20px 12px;">
+        <div id="gr-rpt-outer" style="width:100%;max-width:${({A4:794,A5:559,B5:665}[_st.pageSize]||794)}px;margin:0 auto;flex-shrink:0">
+          <div class="rpt-wrap" id="gr-rpt-preview" style="background:${_st.rptBg||'#ffffff'};font-size:${_st.reportBodySize}px;width:100%;box-shadow:0 4px 24px rgba(0,0,0,.12);border-radius:4px;">${_buildReport(s)}</div>
+        </div>
         <!-- 하단 버튼 제거됨: 우측 고정 버튼(gr-rpt-fixed-btns)으로 대체 -->
       </div>
     </div>`;
@@ -1370,27 +1372,37 @@ const GradeApp = (() => {
 
   
   function _setPageSize(size){
-    _st.pageSize=size;
-    const pxW={A4:794,A5:559,B5:665};
-    const w=(pxW[size]||794)+'px';
-    // ★ rpt-wrap(흰색 카드) 너비도 함께 조정
-    const wrap=document.getElementById('gr-rpt-preview');
-    if(wrap){wrap.style.width=w;wrap.style.maxWidth=w;}
-    // rpt-preview 컨테이너도 맞춤
-    const outer=wrap?.closest?.('.gr-rpt-preview');
-    if(outer){outer.style.maxWidth=w;}
-    document.querySelectorAll('[onclick*="_setPageSize"]').forEach(b=>{
-      const s=b.textContent.trim();
-      const active=s===size;
-      b.style.borderColor=active?'var(--a)':'var(--bdr2)';
-      b.style.background=active?'var(--a20)':'var(--surf2)';
-      b.style.color=active?'var(--a)':'var(--tx3)';
+    _st.pageSize = size;
+    localStorage.setItem('gr_pageSize', size);
+    const pxW = {A4:794, A5:559, B5:665};
+    const w = (pxW[size] || 794) + 'px';
+    /* rpt-wrap 너비 조정 */
+    const wrap = document.getElementById('gr-rpt-preview');
+    if (wrap) { wrap.style.width = w; wrap.style.maxWidth = w; }
+    /* 외부 중앙 컨테이너 너비도 맞춤 */
+    const outer = document.getElementById('gr-rpt-outer');
+    if (outer) { outer.style.maxWidth = w; }
+    /* 버튼 하이라이트 */
+    document.querySelectorAll('[onclick*="_setPageSize"]').forEach(b => {
+      const s = b.textContent.trim();
+      const active = s === size;
+      b.style.borderColor = active ? 'var(--a)' : 'var(--bdr2)';
+      b.style.background  = active ? 'var(--a20)' : 'var(--surf2)';
+      b.style.color       = active ? 'var(--a)' : 'var(--tx3)';
     });
   }
   function _setRptFontSize(type,val){
     val=Number(val);
-    if(type==='title'){_st.reportTitleSize=val;const lbl=document.getElementById('gr-rpt-title-sz');if(lbl)lbl.textContent=val+'px';const wrap=document.getElementById('gr-rpt-preview');if(wrap)wrap.querySelectorAll('.rpt-title').forEach(el=>{el.style.fontSize=val+'px';});}
-    else{_st.reportBodySize=val;const lbl=document.getElementById('gr-rpt-body-sz');if(lbl)lbl.textContent=val+'px';const wrap=document.getElementById('gr-rpt-preview');if(wrap){wrap.querySelectorAll('p,.rpt-info p,.rpt-tbl td,.rpt-tbl th,.rpt-comment-box').forEach(el=>{el.style.fontSize=val+'px';});wrap.style.fontSize=val+'px';}}
+    if(type==='title'){
+      _st.reportTitleSize=val; localStorage.setItem('gr_titleSz',val);
+      const lbl=document.getElementById('gr-rpt-title-sz');if(lbl)lbl.textContent=val+'px';
+      const wrap=document.getElementById('gr-rpt-preview');if(wrap)wrap.querySelectorAll('.rpt-title').forEach(el=>{el.style.fontSize=val+'px';});
+    } else {
+      _st.reportBodySize=val; localStorage.setItem('gr_bodySz',val);
+      const lbl=document.getElementById('gr-rpt-body-sz');if(lbl)lbl.textContent=val+'px';
+      const wrap=document.getElementById('gr-rpt-preview');
+      if(wrap){wrap.querySelectorAll('p,.rpt-info p,.rpt-tbl td,.rpt-tbl th,.rpt-comment-box').forEach(el=>{el.style.fontSize=val+'px';});wrap.style.fontSize=val+'px';}
+    }
   }
   function _setHdrFontSize(val){
     _st.hdrFontSize = Number(val);
