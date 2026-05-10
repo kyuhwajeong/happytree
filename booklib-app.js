@@ -57,6 +57,8 @@ const BooklibApp = (() => {
 .bl-book-card.has-ch{background:linear-gradient(135deg,var(--card) 80%,rgba(5,150,105,.06));}
 .bl-book-card:not(.has-ch):not(.archived){background:linear-gradient(135deg,var(--card) 80%,rgba(59,130,246,.05));}
 .bl-book-card.archived{background:var(--surf2);opacity:.75;cursor:default;}
+.bl-stu-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:var(--a10);border:1px solid var(--a40);border-radius:12px;font-size:11px;font-weight:600;color:var(--a);}
+.bl-stu-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding:8px;background:var(--surf2);border-radius:10px;border:1px solid var(--bdr);min-height:36px;}
 .bl-stu-dropdown{position:absolute;left:0;right:0;top:100%;z-index:9999;background:var(--card);border:1.5px solid var(--a40);border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.12);max-height:200px;overflow-y:auto;margin-top:2px;}
 .bl-book-card.multi-selecting{cursor:default;}
 .bl-multi-ck{margin-right:2px;}
@@ -305,7 +307,12 @@ const BooklibApp = (() => {
         const cks=[...modal.querySelectorAll('.arc-ck:checked')];
         if(!cks.length){_toast('삭제할 교재를 선택하세요','error');return;}
         if(!confirm(cks.length+'개를 삭제하시겠습니까?'))return;
-        for(const ck of cks){await BookLibDB.deleteBook(ck.dataset.bid);ck.closest('.arc-row')?.remove();}
+        for(const ck of cks){
+          const bName=BookLibDB.getBookById(ck.dataset.bid)?.name||ck.dataset.bid;
+          const arcMsg=['"'+bName+'" 완결 교재를 완전히 삭제하시겠습니까?','','⚠️ 아래 데이터가 모두 삭제됩니다:','  · 챕터 목록','  · 학습 현황','  · 플로팅 메모','  · 성적 평가/리포트 데이터','','정말 삭제하시겠습니까? 되돌릴 수 없습니다.'].join('\n');
+          if(!confirm(arcMsg)) continue;
+          await BookLibDB.deleteBook(ck.dataset.bid);ck.closest('.arc-row')?.remove();
+        }
         titleEl.textContent='📦 완결 교재 목록 ('+modal.querySelectorAll('.arc-row').length+'개)';
         _renderLibrary();
       },true));
@@ -503,7 +510,7 @@ const BooklibApp = (() => {
           <div class="bl-book-title" ondblclick="event.stopPropagation();BooklibApp._inlineRenameBook('${b.id}',this)" title="더블클릭하여 교재명 변경">${_e(b.name)}</div>
           <div class="bl-book-meta">
             <span class="bl-badge" style="${chLabelStyle}">${chLabel}</span>
-            ${clsNames?`<span class="bl-badge hi">🏫 ${_e(clsNames)}</span>`:`<span class="bl-badge" style="color:var(--tx3)">반 미배정</span>`}
+            ${clsNames?`<span class="bl-badge hi">🏫 ${_e(clsNames)}</span>`:(b.studentIds&&b.studentIds.length?(()=>{const _aS=typeof StudentDB!=="undefined"?StudentDB.getAll():[];const _nms=(b.studentIds||[]).slice(0,3).map(id=>(_aS.find(s=>s.id===id)||{}).name||"").filter(Boolean);return _nms.length?`<span class="bl-badge" style="background:var(--a10);color:var(--a);border:1px solid var(--a40)">👤 ${_nms.join(" · ")}${(b.studentIds||[]).length>3?" 외 "+((b.studentIds||[]).length-3)+"명":""}</span>`:"";})():"")}
             ${isArchived?`<span class="bl-badge" style="color:var(--tx3)">📦 완결 ${b.archivedAt?b.archivedAt.slice(0,10):''}</span>`:''}
           </div>
         </div>
@@ -739,8 +746,22 @@ const BooklibApp = (() => {
   async function _multiDelete() {
     const ids = [...document.querySelectorAll('.bl-multi-ck:checked')].map(c=>c.dataset.bid);
     if (!ids.length) return;
-    const names = ids.map(id=>BookLibDB.getBookById(id)?.name||'').filter(Boolean).join(', ');
-    if (!confirm(`선택한 ${ids.length}개 교재를 삭제하시겠습니까?\n\n${names}\n\n⚠️ 삭제된 교재와 관련 데이터는 복구할 수 없습니다.`)) return;
+    const names = ids.map(id=>BookLibDB.getBookById(id)?.name||'').filter(Boolean);
+    const msg = [
+      `선택한 ${ids.length}개 교재를 삭제하시겠습니까?`,
+      '',
+      '📚 삭제 대상:',
+      ...names.map(n=>'  · '+n),
+      '',
+      '⚠️ 아래 데이터가 모두 삭제됩니다:',
+      '  · 챕터 목록',
+      '  · 학습 현황 (학생별 수행/미수행)',
+      '  · 플로팅 메모',
+      '  · 성적 평가 및 리포트 데이터',
+      '',
+      '정말 삭제하시겠습니까? 되돌릴 수 없습니다.'
+    ].join('\n');
+    if (!confirm(msg)) return;
     for (const id of ids) { await BookLibDB.deleteBook(id); }
     _multiSelectMode = false;
     _renderLibrary();
@@ -829,7 +850,8 @@ const BooklibApp = (() => {
 
   async function deleteBook(id){
     const book=BookLibDB.getBookById(id);if(!book)return;
-    if(!confirm(`"${book.name}" 교재를 삭제할까요?`))return;
+    const _delMsg=['"'+book.name+'" 교재를 삭제하시겠습니까?','','⚠️ 아래 데이터가 모두 삭제됩니다:','  · 챕터 목록','  · 학습 현황 (학생별 수행/미수행)','  · 플로팅 메모','  · 성적 평가 및 리포트 데이터','','정말 삭제하시겠습니까? 되돌릴 수 없습니다.'].join('\n');
+    if(!confirm(_delMsg))return;
     await BookLibDB.deleteBook(id);_renderLibrary();_toast(`🗑 "${book.name}" 삭제`);
   }
 
@@ -886,12 +908,39 @@ const BooklibApp = (() => {
       <div class="sh-acts">
         <button class="btn-x" onclick="BooklibApp.closeEditor()">취소</button>
         ${isAdmin?`<button class="btn-ok" onclick="BooklibApp.saveEditor()">저장</button>`:''}
+      ${isAdmin?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr)">
+        <button id="bl-ed-del-btn" style="width:100%;padding:8px;border-radius:8px;background:rgba(239,68,68,.08);border:1.5px solid rgba(239,68,68,.25);color:#dc2626;font-size:12px;font-weight:700;cursor:pointer">🗑 이 교재 삭제</button>
+      </div>`:''}
       </div>`;
     if(isAdmin&&_editorTab==='chapters')_bindDrop('bl-ch-drop',book.id,_importChFile);
     // 학생 검색 이벤트
     if(isAdmin&&_editorTab==='chapters'){
       const sinp=document.getElementById('bl-stu-search');
       if(sinp)sinp.addEventListener('input',()=>_renderStuSearchResults(book.id,sinp.value,allStus));
+    }
+    // ★ 교재 삭제 버튼 - addEventListener 직접 등록
+    if(isAdmin){
+      const _dBtn=document.getElementById('bl-ed-del-btn');
+      if(_dBtn){
+        const _bid=book.id, _bname=book.name;
+        const _doDelete=async(e)=>{
+          e.preventDefault(); e.stopPropagation();
+          const msg=[
+            '"'+_bname+'" 교재를 삭제하시겠습니까?','',
+            '⚠️ 아래 데이터가 모두 삭제됩니다:',
+            '  · 챕터 목록','  · 학습 현황 (학생별 수행/미수행)',
+            '  · 플로팅 메모','  · 성적 평가 및 리포트 데이터','',
+            '정말 삭제하시겠습니까? 되돌릴 수 없습니다.'
+          ].join('\n');
+          if(!confirm(msg)) return;
+          await BookLibDB.deleteBook(_bid);
+          BooklibApp.closeEditor();
+          _renderLibrary();
+          _toast('🗑 "'+_bname+'" 삭제 완료','success');
+        };
+        _dBtn.addEventListener('click',_doDelete);
+        _dBtn.addEventListener('touchstart',e=>{e.preventDefault();_doDelete(e);},{passive:false});
+      }
     }
   }
 
@@ -1141,6 +1190,27 @@ const BooklibApp = (() => {
   function _pasteChapters(mode){const ta=document.getElementById('bl-ch-ta');const text=(ta?.value||'').trim();if(!text){_toast('⚠️ 챕터 목록을 입력해주세요');return;}const titles=text.split(/[\r\n]+/).map(l=>l.trim()).filter(Boolean);if(!titles.length){_toast('⚠️ 유효한 챕터가 없습니다');return;}BookLibDB.setChapters(_st.editBookId,titles,mode).then(()=>{if(ta)ta.value='';_toast(`✅ ${titles.length}개 ${mode==='append'?'추가':'교체'}`,'success');_drawEditor(document.getElementById('bl-editor-sh'));});}
   function _delCh(bid,chId){BookLibDB.deleteChapter(bid,chId).then(()=>_drawEditor(document.getElementById('bl-editor-sh')));}
   function _clearChs(){if(!confirm('챕터를 전체 삭제하시겠습니까?'))return;BookLibDB.updateBook(_st.editBookId,{chapters:[]}).then(()=>_drawEditor(document.getElementById('bl-editor-sh')));}
+  async function _deleteBookFromPopup(bookId, bookName){
+    const msg = [
+      '"'+bookName+'" 교재를 삭제하시겠습니까?',
+      '',
+      '⚠️ 아래 데이터가 모두 삭제됩니다:',
+      '  · 챕터 목록',
+      '  · 학습 현황 (학생별 수행/미수행)',
+      '  · 플로팅 메모',
+      '  · 성적 평가 및 리포트 데이터 (*)',
+      '',
+      '(*) 성적 데이터는 성적 관리 탭에 저장된 데이터입니다.',
+      '',
+      '정말 삭제하시겠습니까? 되돌릴 수 없습니다.'
+    ].join('\n');
+    if(!confirm(msg)) return;
+    await BookLibDB.deleteBook(bookId);
+    BooklibApp.closeEditor();
+    _renderLibrary();
+    _toast('🗑 "'+bookName+'" 삭제 완료','success');
+  }
+
   async function _toggleAssign(bookId,classId,el){const isOn=el.classList.contains('on');if(isOn)await BookLibDB.unassignBook(bookId,classId);else await BookLibDB.assignBook(bookId,classId);el.classList.toggle('on',!isOn);_toast(isOn?'반 배정 해제':'✅ 반 배정','success');}
 
   // ★ 학생 직접 배정
@@ -1204,8 +1274,13 @@ const BooklibApp = (() => {
     if(_st.matrixClassId){
       allBks=BookLibDB.getBooksForClass(_st.matrixClassId);
     } else {
-      // ★ 반 미선택 시: 학생 직접 배정된 교재만 표시
-      allBks=BookLibDB.getBooks().filter(b=>(b.studentIds&&b.studentIds.length>0)||(b.assignedStudents&&b.assignedStudents.length>0));
+      // ★ 반 미선택: 반 미배정(classIds 없음) 또는 학생만 배정된 교재
+      const _all=BookLibDB.getBooks().filter(b=>!b.archived);
+      allBks=_all.filter(b=>{
+        const noClass=!(b.classIds&&b.classIds.length>0);
+        const hasStu=(b.studentIds&&b.studentIds.length>0)||(b.assignedStudents&&b.assignedStudents.length>0);
+        return noClass||hasStu;
+      });
     }
     const bks=allBks.filter(b=>!b.archived); // ★ 완결 교재 제외
     sel.innerHTML=`<option value="">— 교재 선택 —</option>`+bks.map(b=>`<option value="${b.id}" ${_st.matrixBookId===b.id?'selected':''}>${_e(b.name)}</option>`).join('');
@@ -1214,13 +1289,17 @@ const BooklibApp = (() => {
   function _fmtStamp(raw){if(!raw)return'';const[dp='',tp='']=String(raw).split(' ');const[,mo='',d='']=dp.split('-');if(!mo||!d)return raw;const dow=DOW_KO[new Date(dp).getDay()]||'';return`${Number(mo)}/${Number(d)} (${dow}) ${tp.slice(0,5)}`;}
 
   function _matrixHTML(){
-    if(!_st.matrixClassId||!_st.matrixBookId)return`<div class="bl-mempty"><div class="bl-mempty-ico">📊</div>반과 교재를 선택하면 학습 현황이 표시됩니다<br><small style="font-size:11px">챕터 셀 탭 → 진도 스탬프 · 학생 이름 탭 → 공유</small></div>`;
+    if(!_st.matrixBookId)return`<div class="bl-mempty"><div class="bl-mempty-ico">📊</div>교재를 선택하면 학습 현황이 표시됩니다<br><small style="font-size:11px">챕터 셀 탭 → 진도 스탬프 · 학생 이름 탭 → 공유</small></div>`;
     const book=BookLibDB.getBookById(_st.matrixBookId);
     if(!book)return`<div class="bl-mempty"><div class="bl-mempty-ico">❌</div>교재를 찾을 수 없습니다</div>`;
     const chs=book.chapters||[];if(!chs.length)return`<div class="bl-mempty"><div class="bl-mempty-ico">📑</div>챕터가 없습니다<br><small>교재 관리 탭 → 챕터 추가</small></div>`;
-    const cls=_getCls(_st.matrixClassId);if(!cls)return`<div class="bl-mempty"><div class="bl-mempty-ico">❌</div>반 정보를 찾을 수 없습니다</div>`;
-    const allStu=typeof StudentDB!=='undefined'?StudentDB.getFiltered({classCode:cls.name,status:'재원'}):[];
-    if(!allStu.length)return`<div class="bl-mempty"><div class="bl-mempty-ico">👨‍🎓</div>${_e(cls.name)}반 재원 학생 없음<br><small>학생 탭에서 엑셀을 가져오세요</small></div>`;
+    const cls=_st.matrixClassId?_getCls(_st.matrixClassId):null;
+    if(_st.matrixClassId&&!cls)return`<div class="bl-mempty"><div class="bl-mempty-ico">❌</div>반 정보를 찾을 수 없습니다</div>`;
+    const allStu=cls
+      ?(typeof StudentDB!=='undefined'?StudentDB.getFiltered({classCode:cls.name,status:'재원'}):[])
+      :((book.studentIds||[]).length&&typeof StudentDB!=='undefined'
+        ?StudentDB.getAll().filter(s=>(book.studentIds||[]).includes(s.id)):[]);
+    if(!allStu.length)return`<div class="bl-mempty"><div class="bl-mempty-ico">👨‍🎓</div>${cls?_e(cls.name)+'반 ':''}학생이 없습니다</div>`;
     const savedOrder=_loadColOrder(_st.matrixClassId,_st.matrixBookId);_st.colOrder=_buildColOrder(allStu,savedOrder);const students=_getOrderedStu(allStu);
     const lastStamp=_getLastStamp(chs,_stamps);const evalChs=lastStamp?chs.filter(ch=>ch.order<=lastStamp.order):chs;
     // ★ 미수행 = evalChs(타임스탬프 이내) 챕터 × 학생 조합 중 체크된 것만
@@ -1331,6 +1410,12 @@ const BooklibApp = (() => {
     const scrollLeft=tbl?tbl.scrollLeft:0;
     mb.innerHTML=_matrixHTML();
     _setupDrag();_bindCsvDrop();
+    // ★ 교재 목록 재필터링
+    const _bsel2=document.getElementById('bl-bsel');
+    if(_bsel2) _fillBookSel(_bsel2);
+    // ★ 교재 목록 필터 재적용 (innerHTML 재생성 후)
+    const _bsel=mb.querySelector('#bl-bsel')||document.getElementById('bl-bsel');
+    if(_bsel) _fillBookSel(_bsel);
     // ★ 폰트 크기 복원 (localStorage에 저장된 값)
     requestAnimationFrame(()=>{
       const _fs=parseFloat(localStorage.getItem('bl_mtbl_fontsize'));

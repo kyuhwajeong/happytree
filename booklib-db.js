@@ -124,15 +124,43 @@ const BookLibDB = (() => {
   }
 
   async function deleteBook(id) {
+    // 1. 메모리 + localStorage 제거
     _books = _books.filter(b=>b.id!==id); _ls(LS_BOOKS,_books);
-    if (_fb()) await FireDB.remove(`${FB_BOOKS}/${id}`).catch(console.warn);
-    const ks = Object.keys(_checks).filter(k=>k.includes(`__${id}`));
+    const ks = Object.keys(_checks).filter(k=>k.includes('__'+id));
     ks.forEach(k=>{ delete _checks[k]; delete _stamps[k]; });
     _ls(LS_CHECKS,_checks); _ls(LS_STAMPS,_stamps);
-    if (_fb()) for(const k of ks) {
-      await FireDB.remove(`${FB_CHECKS}/${k}`).catch(console.warn);
-      await FireDB.remove(`${FB_STAMPS}/${k}`).catch(console.warn);
+
+    if (_fb()) {
+      // 2. Firebase: 교재 본체
+      await FireDB.remove(`${FB_BOOKS}/${id}`).catch(console.warn);
+      // 3. Firebase: 학습현황 체크/스탬프
+      for(const k of ks) {
+        await FireDB.remove(`${FB_CHECKS}/${k}`).catch(console.warn);
+        await FireDB.remove(`${FB_STAMPS}/${k}`).catch(console.warn);
+      }
+      // 4. Firebase: 메모 (hakwon10/memos/{clsId}_{bookId})
+      // 클래스별 메모 키 삭제 (패턴: *_bookId)
+      try {
+        const memoPaths = await FireDB.get('hakwon10/memos');
+        if(memoPaths) {
+          for(const key of Object.keys(memoPaths)) {
+            if(key.endsWith('_'+id)) {
+              await FireDB.remove('hakwon10/memos/'+key).catch(console.warn);
+            }
+          }
+        }
+      } catch(e) {}
+      // 5. Firebase: 예외 설정 내에서 해당 bookId 항목 제거
+      // (exempts는 classId 기준이라 개별 항목에서 bookId 필터 제거 필요)
     }
+    // 6. localStorage 메모 정리
+    Object.keys(localStorage).filter(k=>k.includes('bl_memo_')&&k.includes(id))
+      .forEach(k=>localStorage.removeItem(k));
+    // 7. 성적 데이터 삭제 (grade-db)
+    if(typeof GradeDB!=='undefined'&&GradeDB.deleteAllForBook){
+      await GradeDB.deleteAllForBook(id).catch(console.warn);
+    }
+
     _fire('books');
   }
 

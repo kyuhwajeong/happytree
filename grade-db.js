@@ -209,10 +209,42 @@ const GradeDB = (() => {
     return Object.keys(cls).map(sid => getLatest(cid, sid, bid)).filter(Boolean);
   }
 
+  async function deleteAllForBook(bookId){
+    // 특정 교재의 성적 데이터 전체 삭제
+    // 메모리에서 제거
+    for(const cid of Object.keys(_grades)){
+      for(const sid of Object.keys(_grades[cid]||{})){
+        if(_grades[cid][sid][bookId]){
+          delete _grades[cid][sid][bookId];
+        }
+      }
+    }
+    _ls(LS_GRADES, _grades);
+    // Firebase에서 제거: hakwon10/grades/{cid}/{sid}/{bookId}
+    if(_fb()){
+      try{
+        const allCls=await FireDB.get(FB_GRADES);
+        if(allCls){
+          for(const cid of Object.keys(allCls)){
+            const clsData=allCls[cid];
+            if(clsData){
+              for(const sid of Object.keys(clsData)){
+                if(clsData[sid]&&clsData[sid][bookId]){
+                  await FireDB.remove(`${FB_GRADES}/${cid}/${sid}/${bookId}`).catch(console.warn);
+                }
+              }
+            }
+          }
+        }
+      }catch(e){console.warn('grade deleteAllForBook error',e);}
+    }
+  }
+
   return {
     init, on,
     defaultConfig, getReportConfig, saveReportConfig, getActiveReviews,
     getRecords, getLatest, saveRecord, deleteRecord,
+    deleteAllForBook,
     calcScore, calcAchievement, getClassSummary,
   };
 })();
