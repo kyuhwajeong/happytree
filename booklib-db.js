@@ -172,12 +172,27 @@ const BookLibDB = (() => {
     _fire('books'); return copy;
   }
 
-  async function assignStudents(bookId, studentIds) {
+  function assignStudents(bookId, studentIds) {
     const b=_books.find(x=>x.id===bookId); if(!b) return;
-    b.assignedStudents = studentIds;
+    b.studentIds = studentIds;
     _ls(LS_BOOKS, _books);
-    if(_fb()) FireDB.update(`${FB_BOOKS}/${bookId}`,{assignedStudents:studentIds}).catch(()=>{});
+    if(_fb()) FireDB.update(`${FB_BOOKS}/${bookId}`,{studentIds:studentIds}).catch(()=>{});
     _fire('books');
+  }
+  async function addStudentToBook(bookId, studentId){
+    const b=getBookById(bookId); if(!b) return;
+    const ids=[...new Set([...(b.studentIds||[]),(studentId)])];
+    return updateBook(bookId,{studentIds:ids});
+  }
+  async function batchAddStudents(bookId, studentIds){
+    const b=getBookById(bookId); if(!b) return;
+    const newIds=[...new Set([...(b.studentIds||[]),...studentIds])];
+    return updateBook(bookId,{studentIds:newIds});
+  }
+  async function removeStudentFromBook(bookId, studentId){
+    const b=getBookById(bookId); if(!b) return;
+    const ids=(b.studentIds||[]).filter(id=>id!==studentId);
+    return updateBook(bookId,{studentIds:ids});
   }
 
   async function setChapters(bookId, chapters, mode='replace') {
@@ -289,18 +304,54 @@ const BookLibDB = (() => {
 
   // ★ 면제 학생 저장/로드 (localStorage, classId 기준)
   const _EXEMPT_KEY = classId => 'bl_class_exempt_' + classId;
-  function saveClassExempts(classId, exempts) {
+  async function saveClassExempts(classId, exempts) {
     try { localStorage.setItem(_EXEMPT_KEY(classId), JSON.stringify(exempts)); } catch(e) {}
+    try {
+      if(typeof FireDB!=='undefined'&&FireDB.ready())
+        await FireDB.set('hakwon10/exempts/'+classId, exempts);
+    } catch(e) {}
   }
-  function loadClassExempts(classId) {
+  async function loadClassExempts(classId) {
+    try {
+      if(typeof FireDB!=='undefined'&&FireDB.ready()){
+        const data = await FireDB.get('hakwon10/exempts/'+classId);
+        if(data){ localStorage.setItem(_EXEMPT_KEY(classId), JSON.stringify(data)); return data; }
+      }
+    } catch(e) {}
     try { return JSON.parse(localStorage.getItem(_EXEMPT_KEY(classId)) || '{}'); } catch(e) { return {}; }
+  }
+
+  // ★ 메모 DB 저장 (Firebase + localStorage 이중 저장)
+  async function saveMemo(classId, bookId, data){
+    const key=classId+'_'+bookId;
+    const payload={...data, updatedAt:new Date().toISOString()};
+    try{
+      if(typeof FireDB!=='undefined'&&FireDB.ready()){
+        await FireDB.set('hakwon10/memos/'+key, payload);
+      }
+      localStorage.setItem('bl_memo_db_'+key, JSON.stringify(payload));
+    }catch(e){ localStorage.setItem('bl_memo_db_'+key, JSON.stringify(payload)); }
+  }
+  async function loadMemo(classId, bookId){
+    const key=classId+'_'+bookId;
+    try{
+      if(typeof FireDB!=='undefined'&&FireDB.ready()){
+        const data=await FireDB.get('hakwon10/memos/'+key);
+        if(data){ localStorage.setItem('bl_memo_db_'+key, JSON.stringify(data)); return data; }
+      }
+    }catch(e){}
+    const local=localStorage.getItem('bl_memo_db_'+key);
+    return local?JSON.parse(local):null;
+  }
+  async function saveMemoCheck(classId, bookId, checked){
+    await saveMemo(classId, bookId, {checked});
   }
 
   return {
     init, on,
     getBooks, getAllBooks, getArchivedBooks, getBookById,
     addBook, updateBook, deleteBook,
-    reorderBooks, archiveBook, unarchiveBook, copyBook, assignStudents,
+    reorderBooks, archiveBook, unarchiveBook, copyBook, assignStudents, addStudentToBook, batchAddStudents, removeStudentFromBook,
     setChapters, deleteChapter,
     getBooksForClass, isBookInClass, assignBook, unassignBook,
     getMatrixChecks, getRawCheck, isChecked, getCheckParsed, getSubTasks,
@@ -309,5 +360,6 @@ const BookLibDB = (() => {
     detectChapterType, getSubtaskOptions, SUBTASKS,
     _parseCheck, _serCheck,
     saveClassExempts, loadClassExempts,
+    saveMemo, loadMemo,
   };
 })();

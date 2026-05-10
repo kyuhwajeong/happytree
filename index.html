@@ -51,23 +51,22 @@
 
   <nav class="bnav">
     <button class="bni on" data-pg="operate" onclick="App.go('operate')">
-      <span class="ico">📅</span>운용
+      <span class="ico">📅</span>진도
     </button>
-    <button class="bni" data-pg="manage" onclick="App.go('manage')">
+    <button class="bni" id="nav-manage-btn" data-pg="manage" onclick="App.go('manage')">
       <span class="ico">⚙️</span>관리
-    </button>
-    <!-- ★ admin 전용 탭 (초기 hidden, _refreshAuthUI에서 토글) -->
-    <button class="bni hidden" id="nav-students-btn" data-pg="students" onclick="App.go('students')">
-      <span class="ico">👨‍🎓</span>학생
     </button>
     <button class="bni hidden" id="nav-booklib-btn" data-pg="booklib" onclick="App.go('booklib')">
       <span class="ico">📖</span>교재
     </button>
-    <button class="bni hidden" id="nav-staff-btn" data-pg="staff" onclick="App.go('staff')">
-      <span class="ico">👩‍💼</span>직원
-    </button>
     <button class="bni hidden" id="nav-grade-btn" data-pg="grade" onclick="App.go('grade')">
       <span class="ico">📝</span>성적
+    </button>
+    <button class="bni hidden" id="nav-students-btn" data-pg="students" onclick="App.go('students')">
+      <span class="ico">👨‍🎓</span>학생
+    </button>
+    <button class="bni hidden" id="nav-staff-btn" data-pg="staff" onclick="App.go('staff')">
+      <span class="ico">👩‍💼</span>직원
     </button>
     <span class="ver-lbl">v10</span>
   </nav>
@@ -93,7 +92,7 @@
       </div>
       <div class="phr">
         <div id="sync-dot" style="width:8px;height:8px;border-radius:50%;background:var(--tx3);transition:background .4s;flex-shrink:0"></div>
-        <button id="op-share-btn" class="ibtn hidden" onclick="App.shareCurrentClass()" title="진도 공유">🔗</button>
+        <button id="op-manage-btn" class="ibtn" onclick="App.go('manage')" title="관리" style="display:none">⚙️</button><button id="op-share-btn" class="ibtn hidden" onclick="App.shareCurrentClass()" title="진도 공유">🔗</button>
         <button id="op-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>
       </div>
     </div>
@@ -264,10 +263,15 @@
     </div>
     <div class="f-grp">
       <label class="f-lbl">역할</label>
-      <select class="f-sel" id="f-arole">
+      <select class="f-sel" id="f-arole" onchange="App._onRoleChange(this.value)">
         <option value="admin">관리자 (admin) — 모든 기능</option>
         <option value="operator">운용자 (operator) — 진도 입력만</option>
+        <option value="teacher">강사 (teacher) — 지정 반 진도 입력</option>
       </select>
+      <div id="f-teacher-classes" style="display:none;margin-top:8px;padding:8px;background:var(--card2);border-radius:8px;border:1px solid var(--bdr)">
+        <div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:6px">담당 수업 선택</div>
+        <div id="f-teacher-cls-list" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+      </div>
     </div>
     <div class="sh-acts">
       <button class="btn-x"  onclick="App.closeModal('acc')">취소</button>

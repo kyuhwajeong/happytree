@@ -53,14 +53,6 @@ const App = (() => {
     },AUTO_LOGOUT_MS);
   }
 
-  // ★ operator 세부 권한 조회 (localStorage에 저장된 계정 권한 설정)
-  function _getPermission(type) {
-    const sess = typeof DB.getSession==='function' ? DB.getSession() : null;
-    if (!sess) return false;
-    const perms = sess.permissions || {};
-    return !!perms[type];
-  }
-
   /* ══ INIT ══ */
   async function init(){
     _setLogoImages();
@@ -73,9 +65,6 @@ const App = (() => {
     });
 
     const p=new URLSearchParams(location.search);
-    // ★ 저장된 탭 순서 적용
-    try{const order=JSON.parse(localStorage.getItem('hk10_nav_order')||'[]');if(order.length)_applyNavOrder(order);}catch{}
-
     if(p.has('share')){
       _setSt('로딩 중...');
       await DB.init();
@@ -87,6 +76,28 @@ const App = (() => {
       DB.on('progress',_refreshShareProgress);
       DB.on('classes',()=>{if(_shareRenderData)_refreshShareProgress();});
       _renderShareView(p.get('share'),p.get('mon')); // mon=YYYY-MM-DD 파라미터
+      return;
+    }
+
+    /* ★ 성적 리포트 공유 링크 처리 */
+    if(p.has('rpt')){
+      _setSt('리포트 로딩 중...');
+      await DB.init();
+      document.getElementById('splash').classList.add('out');
+      setTimeout(()=>document.getElementById('splash').style.display='none',400);
+      try{
+        const snap = await FireDB.get(`hakwon10/sharedReports/${p.get('rpt')}`);
+        if(snap?.html){
+          document.open();
+          document.write(snap.html);
+          document.close();
+        } else {
+          document.body.innerHTML='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#6b7280"><div style="font-size:48px;margin-bottom:12px">🔍</div><div style="font-size:16px;font-weight:700">리포트를 찾을 수 없습니다</div><div style="font-size:13px;margin-top:6px">링크가 만료되었거나 잘못된 주소입니다</div></div>';
+        }
+      } catch(e){
+        console.error('[rpt viewer]',e);
+        document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#ef4444">로드 오류: '+e.message+'</div>';
+      }
       return;
     }
 
@@ -119,7 +130,9 @@ const App = (() => {
     if(typeof LOGO==='undefined')return;
     ['spl-logo-img','op-logo'].forEach(id=>{const el=document.getElementById(id);if(el)el.src=LOGO.small;});
   }
-  function _hideSplash(){const sp=document.getElementById('splash');sp.classList.add('out');setTimeout(()=>{sp.style.display='none';document.getElementById('app').classList.remove('hidden');go('operate');},480);}
+  function _hideSplash(){const sp=document.getElementById('splash');sp.classList.add('out');setTimeout(()=>{sp.style.display='none';document.getElementById('app').classList.remove('hidden');
+      if(!DB.isLoggedIn()){_showLogin();}else{go(DB.getRole()==='teacher'?'operate':S.page||'operate');}
+    },480);}
   function _setSt(m){const e=_q('spl-st');if(e)e.textContent=m;}
   function _syncDot(s){const d=_q('sync-dot');if(!d)return;d.style.background=s==='on'?'var(--green)':s==='saving'?'var(--orange)':'var(--tx3)';}
 
@@ -145,13 +158,12 @@ const App = (() => {
 
   /* ══ PAGE NAV ══ */
   function go(page){
-    if(page==='manage'  &&!DB.isLoggedIn()){_showLogin();return;}
-    const _role = typeof DB.getRole==='function'?DB.getRole():(DB.isAdmin()?'admin':'operator');
-    const _isFullAdmin = ['admin','manager'].includes(_role);
-    if(page==='students'&&!_isFullAdmin&&!_getPermission('student')){_showLogin();return;}
-    if(page==='booklib' &&!_isFullAdmin&&!_getPermission('booklib')){_showLogin();return;}
-    if(page==='staff'   &&!_isFullAdmin)  {_showLogin();return;}
-    if(page==='grade'   &&!_isFullAdmin&&!_getPermission('grade')){_showLogin();return;}
+    if(page==='manage'  &&!DB.isLoggedIn()){_showLogin('manage');return;}
+    if(page==='manage'  &&DB.getRole()==='teacher'){go('operate');return;}
+    if(page==='students'&&!DB.isAdmin())  {_showLogin();return;}
+    if(page==='booklib' &&!DB.isAdmin()&&DB.getRole()!=='teacher')  {_showLogin();return;}
+    if(page==='staff'   &&!DB.isAdmin())  {_showLogin();return;}
+    if(page==='grade'   &&!DB.isAdmin())  {_showLogin();return;}
     S.page=page;
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
     document.querySelectorAll('.bni').forEach(n=>n.classList.remove('on'));
@@ -189,20 +201,19 @@ const App = (() => {
     _q('admin-badge')?.classList.toggle('hidden',!isAdmin);
     _q('mg-logout-btn')?.classList.toggle('hidden',!loggedIn);
     // ★ admin 전용 탭 표시/숨김
-    const _role = typeof DB.getRole==='function'?DB.getRole():(isAdmin?'admin':'operator');
-    const showAll   = ['admin','manager'].includes(_role);
-    const showGrade = showAll || (_role==='operator' && (typeof DB.getSession==='function'?DB.getSession()?.permissions?.grade:false));
-    const showStu   = showAll || (_role==='operator' && (typeof DB.getSession==='function'?DB.getSession()?.permissions?.student:false));
-    const showBook  = showAll || (_role==='operator' && (typeof DB.getSession==='function'?DB.getSession()?.permissions?.booklib:false));
-    _q('nav-students-btn')?.classList.toggle('hidden',!showStu);
-    _q('nav-booklib-btn') ?.classList.toggle('hidden',!showBook);
-    _q('nav-staff-btn')   ?.classList.toggle('hidden',!showAll);
-    _q('nav-grade-btn')   ?.classList.toggle('hidden',!showGrade);
+    _q('nav-students-btn')?.classList.toggle('hidden',!isAdmin);
+     // ★ 관리 탭: 항상 표시 (클릭 시 로그인 팝업으로 보호)
+     const _navMgBtn=document.getElementById('nav-manage-btn');
+     if(_navMgBtn) _navMgBtn.style.display=DB.getRole()==='teacher'?'none':'';
+    _q('nav-booklib-btn') ?.classList.toggle('hidden',!isAdmin);
+    _q('nav-staff-btn')   ?.classList.toggle('hidden',!isAdmin);
+    _q('nav-grade-btn')   ?.classList.toggle('hidden',!isAdmin);
     if(loggedIn)_resetAutoLogout();
   }
 
   /* ══ LOGIN ══ */
-  function _showLogin(){
+  function _showLogin(redirect=''){
+    S._loginRedirect=redirect||'';
     const si=localStorage.getItem(LS_REM)||'', sp=localStorage.getItem(LS_REM_PW)||'';
     _q('li-id').value=si; _q('li-pw').value=sp; _q('li-err').textContent='';
     _q('li-remember').checked=!!si;
@@ -223,8 +234,10 @@ const App = (() => {
     if(acc){
       if(_q('li-remember').checked){localStorage.setItem(LS_REM,id);localStorage.setItem(LS_REM_PW,pw);}
       else{localStorage.removeItem(LS_REM);localStorage.removeItem(LS_REM_PW);}
-      _q('login-gate').classList.add('hidden'); _refreshAuthUI(); go('manage');
-      _toast(`✅ ${acc.username} (${{'admin':'admin','manager':'관리자','operator':'일반','teacher':'강사'}[acc.role]||acc.role}) 로그인`,'success');
+      _q('login-gate').classList.add('hidden'); _refreshAuthUI(); const _isT=DB.getRole()==='teacher';
+        go(_isT?'operate':(S._loginRedirect||'manage'));
+        S._loginRedirect='';
+      _toast(`✅ ${acc.username} (${acc.role==='admin'?'관리자':acc.role==='teacher'?'강사':'운용자'}) 로그인`,'success');
     } else {_q('li-err').textContent='⚠️ 아이디 또는 비밀번호가 올바르지 않습니다';_q('li-pw').value='';}
   }
   function logout(){if(!confirm('로그아웃 하시겠습니까?'))return;DB.clearSession();clearTimeout(_autoLogoutTimer);_refreshAuthUI();go('operate');_toast('로그아웃 되었습니다');}
@@ -307,6 +320,22 @@ const App = (() => {
     let classes=DB.getClassesForMonth(curMk);
     // 해당 월에 없으면 현재 활성 반
     if(!classes.length) classes=DB.getActiveClasses();
+    // ★ 강사: 담당 반만 표시 (id 또는 name으로 매칭)
+    if(DB.getRole()==='teacher'){
+      const tcIds=DB.getTeacherClasses();
+      if(tcIds.length){
+        // 저장된 teacherClasses는 id 배열 또는 name 배열일 수 있음
+        const allCls=DB.getActiveClasses();
+        const tcNames=tcIds.map(id=>{
+          const cls=allCls.find(c=>c.id===id);
+          return cls?cls.name:id; // id로 못 찾으면 name으로 간주
+        });
+        classes=classes.filter(c=>tcIds.includes(c.id)||tcNames.includes(c.name));
+      } else {
+        // 담당 반이 없으면 아무것도 표시 안 함 (빈 화면 = 미설정)
+        classes=[];
+      }
+    }
     if(!classes.length){
       wrap.innerHTML='<span style="font-size:11px;color:var(--tx3);white-space:nowrap">관리 메뉴에서 반을 추가하세요</span>';
       return;
@@ -427,7 +456,28 @@ const App = (() => {
     if(!canEdit)inp.readOnly=true;
     const dt=document.createElement('span'); dt.className='bk-date'; dt.textContent=dateStr;
     right.appendChild(inp); right.appendChild(dt);
-    row.appendChild(tag); row.appendChild(nm); row.appendChild(right);
+    row.appendChild(tag); row.appendChild(nm);
+    // ★ 클래스카드 버튼 (booklib 데이터 존재 시 표시)
+    try{
+      const _allBooks=typeof BookLibDB!=='undefined'?BookLibDB.getBooks():[];
+      const _normName=s=>s.replace(/[\s　]+/g,'').toLowerCase();
+      const _matchBk=_allBooks.find(bk=>!bk.archived&&(
+        _normName(bk.name)===_normName(b.name)||           // 완전 일치
+        _normName(bk.name).includes(_normName(b.name))||  // 포함
+        _normName(b.name).includes(_normName(bk.name))   // 역포함
+      ));
+      if(_matchBk){
+        // ★ 매칭되면 항상 표시
+        {
+          const ccBtn=document.createElement('button');
+          ccBtn.textContent='📊'; ccBtn.title='학습 현황 보기';
+          ccBtn.style.cssText='font-size:11px;padding:4px 10px;border-radius:7px;background:var(--a);color:#fff;cursor:pointer;white-space:nowrap;flex-shrink:0;font-weight:700;box-shadow:0 2px 6px var(--a40)';
+          ccBtn.onclick=()=>App._showClassCard(clsId,_matchBk.id,b.name);
+          row.insertBefore(ccBtn,right);
+        }
+      }
+    }catch(e){}
+    row.appendChild(right);
     if(canEdit){
       let _lv=val;
       inp.addEventListener('input',()=>{inp.classList.toggle('filled',inp.value.trim()!=='');row.classList.add('saving');row.classList.remove('saved');_syncDot('saving');clearTimeout(inp._st);inp._st=setTimeout(()=>{if(inp.value!==_lv){DB.autoSave(clsId,weekKey,dayName,'progress',inp.value.trim(),b.id);_lv=inp.value;if(inp.value)dt.textContent=_fmtDateTime(new Date());}row.classList.remove('saving');row.classList.add('saved');_syncDot(FireDB.ready()?'on':'off');setTimeout(()=>row.classList.remove('saved'),1500);},1500);});
@@ -453,6 +503,47 @@ const App = (() => {
   async function _copyUrl(url){try{await navigator.clipboard.writeText(url);_toast('🔗 링크 복사 완료!','success',3000);}catch{prompt('링크:',url);}}
 
   /* ══ 달력 (운용화면) ══ */
+  function _showClassCard(clsId, bookId, bookName){
+    document.getElementById('bl-classcard-popup')?.remove();
+    const modal=document.createElement('div');
+    modal.id='bl-classcard-popup';
+    modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;display:flex;align-items:flex-end;justify-content:center';
+    modal.onclick=e=>{if(e.target===modal)modal.remove();};
+    // 데이터 수집
+    const checks=typeof BookLibDB!=='undefined'?BookLibDB.getMatrixChecks(clsId,bookId):{};
+    const book=typeof BookLibDB!=='undefined'?BookLibDB.getBookById(bookId):null;
+    const chs=book?.chapters||[];
+    const totalCh=chs.length;
+    const allCls=typeof DB!=='undefined'?DB.getActiveClasses():[];
+    const cls=allCls.find(c=>c.id===clsId);
+    const stus=typeof StudentDB!=='undefined'?StudentDB.getFiltered({classCode:cls?.name,status:'재원'}):[];
+    // 학생별 미수행 계산
+    const rows=stus.map(s=>{
+      const undone=chs.filter(ch=>checks[s.id+'__'+ch.id]).length;
+      const done=totalCh-undone;
+      const pct=totalCh>0?Math.round(done/totalCh*100):0;
+      const barW=pct;
+      return'<div style="margin-bottom:8px">'
+        +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">'
+        +'<span style="font-size:12px;font-weight:700;min-width:60px">'+s.name+'</span>'
+        +'<div style="flex:1;background:var(--surf2);border-radius:20px;height:14px;overflow:hidden;border:1px solid var(--bdr)">'
+        +'<div style="width:'+barW+'%;height:100%;background:var(--a);border-radius:20px;transition:width .3s"></div>'
+        +'</div>'
+        +'<span style="font-size:11px;color:var(--a);font-weight:700;min-width:34px">'+pct+'%</span>'
+        +'<span style="font-size:11px;color:#ea580c;min-width:60px">'+undone+'개 미수행</span>'
+        +'</div></div>';
+    }).join('');
+    modal.innerHTML='<div style="background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:500px;max-height:75vh;display:flex;flex-direction:column;box-shadow:0 -4px 24px rgba(0,0,0,.18)">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
+      +'<div><div style="font-size:15px;font-weight:800">📊 클래스카드</div>'
+      +'<div style="font-size:12px;color:var(--tx3)">'+cls?.name+'반 · '+bookName+'</div></div>'
+      +'<button onclick="document.getElementById(&quot;bl-classcard-popup&quot;).remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--tx3)">✕</button>'
+      +'</div>'
+      +'<div style="overflow-y:auto;flex:1">'+(rows||'<p style="text-align:center;color:var(--tx3)">데이터가 없습니다</p>')+'</div>'
+      +'</div>';
+    document.body.appendChild(modal);
+  }
+
   function openCal(){S.calY=S.monday.getFullYear();S.calM=S.monday.getMonth();_renderCal();_q('cal-ov').classList.remove('hidden');history.pushState({pg:'cal'},'');}
   function closeCal(e){if(e&&e.target!==_q('cal-ov'))return;_q('cal-ov').classList.add('hidden');}
   function calPrev(){if(S.calM===0){S.calY--;S.calM=11;}else S.calM--;_renderCal();}
@@ -520,13 +611,26 @@ const App = (() => {
     if(!isAdmin&&S.mgTab==='accounts')S.mgTab='theme';
     mgTab(S.mgTab);
   }
+  function _onRoleChange(role, savedClasses=[]){
+    const wrap=document.getElementById('f-teacher-classes');
+    const list=document.getElementById('f-teacher-cls-list');
+    if(!wrap||!list) return;
+    wrap.style.display=role==='teacher'?'block':'none';
+    if(role==='teacher'){
+      const classes=typeof DB!=='undefined'?DB.getActiveClasses():[];
+      list.innerHTML=classes.map(c=>
+        '<label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;padding:3px 8px;background:var(--card);border-radius:6px;border:1px solid var(--bdr)">'
+        +'<input type="checkbox" value="'+c.id+'"'+(savedClasses.includes(c.id)?' checked':'')+' style="accent-color:var(--a)"> '+c.name+'</label>'
+      ).join('');
+    }
+  }
+
   function _updateToggleBtn(){const btn=_q('toggle-view-btn');if(!btn)return;btn.textContent=S.viewMode==='grid'?'⊞':'☰';btn.title=S.viewMode==='grid'?'그리드 보기':'리스트 보기';}
   function toggleView(){S.viewMode=S.viewMode==='grid'?'list':'grid';_updateToggleBtn();const t=DB.getTheme();t.viewMode=S.viewMode;DB.saveTheme(t);_renderMgCls();}
 
   function mgTab(tab){
     S.mgTab=tab;
-    const TABS=['classes','accounts','theme','io','share','navorder'];
-    const LABELS={'classes':'반 관리','accounts':'계정','theme':'테마','io':'데이터','share':'공유','navorder':'탭 순서'};
+    const TABS=['classes','accounts','theme','io','share'];
     document.querySelectorAll('.mg-tab').forEach((t,i)=>t.classList.toggle('on',TABS[i]===tab));
     TABS.forEach(id=>{const el=_q('mg-'+id);if(el)el.classList.toggle('hidden',id!==tab);});
     if(tab==='classes')       _renderMgCls();
@@ -962,102 +1066,11 @@ const App = (() => {
   }
 
   /* 계정 */
-  // ★ 탭 순서 변경
-  const NAV_ITEMS = [
-    {id:'operate', label:'운용', icon:'📅'},
-    {id:'manage',  label:'관리', icon:'⚙️'},
-    {id:'students',label:'학생', icon:'👨‍🎓'},
-    {id:'booklib', label:'교재', icon:'📖'},
-    {id:'staff',   label:'직원', icon:'👩‍💼'},
-    {id:'grade',   label:'성적', icon:'📝'},
-  ];
-  function _renderMgNavOrder(){
-    const wrap=document.getElementById('mg-accounts');if(!wrap)return;
-    let order=[];
-    try{order=JSON.parse(localStorage.getItem('hk10_nav_order')||'[]');}catch{}
-    if(!order.length) order=NAV_ITEMS.map(n=>n.id);
-    wrap.innerHTML='';
-    const hint=document.createElement('div');
-    hint.style.cssText='font-size:12px;color:var(--tx3);margin-bottom:10px';
-    hint.textContent='드래그하여 탭 순서를 변경합니다';
-    wrap.appendChild(hint);
-    const list=document.createElement('div');
-    list.id='nav-order-list';
-    list.style.cssText='display:flex;flex-direction:column;gap:6px';
-    order.forEach(id=>{
-      const item=NAV_ITEMS.find(n=>n.id===id);if(!item)return;
-      const row=document.createElement('div');
-      row.className='nav-order-item'; row.dataset.id=item.id; row.draggable=true;
-      row.style.cssText='display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--card2);border:1px solid var(--bdr);border-radius:8px;cursor:grab';
-      row.innerHTML=item.icon+' <span style="font-weight:700;font-size:13px">'+item.label+'</span><span style="margin-left:auto;color:var(--tx3);font-size:16px">⠿</span>';
-      list.appendChild(row);
-    });
-    wrap.appendChild(list);
-    const btn=document.createElement('button');
-    btn.style.cssText='margin-top:12px;width:100%;padding:10px;border-radius:10px;background:var(--a);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font)';
-    btn.textContent='✅ 순서 저장'; btn.onclick=App._saveNavOrder;
-    wrap.appendChild(btn);
-    // 드래그 이벤트
-    let dragId=null;
-    list.querySelectorAll('.nav-order-item').forEach(item=>{
-      item.addEventListener('dragstart',e=>{dragId=item.dataset.id;item.style.opacity='.4';e.dataTransfer.effectAllowed='move';});
-      item.addEventListener('dragend',()=>{item.style.opacity='';});
-      item.addEventListener('dragover',e=>{e.preventDefault();list.querySelectorAll('.nav-order-item').forEach(c=>c.style.borderColor='var(--bdr)');item.style.borderColor='var(--a)';});
-      item.addEventListener('dragleave',()=>item.style.borderColor='var(--bdr)');
-      item.addEventListener('drop',e=>{
-        e.preventDefault();item.style.borderColor='var(--bdr)';
-        if(!dragId||dragId===item.dataset.id)return;
-        const items=[...list.querySelectorAll('.nav-order-item')];
-        const from=items.findIndex(c=>c.dataset.id===dragId);
-        const to=items.findIndex(c=>c===item);
-        if(from<0||to<0)return;
-        const [moved]=items.splice(from,1); items.splice(to,0,moved);
-        moved.parentNode.insertBefore(moved,items[to+1]||null);
-      });
-    });
-  }
-    function _saveNavOrder(){
-    const items=[...document.querySelectorAll('.nav-order-item')];
-    const order=items.map(c=>c.dataset.id);
-    localStorage.setItem('hk10_nav_order',JSON.stringify(order));
-    _applyNavOrder(order);
-    _toast('✅ 탭 순서 저장 완료','success');
-  }
-  function _applyNavOrder(order){
-    const nav=document.querySelector('.bnav');if(!nav)return;
-    order.forEach(id=>{
-      const btn=nav.querySelector('[data-pg="'+id+'"]');
-    });
-  }
-
-  function _renderMgAcc(){const wrap=document.getElementById('mg-accounts');if(!wrap)return;wrap.innerHTML='';const isAdmin=DB.isAdmin(),sess=DB.getSession();if(isAdmin){const b=document.createElement('button');b.className='add-cls';b.style.marginBottom='6px';b.innerHTML='<span>＋</span> 계정 추가';b.onclick=()=>openAccModal();wrap.appendChild(b);}const note=document.createElement('div');note.style.cssText='font-size:11px;color:var(--tx2);margin-bottom:8px;line-height:1.65;padding:8px 10px;background:var(--card2);border-radius:var(--rs)';note.innerHTML='<b style="color:var(--tx)">admin</b>: 관리메뉴 전체 + 진도입력<br><b style="color:var(--tx)">operator</b>: 진도 입력만';wrap.appendChild(note);const card=document.createElement('div');card.className='acc-card';DB.getAccounts().forEach(acc=>{const isMe=sess?.id===acc.id,row=document.createElement('div');row.className='acc-row';row.innerHTML=`<div><div class="acc-nm">${_esc(acc.username)}${isMe?'&nbsp;<span style="color:var(--green);font-size:10px">●</span>':''}<span class="role-badge ${acc.role}">${{'admin':'admin','manager':'관리자','operator':'일반','teacher':'강사'}[acc.role]||acc.role}</span></div><div class="acc-role">${{'admin':'모든 기능','manager':'모든 기능','operator':'권한 선택','teacher':'진도 입력만'}[acc.role]||acc.role}</div></div><div class="acc-acts">${isAdmin?`<button class="ibtn" onclick="App.openAccModal('${acc.id}')">✏️</button>`:''}${isAdmin&&!isMe?`<button class="ibtn red" onclick="App.delAcc('${acc.id}','${_esc(acc.username)}')">🗑</button>`:''}</div>`;card.appendChild(row);});wrap.appendChild(card);}
-  function openAccModal(id=null){S.editAccId=id;const acc=id?DB.getAccounts().find(a=>a.id===id):null;_q('macc-t').textContent=id?'계정 수정':'계정 추가';_q('f-aid').value=acc?.username||'';_q('f-aid').readOnly=!!id;_q('f-apw').value='';_q('f-arole').value=acc?.role||'teacher';_q('modal-acc').classList.remove('hidden');}
-  function _onRoleChange(role){
-    const wrap=document.getElementById('f-perm-wrap');
-    if(wrap) wrap.style.display=role==='operator'?'block':'none';
-  }
-  async function saveAccount(){
-    const u=_q('f-aid').value.trim(),p=_q('f-apw').value,role=_q('f-arole').value;
-    if(!u){_toast('⚠️ 아이디를 입력해주세요','error');return;}
-    if(!S.editAccId&&!p){_toast('⚠️ 비밀번호를 입력해주세요','error');return;}
-    // ★ operator 세부 권한 수집
-    const permissions = role==='operator'?{
-      grade:   !!_q('f-perm-grade')?.checked,
-      student: !!_q('f-perm-student')?.checked,
-      booklib: !!_q('f-perm-booklib')?.checked,
-    }:{};
-    if(S.editAccId){
-      const d=p?{password:p,role,permissions}:{role,permissions};
-      await DB.updateAccount(S.editAccId,d);_toast('✅ 계정 수정 완료','success');
-    }else{
-      if(!await DB.addAccount(u,p,role)){_toast('⚠️ 이미 존재하는 아이디','error');return;}
-      // 권한 업데이트
-      const acc=DB.getAccounts().find(a=>a.username===u);
-      if(acc&&role==='operator') await DB.updateAccount(acc.id,{permissions});
-      _toast('✅ 계정 추가 완료','success');
-    }
-    closeModal('acc');_renderMgAcc();
-  }
+  function _renderMgAcc(){const wrap=document.getElementById('mg-accounts');if(!wrap)return;wrap.innerHTML='';const isAdmin=DB.isAdmin(),sess=DB.getSession();if(isAdmin){const b=document.createElement('button');b.className='add-cls';b.style.marginBottom='6px';b.innerHTML='<span>＋</span> 계정 추가';b.onclick=()=>openAccModal();wrap.appendChild(b);}const note=document.createElement('div');note.style.cssText='font-size:11px;color:var(--tx2);margin-bottom:8px;line-height:1.65;padding:8px 10px;background:var(--card2);border-radius:var(--rs)';note.innerHTML='<b style="color:var(--tx)">admin</b>: 관리메뉴 전체 + 진도입력<br><b style="color:var(--tx)">operator</b>: 진도 입력만';wrap.appendChild(note);const card=document.createElement('div');card.className='acc-card';DB.getAccounts().forEach(acc=>{const isMe=sess?.id===acc.id,row=document.createElement('div');row.className='acc-row';row.innerHTML=`<div style="flex:1;min-width:0"><div class="acc-nm">${_esc(acc.username)}${isMe?'&nbsp;<span style="color:var(--green);font-size:10px">●</span>':''}<span class="role-badge ${acc.role}">${acc.role==='admin'?'관리자':acc.role==='teacher'?'강사':'운용자'}</span></div><div class="acc-role">${acc.role==='admin'?'모든 기능':acc.role==='teacher'?'지정 반 진도 입력':'진도 입력만'}</div>${acc.role==='teacher'&&acc.teacherClasses?.length?`<div style="font-size:10px;color:var(--a);margin-top:3px">담당 반: ${acc.teacherClasses.map(id=>{const c=DB.getActiveClasses().find(cl=>cl.id===id);return c?c.name:'?';}).join(', ')}</div>`:''}</div><div class="acc-acts">${isAdmin?`<button class="ibtn" onclick="App.openAccModal('${acc.id}')">✏️</button>`:''}${isAdmin&&!isMe?`<button class="ibtn red" onclick="App.delAcc('${acc.id}','${_esc(acc.username)}')">🗑</button>`:''}</div>`;card.appendChild(row);});wrap.appendChild(card);}
+  function openAccModal(id=null){S.editAccId=id;const acc=id?DB.getAccounts().find(a=>a.id===id):null;_q('macc-t').textContent=id?'계정 수정':'계정 추가';_q('f-aid').value=acc?.username||'';_q('f-aid').readOnly=!!id;_q('f-apw').value='';_q('f-arole').value=acc?.role||'operator';
+    App._onRoleChange(acc?.role||'operator', acc?.teacherClasses||[]);_q('modal-acc').classList.remove('hidden');}
+  async function saveAccount(){const u=_q('f-aid').value.trim(),p=_q('f-apw').value,role=_q('f-arole').value;
+    const teacherClasses=role==='teacher'?[...document.querySelectorAll('#f-teacher-cls-list input:checked')].map(c=>c.value):[];if(!u){_toast('⚠️ 아이디를 입력해주세요','error');return;}if(!S.editAccId&&!p){_toast('⚠️ 비밀번호를 입력해주세요','error');return;}if(S.editAccId){const d=p?{password:p,role,teacherClasses}:{role,teacherClasses};await DB.updateAccount(S.editAccId,d);_toast('✅ 계정 수정 완료','success');}else{if(!await DB.addAccount(u,p,role,teacherClasses)){_toast('⚠️ 이미 존재하는 아이디','error');return;}_toast('✅ 계정 추가 완료','success');}closeModal('acc');_renderMgAcc();}
   async function delAcc(id,u){if(DB.getSession()?.id===id){_toast('⚠️ 현재 계정은 삭제 불가','error');return;}if(!confirm(`"${u}" 계정을 삭제하시겠습니까?`))return;await DB.deleteAccount(id);_renderMgAcc();_toast('🗑 삭제 완료');}
 
   /* 테마 */
@@ -1201,6 +1214,7 @@ const App = (() => {
   let _tt;function _toast(msg,type='',dur=2600){const el=_q('toast');if(!el)return;el.textContent=msg;el.className='toast'+(type?` ${type}`:'');el.classList.remove('hidden');clearTimeout(_tt);_tt=setTimeout(()=>el.classList.add('hidden'),dur);}
 
   return {
+    _onRoleChange, _showClassCard,
     init,go,mgTab,toggleView,
     cancelLogin,doLogin,logout,
     prevWeek,nextWeek,
@@ -1209,7 +1223,7 @@ const App = (() => {
     openClassModal,saveClass,delClass,_onDayCkChange,
     openCopyModal,doCopyBooks,
     mgPrev,mgNext,
-    openAccModal,saveAccount,delAcc,_onRoleChange,_saveNavOrder,
+    openAccModal,saveAccount,delAcc,
     handleImport,shareUrl,sendSms,shareCurrentClass,
     closeModal,
   };
