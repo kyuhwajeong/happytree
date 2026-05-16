@@ -3845,6 +3845,14 @@ const BooklibApp = (() => {
 
         const matchClsId = match.cls ? match.cls.id : null;
         _st.matrixClassId = prevCls; _st.matrixBookId = prevBk;
+        // ★ 핵심 버그 수정: _checks/_stamps를 현재 화면의 반+교재로 복원
+        //   미복원 시 openShare가 마지막 처리 파일의 데이터를 참조해
+        //   미수행 목록이 비어있는 것처럼 표시되는 문제 발생
+        {
+          const _restoreCid = prevCls || '__noclass__';
+          _checks = prevBk ? BookLibDB.getMatrixChecks(_restoreCid, prevBk) : {};
+          _stamps = prevBk ? BookLibDB.getStamps(_restoreCid, prevBk) : {};
+        }
         if(prevCls===matchClsId && prevBk===match.bk.id) _refreshBody();
       } catch(err){
         results.push({name:f.name, ok:false, msg:'❌ 오류: '+err.message});
