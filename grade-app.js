@@ -154,6 +154,23 @@ const GradeApp = (() => {
 .gs-cm-inp{width:100%;padding:5px 8px;border:none;outline:none;background:transparent;font-size:13px;color:var(--tx);font-family:var(--font);resize:none;height:52px;line-height:1.5;cursor:text;box-sizing:border-box;}
 .gs-cm-inp:focus{background:rgba(5,150,105,.05);}
 
+/* ── 컬럼 리사이저 핸들 ── */
+thead th[data-col-key]{position:relative;overflow:visible;}
+.gs-col-resizer{
+  position:absolute;right:-3px;top:0;width:7px;height:100%;
+  cursor:col-resize;z-index:10;background:transparent;user-select:none;
+  transition:background .15s;
+}
+.gs-col-resizer::after{
+  content:'';position:absolute;right:2px;top:15%;height:70%;
+  width:2px;background:var(--bdr2);border-radius:1px;transition:background .15s;
+}
+.gs-col-resizer:hover::after,.gs-col-resizer.dragging::after{background:var(--a);}
+.gs-col-resizer.dragging{background:rgba(99,102,241,.08);}
+/* 너비 초기화 버튼 (툴바 우측) */
+.gr-col-reset-btn{padding:5px 9px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--bdr2);background:var(--surf2);color:var(--tx3);white-space:nowrap;transition:all .15s;}
+.gr-col-reset-btn:hover{border-color:var(--a);color:var(--a);background:var(--a10);}
+
 /* average row */
 .gr-avg-row td{background:var(--surf2)!important;}
 .gr-avg-row .gs-fix{color:var(--a);font-weight:800;font-size:12px;}
@@ -400,6 +417,7 @@ const GradeApp = (() => {
             </div>
           </div>
           <button id="gr-eval-btn" title="선택 교재 평가 설정" style="display:none;padding:6px 14px;border-radius:8px;background:rgba(245,158,11,.1);border:1.5px solid rgba(245,158,11,.4);color:#d97706;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:var(--font)">⚙️ 평가 설정</button>
+          <button id="gr-col-reset-btn" class="gr-col-reset-btn" title="드래그로 조절한 컬럼 너비를 초기화합니다" style="display:none" onclick="GradeApp._resetColWidths()">↩ 너비초기화</button>
           <div class="gr-view-toggle" id="gr-view-toggle">
             <button class="gr-vbtn ${_st.viewMode==='excel'?'on':''}"  data-mode="excel"  onclick="GradeApp._setView('excel')">🔲 엑셀</button>
             <button class="gr-vbtn ${_st.viewMode==='card'?'on':''}"   data-mode="card"   onclick="GradeApp._setView('card')">🐱 카드</button>
@@ -601,9 +619,38 @@ const GradeApp = (() => {
     const rdRow3Q = hasRd ? actRevs.map(rv=>`<th class="gs-th" style="font-size:9px;background:rgba(139,92,246,.04)">${_e(rv.name)}</th>`).join('') : '';
     const rdRow3S = hasRd ? actRevs.map(rv=>`<th class="gs-th" style="font-size:9px;background:rgba(139,92,246,.04)">${_e(rv.name)}</th>`).join('') : '';
 
+    /* ── colgroup: 저장된 너비 or 기본값 적용 ── */
+    const _cw = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
+    const cg  = w => _cw[w];
+    const cgS = (key, def) => `width:${cg(key)||def}px`;
+    let colGroupHtml = `
+      <col data-col-key="fix" style="${cgS('fix',130)}">
+      <col data-col-key="wq"  style="${cgS('wq',60)}">
+      <col data-col-key="wr"  style="${cgS('wr',50)}">
+      <col data-col-key="wp"  style="${cgS('wp',48)}">
+      <col data-col-key="wa"  style="${cgS('wa',56)}">`;
+    if (hasRd) {
+      colGroupHtml += `<col data-col-key="rq" style="${cgS('rq',48)}">`;
+      for (let i=0;i<rvN;i++) colGroupHtml += `<col data-col-key="rr${i}" style="${cgS('rr'+i,52)}">`;
+      for (let i=0;i<rvN;i++) colGroupHtml += `<col data-col-key="rs${i}" style="${cgS('rs'+i,52)}">`;
+      colGroupHtml += `<col data-col-key="ra" style="${cgS('ra',56)}">`;
+    }
+    colGroupHtml += `<col data-col-key="cm" style="width:36px">`;
+
+    /* rdRow2/rdRow3 에 data-col-key 추가 */
+    const rdRow2K = hasRd ? `
+      <th class="gs-th" data-col-key="rq" rowspan="2" style="background:rgba(139,92,246,.06);color:#8b5cf6;vertical-align:middle">총문제</th>
+      <th class="gs-th sec-r" colspan="${rvN}">정답 수</th>
+      <th class="gs-th sec-r" colspan="${rvN}">점수</th>
+      <th class="gs-th sortable sec-r ${_st.sortCol==='rdAch'?'sort-on':''}" data-col-key="ra" rowspan="2"
+          onclick="GradeApp._toggleSort('rdAch')" style="vertical-align:middle">성취율 ${rdIcon}</th>` : '';
+    const rdRow3QK = hasRd ? actRevs.map((rv,i)=>`<th class="gs-th" data-col-key="rr${i}" style="font-size:9px;background:rgba(139,92,246,.04)">${_e(rv.name)}</th>`).join('') : '';
+    const rdRow3SK = hasRd ? actRevs.map((rv,i)=>`<th class="gs-th" data-col-key="rs${i}" style="font-size:9px;background:rgba(139,92,246,.04)">${_e(rv.name)}</th>`).join('') : '';
+
     const html = `
       <div class="gr-sheet-wrap">
         <table class="gr-sheet" oncontextmenu="GradeApp._onCtxTable(event)">
+          <colgroup>${colGroupHtml}</colgroup>
           <thead>
             <tr>
               <th class="gs-fix gs-th sortable ${_st.sortCol==='name'?'sort-on':''}" rowspan="3"
@@ -613,15 +660,15 @@ const GradeApp = (() => {
               <th class="gs-th sec-c" rowspan="3" style="min-width:36px;width:36px">💬</th>
             </tr>
             <tr>
-              <th class="gs-th" rowspan="2" style="background:var(--a10);color:var(--a);vertical-align:middle">총 테스트<br>(문제) 수</th>
-              <th class="gs-th" rowspan="2" style="background:var(--a10);color:var(--a);vertical-align:middle">재시험</th>
-              <th class="gs-th" rowspan="2" style="background:var(--a10);vertical-align:middle">통과</th>
-              <th class="gs-th sortable ${_st.sortCol==='wordAch'?'sort-on':''}" rowspan="2"
+              <th class="gs-th" data-col-key="wq" rowspan="2" style="background:var(--a10);color:var(--a);vertical-align:middle">총 테스트<br>(문제) 수</th>
+              <th class="gs-th" data-col-key="wr" rowspan="2" style="background:var(--a10);color:var(--a);vertical-align:middle">재시험</th>
+              <th class="gs-th" data-col-key="wp" rowspan="2" style="background:var(--a10);vertical-align:middle">통과</th>
+              <th class="gs-th sortable ${_st.sortCol==='wordAch'?'sort-on':''}" data-col-key="wa" rowspan="2"
                   onclick="GradeApp._toggleSort('wordAch')" style="background:var(--a10);vertical-align:middle">성취율 ${wIcon}</th>
-              ${rdRow2}
+              ${rdRow2K}
             </tr>
             <tr>
-              ${rdRow3Q}${rdRow3S}
+              ${rdRow3QK}${rdRow3SK}
             </tr>
           </thead>
           <tbody>
@@ -634,6 +681,7 @@ const GradeApp = (() => {
     /* Fix 3: 헤더 sticky top 값 동적 측정 (실제 렌더 후) */
     requestAnimationFrame(() => {
       _fixStickyHeaderTops();
+      _bindColResize(); // ★ 컬럼 리사이저 바인딩
       /* Fix 2: 엑셀 저장 폰트 복원 */
       if (_st.excelFontSize && _st.excelFontSize !== 12) {
         document.querySelectorAll('.gr-sheet thead th').forEach(th => {
@@ -1410,22 +1458,92 @@ const GradeApp = (() => {
 
   /* ★ 컬럼 드래그 리사이즈 */
   function _bindColResize() {
-    const tbl=document.querySelector('.gr-sheet');if(!tbl)return;
-    tbl.querySelectorAll('thead .gs-th.sec-w,thead .gs-th.sec-r,thead .gs-cm-cell').forEach(th=>{
-      if(th.querySelector('.gs-col-resizer'))return;
-      const h=document.createElement('div');
-      h.className='gs-col-resizer';
+    const tbl = document.querySelector('.gr-sheet'); if (!tbl) return;
+
+    // ── 저장된 너비 복원 (colgroup col 요소에 반영) ──
+    const saved = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
+    tbl.querySelectorAll('colgroup col[data-col-key]').forEach(col => {
+      const w = saved[col.dataset.colKey];
+      if (w) col.style.width = w + 'px';
+    });
+
+    // ── 각 data-col-key 를 가진 th 에 리사이저 핸들 부여 ──
+    tbl.querySelectorAll('thead th[data-col-key]').forEach(th => {
+      if (th.querySelector('.gs-col-resizer')) return;
+      const key = th.dataset.colKey;
+
+      const h = document.createElement('div');
+      h.className = 'gs-col-resizer';
+      h.title = '드래그하여 너비 조절';
       th.appendChild(h);
-      let sx=0,sw=0;
-      h.addEventListener('mousedown',e=>{
-        e.preventDefault();e.stopPropagation();
-        sx=e.clientX;sw=th.offsetWidth;h.classList.add('dragging');
-        const mv=ev=>{const w=Math.max(60,sw+ev.clientX-sx);th.style.width=w+'px';th.style.minWidth=w+'px';};
-        const up=()=>{h.classList.remove('dragging');document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);};
-        document.addEventListener('mousemove',mv);
-        document.addEventListener('mouseup',up);
+
+      const _getCol = () => tbl.querySelector(`colgroup col[data-col-key="${key}"]`);
+      const _getW   = () => { const c = _getCol(); return c ? (parseInt(c.style.width) || th.offsetWidth) : th.offsetWidth; };
+      const _setW   = w  => { const c = _getCol(); if (c) c.style.width = w + 'px'; };
+      const _saveW  = ()  => {
+        const c = _getCol(); if (!c) return;
+        const w = parseInt(c.style.width); if (!w) return;
+        const s = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
+        s[key] = w;
+        localStorage.setItem('gr_col_widths', JSON.stringify(s));
+      };
+
+      // 마우스
+      h.addEventListener('mousedown', e => {
+        e.preventDefault(); e.stopPropagation();
+        const sx = e.clientX, sw = _getW();
+        h.classList.add('dragging');
+        const mv = ev => _setW(Math.max(40, sw + ev.clientX - sx));
+        const up = () => {
+          h.classList.remove('dragging');
+          _saveW();
+          document.removeEventListener('mousemove', mv);
+          document.removeEventListener('mouseup', up);
+        };
+        document.addEventListener('mousemove', mv);
+        document.addEventListener('mouseup', up);
+      });
+
+      // 터치
+      h.addEventListener('touchstart', e => {
+        e.preventDefault(); e.stopPropagation();
+        const sx = e.touches[0].clientX, sw = _getW();
+        const mv = ev => { ev.preventDefault(); _setW(Math.max(40, sw + ev.touches[0].clientX - sx)); };
+        const up = () => {
+          _saveW();
+          document.removeEventListener('touchmove', mv);
+          document.removeEventListener('touchend', up);
+        };
+        document.addEventListener('touchmove', mv, { passive: false });
+        document.addEventListener('touchend', up);
+      }, { passive: false });
+
+      // 더블클릭 → 해당 컬럼 너비 초기화
+      h.addEventListener('dblclick', e => {
+        e.stopPropagation();
+        const defaults = { fix:130, wq:60, wr:50, wp:48, wa:56, rq:48, ra:56 };
+        const def = defaults[key] ?? 52;
+        _setW(def);
+        const s = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
+        delete s[key];
+        localStorage.setItem('gr_col_widths', JSON.stringify(s));
+        _toast('↩ 너비 초기화: ' + key.toUpperCase(), 'info');
       });
     });
+  }
+
+  /* 엑셀 컬럼 너비 전체 초기화 */
+  function _resetColWidths() {
+    localStorage.removeItem('gr_col_widths');
+    // colgroup 초기화
+    const tbl = document.querySelector('.gr-sheet'); if (!tbl) return;
+    const defaults = { fix:130, wq:60, wr:50, wp:48, wa:56, rq:48, ra:56 };
+    tbl.querySelectorAll('colgroup col[data-col-key]').forEach(col => {
+      const key = col.dataset.colKey;
+      const def = defaults[key] ?? 52;
+      col.style.width = def + 'px';
+    });
+    _toast('↩ 모든 컬럼 너비 초기화', 'info');
   }
 
   function _setGraphAlign(align) {
@@ -2846,6 +2964,9 @@ const GradeApp = (() => {
     /* 평가 설정 버튼 */
     const evalBtn = document.getElementById('gr-eval-btn');
     if(evalBtn) evalBtn.style.display = (_st.bookId) ? 'inline-block' : 'none';
+    /* 컬럼 너비 초기화 버튼 — 엑셀 뷰 + 교재 선택 시만 표시 */
+    const colResetBtn = document.getElementById('gr-col-reset-btn');
+    if(colResetBtn) colResetBtn.style.display = (isExcel && hasData) ? 'inline-block' : 'none';
     /* 헤더 폰트 버튼 */
     const fontBtn = document.getElementById('gr-hdr-font-btn');
     if(fontBtn) fontBtn.style.display = ((isExcel || _st.viewMode==='card') && hasData) ? '' : 'none';
@@ -3826,7 +3947,7 @@ const GradeApp = (() => {
     _slideTo, _ts, _te,
     _onCtxTable, _closeCtxMenu,
     saveOne, saveAll, resetOne,
-    _setLayout, _setHdrFontSize, _exportAllGrades, _importAllGrades, _toggleGraph, _setChartStyle, _setPageSize, _setRptFontSize, _setGraphAlign, _setDivider, _setLogoSize, _setTableRound, _bindColResize, _setFontFamily, _openFloatCfg, _setReportBold, _deliverReport, _setRptBg, _setRptScale,
+    _setLayout, _setHdrFontSize, _exportAllGrades, _importAllGrades, _toggleGraph, _setChartStyle, _setPageSize, _setRptFontSize, _setGraphAlign, _setDivider, _setLogoSize, _setTableRound, _bindColResize, _resetColWidths, _setFontFamily, _openFloatCfg, _setReportBold, _deliverReport, _setRptBg, _setRptScale,
     _setTitleAlign, _setTblColor, _applyTheme, _applyRptStyles,
     _setGraphStyleMode, _fixStickyHeaderTops,
     _copyReport, _shareReport, _printReport, _captureReport, _captureAllReports, _showShareModal, _showDeliverModal,
