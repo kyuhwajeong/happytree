@@ -226,6 +226,33 @@ const GradeApp = (() => {
 .gr-card-save-row{display:flex;gap:7px;padding:8px;}
 .gr-card-save-btn{flex:1;padding:10px;border:none;background:var(--a);color:#fff;font-size:12px;font-weight:800;cursor:pointer;font-family:var(--font);border-radius:9px;transition:all .15s;}
 .gr-card-save-btn:active{opacity:.85;}
+/* ── AI Comment Popover ── */
+.gr-cmt-icon-btn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:28px;padding:0;background:none;border:none;border-radius:6px;cursor:pointer;color:var(--tx3);font-size:15px;transition:color .15s,background .15s;position:relative;}
+.gr-cmt-icon-btn:hover{background:var(--a10);color:var(--tx);}
+.gr-cmt-icon-btn.has-cmt{color:var(--a);}
+.gr-cmt-dot{position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:var(--a);pointer-events:none;}
+.gr-cmt-pop{position:fixed;background:var(--card);border:1.5px solid var(--bdr2);border-radius:14px;padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.18);z-index:9990;animation:cpIn .12s ease;}
+@keyframes cpIn{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:translateY(0);}}
+.gr-cp-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;gap:8px;}
+.gr-cp-name{font-size:13px;font-weight:700;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+.gr-cp-tools{display:flex;gap:4px;flex-shrink:0;}
+.gr-cp-tool{display:inline-flex;align-items:center;gap:3px;font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--bdr2);background:var(--surf2);color:var(--tx);cursor:pointer;transition:background .12s;white-space:nowrap;}
+.gr-cp-tool:hover{background:var(--a10);color:var(--a);border-color:var(--a40);}
+.gr-cp-tool:disabled{opacity:.4;cursor:not-allowed;}
+.gr-cp-ta{width:100%;resize:vertical;min-height:72px;font-size:13px;line-height:1.55;padding:8px 10px;border-radius:8px;border:1.5px solid var(--bdr);background:var(--surf2);color:var(--tx);font-family:var(--font);box-sizing:border-box;transition:border-color .15s;}
+.gr-cp-ta:focus{outline:none;border-color:var(--a);}
+.gr-cp-status-line{font-size:11px;min-height:16px;margin-top:5px;line-height:1.4;}
+.gr-cp-status-line.cp-loading{color:var(--a);}
+.gr-cp-status-line.cp-ok{color:#16a34a;}
+.gr-cp-status-line.cp-err{color:#ef4444;}
+.gr-cp-foot{display:flex;align-items:center;justify-content:space-between;margin-top:9px;}
+.gr-cp-cnt{font-size:11px;color:var(--tx3);}
+.gr-cp-save{font-size:12px;padding:6px 14px;border-radius:7px;border:1.5px solid var(--a);background:var(--a10);color:var(--a);cursor:pointer;font-weight:700;transition:all .12s;}
+.gr-cp-save:hover{background:var(--a);color:#fff;}
+.gr-cp-cancel{font-size:12px;padding:6px 12px;border-radius:7px;border:1px solid var(--bdr2);background:none;color:var(--tx2);cursor:pointer;transition:background .12s;}
+.gr-cp-cancel:hover{background:var(--surf2);}
+.gr-cp-ai-row{display:flex;gap:5px;padding:4px 8px 5px;align-items:center;}
+
 
 /* ══ REPORT ══ */
 .gr-report-panel{padding:0;display:flex;flex-direction:column;height:100%;overflow:hidden;}
@@ -583,7 +610,7 @@ const GradeApp = (() => {
                   onclick="GradeApp._toggleSort('name')">학생 ${nmIcon}</th>
               <th class="gs-th sec-w" colspan="4">🔤 단어 평가</th>
               ${rdSection}
-              <th class="gs-th sec-c" rowspan="3" style="min-width:300px">💬 Teacher's Comment</th>
+              <th class="gs-th sec-c" rowspan="3" style="min-width:36px;width:36px">💬</th>
             </tr>
             <tr>
               <th class="gs-th" rowspan="2" style="background:var(--a10);color:var(--a);vertical-align:middle">총 테스트<br>(문제) 수</th>
@@ -675,9 +702,11 @@ const GradeApp = (() => {
           <span class="gs-val">${achW!==''?achW+'%':'—'}</span>
         </td>
         ${rdCells}
-        <td class="gs-td inp-cell gs-cm-cell">
-          <textarea class="gs-cm-inp" id="gr-cmt-${s.id}"
-            oninput="GradeApp._excelComment('${s.id}',this.value)">${_e(d.comment||'')}</textarea>
+        <td class="gs-td" style="text-align:center;padding:3px 5px;min-width:36px;width:36px">
+          <button class="gr-cmt-icon-btn${d.comment?.trim()?' has-cmt':''}"
+            id="gr-cmtbtn-${s.id}"
+            onclick="GradeApp._openCommentPop(event,'${s.id}')"
+            title="${_e((d.comment||'').slice(0,60))||'코멘트 없음'}">💬${d.comment?.trim()?'<span class=\"gr-cmt-dot\"></span>':''}</button>
         </td>
       </tr>`;
   }
@@ -720,7 +749,7 @@ const GradeApp = (() => {
       </td>
       <td class="gs-td ro"><span class="gs-val achv-c" id="gr-avg-w">${avgW!=null?avgW+'%':'—'}</span></td>
       ${rdAvgCells}
-      <td class="gs-td ro gs-cm-cell"></td>
+      <td class="gs-td ro" style="min-width:36px;width:36px"></td>
     </tr>`;
   }
 
@@ -1041,8 +1070,15 @@ const GradeApp = (() => {
         <div class="gr-csec-head"><div class="gr-csec-title">💬 Teacher's Comment</div></div>
         <div style="border:1px solid var(--bdr);border-top:none;border-radius:0 0 9px 9px">
           ${active
-            ? `<textarea class="gr-card-cmt" id="gr-cd-cmt-${s.id}"
-                         oninput="GradeApp._cardComment(this.value,'${s.id}')">${_e(d.comment||'')}</textarea>`
+            ? `<div>
+                <textarea class="gr-card-cmt" id="gr-cd-cmt-${s.id}"
+                  oninput="GradeApp._cardComment(this.value,'${s.id}')">${_e(d.comment||'')}</textarea>
+                <div class="gr-cp-ai-row">
+                  <button class="gr-cp-tool" onclick="GradeApp._cardAiGen('${s.id}')">✨ AI 생성</button>
+                  <button class="gr-cp-tool" onclick="GradeApp._cardAiProof('${s.id}')">🔍 교정</button>
+                  <span id="gr-cd-cmt-st-${s.id}" class="gr-cp-status-line" style="flex:1;margin:0 0 0 4px"></span>
+                </div>
+              </div>`
             : `<div style="padding:8px 10px;font-size:11px;color:var(--tx2);min-height:40px;line-height:1.7">${_e(d.comment||'')}</div>`}
         </div>
       </div>
@@ -3621,9 +3657,170 @@ const GradeApp = (() => {
     _renderContent();
   }
   
+  // ════════════════════════════════════════
+  // AI Comment Popover (엑셀뷰)
+  // ════════════════════════════════════════
+  let _activeCmtPop = null;
+
+  function _openCommentPop(e, sid) {
+    e.stopPropagation();
+    _closeCommentPop();
+    _ensureData(sid);
+    const stu = _getStudents().find(s => s.id === sid);
+    const d   = _st.data[sid] || {};
+    const btn = document.getElementById('gr-cmtbtn-' + sid);
+    if (!btn) return;
+
+    const pop = document.createElement('div');
+    pop.className = 'gr-cmt-pop';
+    pop.innerHTML =
+      '<div class="gr-cp-head">' +
+        '<span class="gr-cp-name">💬 ' + _e(stu ? stu.name : sid) + '</span>' +
+        '<div class="gr-cp-tools">' +
+          '<button class="gr-cp-tool" data-cpa="ai">✨ AI 생성</button>' +
+          '<button class="gr-cp-tool" data-cpa="proof">🔍 교정</button>' +
+          '<button class="gr-cp-cancel" data-cpa="close" style="padding:4px 7px;border-radius:6px;">✕</button>' +
+        '</div>' +
+      '</div>' +
+      '<textarea class="gr-cp-ta" rows="3" placeholder="Teacher's Comment를 입력하거나 AI 생성을 눌러보세요...">' + _e(d.comment || '') + '</textarea>' +
+      '<div class="gr-cp-status-line"></div>' +
+      '<div class="gr-cp-foot">' +
+        '<span class="gr-cp-cnt">' + (d.comment || '').length + '자</span>' +
+        '<div style="display:flex;gap:6px">' +
+          '<button class="gr-cp-cancel" data-cpa="cancel">취소</button>' +
+          '<button class="gr-cp-save" data-cpa="save">💾 저장</button>' +
+        '</div>' +
+      '</div>';
+
+    // 위치 계산
+    const rect = btn.getBoundingClientRect();
+    const pw   = Math.min(360, window.innerWidth - 16);
+    const left = Math.max(8, Math.min(rect.left - 20, window.innerWidth - pw - 8));
+    const spBelow = window.innerHeight - rect.bottom;
+    pop.style.left  = left + 'px';
+    pop.style.width = pw + 'px';
+    if (spBelow >= 240) pop.style.top    = (rect.bottom + 5) + 'px';
+    else                pop.style.bottom = (window.innerHeight - rect.top + 5) + 'px';
+
+    document.body.appendChild(pop);
+    _activeCmtPop = pop;
+
+    const ta     = pop.querySelector('.gr-cp-ta');
+    const cntEl  = pop.querySelector('.gr-cp-cnt');
+    const status = pop.querySelector('.gr-cp-status-line');
+    ta.focus();
+    ta.addEventListener('input', function() { cntEl.textContent = ta.value.length + '자'; });
+
+    pop.addEventListener('click', async function(e2) {
+      const act = e2.target.closest('[data-cpa]') ? e2.target.closest('[data-cpa]').dataset.cpa : null;
+      if (!act) return;
+      if (act === 'close' || act === 'cancel') {
+        _closeCommentPop();
+      } else if (act === 'ai') {
+        if (typeof GeminiAI === 'undefined') { _cpSt(status,'cp-err','⚠ gemini-ai.js 가 로드되지 않았습니다'); return; }
+        _cpSt(status,'cp-loading','✦ AI 생성 중...');
+        _cpLd(pop, true);
+        try {
+          const actRevs = GradeDB.getActiveReviews(_st.bookId);
+          ta.value = await GeminiAI.generateComment({ name: stu ? stu.name : sid, word: d.word, reading: d.reading });
+          cntEl.textContent = ta.value.length + '자';
+          _cpSt(status,'cp-ok','✓ 생성 완료 — 수정 후 저장하세요');
+        } catch(err) { _cpSt(status,'cp-err','⚠ ' + _cpMsg(err)); }
+        finally { _cpLd(pop, false); }
+      } else if (act === 'proof') {
+        if (!ta.value.trim()) { _cpSt(status,'cp-err','교정할 텍스트를 먼저 입력하세요'); return; }
+        if (typeof GeminiAI === 'undefined') { _cpSt(status,'cp-err','⚠ gemini-ai.js 가 로드되지 않았습니다'); return; }
+        _cpSt(status,'cp-loading','✦ 교정 중...');
+        _cpLd(pop, true);
+        try {
+          ta.value = await GeminiAI.proofreadComment(ta.value);
+          cntEl.textContent = ta.value.length + '자';
+          _cpSt(status,'cp-ok','✓ 교정 완료');
+        } catch(err) { _cpSt(status,'cp-err','⚠ ' + _cpMsg(err)); }
+        finally { _cpLd(pop, false); }
+      } else if (act === 'save') {
+        _cpLd(pop, true);
+        _st.data[sid].comment = ta.value.trim();
+        _st.dirty.add(sid);
+        _refreshDirtyUI();
+        try {
+          await saveOne(sid);
+          var b2 = document.getElementById('gr-cmtbtn-' + sid);
+          if (b2) {
+            var hasCmt = !!ta.value.trim();
+            b2.className = 'gr-cmt-icon-btn' + (hasCmt ? ' has-cmt' : '');
+            b2.title = hasCmt ? ta.value.trim().slice(0,60) : '코멘트 없음';
+            b2.innerHTML = '💬' + (hasCmt ? '<span class="gr-cmt-dot"></span>' : '');
+          }
+          _closeCommentPop();
+        } catch(err) { _cpSt(status,'cp-err','⚠ 저장 실패: ' + _cpMsg(err)); _cpLd(pop, false); }
+      }
+    });
+
+    pop._keyH = function(e2) { if (e2.key === 'Escape') _closeCommentPop(); };
+    document.addEventListener('keydown', pop._keyH);
+    setTimeout(function() {
+      pop._clickH = function(e2) { if (!pop.contains(e2.target) && e2.target !== btn) _closeCommentPop(); };
+      document.addEventListener('click', pop._clickH);
+    }, 50);
+  }
+
+  function _closeCommentPop() {
+    if (!_activeCmtPop) return;
+    if (_activeCmtPop._keyH)   document.removeEventListener('keydown', _activeCmtPop._keyH);
+    if (_activeCmtPop._clickH) document.removeEventListener('click',   _activeCmtPop._clickH);
+    _activeCmtPop.remove();
+    _activeCmtPop = null;
+  }
+
+  function _cpSt(el, cls, msg) { el.className = 'gr-cp-status-line ' + cls; el.textContent = msg; }
+  function _cpLd(pop, on)      { pop.querySelectorAll('[data-cpa]').forEach(function(b){ b.disabled = on; }); }
+  function _cpMsg(err) {
+    var m = err && err.message ? err.message : String(err);
+    if (m.indexOf('403') >= 0) return 'API 키 오류 또는 할당량 초과';
+    if (m.indexOf('429') >= 0) return 'API 요청 한도 초과 (잠시 후 재시도)';
+    return m.slice(0, 80);
+  }
+
+  // ════════════════════════════════════════
+  // AI Comment — 카드뷰 전용
+  // ════════════════════════════════════════
+  async function _cardAiGen(sid) {
+    if (typeof GeminiAI === 'undefined') { _toast('⚠ gemini-ai.js 가 로드되지 않았습니다'); return; }
+    _ensureData(sid);
+    var stu    = _getStudents().find(function(s){ return s.id === sid; });
+    var d      = _st.data[sid] || {};
+    var ta     = document.getElementById('gr-cd-cmt-' + sid);
+    var status = document.getElementById('gr-cd-cmt-st-' + sid);
+    if (!ta) return;
+    _cpSt(status, 'cp-loading', '✦ AI 생성 중...');
+    try {
+      ta.value = await GeminiAI.generateComment({ name: stu ? stu.name : sid, word: d.word, reading: d.reading });
+      _cardComment(ta.value, sid);
+      _cpSt(status, 'cp-ok', '✓ 완료');
+      setTimeout(function(){ if(status) status.textContent=''; }, 3000);
+    } catch(err) { _cpSt(status, 'cp-err', '⚠ ' + _cpMsg(err)); }
+  }
+
+  async function _cardAiProof(sid) {
+    if (typeof GeminiAI === 'undefined') { _toast('⚠ gemini-ai.js 가 로드되지 않았습니다'); return; }
+    var ta     = document.getElementById('gr-cd-cmt-' + sid);
+    var status = document.getElementById('gr-cd-cmt-st-' + sid);
+    if (!ta || !ta.value.trim()) { _toast('⚠ 교정할 텍스트를 먼저 입력하세요'); return; }
+    _cpSt(status, 'cp-loading', '✦ 교정 중...');
+    try {
+      ta.value = await GeminiAI.proofreadComment(ta.value);
+      _cardComment(ta.value, sid);
+      _cpSt(status, 'cp-ok', '✓ 교정 완료');
+      setTimeout(function(){ if(status) status.textContent=''; }, 3000);
+    } catch(err) { _cpSt(status, 'cp-err', '⚠ ' + _cpMsg(err)); }
+  }
+
+
   return {
     init, render,
     _onCls, _onBk, _openEvalFromGrade, _showEvalPopup, _openEvalPopupDirect, _grAddReview, _saveEvalCfg, _refreshAfterEvalUpdate, _onStu, _setView, _toggleSort,
+    _openCommentPop, _closeCommentPop, _cardAiGen, _cardAiProof,
     _excelWordInput, _excelRdInput, _excelComment, _onKey,
     _cardWordInput, _cardRdInput, _cardComment,
     _slideTo, _ts, _te,
