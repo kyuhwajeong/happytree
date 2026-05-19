@@ -3682,7 +3682,7 @@ const GradeApp = (() => {
           '<button class="gr-cp-cancel" data-cpa="close" style="padding:4px 7px;border-radius:6px;">✕</button>' +
         '</div>' +
       '</div>' +
-      '<textarea class="gr-cp-ta" rows="3" placeholder="Teacher's Comment를 입력하거나 AI 생성을 눌러보세요...">' + _e(d.comment || '') + '</textarea>' +
+      '<textarea class="gr-cp-ta" rows="3" placeholder="Teacher&#39;s Comment를 입력하거나 AI 생성을 눌러보세요...">' + _e(d.comment || '') + '</textarea>' +
       '<div class="gr-cp-status-line"></div>' +
       '<div class="gr-cp-foot">' +
         '<span class="gr-cp-cnt">' + (d.comment || '').length + '자</span>' +
