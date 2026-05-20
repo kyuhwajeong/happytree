@@ -5,14 +5,15 @@
  */
 const GeminiAI = (() => {
   /* ── API 설정 ──────────────────────────────────────────────── */
-  const API_KEY = 'AIzaSyBR_AMVKpuajVmS3XvLVFn3nLdK2BBQ8t8';
-  /* 429(한도초과) 시 순서대로 폴백 */
+  const API_KEY = 'AIzaSyCRtu_qWYXsCt2iuVAB5AHh9IXYWt1_qRQ';
+  /* 429(한도) 시 순서대로 폴백 — 확인된 유효 모델만 */
   const MODELS = [
     'gemini-2.0-flash',
     'gemini-1.5-flash',
-    'gemini-1.5-flash-8b',
+    'gemini-1.5-flash-latest',
   ];
-  const _ep = m => `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${API_KEY}`;
+  const _ep = m =>
+    `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${API_KEY}`;
 
   /* ── system_instruction ① — Teacher's Comment 생성 ─────────
    *  - 영어 2~4문장, 긍정·격려 톤 유지
@@ -53,7 +54,7 @@ const GeminiAI = (() => {
 4. 원문이 이미 자연스러운 경우 그대로 반환합니다.
 `.trim();
 
-  /* ── 내부 fetch 헬퍼 — 429 시 다음 모델로 자동 폴백 ──────── */
+  /* ── 내부 fetch — 429/404 시 다음 모델로 자동 폴백 ─────────── */
   async function _call(si, userText) {
     let lastErr;
     for (const model of MODELS) {
@@ -67,23 +68,24 @@ const GeminiAI = (() => {
             generationConfig  : { temperature: 0.75, maxOutputTokens: 350, topP: 0.9 },
           }),
         });
-        if (res.status === 429 || res.status === 503) {
-          lastErr = new Error(`${model}_quota`);
-          continue; // 다음 모델 시도
+        /* 429=한도초과, 404=모델없음 → 다음 모델 시도 */
+        if (res.status === 429 || res.status === 404 || res.status === 503) {
+          lastErr = new Error(`${model}_skip_${res.status}`);
+          continue;
         }
         if (!res.ok) {
-          const errTxt = await res.text().catch(() => '');
-          throw new Error(`Gemini API ${res.status}: ${errTxt.slice(0, 120)}`);
+          const t = await res.text().catch(() => '');
+          throw new Error(`Gemini API ${res.status}: ${t.slice(0, 120)}`);
         }
         const data = await res.json();
         const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
         return text.trim().replace(/^["']|["']$/g, '');
       } catch (e) {
-        if (e.message.endsWith('_quota')) { lastErr = e; continue; }
-        throw e; // 네트워크 오류 등은 즉시 throw
+        if (/_skip_/.test(e.message)) { lastErr = e; continue; }
+        throw e;
       }
     }
-    throw new Error('API 요청 한도 초과 (잠시 후 재시도)');
+    throw new Error('API 요청 한도 초과 — 잠시 후 재시도해 주세요.');
   }
 
   /* ── 공개 API ─────────────────────────────────────────────── */

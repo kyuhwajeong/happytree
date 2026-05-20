@@ -104,23 +104,16 @@ const GradeApp = (() => {
 /* ══ EXCEL MODE ══ */
 .gr-sheet-wrap{width:100%;overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 280px);position:relative;}
 .gr-sheet{border-collapse:collapse;font-size:12px;table-layout:fixed;width:auto;min-width:100%;}
-.gr-sheet thead th{overflow:hidden;white-space:nowrap;}
+.gr-sheet thead th{overflow:hidden;white-space:nowrap;position:sticky;z-index:4;background:var(--surf2);}
 .gr-sheet tbody td{overflow:hidden;}
-
 /* fixed student col */
 .gr-sheet .gs-fix{position:sticky;left:0;z-index:3;background:var(--surf);border:1px solid var(--bdr);padding:5px 7px;min-width:100px;width:100px;cursor:pointer;}
 .gr-sheet thead .gs-fix{z-index:6;background:var(--surf2);}
 .gr-sheet .gs-fix.sel,.gr-sheet .gs-fix:hover{background:var(--a10);}
-/* ★ 헤더 2행 sticky — row1:얇은 띠(~18px), row2:실제 헤더 */
-.gr-sheet thead th{position:sticky;z-index:4;background:var(--surf2);}
-.gr-sheet thead tr:first-child th{top:0;}
-.gr-sheet thead tr:nth-child(2) th{top:18px;}  /* row1 높이 ~18px 기준 */
-.gr-sheet thead tr:first-child .gs-fix{top:0;z-index:7;}
-.gr-sheet thead tr:nth-child(2) .gs-fix{top:18px;z-index:7;}
-/* row1: 얇은 섹션 라벨 띠 */
-.gr-sheet thead tr.gs-band th{height:18px;max-height:18px;padding:0 4px;font-size:9px;font-weight:700;line-height:18px;border-bottom:none;}
+/* row1: 얇은 섹션 라벨 띠 — 높이 고정 20px */
+.gr-sheet thead tr.gs-band th{height:20px;padding:0 4px;font-size:9px;font-weight:700;line-height:20px;border-bottom:none;}
 /* row2: 실제 컬럼 헤더 */
-.gr-sheet thead tr.gs-cols th{padding:6px 4px;}
+.gr-sheet thead tr.gs-cols th{padding:5px 4px;}
 
 /* header */
 .gs-th{background:var(--surf2);border:1px solid var(--bdr);padding:5px 4px;font-size:11px;font-weight:800;color:var(--tx2);text-align:center;white-space:nowrap;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;}
@@ -153,15 +146,110 @@ const GradeApp = (() => {
 .gs-inp::-webkit-outer-spin-button,.gs-inp::-webkit-inner-spin-button{-webkit-appearance:none;}
 .gs-inp:focus{background:rgba(99,102,241,.08);border-radius:4px;}
 
-/* comment 셀 — 인라인 표시 + 팝오버 버튼 */
-.gs-cm-cell{min-width:160px;max-width:400px;padding:0;}
-.gs-cm-wrap{display:flex;align-items:stretch;gap:0;height:100%;}
-.gs-cm-preview{flex:1;padding:4px 6px;font-size:11px;color:var(--tx3);line-height:1.4;cursor:pointer;white-space:pre-wrap;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;min-width:0;}
-.gs-cm-preview.has-text{color:var(--tx);}
-.gs-cm-preview:hover{background:var(--a10);border-radius:4px;}
-.gs-cm-icon{flex:0 0 28px;width:28px;display:flex;align-items:center;justify-content:center;border-left:1px solid var(--bdr);cursor:pointer;color:var(--tx3);font-size:13px;transition:background .12s;}
+/* comment 셀 — 인라인 직접 편집 */
+.gs-cm-cell{min-width:160px;max-width:400px;padding:0;vertical-align:top;}
+.gs-cm-wrap{display:flex;align-items:stretch;height:100%;}
+/* 인라인 textarea */
+.gs-cm-ta{
+  flex:1;padding:5px 7px;border:none;outline:none;
+  background:transparent;font-size:12px;color:var(--tx);
+  font-family:var(--font);resize:none;line-height:1.5;
+  min-height:48px;width:100%;box-sizing:border-box;
+  white-space:pre-wrap;word-break:break-word;
+}
+.gs-cm-ta:focus{background:rgba(5,150,105,.04);}
+.gs-cm-ta::placeholder{color:var(--tx3);font-style:italic;}
+/* ✏️ AI 버튼 */
+.gs-cm-icon{
+  flex:0 0 26px;width:26px;display:flex;align-items:center;
+  justify-content:center;border-left:1px solid var(--bdr);
+  cursor:pointer;color:var(--tx3);font-size:12px;
+  transition:background .12s;background:var(--surf2);
+}
 .gs-cm-icon:hover{background:var(--a10);color:var(--a);}
 .gs-cm-icon.has-cmt{color:var(--green);}
+
+/* ══ Comment 대형 팝업 (✏️버튼 전용) ══ */
+.gr-cmt-modal{
+  position:fixed;inset:0;background:rgba(0,0,0,.5);
+  z-index:600;display:flex;align-items:center;justify-content:center;
+  padding:16px;
+}
+.gr-cmt-box{
+  background:var(--card);border-radius:20px;
+  width:100%;max-width:560px;
+  box-shadow:0 8px 40px rgba(0,0,0,.22);
+  display:flex;flex-direction:column;
+  max-height:90vh;overflow:hidden;
+}
+.gr-cmt-header{
+  padding:20px 22px 14px;border-bottom:1px solid var(--bdr);
+  display:flex;align-items:center;justify-content:space-between;
+  flex-shrink:0;
+}
+.gr-cmt-title{font-size:18px;font-weight:800;color:var(--tx);}
+.gr-cmt-subtitle{font-size:13px;color:var(--tx3);margin-top:3px;}
+.gr-cmt-close{
+  width:36px;height:36px;border-radius:50%;border:none;
+  background:var(--surf2);cursor:pointer;font-size:18px;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--tx2);transition:background .12s;flex-shrink:0;
+}
+.gr-cmt-close:hover{background:var(--bdr);}
+.gr-cmt-body{padding:18px 22px;flex:1;overflow-y:auto;}
+/* 팝업 내 textarea — 크고 편하게 */
+.gr-cmt-textarea{
+  width:100%;box-sizing:border-box;
+  min-height:160px;padding:14px 16px;
+  border:2px solid var(--bdr);border-radius:12px;
+  background:var(--surf2);
+  font-size:16px;line-height:1.7;color:var(--tx);
+  font-family:var(--font);resize:vertical;
+  outline:none;transition:border-color .15s;
+}
+.gr-cmt-textarea:focus{border-color:var(--a);}
+/* AI 버튼 행 */
+.gr-cmt-ai-row{
+  display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;
+}
+.gr-cmt-ai-btn{
+  flex:1;min-width:120px;padding:13px 10px;
+  border-radius:12px;border:2px solid var(--bdr2);
+  background:var(--surf2);font-size:14px;font-weight:700;
+  cursor:pointer;color:var(--tx);transition:all .15s;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.gr-cmt-ai-btn:hover{border-color:var(--a);color:var(--a);background:var(--a10);}
+.gr-cmt-ai-btn:disabled{opacity:.4;cursor:not-allowed;}
+.gr-cmt-ai-btn.proof{border-color:rgba(139,92,246,.4);}
+.gr-cmt-ai-btn.proof:hover{border-color:#8b5cf6;color:#8b5cf6;background:rgba(139,92,246,.08);}
+/* 상태 메시지 */
+.gr-cmt-status{
+  margin-top:10px;min-height:20px;font-size:13px;
+  padding:8px 12px;border-radius:8px;display:none;
+}
+.gr-cmt-status.show{display:block;}
+.gr-cmt-status.loading{background:var(--a10);color:var(--a);}
+.gr-cmt-status.ok{background:rgba(22,163,74,.1);color:#16a34a;}
+.gr-cmt-status.err{background:rgba(239,68,68,.1);color:#ef4444;}
+/* 하단 버튼 */
+.gr-cmt-footer{
+  padding:14px 22px 20px;border-top:1px solid var(--bdr);
+  display:flex;gap:10px;flex-shrink:0;
+}
+.gr-cmt-cancel-btn{
+  flex:1;padding:14px;border-radius:12px;
+  background:var(--surf2);border:1.5px solid var(--bdr2);
+  font-size:15px;font-weight:700;cursor:pointer;color:var(--tx2);
+}
+.gr-cmt-save-btn{
+  flex:2;padding:14px;border-radius:12px;
+  background:var(--a);color:#fff;border:none;
+  font-size:15px;font-weight:800;cursor:pointer;
+  transition:opacity .12s;
+}
+.gr-cmt-save-btn:hover{opacity:.88;}
+.gr-cmt-char-count{font-size:12px;color:var(--tx3);text-align:right;margin-top:6px;}
 
 /* ── 컬럼 리사이저 핸들 ── */
 thead th[data-col-key]{position:relative;overflow:visible;}
@@ -674,9 +762,11 @@ thead th[data-col-key]{position:relative;overflow:visible;}
       </div>`;
     cnt.innerHTML = html;
     requestAnimationFrame(() => {
+      _applyTableWidth();
+      _bindColResize();
       _fixStickyHeaderTops();
-      _applyTableWidth();   // ★ colgroup 합산 → 테이블 총 너비 확정
-      _bindColResize();     // ★ 리사이저 핸들 바인딩
+      // 레이아웃 완전히 끝난 뒤 한번 더 정확히 재계산
+      requestAnimationFrame(_fixStickyHeaderTops);
       if (_st.excelFontSize && _st.excelFontSize !== 12) {
         document.querySelectorAll('.gr-sheet thead th').forEach(th => {
           th.style.fontSize = _st.excelFontSize + 'px';
@@ -746,12 +836,15 @@ thead th[data-col-key]{position:relative;overflow:visible;}
         ${rdCells}
         <td class="gs-td gs-cm-cell" style="padding:0;">
           <div class="gs-cm-wrap">
-            <div class="gs-cm-preview${d.comment?.trim()?' has-text':''}"
-              onclick="GradeApp._openCommentPop(event,'${s.id}')"
-              title="클릭하여 편집">${_e(d.comment||'').replace(/\n/g,'<br>') || '<span style="color:var(--tx3);font-style:italic;font-size:10px">코멘트 없음 — 클릭하여 입력</span>'}</div>
+            <textarea class="gs-cm-ta"
+              id="gr-cmta-${s.id}"
+              placeholder="코멘트 입력…"
+              data-sid="${s.id}"
+              oninput="GradeApp._onCmtInput('${s.id}',this.value)"
+            >${_e(d.comment || '')}</textarea>
             <div class="gs-cm-icon${d.comment?.trim()?' has-cmt':''}"
-              onclick="GradeApp._openCommentPop(event,'${s.id}')"
               id="gr-cmtbtn-${s.id}"
+              onclick="GradeApp._openCommentPop(event,'${s.id}')"
               title="AI 생성 / 교정">✏️</div>
           </div>
         </td>
@@ -2139,7 +2232,8 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     const rows = [...thead.querySelectorAll('tr')];
     let cumH = 0;
     rows.forEach(row => {
-      const h = row.getBoundingClientRect().height || (row.classList.contains('gs-band') ? 18 : 34);
+      // offsetHeight 우선(레이아웃 완료 후 정확), BoundingRect 폴백
+      const h = row.offsetHeight || Math.round(row.getBoundingClientRect().height) || (row.classList.contains('gs-band') ? 20 : 34);
       row.querySelectorAll('th').forEach(th => {
         th.style.position = 'sticky';
         th.style.top = cumH + 'px';
@@ -3795,114 +3889,160 @@ thead th[data-col-key]{position:relative;overflow:visible;}
   // ════════════════════════════════════════
   let _activeCmtPop = null;
 
+  /* 인라인 textarea 입력 → 즉시 메모리 반영 (저장은 자동 or 수동) */
+  function _onCmtInput(sid, val) {
+    _ensureData(sid);
+    _st.data[sid].comment = val;
+    _st.dirty.add(sid);
+    _refreshDirtyUI();
+    // 아이콘 has-cmt 상태 갱신
+    const icon = document.getElementById('gr-cmtbtn-' + sid);
+    if (icon) icon.className = 'gs-cm-icon' + (val.trim() ? ' has-cmt' : '');
+  }
+
+  /* ✏️ 버튼 → 대형 AI 팝업 */
   function _openCommentPop(e, sid) {
     e.stopPropagation();
     _closeCommentPop();
     _ensureData(sid);
     const stu = _getStudents().find(s => s.id === sid);
     const d   = _st.data[sid] || {};
-    const btn = document.getElementById('gr-cmtbtn-' + sid);
-    if (!btn) return;
 
-    const pop = document.createElement('div');
-    pop.className = 'gr-cmt-pop';
-    pop.innerHTML =
-      '<div class="gr-cp-head">' +
-        '<span class="gr-cp-name">💬 ' + _e(stu ? stu.name : sid) + '</span>' +
-        '<div class="gr-cp-tools">' +
-          '<button class="gr-cp-tool" data-cpa="ai">✨ AI 생성</button>' +
-          '<button class="gr-cp-tool" data-cpa="proof">🔍 교정</button>' +
-          '<button class="gr-cp-cancel" data-cpa="close" style="padding:4px 7px;border-radius:6px;">✕</button>' +
-        '</div>' +
-      '</div>' +
-      '<textarea class="gr-cp-ta" rows="3" placeholder="Teacher&#39;s Comment를 입력하거나 AI 생성을 눌러보세요...">' + _e(d.comment || '') + '</textarea>' +
-      '<div class="gr-cp-status-line"></div>' +
-      '<div class="gr-cp-foot">' +
-        '<span class="gr-cp-cnt">' + (d.comment || '').length + '자</span>' +
-        '<div style="display:flex;gap:6px">' +
-          '<button class="gr-cp-cancel" data-cpa="cancel">취소</button>' +
-          '<button class="gr-cp-save" data-cpa="save">💾 저장</button>' +
-        '</div>' +
-      '</div>';
+    // ── 모달 생성 ──
+    const modal = document.createElement('div');
+    modal.className = 'gr-cmt-modal';
+    modal.id = 'gr-cmt-modal';
+    modal.onclick = e2 => { if (e2.target === modal) _closeCommentPop(); };
 
-    // 위치 계산
-    const rect = btn.getBoundingClientRect();
-    const pw   = Math.min(360, window.innerWidth - 16);
-    const left = Math.max(8, Math.min(rect.left - 20, window.innerWidth - pw - 8));
-    const spBelow = window.innerHeight - rect.bottom;
-    pop.style.left  = left + 'px';
-    pop.style.width = pw + 'px';
-    if (spBelow >= 240) pop.style.top    = (rect.bottom + 5) + 'px';
-    else                pop.style.bottom = (window.innerHeight - rect.top + 5) + 'px';
+    const box = document.createElement('div');
+    box.className = 'gr-cmt-box';
 
-    document.body.appendChild(pop);
-    _activeCmtPop = pop;
+    // 헤더
+    const header = document.createElement('div');
+    header.className = 'gr-cmt-header';
+    header.innerHTML = `
+      <div>
+        <div class="gr-cmt-title">✏️ Teacher's Comment</div>
+        <div class="gr-cmt-subtitle">${_e(stu ? (stu.name + (stu.nickname ? ' ('+stu.nickname+')' : '')) : sid)}</div>
+      </div>
+      <button class="gr-cmt-close" onclick="GradeApp._closeCommentPop()">✕</button>`;
+    box.appendChild(header);
 
-    const ta     = pop.querySelector('.gr-cp-ta');
-    const cntEl  = pop.querySelector('.gr-cp-cnt');
-    const status = pop.querySelector('.gr-cp-status-line');
+    // 본문
+    const body = document.createElement('div');
+    body.className = 'gr-cmt-body';
+
+    const ta = document.createElement('textarea');
+    ta.className = 'gr-cmt-textarea';
+    ta.placeholder = "Teacher's Comment를 입력하거나 아래 AI 버튼을 눌러보세요…";
+    ta.value = d.comment || '';
+    ta.rows = 6;
+    body.appendChild(ta);
+
+    const charCount = document.createElement('div');
+    charCount.className = 'gr-cmt-char-count';
+    charCount.textContent = ta.value.length + '자';
+    body.appendChild(charCount);
+    ta.addEventListener('input', () => { charCount.textContent = ta.value.length + '자'; });
+
+    // AI 버튼 행
+    const aiRow = document.createElement('div');
+    aiRow.className = 'gr-cmt-ai-row';
+    aiRow.innerHTML = `
+      <button class="gr-cmt-ai-btn" id="gr-cmt-gen">✨ AI 자동 생성</button>
+      <button class="gr-cmt-ai-btn proof" id="gr-cmt-proof">🔍 문법 교정</button>`;
+    body.appendChild(aiRow);
+
+    const status = document.createElement('div');
+    status.className = 'gr-cmt-status';
+    body.appendChild(status);
+
+    box.appendChild(body);
+
+    // 하단 버튼
+    const footer = document.createElement('div');
+    footer.className = 'gr-cmt-footer';
+    footer.innerHTML = `
+      <button class="gr-cmt-cancel-btn" onclick="GradeApp._closeCommentPop()">취소</button>
+      <button class="gr-cmt-save-btn" id="gr-cmt-save">💾 저장</button>`;
+    box.appendChild(footer);
+
+    modal.appendChild(box);
+    document.body.appendChild(modal);
+    _activeCmtPop = modal;
     ta.focus();
-    ta.addEventListener('input', function() { cntEl.textContent = ta.value.length + '자'; });
 
-    pop.addEventListener('click', async function(e2) {
-      const act = e2.target.closest('[data-cpa]') ? e2.target.closest('[data-cpa]').dataset.cpa : null;
-      if (!act) return;
-      if (act === 'close' || act === 'cancel') {
+    // 상태 표시 헬퍼
+    const _st2 = (cls, msg) => {
+      status.className = 'gr-cmt-status show ' + cls;
+      status.textContent = msg;
+    };
+    const _loading = on => {
+      const genBtn   = modal.querySelector('#gr-cmt-gen');
+      const proofBtn = modal.querySelector('#gr-cmt-proof');
+      const saveBtn  = modal.querySelector('#gr-cmt-save');
+      [genBtn, proofBtn, saveBtn].forEach(b => { if(b) b.disabled = on; });
+    };
+
+    // AI 생성
+    modal.querySelector('#gr-cmt-gen').onclick = async () => {
+      if (typeof GeminiAI === 'undefined') { _st2('err','⚠ GeminiAI 모듈 미로드'); return; }
+      _st2('loading','✦ AI 생성 중… 잠시 기다려 주세요');
+      _loading(true);
+      try {
+        ta.value = await GeminiAI.generateComment({ name: stu ? stu.name : sid, word: d.word, reading: d.reading });
+        charCount.textContent = ta.value.length + '자';
+        _st2('ok','✓ 생성 완료 — 내용을 확인하고 저장하세요');
+      } catch(err) { _st2('err','⚠ ' + _cpMsg(err)); }
+      finally { _loading(false); }
+    };
+
+    // AI 교정
+    modal.querySelector('#gr-cmt-proof').onclick = async () => {
+      if (!ta.value.trim()) { _st2('err','교정할 텍스트를 먼저 입력하세요'); return; }
+      if (typeof GeminiAI === 'undefined') { _st2('err','⚠ GeminiAI 모듈 미로드'); return; }
+      _st2('loading','✦ 교정 중…');
+      _loading(true);
+      try {
+        ta.value = await GeminiAI.proofreadComment(ta.value);
+        charCount.textContent = ta.value.length + '자';
+        _st2('ok','✓ 교정 완료');
+      } catch(err) { _st2('err','⚠ ' + _cpMsg(err)); }
+      finally { _loading(false); }
+    };
+
+    // 저장
+    modal.querySelector('#gr-cmt-save').onclick = async () => {
+      _loading(true);
+      const val = ta.value.trim();
+      _st.data[sid].comment = val;
+      _st.dirty.add(sid);
+      _refreshDirtyUI();
+      // 인라인 textarea도 동기화
+      const inlineTa = document.getElementById('gr-cmta-' + sid);
+      if (inlineTa) inlineTa.value = val;
+      const icon = document.getElementById('gr-cmtbtn-' + sid);
+      if (icon) icon.className = 'gs-cm-icon' + (val ? ' has-cmt' : '');
+      try {
+        await saveOne(sid);
         _closeCommentPop();
-      } else if (act === 'ai') {
-        if (typeof GeminiAI === 'undefined') { _cpSt(status,'cp-err','⚠ gemini-ai.js 가 로드되지 않았습니다'); return; }
-        _cpSt(status,'cp-loading','✦ AI 생성 중...');
-        _cpLd(pop, true);
-        try {
-          const actRevs = GradeDB.getActiveReviews(_st.bookId);
-          ta.value = await GeminiAI.generateComment({ name: stu ? stu.name : sid, word: d.word, reading: d.reading });
-          cntEl.textContent = ta.value.length + '자';
-          _cpSt(status,'cp-ok','✓ 생성 완료 — 수정 후 저장하세요');
-        } catch(err) { _cpSt(status,'cp-err','⚠ ' + _cpMsg(err)); }
-        finally { _cpLd(pop, false); }
-      } else if (act === 'proof') {
-        if (!ta.value.trim()) { _cpSt(status,'cp-err','교정할 텍스트를 먼저 입력하세요'); return; }
-        if (typeof GeminiAI === 'undefined') { _cpSt(status,'cp-err','⚠ gemini-ai.js 가 로드되지 않았습니다'); return; }
-        _cpSt(status,'cp-loading','✦ 교정 중...');
-        _cpLd(pop, true);
-        try {
-          ta.value = await GeminiAI.proofreadComment(ta.value);
-          cntEl.textContent = ta.value.length + '자';
-          _cpSt(status,'cp-ok','✓ 교정 완료');
-        } catch(err) { _cpSt(status,'cp-err','⚠ ' + _cpMsg(err)); }
-        finally { _cpLd(pop, false); }
-      } else if (act === 'save') {
-        _cpLd(pop, true);
-        _st.data[sid].comment = ta.value.trim();
-        _st.dirty.add(sid);
-        _refreshDirtyUI();
-        try {
-          await saveOne(sid);
-          var b2 = document.getElementById('gr-cmtbtn-' + sid);
-          if (b2) {
-            var hasCmt = !!ta.value.trim();
-            b2.className = 'gr-cmt-icon-btn' + (hasCmt ? ' has-cmt' : '');
-            b2.title = hasCmt ? ta.value.trim().slice(0,60) : '코멘트 없음';
-            b2.innerHTML = '💬' + (hasCmt ? '<span class="gr-cmt-dot"></span>' : '');
-          }
-          _closeCommentPop();
-        } catch(err) { _cpSt(status,'cp-err','⚠ 저장 실패: ' + _cpMsg(err)); _cpLd(pop, false); }
-      }
-    });
+      } catch(err) { _st2('err','⚠ 저장 실패: ' + _cpMsg(err)); _loading(false); }
+    };
 
-    pop._keyH = function(e2) { if (e2.key === 'Escape') _closeCommentPop(); };
-    document.addEventListener('keydown', pop._keyH);
-    setTimeout(function() {
-      pop._clickH = function(e2) { if (!pop.contains(e2.target) && e2.target !== btn) _closeCommentPop(); };
-      document.addEventListener('click', pop._clickH);
-    }, 50);
+    // Esc 닫기
+    modal._keyH = e2 => { if (e2.key === 'Escape') _closeCommentPop(); };
+    document.addEventListener('keydown', modal._keyH);
   }
 
   function _closeCommentPop() {
-    if (!_activeCmtPop) return;
-    if (_activeCmtPop._keyH)   document.removeEventListener('keydown', _activeCmtPop._keyH);
-    if (_activeCmtPop._clickH) document.removeEventListener('click',   _activeCmtPop._clickH);
-    _activeCmtPop.remove();
+    const m = document.getElementById('gr-cmt-modal');
+    if (m) { if (m._keyH) document.removeEventListener('keydown', m._keyH); m.remove(); }
+    // 구버전 팝오버도 정리
+    if (_activeCmtPop && _activeCmtPop !== m) {
+      if (_activeCmtPop._keyH) document.removeEventListener('keydown', _activeCmtPop._keyH);
+      if (_activeCmtPop._clickH) document.removeEventListener('click', _activeCmtPop._clickH);
+      _activeCmtPop.remove();
+    }
     _activeCmtPop = null;
   }
 
@@ -3959,7 +4099,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     _slideTo, _ts, _te,
     _onCtxTable, _closeCtxMenu,
     saveOne, saveAll, resetOne,
-    _setLayout, _setHdrFontSize, _exportAllGrades, _importAllGrades, _toggleGraph, _setChartStyle, _setPageSize, _setRptFontSize, _setGraphAlign, _setDivider, _setLogoSize, _setTableRound, _applyTableWidth, _bindColResize, _resetColWidths, _setFontFamily, _openFloatCfg, _setReportBold, _deliverReport, _setRptBg, _setRptScale,
+    _setLayout, _setHdrFontSize, _exportAllGrades, _importAllGrades, _toggleGraph, _setChartStyle, _setPageSize, _setRptFontSize, _setGraphAlign, _setDivider, _setLogoSize, _setTableRound, _applyTableWidth, _bindColResize, _resetColWidths, _onCmtInput, _setFontFamily, _openFloatCfg, _setReportBold, _deliverReport, _setRptBg, _setRptScale,
     _setTitleAlign, _setTblColor, _applyTheme, _applyRptStyles,
     _setGraphStyleMode, _fixStickyHeaderTops,
     _copyReport, _shareReport, _printReport, _captureReport, _captureAllReports, _showShareModal, _showDeliverModal,
