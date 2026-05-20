@@ -1,5 +1,5 @@
 /**
- * grade-app.js — v4.1
+ * grade-app.js — v4.1.1
  *
  * 변경사항
  * ─────────────────────────────────────
@@ -103,8 +103,7 @@ const GradeApp = (() => {
 
 /* ══ EXCEL MODE ══ */
 .gr-sheet-wrap{width:100%;overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 280px);position:relative;}
-.gr-sheet{border-collapse:collapse;font-size:12px;table-layout:fixed;width:auto;min-width:100%;}
-.gr-sheet th,.gr-sheet td{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.gr-sheet{border-collapse:collapse;font-size:12px;width:100%;}
 
 /* fixed student col */
 .gr-sheet .gs-fix{position:sticky;left:0;z-index:3;background:var(--surf);border:1px solid var(--bdr);padding:5px 8px;min-width:130px;width:130px;cursor:pointer;}
@@ -150,35 +149,10 @@ const GradeApp = (() => {
 .gs-inp::-webkit-outer-spin-button,.gs-inp::-webkit-inner-spin-button{-webkit-appearance:none;}
 .gs-inp:focus{background:rgba(99,102,241,.08);border-radius:4px;}
 
-/* comment 셀 — 인라인 표시 + 팝오버 버튼 */
-.gs-cm-cell{min-width:160px;max-width:400px;padding:0;}
-.gs-cm-wrap{display:flex;align-items:stretch;gap:0;height:100%;}
-.gs-cm-preview{flex:1;padding:4px 6px;font-size:11px;color:var(--tx3);line-height:1.4;cursor:pointer;white-space:pre-wrap;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;min-width:0;}
-.gs-cm-preview.has-text{color:var(--tx);}
-.gs-cm-preview:hover{background:var(--a10);border-radius:4px;}
-.gs-cm-icon{flex:0 0 28px;width:28px;display:flex;align-items:center;justify-content:center;border-left:1px solid var(--bdr);cursor:pointer;color:var(--tx3);font-size:13px;transition:background .12s;}
-.gs-cm-icon:hover{background:var(--a10);color:var(--a);}
-.gs-cm-icon.has-cmt{color:var(--green);}
-
-/* ── 컬럼 리사이저 핸들 ── */
-thead th[data-col-key]{position:relative;overflow:visible;}
-.gs-col-resizer{
-  position:absolute;right:-4px;top:0;width:9px;height:100%;
-  cursor:col-resize;z-index:20;user-select:none;
-}
-.gs-col-resizer::after{
-  content:'';position:absolute;left:50%;transform:translateX(-50%);
-  top:10%;height:80%;width:3px;
-  background:var(--bdr2);border-radius:2px;
-  transition:background .12s,box-shadow .12s;
-}
-.gs-col-resizer:hover::after,.gs-col-resizer.dragging::after{
-  background:var(--a);box-shadow:0 0 6px var(--a);width:4px;
-}
-.gr-sheet.resizing,.gr-sheet.resizing *{cursor:col-resize!important;user-select:none!important;}
-/* 너비 초기화 버튼 */
-.gr-col-reset-btn{padding:5px 9px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--bdr2);background:var(--surf2);color:var(--tx3);white-space:nowrap;transition:all .15s;}
-.gr-col-reset-btn:hover{border-color:var(--a);color:var(--a);background:var(--a10);}
+/* comment */
+.gs-cm-cell{width:40%;min-width:220px;}
+.gs-cm-inp{width:100%;padding:5px 8px;border:none;outline:none;background:transparent;font-size:13px;color:var(--tx);font-family:var(--font);resize:none;height:52px;line-height:1.5;cursor:text;box-sizing:border-box;}
+.gs-cm-inp:focus{background:rgba(5,150,105,.05);}
 
 /* average row */
 .gr-avg-row td{background:var(--surf2)!important;}
@@ -252,33 +226,6 @@ thead th[data-col-key]{position:relative;overflow:visible;}
 .gr-card-save-row{display:flex;gap:7px;padding:8px;}
 .gr-card-save-btn{flex:1;padding:10px;border:none;background:var(--a);color:#fff;font-size:12px;font-weight:800;cursor:pointer;font-family:var(--font);border-radius:9px;transition:all .15s;}
 .gr-card-save-btn:active{opacity:.85;}
-/* ── AI Comment Popover ── */
-.gr-cmt-icon-btn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:28px;padding:0;background:none;border:none;border-radius:6px;cursor:pointer;color:var(--tx3);font-size:15px;transition:color .15s,background .15s;position:relative;}
-.gr-cmt-icon-btn:hover{background:var(--a10);color:var(--tx);}
-.gr-cmt-icon-btn.has-cmt{color:var(--a);}
-.gr-cmt-dot{position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:var(--a);pointer-events:none;}
-.gr-cmt-pop{position:fixed;background:var(--card);border:1.5px solid var(--bdr2);border-radius:14px;padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.18);z-index:9990;animation:cpIn .12s ease;}
-@keyframes cpIn{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:translateY(0);}}
-.gr-cp-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;gap:8px;}
-.gr-cp-name{font-size:13px;font-weight:700;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
-.gr-cp-tools{display:flex;gap:4px;flex-shrink:0;}
-.gr-cp-tool{display:inline-flex;align-items:center;gap:3px;font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--bdr2);background:var(--surf2);color:var(--tx);cursor:pointer;transition:background .12s;white-space:nowrap;}
-.gr-cp-tool:hover{background:var(--a10);color:var(--a);border-color:var(--a40);}
-.gr-cp-tool:disabled{opacity:.4;cursor:not-allowed;}
-.gr-cp-ta{width:100%;resize:vertical;min-height:72px;font-size:13px;line-height:1.55;padding:8px 10px;border-radius:8px;border:1.5px solid var(--bdr);background:var(--surf2);color:var(--tx);font-family:var(--font);box-sizing:border-box;transition:border-color .15s;}
-.gr-cp-ta:focus{outline:none;border-color:var(--a);}
-.gr-cp-status-line{font-size:11px;min-height:16px;margin-top:5px;line-height:1.4;}
-.gr-cp-status-line.cp-loading{color:var(--a);}
-.gr-cp-status-line.cp-ok{color:#16a34a;}
-.gr-cp-status-line.cp-err{color:#ef4444;}
-.gr-cp-foot{display:flex;align-items:center;justify-content:space-between;margin-top:9px;}
-.gr-cp-cnt{font-size:11px;color:var(--tx3);}
-.gr-cp-save{font-size:12px;padding:6px 14px;border-radius:7px;border:1.5px solid var(--a);background:var(--a10);color:var(--a);cursor:pointer;font-weight:700;transition:all .12s;}
-.gr-cp-save:hover{background:var(--a);color:#fff;}
-.gr-cp-cancel{font-size:12px;padding:6px 12px;border-radius:7px;border:1px solid var(--bdr2);background:none;color:var(--tx2);cursor:pointer;transition:background .12s;}
-.gr-cp-cancel:hover{background:var(--surf2);}
-.gr-cp-ai-row{display:flex;gap:5px;padding:4px 8px 5px;align-items:center;}
-
 
 /* ══ REPORT ══ */
 .gr-report-panel{padding:0;display:flex;flex-direction:column;height:100%;overflow:hidden;}
@@ -426,7 +373,6 @@ thead th[data-col-key]{position:relative;overflow:visible;}
             </div>
           </div>
           <button id="gr-eval-btn" title="선택 교재 평가 설정" style="display:none;padding:6px 14px;border-radius:8px;background:rgba(245,158,11,.1);border:1.5px solid rgba(245,158,11,.4);color:#d97706;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:var(--font)">⚙️ 평가 설정</button>
-          <button id="gr-col-reset-btn" class="gr-col-reset-btn" style="display:none" onclick="GradeApp._resetColWidths()" title="컬럼 너비 초기화">↩ 너비초기화</button>
           <div class="gr-view-toggle" id="gr-view-toggle">
             <button class="gr-vbtn ${_st.viewMode==='excel'?'on':''}"  data-mode="excel"  onclick="GradeApp._setView('excel')">🔲 엑셀</button>
             <button class="gr-vbtn ${_st.viewMode==='card'?'on':''}"   data-mode="card"   onclick="GradeApp._setView('card')">🐱 카드</button>
@@ -620,43 +566,30 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     const rdH1span = hasRd ? 1 + rvN * 2 + 1 : 0;
     const rdSection = hasRd ? `<th class="gs-th sec-r" colspan="${rdH1span}">📖 리딩 평가</th>` : '';
     const rdRow2 = hasRd ? `
-      <th class="gs-th" data-col-key="rq" rowspan="2" style="background:rgba(139,92,246,.06);color:#8b5cf6;vertical-align:middle">총문제</th>
+      <th class="gs-th" rowspan="2" style="background:rgba(139,92,246,.06);color:#8b5cf6;vertical-align:middle">총문제</th>
       <th class="gs-th sec-r" colspan="${rvN}">정답 수</th>
       <th class="gs-th sec-r" colspan="${rvN}">점수</th>
-      <th class="gs-th sortable sec-r ${_st.sortCol==='rdAch'?'sort-on':''}" data-col-key="ra" rowspan="2"
+      <th class="gs-th sortable sec-r ${_st.sortCol==='rdAch'?'sort-on':''}" rowspan="2"
           onclick="GradeApp._toggleSort('rdAch')" style="vertical-align:middle">성취율 ${rdIcon}</th>` : '';
-    const rdRow3Q = hasRd ? actRevs.map((rv,i)=>`<th class="gs-th" data-col-key="rr${i}" style="font-size:9px;background:rgba(139,92,246,.04)">${_e(rv.name)}</th>`).join('') : '';
-    const rdRow3S = hasRd ? actRevs.map((rv,i)=>`<th class="gs-th" data-col-key="rs${i}" style="font-size:9px;background:rgba(139,92,246,.04)">${_e(rv.name)}</th>`).join('') : '';
-
-    /* colgroup — 저장된 너비 or 기본값 */
-    const _cw  = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
-    const _cgs = (key, def) => `<col data-col-key="${key}" style="width:${_cw[key]||def}px">`;
-    let colHtml = _cgs('fix',130) + _cgs('wq',60) + _cgs('wr',52) + _cgs('wp',48) + _cgs('wa',58);
-    if (hasRd) {
-      colHtml += _cgs('rq',48);
-      for (let i=0;i<rvN;i++) colHtml += _cgs(`rr${i}`,52);
-      for (let i=0;i<rvN;i++) colHtml += _cgs(`rs${i}`,52);
-      colHtml += _cgs('ra',58);
-    }
-    colHtml += _cgs('cm', 200); // comment 열 기본 200px
+    const rdRow3Q = hasRd ? actRevs.map(rv=>`<th class="gs-th" style="font-size:9px;background:rgba(139,92,246,.04)">${_e(rv.name)}</th>`).join('') : '';
+    const rdRow3S = hasRd ? actRevs.map(rv=>`<th class="gs-th" style="font-size:9px;background:rgba(139,92,246,.04)">${_e(rv.name)}</th>`).join('') : '';
 
     const html = `
       <div class="gr-sheet-wrap">
         <table class="gr-sheet" oncontextmenu="GradeApp._onCtxTable(event)">
-          <colgroup>${colHtml}</colgroup>
           <thead>
             <tr>
               <th class="gs-fix gs-th sortable ${_st.sortCol==='name'?'sort-on':''}" rowspan="3"
                   onclick="GradeApp._toggleSort('name')">학생 ${nmIcon}</th>
               <th class="gs-th sec-w" colspan="4">🔤 단어 평가</th>
               ${rdSection}
-              <th class="gs-th sec-c" data-col-key="cm" rowspan="3">💬 Teacher's Comment</th>
+              <th class="gs-th sec-c" rowspan="3" style="min-width:300px">💬 Teacher's Comment</th>
             </tr>
             <tr>
-              <th class="gs-th" data-col-key="wq" rowspan="2" style="background:var(--a10);color:var(--a);vertical-align:middle">총 테스트<br>(문제) 수</th>
-              <th class="gs-th" data-col-key="wr" rowspan="2" style="background:var(--a10);color:var(--a);vertical-align:middle">재시험</th>
-              <th class="gs-th" data-col-key="wp" rowspan="2" style="background:var(--a10);vertical-align:middle">통과</th>
-              <th class="gs-th sortable ${_st.sortCol==='wordAch'?'sort-on':''}" data-col-key="wa" rowspan="2"
+              <th class="gs-th" rowspan="2" style="background:var(--a10);color:var(--a);vertical-align:middle">총 테스트<br>(문제) 수</th>
+              <th class="gs-th" rowspan="2" style="background:var(--a10);color:var(--a);vertical-align:middle">재시험</th>
+              <th class="gs-th" rowspan="2" style="background:var(--a10);vertical-align:middle">통과</th>
+              <th class="gs-th sortable ${_st.sortCol==='wordAch'?'sort-on':''}" rowspan="2"
                   onclick="GradeApp._toggleSort('wordAch')" style="background:var(--a10);vertical-align:middle">성취율 ${wIcon}</th>
               ${rdRow2}
             </tr>
@@ -671,10 +604,10 @@ thead th[data-col-key]{position:relative;overflow:visible;}
         </table>
       </div>`;
     cnt.innerHTML = html;
+    /* Fix 3: 헤더 sticky top 값 동적 측정 (실제 렌더 후) */
     requestAnimationFrame(() => {
       _fixStickyHeaderTops();
-      _applyTableWidth();   // ★ colgroup 합산 → 테이블 총 너비 확정
-      _bindColResize();     // ★ 리사이저 핸들 바인딩
+      /* Fix 2: 엑셀 저장 폰트 복원 */
       if (_st.excelFontSize && _st.excelFontSize !== 12) {
         document.querySelectorAll('.gr-sheet thead th').forEach(th => {
           th.style.fontSize = _st.excelFontSize + 'px';
@@ -742,16 +675,9 @@ thead th[data-col-key]{position:relative;overflow:visible;}
           <span class="gs-val">${achW!==''?achW+'%':'—'}</span>
         </td>
         ${rdCells}
-        <td class="gs-td gs-cm-cell" style="padding:0;">
-          <div class="gs-cm-wrap">
-            <div class="gs-cm-preview${d.comment?.trim()?' has-text':''}"
-              onclick="GradeApp._openCommentPop(event,'${s.id}')"
-              title="클릭하여 편집">${_e(d.comment||'').replace(/\n/g,'<br>') || '<span style="color:var(--tx3);font-style:italic;font-size:10px">코멘트 없음 — 클릭하여 입력</span>'}</div>
-            <div class="gs-cm-icon${d.comment?.trim()?' has-cmt':''}"
-              onclick="GradeApp._openCommentPop(event,'${s.id}')"
-              id="gr-cmtbtn-${s.id}"
-              title="AI 생성 / 교정">✏️</div>
-          </div>
+        <td class="gs-td inp-cell gs-cm-cell">
+          <textarea class="gs-cm-inp" id="gr-cmt-${s.id}"
+            oninput="GradeApp._excelComment('${s.id}',this.value)">${_e(d.comment||'')}</textarea>
         </td>
       </tr>`;
   }
@@ -794,7 +720,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
       </td>
       <td class="gs-td ro"><span class="gs-val achv-c" id="gr-avg-w">${avgW!=null?avgW+'%':'—'}</span></td>
       ${rdAvgCells}
-      <td class="gs-td ro" style="min-width:36px;width:36px"></td>
+      <td class="gs-td ro gs-cm-cell"></td>
     </tr>`;
   }
 
@@ -1115,15 +1041,8 @@ thead th[data-col-key]{position:relative;overflow:visible;}
         <div class="gr-csec-head"><div class="gr-csec-title">💬 Teacher's Comment</div></div>
         <div style="border:1px solid var(--bdr);border-top:none;border-radius:0 0 9px 9px">
           ${active
-            ? `<div>
-                <textarea class="gr-card-cmt" id="gr-cd-cmt-${s.id}"
-                  oninput="GradeApp._cardComment(this.value,'${s.id}')">${_e(d.comment||'')}</textarea>
-                <div class="gr-cp-ai-row">
-                  <button class="gr-cp-tool" onclick="GradeApp._cardAiGen('${s.id}')">✨ AI 생성</button>
-                  <button class="gr-cp-tool" onclick="GradeApp._cardAiProof('${s.id}')">🔍 교정</button>
-                  <span id="gr-cd-cmt-st-${s.id}" class="gr-cp-status-line" style="flex:1;margin:0 0 0 4px"></span>
-                </div>
-              </div>`
+            ? `<textarea class="gr-card-cmt" id="gr-cd-cmt-${s.id}"
+                         oninput="GradeApp._cardComment(this.value,'${s.id}')">${_e(d.comment||'')}</textarea>`
             : `<div style="padding:8px 10px;font-size:11px;color:var(--tx2);min-height:40px;line-height:1.7">${_e(d.comment||'')}</div>`}
         </div>
       </div>
@@ -1454,106 +1373,23 @@ thead th[data-col-key]{position:relative;overflow:visible;}
   }
 
   /* ★ 컬럼 드래그 리사이즈 */
-  /* ── 테이블 총 너비를 colgroup 합산으로 확정 (table-layout:fixed 필수) ── */
-  function _applyTableWidth() {
-    const tbl = document.querySelector('.gr-sheet'); if (!tbl) return;
-    let total = 0;
-    tbl.querySelectorAll('colgroup col').forEach(col => { total += parseInt(col.style.width) || 52; });
-    tbl.style.width = total + 'px';
-  }
-
-  /* ── 컬럼 리사이저 핸들 바인딩 ── */
   function _bindColResize() {
-    const tbl = document.querySelector('.gr-sheet'); if (!tbl) return;
-
-    /* 저장된 너비 col 에 즉시 반영 */
-    const saved = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
-    tbl.querySelectorAll('colgroup col[data-col-key]').forEach(col => {
-      if (saved[col.dataset.colKey]) col.style.width = saved[col.dataset.colKey] + 'px';
-    });
-    _applyTableWidth();
-
-    /* th[data-col-key] 마다 핸들 부착 */
-    tbl.querySelectorAll('thead th[data-col-key]').forEach(th => {
-      if (th.querySelector('.gs-col-resizer')) return;
-      const key = th.dataset.colKey;
-
-      const handle = document.createElement('div');
-      handle.className = 'gs-col-resizer';
-      handle.title = '← → 드래그: 너비 조절  |  더블클릭: 초기화';
-      th.style.position = 'relative';
-      th.appendChild(handle);
-
-      const _col  = () => tbl.querySelector(`colgroup col[data-col-key="${key}"]`);
-      const _getW = () => { const c = _col(); return c ? (parseInt(c.style.width) || 52) : 52; };
-      const _setW = w  => {
-        const c = _col(); if (!c) return;
-        c.style.width = Math.max(36, w) + 'px';
-        _applyTableWidth();
-      };
-      const _save = () => {
-        const c = _col(); if (!c) return;
-        const s = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
-        s[key] = parseInt(c.style.width);
-        localStorage.setItem('gr_col_widths', JSON.stringify(s));
-      };
-
-      /* 마우스 드래그 */
-      handle.addEventListener('mousedown', e => {
-        e.preventDefault(); e.stopPropagation();
-        const sx = e.clientX, sw = _getW();
-        handle.classList.add('dragging');
-        tbl.classList.add('resizing');
-        const mv = ev => _setW(sw + ev.clientX - sx);
-        const up = () => {
-          handle.classList.remove('dragging');
-          tbl.classList.remove('resizing');
-          _save();
-          document.removeEventListener('mousemove', mv);
-          document.removeEventListener('mouseup', up);
-        };
-        document.addEventListener('mousemove', mv);
-        document.addEventListener('mouseup', up);
-      });
-
-      /* 터치 드래그 */
-      handle.addEventListener('touchstart', e => {
-        e.preventDefault(); e.stopPropagation();
-        const sx = e.touches[0].clientX, sw = _getW();
-        tbl.classList.add('resizing');
-        const mv = ev => { ev.preventDefault(); _setW(sw + ev.touches[0].clientX - sx); };
-        const up = () => {
-          tbl.classList.remove('resizing');
-          _save();
-          document.removeEventListener('touchmove', mv);
-          document.removeEventListener('touchend', up);
-        };
-        document.addEventListener('touchmove', mv, { passive: false });
-        document.addEventListener('touchend', up);
-      }, { passive: false });
-
-      /* 더블클릭 → 해당 컬럼 초기화 */
-      handle.addEventListener('dblclick', e => {
-        e.stopPropagation();
-        const defs = { fix:130, wq:60, wr:52, wp:48, wa:58, rq:48, ra:58, cm:200 };
-        _setW(defs[key] ?? 52);
-        const s = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
-        delete s[key]; localStorage.setItem('gr_col_widths', JSON.stringify(s));
-        _toast('↩ 너비 초기화: ' + key.toUpperCase(), 'info');
+    const tbl=document.querySelector('.gr-sheet');if(!tbl)return;
+    tbl.querySelectorAll('thead .gs-th.sec-w,thead .gs-th.sec-r,thead .gs-cm-cell').forEach(th=>{
+      if(th.querySelector('.gs-col-resizer'))return;
+      const h=document.createElement('div');
+      h.className='gs-col-resizer';
+      th.appendChild(h);
+      let sx=0,sw=0;
+      h.addEventListener('mousedown',e=>{
+        e.preventDefault();e.stopPropagation();
+        sx=e.clientX;sw=th.offsetWidth;h.classList.add('dragging');
+        const mv=ev=>{const w=Math.max(60,sw+ev.clientX-sx);th.style.width=w+'px';th.style.minWidth=w+'px';};
+        const up=()=>{h.classList.remove('dragging');document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);};
+        document.addEventListener('mousemove',mv);
+        document.addEventListener('mouseup',up);
       });
     });
-  }
-
-  /* ── 전체 컬럼 너비 초기화 ── */
-  function _resetColWidths() {
-    localStorage.removeItem('gr_col_widths');
-    const tbl = document.querySelector('.gr-sheet'); if (!tbl) return;
-    const defs = { fix:130, wq:60, wr:52, wp:48, wa:58, rq:48, ra:58, cm:200 };
-    tbl.querySelectorAll('colgroup col[data-col-key]').forEach(col => {
-      col.style.width = (defs[col.dataset.colKey] ?? 52) + 'px';
-    });
-    _applyTableWidth();
-    _toast('↩ 모든 컬럼 너비 초기화', 'info');
   }
 
   function _setGraphAlign(align) {
@@ -2974,9 +2810,6 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     /* 평가 설정 버튼 */
     const evalBtn = document.getElementById('gr-eval-btn');
     if(evalBtn) evalBtn.style.display = (_st.bookId) ? 'inline-block' : 'none';
-    /* 컬럼 너비 초기화 버튼 */
-    const colResetBtn = document.getElementById('gr-col-reset-btn');
-    if(colResetBtn) colResetBtn.style.display = (isExcel && hasData) ? 'inline-block' : 'none';
     /* 헤더 폰트 버튼 */
     const fontBtn = document.getElementById('gr-hdr-font-btn');
     if(fontBtn) fontBtn.style.display = ((isExcel || _st.viewMode==='card') && hasData) ? '' : 'none';
@@ -3788,176 +3621,15 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     _renderContent();
   }
   
-  // ════════════════════════════════════════
-  // AI Comment Popover (엑셀뷰)
-  // ════════════════════════════════════════
-  let _activeCmtPop = null;
-
-  function _openCommentPop(e, sid) {
-    e.stopPropagation();
-    _closeCommentPop();
-    _ensureData(sid);
-    const stu = _getStudents().find(s => s.id === sid);
-    const d   = _st.data[sid] || {};
-    const btn = document.getElementById('gr-cmtbtn-' + sid);
-    if (!btn) return;
-
-    const pop = document.createElement('div');
-    pop.className = 'gr-cmt-pop';
-    pop.innerHTML =
-      '<div class="gr-cp-head">' +
-        '<span class="gr-cp-name">💬 ' + _e(stu ? stu.name : sid) + '</span>' +
-        '<div class="gr-cp-tools">' +
-          '<button class="gr-cp-tool" data-cpa="ai">✨ AI 생성</button>' +
-          '<button class="gr-cp-tool" data-cpa="proof">🔍 교정</button>' +
-          '<button class="gr-cp-cancel" data-cpa="close" style="padding:4px 7px;border-radius:6px;">✕</button>' +
-        '</div>' +
-      '</div>' +
-      '<textarea class="gr-cp-ta" rows="3" placeholder="Teacher&#39;s Comment를 입력하거나 AI 생성을 눌러보세요...">' + _e(d.comment || '') + '</textarea>' +
-      '<div class="gr-cp-status-line"></div>' +
-      '<div class="gr-cp-foot">' +
-        '<span class="gr-cp-cnt">' + (d.comment || '').length + '자</span>' +
-        '<div style="display:flex;gap:6px">' +
-          '<button class="gr-cp-cancel" data-cpa="cancel">취소</button>' +
-          '<button class="gr-cp-save" data-cpa="save">💾 저장</button>' +
-        '</div>' +
-      '</div>';
-
-    // 위치 계산
-    const rect = btn.getBoundingClientRect();
-    const pw   = Math.min(360, window.innerWidth - 16);
-    const left = Math.max(8, Math.min(rect.left - 20, window.innerWidth - pw - 8));
-    const spBelow = window.innerHeight - rect.bottom;
-    pop.style.left  = left + 'px';
-    pop.style.width = pw + 'px';
-    if (spBelow >= 240) pop.style.top    = (rect.bottom + 5) + 'px';
-    else                pop.style.bottom = (window.innerHeight - rect.top + 5) + 'px';
-
-    document.body.appendChild(pop);
-    _activeCmtPop = pop;
-
-    const ta     = pop.querySelector('.gr-cp-ta');
-    const cntEl  = pop.querySelector('.gr-cp-cnt');
-    const status = pop.querySelector('.gr-cp-status-line');
-    ta.focus();
-    ta.addEventListener('input', function() { cntEl.textContent = ta.value.length + '자'; });
-
-    pop.addEventListener('click', async function(e2) {
-      const act = e2.target.closest('[data-cpa]') ? e2.target.closest('[data-cpa]').dataset.cpa : null;
-      if (!act) return;
-      if (act === 'close' || act === 'cancel') {
-        _closeCommentPop();
-      } else if (act === 'ai') {
-        if (typeof GeminiAI === 'undefined') { _cpSt(status,'cp-err','⚠ gemini-ai.js 가 로드되지 않았습니다'); return; }
-        _cpSt(status,'cp-loading','✦ AI 생성 중...');
-        _cpLd(pop, true);
-        try {
-          const actRevs = GradeDB.getActiveReviews(_st.bookId);
-          ta.value = await GeminiAI.generateComment({ name: stu ? stu.name : sid, word: d.word, reading: d.reading });
-          cntEl.textContent = ta.value.length + '자';
-          _cpSt(status,'cp-ok','✓ 생성 완료 — 수정 후 저장하세요');
-        } catch(err) { _cpSt(status,'cp-err','⚠ ' + _cpMsg(err)); }
-        finally { _cpLd(pop, false); }
-      } else if (act === 'proof') {
-        if (!ta.value.trim()) { _cpSt(status,'cp-err','교정할 텍스트를 먼저 입력하세요'); return; }
-        if (typeof GeminiAI === 'undefined') { _cpSt(status,'cp-err','⚠ gemini-ai.js 가 로드되지 않았습니다'); return; }
-        _cpSt(status,'cp-loading','✦ 교정 중...');
-        _cpLd(pop, true);
-        try {
-          ta.value = await GeminiAI.proofreadComment(ta.value);
-          cntEl.textContent = ta.value.length + '자';
-          _cpSt(status,'cp-ok','✓ 교정 완료');
-        } catch(err) { _cpSt(status,'cp-err','⚠ ' + _cpMsg(err)); }
-        finally { _cpLd(pop, false); }
-      } else if (act === 'save') {
-        _cpLd(pop, true);
-        _st.data[sid].comment = ta.value.trim();
-        _st.dirty.add(sid);
-        _refreshDirtyUI();
-        try {
-          await saveOne(sid);
-          var b2 = document.getElementById('gr-cmtbtn-' + sid);
-          if (b2) {
-            var hasCmt = !!ta.value.trim();
-            b2.className = 'gr-cmt-icon-btn' + (hasCmt ? ' has-cmt' : '');
-            b2.title = hasCmt ? ta.value.trim().slice(0,60) : '코멘트 없음';
-            b2.innerHTML = '💬' + (hasCmt ? '<span class="gr-cmt-dot"></span>' : '');
-          }
-          _closeCommentPop();
-        } catch(err) { _cpSt(status,'cp-err','⚠ 저장 실패: ' + _cpMsg(err)); _cpLd(pop, false); }
-      }
-    });
-
-    pop._keyH = function(e2) { if (e2.key === 'Escape') _closeCommentPop(); };
-    document.addEventListener('keydown', pop._keyH);
-    setTimeout(function() {
-      pop._clickH = function(e2) { if (!pop.contains(e2.target) && e2.target !== btn) _closeCommentPop(); };
-      document.addEventListener('click', pop._clickH);
-    }, 50);
-  }
-
-  function _closeCommentPop() {
-    if (!_activeCmtPop) return;
-    if (_activeCmtPop._keyH)   document.removeEventListener('keydown', _activeCmtPop._keyH);
-    if (_activeCmtPop._clickH) document.removeEventListener('click',   _activeCmtPop._clickH);
-    _activeCmtPop.remove();
-    _activeCmtPop = null;
-  }
-
-  function _cpSt(el, cls, msg) { el.className = 'gr-cp-status-line ' + cls; el.textContent = msg; }
-  function _cpLd(pop, on)      { pop.querySelectorAll('[data-cpa]').forEach(function(b){ b.disabled = on; }); }
-  function _cpMsg(err) {
-    var m = err && err.message ? err.message : String(err);
-    if (m.indexOf('403') >= 0) return 'API 키 오류 또는 할당량 초과';
-    if (m.indexOf('429') >= 0) return 'API 요청 한도 초과 (잠시 후 재시도)';
-    return m.slice(0, 80);
-  }
-
-  // ════════════════════════════════════════
-  // AI Comment — 카드뷰 전용
-  // ════════════════════════════════════════
-  async function _cardAiGen(sid) {
-    if (typeof GeminiAI === 'undefined') { _toast('⚠ gemini-ai.js 가 로드되지 않았습니다'); return; }
-    _ensureData(sid);
-    var stu    = _getStudents().find(function(s){ return s.id === sid; });
-    var d      = _st.data[sid] || {};
-    var ta     = document.getElementById('gr-cd-cmt-' + sid);
-    var status = document.getElementById('gr-cd-cmt-st-' + sid);
-    if (!ta) return;
-    _cpSt(status, 'cp-loading', '✦ AI 생성 중...');
-    try {
-      ta.value = await GeminiAI.generateComment({ name: stu ? stu.name : sid, word: d.word, reading: d.reading });
-      _cardComment(ta.value, sid);
-      _cpSt(status, 'cp-ok', '✓ 완료');
-      setTimeout(function(){ if(status) status.textContent=''; }, 3000);
-    } catch(err) { _cpSt(status, 'cp-err', '⚠ ' + _cpMsg(err)); }
-  }
-
-  async function _cardAiProof(sid) {
-    if (typeof GeminiAI === 'undefined') { _toast('⚠ gemini-ai.js 가 로드되지 않았습니다'); return; }
-    var ta     = document.getElementById('gr-cd-cmt-' + sid);
-    var status = document.getElementById('gr-cd-cmt-st-' + sid);
-    if (!ta || !ta.value.trim()) { _toast('⚠ 교정할 텍스트를 먼저 입력하세요'); return; }
-    _cpSt(status, 'cp-loading', '✦ 교정 중...');
-    try {
-      ta.value = await GeminiAI.proofreadComment(ta.value);
-      _cardComment(ta.value, sid);
-      _cpSt(status, 'cp-ok', '✓ 교정 완료');
-      setTimeout(function(){ if(status) status.textContent=''; }, 3000);
-    } catch(err) { _cpSt(status, 'cp-err', '⚠ ' + _cpMsg(err)); }
-  }
-
-
   return {
     init, render,
     _onCls, _onBk, _openEvalFromGrade, _showEvalPopup, _openEvalPopupDirect, _grAddReview, _saveEvalCfg, _refreshAfterEvalUpdate, _onStu, _setView, _toggleSort,
-    _openCommentPop, _closeCommentPop, _cardAiGen, _cardAiProof,
     _excelWordInput, _excelRdInput, _excelComment, _onKey,
     _cardWordInput, _cardRdInput, _cardComment,
     _slideTo, _ts, _te,
     _onCtxTable, _closeCtxMenu,
     saveOne, saveAll, resetOne,
-    _setLayout, _setHdrFontSize, _exportAllGrades, _importAllGrades, _toggleGraph, _setChartStyle, _setPageSize, _setRptFontSize, _setGraphAlign, _setDivider, _setLogoSize, _setTableRound, _applyTableWidth, _bindColResize, _resetColWidths, _setFontFamily, _openFloatCfg, _setReportBold, _deliverReport, _setRptBg, _setRptScale,
+    _setLayout, _setHdrFontSize, _exportAllGrades, _importAllGrades, _toggleGraph, _setChartStyle, _setPageSize, _setRptFontSize, _setGraphAlign, _setDivider, _setLogoSize, _setTableRound, _bindColResize, _setFontFamily, _openFloatCfg, _setReportBold, _deliverReport, _setRptBg, _setRptScale,
     _setTitleAlign, _setTblColor, _applyTheme, _applyRptStyles,
     _setGraphStyleMode, _fixStickyHeaderTops,
     _copyReport, _shareReport, _printReport, _captureReport, _captureAllReports, _showShareModal, _showDeliverModal,
