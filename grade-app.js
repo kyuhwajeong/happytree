@@ -114,6 +114,7 @@ const GradeApp = (() => {
 .gr-sheet thead tr.gs-band th{height:20px;padding:0 4px;font-size:9px;font-weight:700;line-height:20px;border-bottom:none;}
 /* row2: 실제 컬럼 헤더 */
 .gr-sheet thead tr.gs-cols th{padding:5px 4px;}
+.gr-sheet thead tr.gs-rd-cols th{padding:4px 4px;background:var(--surf2);}
 
 /* header */
 .gs-th{background:var(--surf2);border:1px solid var(--bdr);padding:5px 4px;font-size:11px;font-weight:800;color:var(--tx2);text-align:center;white-space:nowrap;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;}
@@ -703,19 +704,24 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     const nmIcon = _st.sortCol==='name'   ?(_st.sortDesc?'↓':'↑'):'↕';
 
     /*
-     * 헤더 구조 (2행, rowspan 없음):
+     * 헤더 구조 (리딩 활성화 시 3행, 비활성 시 2행):
      * Row1 (얇은 띠): [빈칸] [🔤단어평가(4)] [📖리딩평가(N)] [빈칸(cm)]
      * Row2 (실제 헤더): [학생] [총테스트|재시험|통과|성취율] [rdSubs] [💬Comment]
      */
     const rdH1span = hasRd ? 1 + rvN * 2 + 1 : 0;
 
-    /* Row2 — 리딩 서브 컬럼 */
+    /* Row2 — 리딩 서브 컬럼 (그룹 헤더: 정답 수 / 점수) */
     const rdRow2Sub = hasRd ? `
-      <th class="gs-th" data-col-key="rq" style="background:rgba(139,92,246,.06);color:#8b5cf6;font-size:10px">총문제</th>
-      ${actRevs.map((rv,i)=>`<th class="gs-th sec-r" data-col-key="rr${i}" style="font-size:9px">${_e(rv.name)}<br><span style="font-size:8px;opacity:.7">정답</span></th>`).join('')}
-      ${actRevs.map((rv,i)=>`<th class="gs-th sec-r" data-col-key="rs${i}" style="font-size:9px">${_e(rv.name)}</th>`).join('')}
-      <th class="gs-th sortable sec-r ${_st.sortCol==='rdAch'?'sort-on':''}" data-col-key="ra"
+      <th class="gs-th" data-col-key="rq" rowspan="2" style="background:rgba(139,92,246,.06);color:#8b5cf6;font-size:10px">총문제</th>
+      <th class="gs-th sec-r" colspan="${rvN}" style="font-size:10px">정답 수</th>
+      <th class="gs-th sec-r" colspan="${rvN}" style="font-size:10px">점수</th>
+      <th class="gs-th sortable sec-r ${_st.sortCol==='rdAch'?'sort-on':''}" data-col-key="ra" rowspan="2"
           onclick="GradeApp._toggleSort('rdAch')" style="font-size:10px">성취율 ${rdIcon}</th>` : '';
+
+    /* Row3 — 리딩 Review별 서브컬럼 (정답 수 N개 + 점수 N개) */
+    const rdRow3Sub = hasRd ? `
+      ${actRevs.map((rv,i)=>`<th class="gs-th sec-r" data-col-key="rr${i}" style="font-size:9px">${_e(rv.name)}</th>`).join('')}
+      ${actRevs.map((rv,i)=>`<th class="gs-th sec-r" data-col-key="rs${i}" style="font-size:9px">${_e(rv.name)}</th>`).join('')}` : '';
 
     /* colgroup */
     const _cw  = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
@@ -744,15 +750,17 @@ thead th[data-col-key]{position:relative;overflow:visible;}
             <!-- Row2: 실제 컬럼 헤더 -->
             <tr class="gs-cols">
               <th class="gs-fix gs-th sortable ${_st.sortCol==='name'?'sort-on':''}"
-                  onclick="GradeApp._toggleSort('name')">학생 ${nmIcon}</th>
-              <th class="gs-th" data-col-key="wq" style="background:var(--a10);color:var(--a);font-size:10px">총 테스트<br>(문제) 수</th>
-              <th class="gs-th" data-col-key="wr" style="background:var(--a10);color:var(--a);font-size:10px">재시험</th>
-              <th class="gs-th" data-col-key="wp" style="background:var(--a10);font-size:10px">통과</th>
+                  onclick="GradeApp._toggleSort('name')" ${hasRd?'rowspan="2"':''}>학생 ${nmIcon}</th>
+              <th class="gs-th" data-col-key="wq" ${hasRd?'rowspan="2"':''} style="background:var(--a10);color:var(--a);font-size:10px">총 테스트<br>(문제) 수</th>
+              <th class="gs-th" data-col-key="wr" ${hasRd?'rowspan="2"':''} style="background:var(--a10);color:var(--a);font-size:10px">재시험</th>
+              <th class="gs-th" data-col-key="wp" ${hasRd?'rowspan="2"':''} style="background:var(--a10);font-size:10px">통과</th>
               <th class="gs-th sortable ${_st.sortCol==='wordAch'?'sort-on':''}" data-col-key="wa"
-                  onclick="GradeApp._toggleSort('wordAch')" style="background:var(--a10);font-size:10px">성취율 ${wIcon}</th>
+                  onclick="GradeApp._toggleSort('wordAch')" ${hasRd?'rowspan="2"':''} style="background:var(--a10);font-size:10px">성취율 ${wIcon}</th>
               ${rdRow2Sub}
-              <th class="gs-th sec-c" data-col-key="cm" style="font-size:11px">💬 Teacher's Comment</th>
+              <th class="gs-th sec-c" data-col-key="cm" ${hasRd?'rowspan="2"':''} style="font-size:11px">💬 Teacher's Comment</th>
             </tr>
+            <!-- Row3: 리딩 Review 서브컬럼 (리딩 활성화 시에만) -->
+            ${hasRd ? `<tr class="gs-rd-cols">${rdRow3Sub}</tr>` : ''}
           </thead>
           <tbody>
             ${students.map((s,ri) => _excelRow(s, ri, config, totalWQ, actRevs, totalRQ, hasRd)).join('')}
