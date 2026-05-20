@@ -6,7 +6,7 @@
 const GeminiAI = (() => {
   /* ── API 설정 ──────────────────────────────────────────────── */
   const MODEL    = 'gemini-2.0-flash';
-  const API_KEY  = 'AIzaSyCRtu_qWYXsCt2iuVAB5AHh9IXYWt1_qRQ';
+  const API_KEY  = 'AIzaSyBR_AMVKpuajVmS3XvLVFn3nLdK2BBQ8t8';
   const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
 
   /* ── system_instruction ① — Teacher's Comment 생성 ─────────
