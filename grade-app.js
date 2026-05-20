@@ -338,7 +338,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
 .gr-cdisp.achv{color:#8b5cf6;background:rgba(139,92,246,.1);border-color:rgba(139,92,246,.25);}
 
 /* card comment */
-.gr-card-cmt{width:100%;box-sizing:border-box;padding:8px 10px;border:none;outline:none;background:transparent;font-size:12px;color:var(--tx);font-family:var(--font);resize:none;min-height:60px;line-height:1.8;}
+.gr-card-cmt{width:100%;box-sizing:border-box;padding:12px 14px;border:none;outline:none;background:transparent;font-size:16px;color:var(--tx);font-family:var(--font);resize:vertical;min-height:150px;line-height:1.8;}
 .gr-card-cmt:focus{background:rgba(5,150,105,.04);}
 .gr-card-save-row{display:flex;gap:7px;padding:8px;}
 .gr-card-save-btn{flex:1;padding:10px;border:none;background:var(--a);color:#fff;font-size:12px;font-weight:800;cursor:pointer;font-family:var(--font);border-radius:9px;transition:all .15s;}
@@ -712,8 +712,8 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     /* Row2 — 리딩 서브 컬럼 */
     const rdRow2Sub = hasRd ? `
       <th class="gs-th" data-col-key="rq" style="background:rgba(139,92,246,.06);color:#8b5cf6;font-size:10px">총문제</th>
-      ${actRevs.map((rv,i)=>`<th class="gs-th sec-r" data-col-key="rr${i}" style="font-size:9px">${_e(rv.name)}<br><span style="font-size:8px;opacity:.75">정답</span></th>`).join('')}
-      ${actRevs.map((rv,i)=>`<th class="gs-th sec-r" data-col-key="rs${i}" style="font-size:9px">${_e(rv.name)}<br><span style="font-size:8px;opacity:.75">점수</span></th>`).join('')}
+      ${actRevs.map((rv,i)=>`<th class="gs-th sec-r" data-col-key="rr${i}" style="font-size:9px">${_e(rv.name)}<br><span style="font-size:8px;opacity:.7">정답</span></th>`).join('')}
+      ${actRevs.map((rv,i)=>`<th class="gs-th sec-r" data-col-key="rs${i}" style="font-size:9px">${_e(rv.name)}</th>`).join('')}
       <th class="gs-th sortable sec-r ${_st.sortCol==='rdAch'?'sort-on':''}" data-col-key="ra"
           onclick="GradeApp._toggleSort('rdAch')" style="font-size:10px">성취율 ${rdIcon}</th>` : '';
 
@@ -1212,14 +1212,15 @@ thead th[data-col-key]{position:relative;overflow:visible;}
           ${active
             ? `<div>
                 <textarea class="gr-card-cmt" id="gr-cd-cmt-${s.id}"
+                  placeholder="코멘트를 직접 입력하거나 AI 생성을 눌러주세요…"
                   oninput="GradeApp._cardComment(this.value,'${s.id}')">${_e(d.comment||'')}</textarea>
-                <div class="gr-cp-ai-row">
-                  <button class="gr-cp-tool" onclick="GradeApp._cardAiGen('${s.id}')">✨ AI 생성</button>
-                  <button class="gr-cp-tool" onclick="GradeApp._cardAiProof('${s.id}')">🔍 교정</button>
-                  <span id="gr-cd-cmt-st-${s.id}" class="gr-cp-status-line" style="flex:1;margin:0 0 0 4px"></span>
+                <div class="gr-cp-ai-row" style="padding:8px 10px;gap:8px;">
+                  <button class="gr-cp-tool" style="flex:1;padding:10px;font-size:14px;font-weight:700;border-radius:10px;" onclick="GradeApp._cardAiGen('${s.id}')">✨ AI 자동생성</button>
+                  <button class="gr-cp-tool" style="flex:1;padding:10px;font-size:14px;font-weight:700;border-radius:10px;" onclick="GradeApp._cardAiProof('${s.id}')">🔍 문법 교정</button>
                 </div>
+                <div id="gr-cd-cmt-st-${s.id}" class="gr-cp-status-line" style="padding:0 10px 8px;font-size:13px;min-height:20px"></div>
               </div>`
-            : `<div style="padding:8px 10px;font-size:11px;color:var(--tx2);min-height:40px;line-height:1.7">${_e(d.comment||'')}</div>`}
+            : `<div style="padding:10px 14px;font-size:15px;color:var(--tx2);min-height:60px;line-height:1.8">${_e(d.comment||'')}</div>`}
         </div>
       </div>
       ${active?`<div class="gr-card-save-row">
