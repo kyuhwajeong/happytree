@@ -129,7 +129,7 @@ const GradeApp = (() => {
 .gs-td{border:1px solid var(--bdr);text-align:center;padding:0;vertical-align:middle;min-width:28px;}
 /* 계산값 (읽기 전용) - 연한 배경으로 구분 */
 .gs-td.ro{background:var(--surf2);}
-.gs-td.ro .gs-val{padding:5px 6px;font-size:13px;font-weight:700;display:block;}
+.gs-td.ro .gs-val{padding:9px 6px;font-size:13px;font-weight:700;display:block;}
 .gs-td.ro.pass-c .gs-val{color:#16a34a;}
 .gs-td.ro.fail-c .gs-val{color:#f97316;}
 .gs-td.ro.score-c .gs-val{color:var(--a);}
@@ -143,7 +143,7 @@ const GradeApp = (() => {
 .gr-sheet tbody tr.sel-row .gs-fix{background:var(--a20)!important;}
 
 /* number input */
-.gs-inp{width:100%;min-width:28px;padding:4px 2px;border:none;outline:none;background:transparent;font-size:12px;font-weight:700;color:var(--a);text-align:center;font-family:var(--font);-moz-appearance:textfield;cursor:text;}
+.gs-inp{width:100%;min-width:28px;padding:9px 2px;border:none;outline:none;background:transparent;font-size:12px;font-weight:700;color:var(--a);text-align:center;font-family:var(--font);-moz-appearance:textfield;cursor:text;}
 .gs-inp::-webkit-outer-spin-button,.gs-inp::-webkit-inner-spin-button{-webkit-appearance:none;}
 .gs-inp:focus{background:rgba(99,102,241,.08);border-radius:4px;}
 
@@ -152,10 +152,10 @@ const GradeApp = (() => {
 .gs-cm-wrap{display:flex;align-items:stretch;height:100%;}
 /* 인라인 textarea */
 .gs-cm-ta{
-  flex:1;padding:5px 7px;border:none;outline:none;
-  background:transparent;font-size:12px;color:var(--tx);
-  font-family:var(--font);resize:none;line-height:1.5;
-  min-height:48px;width:100%;box-sizing:border-box;
+  flex:1;padding:7px 9px;border:none;outline:none;
+  background:transparent;font-size:15px;color:var(--tx);
+  font-family:var(--font);resize:none;line-height:1.6;
+  min-height:64px;width:100%;box-sizing:border-box;
   white-space:pre-wrap;word-break:break-word;
 }
 .gs-cm-ta:focus{background:rgba(5,150,105,.04);}
@@ -268,6 +268,21 @@ thead th[data-col-key]{position:relative;overflow:visible;}
   background:var(--a);box-shadow:0 0 6px var(--a);width:4px;
 }
 .gr-sheet.resizing,.gr-sheet.resizing *{cursor:col-resize!important;user-select:none!important;}
+
+/* ── 그룹 리사이저 (학생/단어/리딩 구획 경계) ── */
+.gs-group-resizer{
+  position:absolute;right:-8px;top:0;width:16px;height:100%;
+  cursor:col-resize;z-index:30;user-select:none;
+}
+.gs-group-resizer::after{
+  content:'';position:absolute;left:50%;transform:translateX(-50%);
+  top:8%;height:84%;width:5px;
+  background:var(--a40);border-radius:4px;
+  transition:background .15s,box-shadow .15s,width .15s;
+}
+.gs-group-resizer:hover::after,.gs-group-resizer.dragging::after{
+  background:var(--a);box-shadow:0 0 10px var(--a40);width:7px;
+}
 /* 너비 초기화 버튼 */
 .gr-col-reset-btn{padding:5px 9px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--bdr2);background:var(--surf2);color:var(--tx3);white-space:nowrap;transition:all .15s;}
 .gr-col-reset-btn:hover{border-color:var(--a);color:var(--a);background:var(--a10);}
@@ -772,6 +787,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     requestAnimationFrame(() => {
       _applyTableWidth();
       _bindColResize();
+      _bindGroupResizers();
       _fixStickyHeaderTops();
       // 레이아웃 완전히 끝난 뒤 한번 더 정확히 재계산
       requestAnimationFrame(_fixStickyHeaderTops);
@@ -1577,10 +1593,12 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     });
     _applyTableWidth();
 
-    /* th[data-col-key] 마다 핸들 부착 */
+    /* th[data-col-key] 마다 핸들 부착 (그룹 경계 컬럼은 그룹 리사이저가 담당) */
+    const GROUP_BOUNDARY = new Set(['wa', 'ra']);
     tbl.querySelectorAll('thead th[data-col-key]').forEach(th => {
       if (th.querySelector('.gs-col-resizer')) return;
       const key = th.dataset.colKey;
+      if (GROUP_BOUNDARY.has(key)) return; // 그룹 리사이저가 처리
 
       const handle = document.createElement('div');
       handle.className = 'gs-col-resizer';
@@ -1658,6 +1676,111 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     });
     _applyTableWidth();
     _toast('↩ 모든 컬럼 너비 초기화', 'info');
+  }
+
+  /* ── 그룹 리사이저 바인딩
+   *   · 학생 구획  : gs-fix th → fix 컬럼
+   *   · 단어 구획  : wa th    → wq·wr·wp·wa 비례 조정
+   *   · 리딩 구획  : ra th    → rq·rr0..N·rs0..N·ra 비례 조정
+   * ─────────────────────────────────────────────────────── */
+  function _bindGroupResizers() {
+    const tbl = document.querySelector('.gr-sheet'); if (!tbl) return;
+    const config  = GradeDB.getReportConfig(_st.bookId);
+    const actRevs = GradeDB.getActiveReviews(_st.bookId);
+    const hasRd   = config.reading?.enabled && actRevs.length > 0;
+
+    const _getColW = key => {
+      const c = tbl.querySelector(`colgroup col[data-col-key="${key}"]`);
+      return c ? (parseInt(c.style.width) || 48) : 48;
+    };
+    const _setColW = (key, w) => {
+      const c = tbl.querySelector(`colgroup col[data-col-key="${key}"]`);
+      if (c) c.style.width = Math.max(28, Math.round(w)) + 'px';
+    };
+    const _saveKeys = keys => {
+      const s = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
+      keys.forEach(k => {
+        const c = tbl.querySelector(`colgroup col[data-col-key="${k}"]`);
+        if (c) s[k] = parseInt(c.style.width);
+      });
+      localStorage.setItem('gr_col_widths', JSON.stringify(s));
+    };
+
+    /* 그룹 정의 */
+    const rdKeys = hasRd
+      ? ['rq', ...actRevs.map((_,i)=>`rr${i}`), ...actRevs.map((_,i)=>`rs${i}`), 'ra']
+      : [];
+
+    const groups = [
+      { thSel: 'thead tr.gs-cols th.gs-fix', keys: ['fix'],                      label: '학생' },
+      { thSel: 'thead th[data-col-key="wa"]', keys: ['wq','wr','wp','wa'],        label: '단어 평가' },
+      ...(hasRd ? [{ thSel: 'thead th[data-col-key="ra"]', keys: rdKeys, label: '리딩 평가' }] : []),
+    ];
+
+    groups.forEach(({ thSel, keys, label }) => {
+      const th = tbl.querySelector(thSel);
+      if (!th) return;
+      if (th.querySelector('.gs-group-resizer')) return;
+
+      const handle = document.createElement('div');
+      handle.className = 'gs-group-resizer';
+      handle.title = `← → ${label} 너비 조절  |  더블클릭: 초기화`;
+      th.style.overflow = 'visible';
+      th.appendChild(handle);
+
+      /* 드래그 시작 시 초기 너비 스냅샷 */
+      const _startResize = (startX) => {
+        const initW = Object.fromEntries(keys.map(k => [k, _getColW(k)]));
+        const initTotal = keys.reduce((s,k) => s + initW[k], 0);
+        handle.classList.add('dragging');
+        tbl.classList.add('resizing');
+        return { startX, initW, initTotal };
+      };
+      const _applyDelta = ({ startX, initW, initTotal }, currentX) => {
+        const delta = currentX - startX;
+        const newTotal = Math.max(keys.length * 28, initTotal + delta);
+        const ratio = newTotal / initTotal;
+        keys.forEach(k => _setColW(k, Math.round(initW[k] * ratio)));
+        _applyTableWidth();
+      };
+      const _endResize = () => {
+        handle.classList.remove('dragging');
+        tbl.classList.remove('resizing');
+        _saveKeys(keys);
+      };
+
+      /* 마우스 드래그 */
+      handle.addEventListener('mousedown', e => {
+        e.preventDefault(); e.stopPropagation();
+        const ctx = _startResize(e.clientX);
+        const mv = ev => _applyDelta(ctx, ev.clientX);
+        const up = () => { _endResize(); document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); };
+        document.addEventListener('mousemove', mv);
+        document.addEventListener('mouseup', up);
+      });
+
+      /* 터치 드래그 */
+      handle.addEventListener('touchstart', e => {
+        e.preventDefault(); e.stopPropagation();
+        const ctx = _startResize(e.touches[0].clientX);
+        const mv = ev => { ev.preventDefault(); _applyDelta(ctx, ev.touches[0].clientX); };
+        const up = () => { _endResize(); document.removeEventListener('touchmove', mv); document.removeEventListener('touchend', up); };
+        document.addEventListener('touchmove', mv, { passive: false });
+        document.addEventListener('touchend', up);
+      }, { passive: false });
+
+      /* 더블클릭 → 그룹 기본값 복원 */
+      handle.addEventListener('dblclick', e => {
+        e.stopPropagation();
+        const defs = { fix:100, wq:56, wr:48, wp:44, wa:56, rq:44, ra:56, cm:200 };
+        keys.forEach(k => _setColW(k, defs[k] ?? 48));
+        _applyTableWidth();
+        const s = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
+        keys.forEach(k => delete s[k]);
+        localStorage.setItem('gr_col_widths', JSON.stringify(s));
+        _toast(`↩ ${label} 너비 초기화`, 'info');
+      });
+    });
   }
 
   function _setGraphAlign(align) {
@@ -4108,7 +4231,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     _slideTo, _ts, _te,
     _onCtxTable, _closeCtxMenu,
     saveOne, saveAll, resetOne,
-    _setLayout, _setHdrFontSize, _exportAllGrades, _importAllGrades, _toggleGraph, _setChartStyle, _setPageSize, _setRptFontSize, _setGraphAlign, _setDivider, _setLogoSize, _setTableRound, _applyTableWidth, _bindColResize, _resetColWidths, _onCmtInput, _setFontFamily, _openFloatCfg, _setReportBold, _deliverReport, _setRptBg, _setRptScale,
+    _setLayout, _setHdrFontSize, _exportAllGrades, _importAllGrades, _toggleGraph, _setChartStyle, _setPageSize, _setRptFontSize, _setGraphAlign, _setDivider, _setLogoSize, _setTableRound, _applyTableWidth, _bindColResize, _bindGroupResizers, _resetColWidths, _onCmtInput, _setFontFamily, _openFloatCfg, _setReportBold, _deliverReport, _setRptBg, _setRptScale,
     _setTitleAlign, _setTblColor, _applyTheme, _applyRptStyles,
     _setGraphStyleMode, _fixStickyHeaderTops,
     _copyReport, _shareReport, _printReport, _captureReport, _captureAllReports, _showShareModal, _showDeliverModal,
