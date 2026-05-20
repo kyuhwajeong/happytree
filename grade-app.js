@@ -104,26 +104,23 @@ const GradeApp = (() => {
 /* ══ EXCEL MODE ══ */
 .gr-sheet-wrap{width:100%;overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 280px);position:relative;}
 .gr-sheet{border-collapse:collapse;font-size:12px;table-layout:fixed;width:auto;min-width:100%;}
-/* th: nowrap 유지(헤더 텍스트 잘림 방지), td: overflow만 */
 .gr-sheet thead th{overflow:hidden;white-space:nowrap;}
 .gr-sheet tbody td{overflow:hidden;}
 
-/* fixed student col — 이름+닉네임 맞게 축소 */
+/* fixed student col */
 .gr-sheet .gs-fix{position:sticky;left:0;z-index:3;background:var(--surf);border:1px solid var(--bdr);padding:5px 7px;min-width:100px;width:100px;cursor:pointer;}
 .gr-sheet thead .gs-fix{z-index:6;background:var(--surf2);}
 .gr-sheet .gs-fix.sel,.gr-sheet .gs-fix:hover{background:var(--a10);}
-/* ★ 헤더 2행 sticky 고정 */
+/* ★ 헤더 2행 sticky — row1:얇은 띠(~18px), row2:실제 헤더 */
 .gr-sheet thead th{position:sticky;z-index:4;background:var(--surf2);}
 .gr-sheet thead tr:first-child th{top:0;}
-.gr-sheet thead tr:nth-child(2) th{top:34px;}
+.gr-sheet thead tr:nth-child(2) th{top:18px;}  /* row1 높이 ~18px 기준 */
 .gr-sheet thead tr:first-child .gs-fix{top:0;z-index:7;}
-.gr-sheet thead tr:nth-child(2) .gs-fix{top:34px;z-index:7;}
-.gr-sheet thead tr:first-child th{top:0;}
-.gr-sheet thead tr:nth-child(2) th{top:34px;}
-.gr-sheet thead tr:nth-child(3) th{top:68px;}
-.gr-sheet thead tr:first-child .gs-fix{top:0;z-index:7;}
-.gr-sheet thead tr:nth-child(2) .gs-fix{top:34px;z-index:7;}
-.gr-sheet thead tr:nth-child(3) .gs-fix{top:68px;z-index:7;}
+.gr-sheet thead tr:nth-child(2) .gs-fix{top:18px;z-index:7;}
+/* row1: 얇은 섹션 라벨 띠 */
+.gr-sheet thead tr.gs-band th{height:18px;max-height:18px;padding:0 4px;font-size:9px;font-weight:700;line-height:18px;border-bottom:none;}
+/* row2: 실제 컬럼 헤더 */
+.gr-sheet thead tr.gs-cols th{padding:6px 4px;}
 
 /* header */
 .gs-th{background:var(--surf2);border:1px solid var(--bdr);padding:5px 4px;font-size:11px;font-weight:800;color:var(--tx2);text-align:center;white-space:nowrap;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;}
@@ -618,22 +615,21 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     const nmIcon = _st.sortCol==='name'   ?(_st.sortDesc?'↓':'↑'):'↕';
 
     /*
-     * 헤더 구조 (2행):
-     * Row1: [학생(2행)] [🔤단어평가(4)] [📖리딩평가(rdH)] [💬Comment(2행)]
-     * Row2: 총테스트 | 재시험 | 통과 | 성취율 | [총문제 | R0✓|R1✓|... | R0점|R1점|... | 성취율]
+     * 헤더 구조 (2행, rowspan 없음):
+     * Row1 (얇은 띠): [빈칸] [🔤단어평가(4)] [📖리딩평가(N)] [빈칸(cm)]
+     * Row2 (실제 헤더): [학생] [총테스트|재시험|통과|성취율] [rdSubs] [💬Comment]
      */
     const rdH1span = hasRd ? 1 + rvN * 2 + 1 : 0;
-    const rdSection = hasRd ? `<th class="gs-th sec-r" colspan="${rdH1span}">📖 리딩 평가</th>` : '';
 
-    /* Row2 — 리딩 서브 컬럼: R0정답 R1정답... R0점수 R1점수... 성취율 */
+    /* Row2 — 리딩 서브 컬럼 */
     const rdRow2Sub = hasRd ? `
       <th class="gs-th" data-col-key="rq" style="background:rgba(139,92,246,.06);color:#8b5cf6;font-size:10px">총문제</th>
-      ${actRevs.map((rv,i)=>`<th class="gs-th sec-r" data-col-key="rr${i}" style="font-size:9px">${_e(rv.name)}<br><span style="font-size:8px;opacity:.8">정답</span></th>`).join('')}
-      ${actRevs.map((rv,i)=>`<th class="gs-th sec-r" data-col-key="rs${i}" style="font-size:9px">${_e(rv.name)}<br><span style="font-size:8px;opacity:.8">점수</span></th>`).join('')}
+      ${actRevs.map((rv,i)=>`<th class="gs-th sec-r" data-col-key="rr${i}" style="font-size:9px">${_e(rv.name)}<br><span style="font-size:8px;opacity:.75">정답</span></th>`).join('')}
+      ${actRevs.map((rv,i)=>`<th class="gs-th sec-r" data-col-key="rs${i}" style="font-size:9px">${_e(rv.name)}<br><span style="font-size:8px;opacity:.75">점수</span></th>`).join('')}
       <th class="gs-th sortable sec-r ${_st.sortCol==='rdAch'?'sort-on':''}" data-col-key="ra"
           onclick="GradeApp._toggleSort('rdAch')" style="font-size:10px">성취율 ${rdIcon}</th>` : '';
 
-    /* colgroup — 저장된 너비 or 기본값 */
+    /* colgroup */
     const _cw  = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
     const _cgs = (key, def) => `<col data-col-key="${key}" style="width:${_cw[key]||def}px">`;
     let colHtml = _cgs('fix',100) + _cgs('wq',56) + _cgs('wr',48) + _cgs('wp',44) + _cgs('wa',56);
@@ -650,20 +646,24 @@ thead th[data-col-key]{position:relative;overflow:visible;}
         <table class="gr-sheet" oncontextmenu="GradeApp._onCtxTable(event)">
           <colgroup>${colHtml}</colgroup>
           <thead>
-            <tr>
-              <th class="gs-fix gs-th sortable ${_st.sortCol==='name'?'sort-on':''}" rowspan="2"
-                  onclick="GradeApp._toggleSort('name')">학생 ${nmIcon}</th>
-              <th class="gs-th sec-w" colspan="4">🔤 단어 평가</th>
-              ${rdSection}
-              <th class="gs-th sec-c" data-col-key="cm" rowspan="2">💬 Teacher's Comment</th>
+            <!-- Row1: 얇은 섹션 라벨 띠 (rowspan 없음) -->
+            <tr class="gs-band">
+              <th class="gs-fix gs-th" style="border-bottom:none;background:var(--surf2)"></th>
+              <th class="gs-th sec-w" colspan="4" style="letter-spacing:.5px">🔤 단어 평가</th>
+              ${hasRd ? `<th class="gs-th sec-r" colspan="${rdH1span}" style="letter-spacing:.5px">📖 리딩 평가</th>` : ''}
+              <th class="gs-th sec-c" data-col-key="cm" style="border-bottom:none;background:rgba(5,150,105,.08)"></th>
             </tr>
-            <tr>
+            <!-- Row2: 실제 컬럼 헤더 -->
+            <tr class="gs-cols">
+              <th class="gs-fix gs-th sortable ${_st.sortCol==='name'?'sort-on':''}"
+                  onclick="GradeApp._toggleSort('name')">학생 ${nmIcon}</th>
               <th class="gs-th" data-col-key="wq" style="background:var(--a10);color:var(--a);font-size:10px">총 테스트<br>(문제) 수</th>
               <th class="gs-th" data-col-key="wr" style="background:var(--a10);color:var(--a);font-size:10px">재시험</th>
               <th class="gs-th" data-col-key="wp" style="background:var(--a10);font-size:10px">통과</th>
               <th class="gs-th sortable ${_st.sortCol==='wordAch'?'sort-on':''}" data-col-key="wa"
                   onclick="GradeApp._toggleSort('wordAch')" style="background:var(--a10);font-size:10px">성취율 ${wIcon}</th>
               ${rdRow2Sub}
+              <th class="gs-th sec-c" data-col-key="cm" style="font-size:11px">💬 Teacher's Comment</th>
             </tr>
           </thead>
           <tbody>
@@ -2132,20 +2132,17 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     }
   }
 
-  /* Fix 3: sticky 헤더 top 값을 실제 높이로 동적 설정 (2행 헤더 기준) */
+  /* Fix 3: sticky 헤더 top 값을 실제 높이로 동적 설정 */
   function _fixStickyHeaderTops() {
     const thead = document.querySelector('.gr-sheet thead');
     if (!thead) return;
     const rows = [...thead.querySelectorAll('tr')];
     let cumH = 0;
-    rows.forEach((row, ri) => {
-      const h = row.getBoundingClientRect().height || 34;
+    rows.forEach(row => {
+      const h = row.getBoundingClientRect().height || (row.classList.contains('gs-band') ? 18 : 34);
       row.querySelectorAll('th').forEach(th => {
         th.style.position = 'sticky';
         th.style.top = cumH + 'px';
-        // rowspan=2 인 셀(학생, Comment)은 row 0 기준 top 유지
-        const rs = parseInt(th.getAttribute('rowspan') || '1');
-        if (rs > 1) th.style.top = '0px';
         th.style.zIndex = th.classList.contains('gs-fix') ? '7' : '4';
         if (!th.style.background) th.style.background = 'var(--surf2)';
       });
