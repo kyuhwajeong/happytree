@@ -5,7 +5,7 @@
  */
 const GeminiAI = (() => {
   /* ── API 설정 ──────────────────────────────────────────────── */
-  const API_KEY = 'AIzaSyCRtu_qWYXsCt2iuVAB5AHh9IXYWt1_qRQ';
+  const API_KEY = 'AIzaSyBR_AMVKpuajVmS3XvLVFn3nLdK2BBQ8t8';
   /* 429(한도) 시 순서대로 폴백 — 확인된 유효 모델만 */
   const MODELS = [
     'gemini-2.0-flash',
