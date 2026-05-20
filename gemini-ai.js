@@ -5,9 +5,14 @@
  */
 const GeminiAI = (() => {
   /* ── API 설정 ──────────────────────────────────────────────── */
-  const MODEL    = 'gemini-2.0-flash';
-  const API_KEY  = 'AIzaSyBR_AMVKpuajVmS3XvLVFn3nLdK2BBQ8t8';
-  const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
+  const API_KEY = 'AIzaSyBR_AMVKpuajVmS3XvLVFn3nLdK2BBQ8t8';
+  /* 429(한도초과) 시 순서대로 폴백 */
+  const MODELS = [
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-8b',
+  ];
+  const _ep = m => `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${API_KEY}`;
 
   /* ── system_instruction ① — Teacher's Comment 생성 ─────────
    *  - 영어 2~4문장, 긍정·격려 톤 유지
@@ -48,24 +53,37 @@ const GeminiAI = (() => {
 4. 원문이 이미 자연스러운 경우 그대로 반환합니다.
 `.trim();
 
-  /* ── 내부 fetch 헬퍼 ──────────────────────────────────────── */
+  /* ── 내부 fetch 헬퍼 — 429 시 다음 모델로 자동 폴백 ──────── */
   async function _call(si, userText) {
-    const res = await fetch(ENDPOINT, {
-      method : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body   : JSON.stringify({
-        system_instruction: { parts: [{ text: si }] },
-        contents          : [{ parts: [{ text: userText }] }],
-        generationConfig  : { temperature: 0.75, maxOutputTokens: 350, topP: 0.9 },
-      }),
-    });
-    if (!res.ok) {
-      const errTxt = await res.text().catch(() => '');
-      throw new Error(`Gemini API ${res.status}: ${errTxt.slice(0, 120)}`);
+    let lastErr;
+    for (const model of MODELS) {
+      try {
+        const res = await fetch(_ep(model), {
+          method : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body   : JSON.stringify({
+            system_instruction: { parts: [{ text: si }] },
+            contents          : [{ parts: [{ text: userText }] }],
+            generationConfig  : { temperature: 0.75, maxOutputTokens: 350, topP: 0.9 },
+          }),
+        });
+        if (res.status === 429 || res.status === 503) {
+          lastErr = new Error(`${model}_quota`);
+          continue; // 다음 모델 시도
+        }
+        if (!res.ok) {
+          const errTxt = await res.text().catch(() => '');
+          throw new Error(`Gemini API ${res.status}: ${errTxt.slice(0, 120)}`);
+        }
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+        return text.trim().replace(/^["']|["']$/g, '');
+      } catch (e) {
+        if (e.message.endsWith('_quota')) { lastErr = e; continue; }
+        throw e; // 네트워크 오류 등은 즉시 throw
+      }
     }
-    const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    return text.trim().replace(/^["']|["']$/g, '');   // 양끝 따옴표 제거 보정
+    throw new Error('API 요청 한도 초과 (잠시 후 재시도)');
   }
 
   /* ── 공개 API ─────────────────────────────────────────────── */
