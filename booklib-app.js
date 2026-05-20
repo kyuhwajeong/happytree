@@ -796,8 +796,13 @@ const BooklibApp = (() => {
 
     // ── 반 배정 ──
     const clsSection = document.createElement('div');
-    clsSection.style.cssText = 'margin-bottom:16px';
-    clsSection.innerHTML = `<div style="font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:.8px;margin-bottom:7px">반 배정 <span style="font-size:9px;font-weight:400">(선택)</span></div>
+    clsSection.id = 'bl-reg-cls-section';
+    clsSection.style.cssText = 'margin-bottom:16px;transition:opacity .2s';
+    clsSection.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+        <span style="font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:.8px">반 배정 <span style="font-size:9px;font-weight:400">(선택)</span></span>
+        <span id="bl-reg-cls-disabled-badge" style="display:none;font-size:9px;font-weight:700;color:var(--orange);background:rgba(217,119,6,.1);border:1px solid rgba(217,119,6,.3);border-radius:5px;padding:1px 7px">학생 배정 시 비활성</span>
+      </div>
       <div id="bl-reg-cls-chips" style="display:flex;flex-wrap:wrap;gap:6px">
         ${allCls.length
           ? allCls.map(c=>`<button class="bl-cls-chip" data-cid="${c.id}"
@@ -809,9 +814,13 @@ const BooklibApp = (() => {
 
     // ── 학생 배정 ──
     const stuSection = document.createElement('div');
-    stuSection.style.cssText = 'margin-bottom:16px';
+    stuSection.id = 'bl-reg-stu-section';
+    stuSection.style.cssText = 'margin-bottom:16px;transition:opacity .2s';
     stuSection.innerHTML = `
-      <div style="font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:.8px;margin-bottom:8px">학생 배정 <span style="font-size:9px;font-weight:400">(선택)</span></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:.8px">학생 배정 <span style="font-size:9px;font-weight:400">(선택)</span></span>
+        <span id="bl-reg-stu-disabled-badge" style="display:none;font-size:9px;font-weight:700;color:var(--orange);background:rgba(217,119,6,.1);border:1px solid rgba(217,119,6,.3);border-radius:5px;padding:1px 7px">반 배정 시 비활성</span>
+      </div>
 
       <!-- 반 선택 일괄 추가 -->
       <div style="background:var(--surf2);border:1px solid var(--bdr);border-radius:11px;padding:11px 12px;margin-bottom:8px">
@@ -965,15 +974,25 @@ const BooklibApp = (() => {
     wrap.innerHTML = '';
     if (!modal._selStus.size) {
       wrap.innerHTML = '<span style="font-size:11px;color:var(--tx3)">배정된 학생 없음</span>';
-      return;
+    } else {
+      modal._selStus.forEach((s, sid) => {
+        const chip = document.createElement('div');
+        chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--a10);border:1px solid var(--a40);border-radius:12px;font-size:12px;font-weight:600;color:var(--a)';
+        chip.innerHTML = `<span>${_e(s.name)}</span><button style="background:none;border:none;cursor:pointer;color:var(--a);font-size:13px;padding:0 2px;line-height:1" data-sid="${sid}">✕</button>`;
+        chip.querySelector('button').onclick = () => { modal._selStus.delete(sid); _renderRegStuChips(modal, allStus); };
+        wrap.appendChild(chip);
+      });
     }
-    modal._selStus.forEach((s, sid) => {
-      const chip = document.createElement('div');
-      chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--a10);border:1px solid var(--a40);border-radius:12px;font-size:12px;font-weight:600;color:var(--a)';
-      chip.innerHTML = `<span>${_e(s.name)}</span><button style="background:none;border:none;cursor:pointer;color:var(--a);font-size:13px;padding:0 2px;line-height:1" data-sid="${sid}">✕</button>`;
-      chip.querySelector('button').onclick = () => { modal._selStus.delete(sid); _renderRegStuChips(modal, allStus); };
-      wrap.appendChild(chip);
-    });
+    /* ★ 학생 배정 여부에 따라 반 배정 섹션 활성/비활성 */
+    const hasStudents = modal._selStus.size > 0;
+    const clsSec = document.getElementById('bl-reg-cls-section');
+    const clsBadge = document.getElementById('bl-reg-cls-disabled-badge');
+    if (clsSec) {
+      clsSec.style.opacity = hasStudents ? '0.38' : '1';
+      clsSec.style.pointerEvents = hasStudents ? 'none' : '';
+      clsSec.style.userSelect = hasStudents ? 'none' : '';
+    }
+    if (clsBadge) clsBadge.style.display = hasStudents ? 'inline' : 'none';
   }
 
   // 등록 모달 - 반 칩 토글
@@ -983,6 +1002,16 @@ const BooklibApp = (() => {
     const isOn = modal._selCls.has(clsId);
     if (isOn) { modal._selCls.delete(clsId); btn.style.background='var(--card2)'; btn.style.color='var(--tx2)'; btn.style.borderColor='var(--bdr2)'; }
     else { modal._selCls.add(clsId); btn.style.background='var(--a20)'; btn.style.color='var(--a)'; btn.style.borderColor='var(--a)'; }
+    /* ★ 반 선택 여부에 따라 학생 배정 섹션 활성/비활성 */
+    const stuSec = document.getElementById('bl-reg-stu-section');
+    const disabledBadge = document.getElementById('bl-reg-stu-disabled-badge');
+    if (stuSec) {
+      const hasClass = modal._selCls.size > 0;
+      stuSec.style.opacity = hasClass ? '0.38' : '1';
+      stuSec.style.pointerEvents = hasClass ? 'none' : '';
+      stuSec.style.userSelect = hasClass ? 'none' : '';
+      if (disabledBadge) disabledBadge.style.display = hasClass ? '' : 'none';
+    }
   }
 
   async function _modalAddBook() {
@@ -1264,7 +1293,7 @@ const BooklibApp = (() => {
       <div class="sh-handle"></div>
       <div class="sh-title" style="display:flex;align-items:center;gap:8px">
         📖 <span id="bl-ed-book-name-lbl" ondblclick="BooklibApp._inlineRenameInPopup('${book.id}',this)" title="더블클릭하여 교재명 변경" style="cursor:pointer;border-bottom:2px dashed var(--a40);padding-bottom:1px">${_e(book.name)}</span>
-        <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:var(--a10);color:var(--a);border:1px solid var(--a30)">${_editorTab==='eval'?'평가 설정':'챕터 관리'}</span>
+        <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:var(--a10);color:var(--a);border:1px solid var(--a30)">${_editorTab==='eval'?'평가 설정':'교재 수정'}</span>
       </div>
 
       <div class="bl-editor-body" id="bl-editor-body">
@@ -1313,45 +1342,61 @@ const BooklibApp = (() => {
   // ─── 탭1: 챕터 관리 HTML ───
   function _edChaptersHTML(book,chs,allCls,allStus,isAdmin){
     const assignedStus=(book.studentIds||[]).map(id=>allStus.find(s=>s.id===id)).filter(Boolean);
+    const _initClsDisabled = assignedStus.length > 0;
+    const _initStuDisabled = (book.classIds||[]).length > 0;
     return `
       ${isAdmin?`
-        <span class="bl-lbl">챕터 추가</span>
-        <div class="bl-drop-zone" id="bl-ch-drop">📂 파일 드롭 또는 탭 (.xlsx/.csv/.txt)</div>
-        <textarea class="bl-ch-ta" id="bl-ch-ta" placeholder="챕터를 한 줄에 하나씩&#10;[단어] Unit 1&#10;[문장] Unit 1"></textarea>
-        <div class="bl-ch-hint">💡 [단어]/[문장] 포함 시 세부미수행 옵션 자동 활성화</div>
-        <div class="bl-paste-row">
-          <button class="bl-paste-btn replace" onclick="BooklibApp._pasteChapters('replace')">🔄 교체</button>
-          <button class="bl-paste-btn append"  onclick="BooklibApp._pasteChapters('append')">➕ 추가</button>
+        <!-- ★ 반 배정 -->
+        <div id="bl-ed-cls-section" style="transition:opacity .2s${_initClsDisabled?';opacity:0.38;pointer-events:none;user-select:none':''}">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+            <span class="bl-lbl" style="padding:0;margin:0">반 배정</span>
+            <span id="bl-ed-cls-disabled-badge" style="display:${_initClsDisabled?'inline':'none'};font-size:9px;font-weight:700;color:var(--orange);background:rgba(217,119,6,.1);border:1px solid rgba(217,119,6,.3);border-radius:5px;padding:1px 7px">학생 배정 시 비활성</span>
+          </div>
+          <div class="bl-cls-chips">${allCls.length?allCls.map(cls=>`<div class="bl-cls-chip ${BookLibDB.isBookInClass(book.id,cls.id)?'on':''}" onclick="BooklibApp._toggleAssign('${book.id}','${cls.id}',this)">${_e(cls.name)}</div>`).join(''):'<span style="font-size:12px;color:var(--tx3)">운용 중인 반 없음</span>'}</div>
         </div>
-
-        <span class="bl-lbl">반 배정</span>
-        <div class="bl-cls-chips">${allCls.length?allCls.map(cls=>`<div class="bl-cls-chip ${BookLibDB.isBookInClass(book.id,cls.id)?'on':''}" onclick="BooklibApp._toggleAssign('${book.id}','${cls.id}',this)">${_e(cls.name)}</div>`).join(''):'<span style="font-size:12px;color:var(--tx3)">운용 중인 반 없음</span>'}</div>
 
         <!-- ★ 학생 직접 배정 -->
-        <span class="bl-lbl">학생 배정</span>
+        <div id="bl-ed-stu-section" style="transition:opacity .2s${_initStuDisabled?';opacity:0.38;pointer-events:none;user-select:none':''}">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+            <span class="bl-lbl" style="padding:0;margin:0">학생 배정</span>
+            <span id="bl-ed-stu-disabled-badge" style="display:${_initStuDisabled?'inline':'none'};font-size:9px;font-weight:700;color:var(--orange);background:rgba(217,119,6,.1);border:1px solid rgba(217,119,6,.3);border-radius:5px;padding:1px 7px">반 배정 시 비활성</span>
+          </div>
 
-        <!-- 반별 일괄 추가 -->
-        <div style="background:var(--surf2);border:1px solid var(--bdr);border-radius:11px;padding:10px 12px;margin-bottom:8px">
-          <div style="font-size:11px;font-weight:800;color:var(--tx2);margin-bottom:7px">🏫 반 선택 → 일괄 추가</div>
-          <select id="bl-cls-bulk-sel" style="width:100%;padding:7px 10px;border-radius:9px;border:1.5px solid var(--bdr2);background:var(--card);font-size:13px;font-family:var(--font);outline:none;margin-bottom:8px"
-            onchange="BooklibApp._renderClsBulkList('${book.id}',this.value)">
-            <option value="">— 반 선택 —</option>
-            ${allCls.map(c=>`<option value="${c.id}">${_e(c.name)}</option>`).join('')}
-          </select>
-          <div id="bl-cls-bulk-list" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
+          <!-- 반별 일괄 추가 -->
+          <div style="background:var(--surf2);border:1px solid var(--bdr);border-radius:11px;padding:10px 12px;margin-bottom:8px;margin-top:6px">
+            <div style="font-size:11px;font-weight:800;color:var(--tx2);margin-bottom:7px">🏫 반 선택 → 일괄 추가</div>
+            <select id="bl-cls-bulk-sel" style="width:100%;padding:7px 10px;border-radius:9px;border:1.5px solid var(--bdr2);background:var(--card);font-size:13px;font-family:var(--font);outline:none;margin-bottom:8px"
+              onchange="BooklibApp._renderClsBulkList('${book.id}',this.value)">
+              <option value="">— 반 선택 —</option>
+              ${allCls.map(c=>`<option value="${c.id}">${_e(c.name)}</option>`).join('')}
+            </select>
+            <div id="bl-cls-bulk-list" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
+          </div>
+
+          <!-- 이름 검색 -->
+          <div style="background:var(--surf2);border:1px solid var(--bdr);border-radius:11px;padding:10px 12px;margin-bottom:8px">
+            <div style="font-size:11px;font-weight:800;color:var(--tx2);margin-bottom:7px">🔍 이름으로 검색</div>
+            <div style="position:relative">
+              <input class="f-inp" id="bl-stu-search" placeholder="학생 이름 검색 (초성 지원)..." style="width:100%;padding:7px 10px;font-size:13px">
+              <div id="bl-stu-results" class="bl-stu-dropdown"></div>
+            </div>
+          </div>
+
+          <!-- 배정된 학생 칩 -->
+          ${assignedStus.length?`<div id="bl-stu-chips-wrap" class="bl-stu-chips">${assignedStus.map(s=>`<div class="bl-stu-chip"><span>${_e(s.name)}</span><button onclick="BooklibApp._removeStudent('${book.id}','${s.id}')">✕</button></div>`).join('')}</div>`:'<div id="bl-stu-chips-wrap" class="bl-stu-chips" style="min-height:36px"><span style="font-size:11px;color:var(--tx3)">배정된 학생 없음</span></div>'}
         </div>
 
-        <!-- 이름 검색 -->
-        <div style="background:var(--surf2);border:1px solid var(--bdr);border-radius:11px;padding:10px 12px;margin-bottom:8px">
-          <div style="font-size:11px;font-weight:800;color:var(--tx2);margin-bottom:7px">🔍 이름으로 검색</div>
-          <div style="position:relative">
-            <input class="f-inp" id="bl-stu-search" placeholder="학생 이름 검색 (초성 지원)..." style="width:100%;padding:7px 10px;font-size:13px">
-            <div id="bl-stu-results" class="bl-stu-dropdown"></div>
+        <!-- ★ 챕터 추가 (반/학생 배정 아래로 이동) -->
+        <div style="margin-top:4px">
+          <span class="bl-lbl">챕터 추가</span>
+          <div class="bl-drop-zone" id="bl-ch-drop">📂 파일 드롭 또는 탭 (.xlsx/.csv/.txt)</div>
+          <textarea class="bl-ch-ta" id="bl-ch-ta" placeholder="챕터를 한 줄에 하나씩&#10;[단어] Unit 1&#10;[문장] Unit 1"></textarea>
+          <div class="bl-ch-hint">💡 [단어]/[문장] 포함 시 세부미수행 옵션 자동 활성화</div>
+          <div class="bl-paste-row">
+            <button class="bl-paste-btn replace" onclick="BooklibApp._pasteChapters('replace')">🔄 교체</button>
+            <button class="bl-paste-btn append"  onclick="BooklibApp._pasteChapters('append')">➕ 추가</button>
           </div>
         </div>
-
-        <!-- 배정된 학생 칩 -->
-        ${assignedStus.length?`<div id="bl-stu-chips-wrap" class="bl-stu-chips">${assignedStus.map(s=>`<div class="bl-stu-chip"><span>${_e(s.name)}</span><button onclick="BooklibApp._removeStudent('${book.id}','${s.id}')">✕</button></div>`).join('')}</div>`:'<div id="bl-stu-chips-wrap" class="bl-stu-chips" style="min-height:36px"><span style="font-size:11px;color:var(--tx3)">배정된 학생 없음</span></div>'}
       `:''}
 
       <!-- 챕터 목록 -->
@@ -1691,7 +1736,24 @@ const BooklibApp = (() => {
     _toast('🗑 "'+bookName+'" 삭제 완료','success');
   }
 
-  async function _toggleAssign(bookId,classId,el){const isOn=el.classList.contains('on');if(isOn)await BookLibDB.unassignBook(bookId,classId);else await BookLibDB.assignBook(bookId,classId);el.classList.toggle('on',!isOn);_toast(isOn?'반 배정 해제':'✅ 반 배정','success');}
+  async function _toggleAssign(bookId,classId,el){
+    const isOn=el.classList.contains('on');
+    if(isOn)await BookLibDB.unassignBook(bookId,classId);
+    else await BookLibDB.assignBook(bookId,classId);
+    el.classList.toggle('on',!isOn);
+    _toast(isOn?'반 배정 해제':'✅ 반 배정','success');
+    /* ★ 반 배정 여부에 따라 학생 배정 섹션 활성/비활성 토글 */
+    const bookNow=BookLibDB.getBookById(bookId);
+    const hasClass=(bookNow?.classIds||[]).length>0;
+    const stuSec=document.getElementById('bl-ed-stu-section');
+    const stuBadge=document.getElementById('bl-ed-stu-disabled-badge');
+    if(stuSec){
+      stuSec.style.opacity=hasClass?'0.38':'1';
+      stuSec.style.pointerEvents=hasClass?'none':'';
+      stuSec.style.userSelect=hasClass?'none':'';
+    }
+    if(stuBadge) stuBadge.style.display=hasClass?'inline':'none';
+  }
 
   // ★ 학생 직접 배정
   async function _assignStudentBtn(bookId, studentId, btn){
@@ -1713,12 +1775,22 @@ const BooklibApp = (() => {
     const allStus=typeof StudentDB!=='undefined'?StudentDB.getAll():[];
     const allCls=typeof DB!=='undefined'?DB.getActiveClasses():[];
     const assigned=(book.studentIds||[]).map(id=>allStus.find(s=>s.id===id)).filter(Boolean);
-    if(!assigned.length){wrap.innerHTML='<span style="font-size:11px;color:var(--tx3)">배정된 학생 없음</span>';return;}
-    wrap.innerHTML=assigned.map(s=>{
+    if(!assigned.length){wrap.innerHTML='<span style="font-size:11px;color:var(--tx3)">배정된 학생 없음</span>';}
+    else{wrap.innerHTML=assigned.map(s=>{
       const c=allCls.find(cl=>cl.name===s.classCode);
       const lbl=c?'('+c.name+'반)':'';
       return`<div class="bl-stu-chip"><span>${_e(s.name)+lbl}</span><button onclick="BooklibApp._removeStudent('${bookId}','${s.id}')" style="margin-left:4px;background:none;border:none;cursor:pointer;color:var(--tx3);font-size:13px">✕</button></div>`;
-    }).join('');
+    }).join('');}
+    /* ★ 학생 배정 여부에 따라 반 배정 섹션 활성/비활성 */
+    const hasStudents = assigned.length > 0;
+    const clsSec = document.getElementById('bl-ed-cls-section');
+    const clsBadge = document.getElementById('bl-ed-cls-disabled-badge');
+    if(clsSec){
+      clsSec.style.opacity = hasStudents ? '0.38' : '1';
+      clsSec.style.pointerEvents = hasStudents ? 'none' : '';
+      clsSec.style.userSelect = hasStudents ? 'none' : '';
+    }
+    if(clsBadge) clsBadge.style.display = hasStudents ? 'inline' : 'none';
   }
   async function _removeStudent(bookId, studentId){
     await BookLibDB.removeStudentFromBook(bookId, studentId);
