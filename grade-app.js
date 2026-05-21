@@ -521,6 +521,117 @@ thead th[data-col-key]{position:relative;overflow:visible;}
 
 @media print{body>*:not(#gr-pf){display:none!important;}#gr-pf{display:block!important;position:fixed;inset:0;z-index:9999;background:#fff;padding:24px;overflow:auto;}}
 #gr-pf{display:none;}
+
+/* ══ 리포트 미리보기 전체화면 모드 ══ */
+.gr-pm-ov{
+  position:fixed;inset:0;z-index:8000;
+  background:var(--surf2);
+  display:flex;flex-direction:column;
+  opacity:0;transform:scale(.97);
+  transition:opacity .22s ease,transform .22s ease;
+  pointer-events:none;
+}
+.gr-pm-ov.open{opacity:1;transform:scale(1);pointer-events:auto;}
+
+/* 상단 바 */
+.gr-pm-bar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 16px;background:var(--a);flex-shrink:0;
+  box-shadow:0 2px 8px rgba(0,0,0,.18);
+}
+.gr-pm-bar-title{
+  font-size:14px;font-weight:800;color:#fff;letter-spacing:.3px;
+  display:flex;align-items:center;gap:8px;
+}
+.gr-pm-bar-title span{font-size:11px;opacity:.8;font-weight:500;}
+.gr-pm-close-btn{
+  background:rgba(255,255,255,.2);border:none;color:#fff;
+  border-radius:8px;padding:5px 14px;cursor:pointer;
+  font-size:13px;font-weight:800;font-family:var(--font);
+  transition:background .15s;
+}
+.gr-pm-close-btn:hover{background:rgba(255,255,255,.35);}
+
+/* 메인 영역: 미리보기 + 설정 사이드바 */
+.gr-pm-main{
+  display:flex;flex:1;min-height:0;overflow:hidden;
+}
+
+/* 리포트 미리보기 영역 */
+.gr-pm-report-area{
+  flex:1;overflow:auto;display:flex;justify-content:center;
+  padding:24px 20px;background:var(--surf2);
+  min-width:0;
+}
+
+/* 설정 사이드바 (데스크탑) */
+.gr-pm-aside{
+  width:300px;flex-shrink:0;
+  display:flex;flex-direction:column;
+  background:var(--card);
+  border-left:1.5px solid var(--bdr);
+  overflow:hidden;
+  transition:width .22s ease;
+}
+.gr-pm-aside-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px 8px;background:var(--a);flex-shrink:0;
+}
+.gr-pm-aside-title{font-size:13px;font-weight:800;color:#fff;}
+.gr-pm-aside-body{
+  overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:12px 14px;flex:1;
+}
+.gr-pm-aside-body::-webkit-scrollbar{width:4px;}
+.gr-pm-aside-body::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:2px;}
+
+/* ── 모바일 (<= 640px) ── */
+@media(max-width:640px){
+  .gr-pm-aside{display:none;}  /* 사이드바 숨김 */
+
+  /* 우측 하단 플로팅 설정 버튼 */
+  .gr-pm-mob-fab{
+    position:absolute;bottom:20px;right:16px;
+    width:48px;height:48px;border-radius:50%;
+    background:var(--a);border:none;color:#fff;
+    font-size:20px;cursor:pointer;
+    box-shadow:0 4px 16px var(--a40);
+    display:flex;align-items:center;justify-content:center;
+    z-index:10;transition:transform .15s;
+  }
+  .gr-pm-mob-fab:active{transform:scale(.9);}
+
+  /* 모바일 설정 드로어 */
+  .gr-pm-mob-drawer{
+    position:absolute;inset:0;
+    background:rgba(0,0,0,.4);
+    z-index:20;
+    opacity:0;pointer-events:none;
+    transition:opacity .22s ease;
+  }
+  .gr-pm-mob-drawer.open{opacity:1;pointer-events:auto;}
+  .gr-pm-mob-drawer-inner{
+    position:absolute;right:0;top:0;bottom:0;
+    width:88vw;max-width:340px;
+    background:var(--card);
+    display:flex;flex-direction:column;
+    transform:translateX(100%);
+    transition:transform .25s cubic-bezier(.32,.72,0,1);
+  }
+  .gr-pm-mob-drawer.open .gr-pm-mob-drawer-inner{transform:translateX(0);}
+  .gr-pm-mob-drawer-hdr{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:10px 14px 8px;background:var(--a);flex-shrink:0;
+  }
+  .gr-pm-mob-drawer-hdr span{font-size:13px;font-weight:800;color:#fff;}
+  .gr-pm-mob-drawer-close{
+    background:rgba(255,255,255,.2);border:none;color:#fff;
+    border-radius:6px;padding:3px 10px;cursor:pointer;font-size:14px;font-weight:800;
+  }
+  .gr-pm-mob-drawer-body{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 14px;flex:1;}
+  .gr-pm-mob-drawer-body::-webkit-scrollbar{width:4px;}
+  .gr-pm-mob-drawer-body::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:2px;}
+}
 `;
     document.head.appendChild(s);
   }
@@ -629,6 +740,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
         <button class="gr-rpt-fab" onclick="GradeApp._printReport()" title="PDF"><span class="gr-rpt-fab-ico">🖨️</span><span class="gr-rpt-fab-lbl">PDF</span></button>
         <button class="gr-rpt-fab" onclick="GradeApp._captureReport()" title="캡처"><span class="gr-rpt-fab-ico">📸</span><span class="gr-rpt-fab-lbl">캡처</span></button>
         <button class="gr-rpt-fab" onclick="GradeApp._captureAllReports()" title="전체 캡처 저장" style="background:linear-gradient(135deg,var(--a10),rgba(99,102,241,.2));border-color:var(--a40)"><span class="gr-rpt-fab-ico">📂</span><span class="gr-rpt-fab-lbl" style="color:var(--a);font-weight:800">전체</span></button>
+        <button class="gr-rpt-fab" onclick="GradeApp._openPreviewMode()" title="미리보기 전체화면" style="background:linear-gradient(135deg,rgba(139,92,246,.12),rgba(99,102,241,.18));border-color:rgba(139,92,246,.4)"><span class="gr-rpt-fab-ico">🔍</span><span class="gr-rpt-fab-lbl" style="color:#7c3aed;font-weight:800">미리보기</span></button>
       </div>
       <!-- 성적표 모달 -->
       <div id="gr-rpt-ov" class="ov hidden" onclick="if(event.target.id==='gr-rpt-ov')GradeApp.closeReport()">
@@ -1979,42 +2091,116 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     {label:'Arial',value:'Arial,sans-serif'},
   ];
 
-  // ── 플로팅 설정 패널 열기/닫기 ──
-  function _openFloatCfg() {
-    const existing = document.getElementById('gr-float-cfg');
-    if (existing) { existing.remove(); return; }
+  // ══ 리포트 미리보기 전체화면 모드 ══
+  function _openPreviewMode() {
+    if (document.getElementById('gr-pm-ov')) return;
+    const srcPreview = document.getElementById('gr-rpt-preview');
+    if (!srcPreview) { _toast('⚠️ 리포트 탭에서 학생을 먼저 선택하세요'); return; }
 
-    const panel = document.createElement('div');
-    panel.id = 'gr-float-cfg';
-    panel.className = 'gr-float-cfg';
+    // 원래 위치 기억 (닫을 때 복원)
+    const origParent  = srcPreview.parentNode;
+    const origNext    = srcPreview.nextSibling;
 
-    // 초기 위치: 화면 왼쪽 중앙
-    const initLeft = Math.max(8, window.innerWidth * 0.02);
-    const initTop  = Math.max(60, window.innerHeight * 0.15);
-    panel.style.left = initLeft + 'px';
-    panel.style.top  = initTop  + 'px';
+    const ov = document.createElement('div');
+    ov.id = 'gr-pm-ov';
+    ov.className = 'gr-pm-ov';
+    // 복원 정보 저장
+    ov._origParent = origParent;
+    ov._origNext   = origNext;
 
-    const FONTS = [
-      { key: 'Noto Sans KR',      label: 'Noto',   style: "'Noto Sans KR', sans-serif" },
-      { key: 'IBM Plex Sans KR',  label: 'IBM',    style: "'IBM Plex Sans KR', sans-serif" },
-      { key: 'Nanum Gothic',      label: '나눔고딕', style: "'Nanum Gothic', sans-serif" },
-      { key: 'Nanum Myeongjo',    label: '명조',    style: "'Nanum Myeongjo', serif" },
-      { key: 'Spoqa Han Sans Neo',label: 'Spoqa',  style: "'Spoqa Han Sans Neo','Noto Sans KR',sans-serif" },
-    ];
-
-    panel.innerHTML = `
-      <div class="gr-float-cfg-hdr" id="gr-float-cfg-hdr">
-        <span class="gr-float-cfg-title">⚙️ 리포트 설정</span>
-        <button class="gr-float-cfg-close" id="gr-float-cfg-close-btn">✕</button>
+    ov.innerHTML = `
+      <!-- 상단 바 -->
+      <div class="gr-pm-bar">
+        <div class="gr-pm-bar-title">🔍 리포트 미리보기 <span>— 설정 변경이 즉시 반영됩니다</span></div>
+        <button class="gr-pm-close-btn" onclick="GradeApp._closePreviewMode()">✕ 닫기</button>
       </div>
-      <div class="gr-float-cfg-body">
+      <!-- 메인 -->
+      <div class="gr-pm-main">
+        <!-- 리포트 영역 (srcPreview 이동될 자리) -->
+        <div class="gr-pm-report-area" id="gr-pm-report-area"></div>
+        <!-- 데스크탑 설정 사이드바 -->
+        <aside class="gr-pm-aside">
+          <div class="gr-pm-aside-hdr">
+            <span class="gr-pm-aside-title">⚙️ 리포트 설정</span>
+          </div>
+          <div class="gr-pm-aside-body gr-float-cfg-body">${_buildCfgBodyHTML()}</div>
+        </aside>
+      </div>
+      <!-- 모바일: 설정 FAB -->
+      <button class="gr-pm-mob-fab" id="gr-pm-mob-fab"
+        onclick="GradeApp._togglePmDrawer()" title="설정">⚙️</button>
+      <!-- 모바일: 설정 드로어 -->
+      <div class="gr-pm-mob-drawer" id="gr-pm-mob-drawer"
+        onclick="if(event.target===this)GradeApp._togglePmDrawer()">
+        <div class="gr-pm-mob-drawer-inner">
+          <div class="gr-pm-mob-drawer-hdr">
+            <span>⚙️ 리포트 설정</span>
+            <button class="gr-pm-mob-drawer-close"
+              onclick="GradeApp._togglePmDrawer()">✕</button>
+          </div>
+          <div class="gr-pm-mob-drawer-body gr-float-cfg-body">${_buildCfgBodyHTML()}</div>
+        </div>
+      </div>`;
 
+    document.body.appendChild(ov);
+
+    // #gr-rpt-preview 를 미리보기 영역으로 물리 이동
+    // → 기존 _setXxx 함수들이 getElementById('gr-rpt-preview') 로 그대로 동작
+    const reportArea = document.getElementById('gr-pm-report-area');
+    reportArea.appendChild(srcPreview);
+    srcPreview.style.cssText += ';width:100%;max-width:none;margin:0;';
+
+    // 열림 애니메이션
+    requestAnimationFrame(() => requestAnimationFrame(() => ov.classList.add('open')));
+
+    // ESC 키로 닫기
+    ov._escHandler = e => { if (e.key === 'Escape') GradeApp._closePreviewMode(); };
+    document.addEventListener('keydown', ov._escHandler);
+  }
+
+  function _closePreviewMode() {
+    const ov = document.getElementById('gr-pm-ov');
+    if (!ov) return;
+
+    // #gr-rpt-preview 원래 위치로 복원
+    const preview = document.getElementById('gr-rpt-preview');
+    if (preview && ov._origParent) {
+      preview.style.cssText = preview.style.cssText
+        .replace(/width:[^;]*;?/g, '')
+        .replace(/max-width:[^;]*;?/g, '')
+        .replace(/margin:[^;]*;?/g, '');
+      if (ov._origNext) ov._origParent.insertBefore(preview, ov._origNext);
+      else              ov._origParent.appendChild(preview);
+    }
+
+    // ESC 핸들러 정리
+    if (ov._escHandler) document.removeEventListener('keydown', ov._escHandler);
+
+    // 닫힘 애니메이션 후 제거
+    ov.classList.remove('open');
+    setTimeout(() => ov.remove(), 250);
+  }
+
+  function _togglePmDrawer() {
+    const drawer = document.getElementById('gr-pm-mob-drawer');
+    if (drawer) drawer.classList.toggle('open');
+  }
+
+  // ── 설정 패널 HTML 빌더 (float 패널 · 미리보기 모드 공유) ──
+  function _buildCfgBodyHTML() {
+    const FONTS = [
+      { key: 'Noto Sans KR',      label: 'Noto',    style: "'Noto Sans KR', sans-serif" },
+      { key: 'IBM Plex Sans KR',  label: 'IBM',     style: "'IBM Plex Sans KR', sans-serif" },
+      { key: 'Nanum Gothic',      label: '나눔고딕', style: "'Nanum Gothic', sans-serif" },
+      { key: 'Nanum Myeongjo',    label: '명조',     style: "'Nanum Myeongjo', serif" },
+      { key: 'Spoqa Han Sans Neo',label: 'Spoqa',   style: "'Spoqa Han Sans Neo','Noto Sans KR',sans-serif" },
+    ];
+    return `
         <!-- 레이아웃 -->
         <div class="gr-float-section">
           <div class="gr-float-lbl">📐 레이아웃</div>
           <div class="gr-rpt-layouts">${[1,2,3,4,5].map(n=>`<button class="gr-rpt-lbtn ${_st.reportLayout===n?'on':''}" onclick="GradeApp._setLayout(${n})">L${n}</button>`).join('')}</div>
         </div>
-
         <!-- 폰트 -->
         <div class="gr-float-section">
           <div class="gr-float-lbl">🔤 본문 폰트</div>
@@ -2028,7 +2214,6 @@ thead th[data-col-key]{position:relative;overflow:visible;}
             <span style="font-size:11px;font-weight:700">Bold 강조 적용</span>
           </label>
         </div>
-
         <!-- 글자 크기 -->
         <div class="gr-float-section">
           <div class="gr-float-lbl">🔡 글자 크기</div>
@@ -2043,7 +2228,6 @@ thead th[data-col-key]{position:relative;overflow:visible;}
             </label>
           </div>
         </div>
-
         <!-- 페이지 -->
         <div class="gr-float-section">
           <div class="gr-float-lbl">📄 페이지 크기</div>
@@ -2063,13 +2247,11 @@ thead th[data-col-key]{position:relative;overflow:visible;}
             <input type="range" min="40" max="160" value="${_st.logoSize}" oninput="GradeApp._setLogoSize(this.value)" style="flex:1;accent-color:var(--a)">
             <span id="gr-rpt-logo-sz" style="min-width:34px;text-align:right">${_st.logoSize}px</span>
           </label>
-          <!-- 확대/축소 -->
           <label style="font-size:11px;color:var(--tx2);display:flex;align-items:center;gap:6px;margin-top:6px">🔍 배율
             <input type="range" min="60" max="150" step="5" value="${_st.rptScale}" oninput="GradeApp._setRptScale(+this.value)" style="flex:1;accent-color:var(--a)">
             <span id="gr-rpt-scale-lbl" style="min-width:34px;text-align:right">${_st.rptScale}%</span>
           </label>
         </div>
-
         <!-- 배경색 -->
         <div class="gr-float-section">
           <div class="gr-float-lbl">🎨 배경색</div>
@@ -2078,7 +2260,6 @@ thead th[data-col-key]{position:relative;overflow:visible;}
               `<button onclick="GradeApp._setRptBg('${c}')" title="${l}" style="width:24px;height:24px;border-radius:50%;border:2px solid ${_st.rptBg===c?'var(--a)':'#e5e7eb'};background:${c};cursor:pointer;box-shadow:${_st.rptBg===c?'0 0 0 2px var(--a)':'none'};transition:all .15s"></button>`).join('')}
           </div>
         </div>
-
         <!-- 그래프 & 라인 -->
         <div class="gr-float-section">
           <div class="gr-float-lbl">📊 그래프 · 🖊 라인</div>
@@ -2097,7 +2278,6 @@ thead th[data-col-key]{position:relative;overflow:visible;}
             <label style="font-size:11px;color:var(--tx2);display:flex;align-items:center;gap:4px"><input type="checkbox" id="gr-tbl-round" ${_st.tableRound?'checked':''} onchange="GradeApp._setTableRound(this.checked)" style="accent-color:var(--a)"> 표 라운드</label>
           </div>
         </div>
-
         <!-- 제목 정렬 -->
         <div class="gr-float-section">
           <div class="gr-float-lbl">📐 제목 정렬 · 🗂 표 색상</div>
@@ -2111,7 +2291,6 @@ thead th[data-col-key]{position:relative;overflow:visible;}
             <label style="font-size:10px;color:var(--tx2);display:flex;align-items:center;gap:3px">셀배경<input type="color" value="${_st.tblCellBg}" oninput="GradeApp._setTblColor('cellBg',this.value)" style="width:22px;height:16px;border:none;cursor:pointer;border-radius:3px;padding:0"></label>
           </div>
         </div>
-
         <!-- 추천 테마 -->
         <div class="gr-float-section">
           <div class="gr-float-lbl">✨ 추천 테마</div>
@@ -2120,9 +2299,29 @@ thead th[data-col-key]{position:relative;overflow:visible;}
             <button onclick="GradeApp._applyTheme(2)" style="padding:5px 12px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:var(--font);border:1.5px solid #a5f3fc;background:linear-gradient(135deg,#ecfeff,#cffafe);color:#0e7490">🌊 블루</button>
             <button onclick="GradeApp._applyTheme(3)" style="padding:5px 12px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:var(--font);border:1.5px solid #fcd34d;background:linear-gradient(135deg,#fffbeb,#fef3c7);color:#92400e">🌟 골드</button>
           </div>
-        </div>
+        </div>`;
+  }
 
-      </div>`;
+  // ── 플로팅 설정 패널 열기/닫기 ──
+  function _openFloatCfg() {
+    const existing = document.getElementById('gr-float-cfg');
+    if (existing) { existing.remove(); return; }
+
+    const panel = document.createElement('div');
+    panel.id = 'gr-float-cfg';
+    panel.className = 'gr-float-cfg';
+
+    const initLeft = Math.max(8, window.innerWidth * 0.02);
+    const initTop  = Math.max(60, window.innerHeight * 0.15);
+    panel.style.left = initLeft + 'px';
+    panel.style.top  = initTop  + 'px';
+
+    panel.innerHTML = `
+      <div class="gr-float-cfg-hdr" id="gr-float-cfg-hdr">
+        <span class="gr-float-cfg-title">⚙️ 리포트 설정</span>
+        <button class="gr-float-cfg-close" id="gr-float-cfg-close-btn">✕</button>
+      </div>
+      <div class="gr-float-cfg-body">${_buildCfgBodyHTML()}</div>`;
 
     document.body.appendChild(panel);
 
@@ -4352,7 +4551,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     _slideTo, _ts, _te,
     _onCtxTable, _closeCtxMenu,
     saveOne, saveAll, resetOne,
-    _setLayout, _setHdrFontSize, _exportAllGrades, _importAllGrades, _toggleGraph, _setChartStyle, _setPageSize, _setRptFontSize, _setGraphAlign, _setDivider, _setLogoSize, _setTableRound, _applyTableWidth, _bindColResize, _bindGroupResizers, _repositionGroupResizers, _resetColWidths, _onCmtInput, _setFontFamily, _openFloatCfg, _setReportBold, _deliverReport, _setRptBg, _setRptScale,
+    _setLayout, _setHdrFontSize, _exportAllGrades, _importAllGrades, _toggleGraph, _setChartStyle, _setPageSize, _setRptFontSize, _setGraphAlign, _setDivider, _setLogoSize, _setTableRound, _applyTableWidth, _bindColResize, _bindGroupResizers, _repositionGroupResizers, _resetColWidths, _onCmtInput, _setFontFamily, _openFloatCfg, _setReportBold, _deliverReport, _setRptBg, _setRptScale, _openPreviewMode, _closePreviewMode, _togglePmDrawer,
     _setTitleAlign, _setTblColor, _applyTheme, _applyRptStyles,
     _setGraphStyleMode, _fixStickyHeaderTops,
     _copyReport, _shareReport, _printReport, _captureReport, _captureAllReports, _showShareModal, _showDeliverModal,
