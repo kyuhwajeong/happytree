@@ -149,8 +149,8 @@ const GradeApp = (() => {
 
 /* comment 셀 — 인라인 직접 편집 */
 .gs-cm-cell{min-width:160px;max-width:400px;padding:0;vertical-align:top;}
-.gs-cm-wrap{display:flex;align-items:stretch;height:100%;}
-/* 인라인 textarea */
+.gs-cm-wrap{display:flex;align-items:stretch;height:100%;position:relative;}
+/* 인라인 textarea — 버튼과 독립적으로 전체 너비 사용 */
 .gs-cm-ta{
   flex:1;padding:7px 9px;border:none;outline:none;
   background:transparent;font-size:14px;color:var(--tx);
@@ -160,15 +160,36 @@ const GradeApp = (() => {
 }
 .gs-cm-ta:focus{background:rgba(5,150,105,.04);}
 .gs-cm-ta::placeholder{color:var(--tx3);font-style:italic;}
-/* ✏️ AI 버튼 */
-.gs-cm-icon{
-  flex:0 0 26px;width:26px;display:flex;align-items:center;
-  justify-content:center;border-left:1px solid var(--bdr);
-  cursor:pointer;color:var(--tx3);font-size:12px;
-  transition:background .12s;background:var(--surf2);
+
+/* 우측 상단 삼각형 인디케이터 (항상 표시) */
+.gs-cm-wrap::after{
+  content:'';position:absolute;top:0;right:0;
+  width:0;height:0;border-style:solid;
+  border-width:0 12px 12px 0;
+  border-color:transparent var(--a40) transparent transparent;
+  transition:border-color .15s;pointer-events:none;z-index:2;
 }
-.gs-cm-icon:hover{background:var(--a10);color:var(--a);}
-.gs-cm-icon.has-cmt{color:var(--green);}
+.gs-cm-wrap:hover::after{border-color:transparent var(--a) transparent transparent;}
+
+/* AI 버튼 — 평소 hidden, 셀 hover·textarea focus 시 스무드 reveal */
+.gs-cm-icon{
+  position:absolute;top:5px;right:5px;z-index:3;
+  padding:3px 8px;border-radius:6px;
+  background:var(--a);color:#fff;
+  font-size:11px;font-weight:700;
+  cursor:pointer;white-space:nowrap;user-select:none;
+  opacity:0;transform:translateY(-4px) scale(.9);
+  transition:opacity .18s ease,transform .18s ease;
+  pointer-events:none;
+  box-shadow:0 2px 8px var(--a40);
+}
+.gs-cm-wrap:hover .gs-cm-icon,
+.gs-cm-ta:focus ~ .gs-cm-icon{
+  opacity:1;transform:translateY(0) scale(1);
+  pointer-events:auto;
+}
+.gs-cm-icon.has-cmt{background:var(--green);box-shadow:0 2px 8px rgba(5,150,105,.4);}
+.gs-cm-icon:hover{filter:brightness(1.1);}
 
 /* ══ Comment 대형 팝업 (✏️버튼 전용) ══ */
 .gr-cmt-modal{
@@ -269,19 +290,45 @@ thead th[data-col-key]{position:relative;overflow:visible;}
 }
 .gr-sheet.resizing,.gr-sheet.resizing *{cursor:col-resize!important;user-select:none!important;}
 
-/* ── 그룹 리사이저 (학생/단어/리딩 구획 경계) ── */
-.gs-group-resizer{
-  position:absolute;right:-8px;top:0;width:16px;height:100%;
-  cursor:col-resize;z-index:30;user-select:none;
+/* ── 그룹 리사이저 오버레이 (전체 높이, gr-sheet-wrap 위) ── */
+.gs-group-resizer-overlay{
+  position:absolute;top:0;width:16px;height:100%;
+  cursor:col-resize;z-index:20;user-select:none;
+  transform:translateX(-50%);
 }
-.gs-group-resizer::after{
+.gs-group-resizer-overlay::before{
+  /* 시각적 핸들 바 */
   content:'';position:absolute;left:50%;transform:translateX(-50%);
-  top:8%;height:84%;width:5px;
-  background:var(--a40);border-radius:4px;
-  transition:background .15s,box-shadow .15s,width .15s;
+  top:0;height:100%;width:4px;
+  background:transparent;
+  transition:background .15s,width .15s,box-shadow .15s;
+  border-radius:2px;
 }
-.gs-group-resizer:hover::after,.gs-group-resizer.dragging::after{
-  background:var(--a);box-shadow:0 0 10px var(--a40);width:7px;
+.gs-group-resizer-overlay:hover::before,
+.gs-group-resizer-overlay.dragging::before{
+  background:var(--a);
+  box-shadow:0 0 10px var(--a40);
+  width:6px;
+}
+/* 헤더 th에 직접 붙는 sticky 핸들 — 스크롤 후에도 정렬 클릭 차단 */
+.gs-grp-hdr-handle{
+  position:absolute;right:-8px;top:0;
+  width:16px;height:100%;
+  cursor:col-resize;z-index:30;
+  user-select:none;
+}
+.gs-grp-hdr-handle::before{
+  content:'';position:absolute;left:50%;transform:translateX(-50%);
+  top:0;height:100%;width:4px;
+  background:transparent;
+  transition:background .15s,width .15s,box-shadow .15s;
+  border-radius:2px;
+}
+.gs-grp-hdr-handle:hover::before,
+.gs-grp-hdr-handle.dragging::before{
+  background:var(--a);
+  box-shadow:0 0 10px var(--a40);
+  width:6px;
 }
 /* 너비 초기화 버튼 */
 .gr-col-reset-btn{padding:5px 9px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--bdr2);background:var(--surf2);color:var(--tx3);white-space:nowrap;transition:all .15s;}
@@ -870,7 +917,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
             <div class="gs-cm-icon${d.comment?.trim()?' has-cmt':''}"
               id="gr-cmtbtn-${s.id}"
               onclick="GradeApp._openCommentPop(event,'${s.id}')"
-              title="AI 생성 / 교정">✏️</div>
+              title="AI 생성 / 교정">✨ AI</div>
           </div>
         </td>
       </tr>`;
@@ -1581,6 +1628,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     let total = 0;
     tbl.querySelectorAll('colgroup col').forEach(col => { total += parseInt(col.style.width) || 52; });
     tbl.style.width = total + 'px';
+    _repositionGroupResizers();
   }
 
   /* ── 컬럼 리사이저 핸들 바인딩 ── */
@@ -1681,15 +1729,24 @@ thead th[data-col-key]{position:relative;overflow:visible;}
   }
 
   /* ── 그룹 리사이저 바인딩
-   *   · 학생 구획  : gs-fix th → fix 컬럼
-   *   · 단어 구획  : wa th    → wq·wr·wp·wa 비례 조정
-   *   · 리딩 구획  : ra th    → rq·rr0..N·rs0..N·ra 비례 조정
+   *   오버레이를 .gr-sheet-wrap 에 직접 붙여 헤더 ~ 평균행까지 전체 높이 커버
+   *   · fix  : 학생 컬럼 우측 (scroll 이벤트로 position 동기화)
+   *   · wa   : 단어 성취율 컬럼 우측 (absolute, content와 함께 스크롤)
+   *   · ra   : 리딩 성취율 컬럼 우측 (absolute, content와 함께 스크롤)
    * ─────────────────────────────────────────────────────── */
   function _bindGroupResizers() {
-    const tbl = document.querySelector('.gr-sheet'); if (!tbl) return;
+    const wrap = document.querySelector('.gr-sheet-wrap'); if (!wrap) return;
+    const tbl  = document.querySelector('.gr-sheet');      if (!tbl)  return;
     const config  = GradeDB.getReportConfig(_st.bookId);
     const actRevs = GradeDB.getActiveReviews(_st.bookId);
     const hasRd   = config.reading?.enabled && actRevs.length > 0;
+
+    /* 기존 오버레이 + 이전 스크롤 리스너 제거 */
+    wrap.querySelectorAll('.gs-group-resizer-overlay').forEach(el => el.remove());
+    if (wrap._grpScrollHandler) {
+      wrap.removeEventListener('scroll', wrap._grpScrollHandler);
+      wrap._grpScrollHandler = null;
+    }
 
     const _getColW = key => {
       const c = tbl.querySelector(`colgroup col[data-col-key="${key}"]`);
@@ -1708,34 +1765,46 @@ thead th[data-col-key]{position:relative;overflow:visible;}
       localStorage.setItem('gr_col_widths', JSON.stringify(s));
     };
 
+    /* colgroup 기준 누적 너비 → 경계 left 계산 */
+    const _boundaryLeft = lastKey => {
+      let left = 0;
+      for (const col of tbl.querySelectorAll('colgroup col')) {
+        left += parseInt(col.style.width) || 48;
+        if (col.dataset.colKey === lastKey) break;
+      }
+      return left;
+    };
+
     /* 그룹 정의 */
     const rdKeys = hasRd
       ? ['rq', ...actRevs.map((_,i)=>`rr${i}`), ...actRevs.map((_,i)=>`rs${i}`), 'ra']
       : [];
 
     const groups = [
-      { thSel: 'thead tr.gs-cols th.gs-fix', keys: ['fix'],                      label: '학생' },
-      { thSel: 'thead th[data-col-key="wa"]', keys: ['wq','wr','wp','wa'],        label: '단어 평가' },
-      ...(hasRd ? [{ thSel: 'thead th[data-col-key="ra"]', keys: rdKeys, label: '리딩 평가' }] : []),
+      { lastKey:'fix', keys:['fix'],              label:'학생',     isFixCol:true  },
+      { lastKey:'wa',  keys:['wq','wr','wp','wa'], label:'단어 평가', isFixCol:false },
+      ...(hasRd ? [{ lastKey:'ra', keys:rdKeys, label:'리딩 평가', isFixCol:false }] : []),
     ];
 
-    groups.forEach(({ thSel, keys, label }) => {
-      const th = tbl.querySelector(thSel);
-      if (!th) return;
-      if (th.querySelector('.gs-group-resizer')) return;
+    const overlays = [];
 
-      const handle = document.createElement('div');
-      handle.className = 'gs-group-resizer';
-      handle.title = `← → ${label} 너비 조절  |  더블클릭: 초기화`;
-      th.style.overflow = 'visible';
-      th.appendChild(handle);
+    groups.forEach(({ lastKey, keys, label, isFixCol }) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'gs-group-resizer-overlay';
+      overlay.dataset.lastKey = lastKey;
+      overlay.dataset.fixCol  = isFixCol ? '1' : '0';
+      overlay.title = `← → ${label} 너비 조절  |  더블클릭: 초기화`;
+      /* height는 RAF에서 테이블 실제 높이로 설정 */
+      overlay.style.left = (isFixCol ? wrap.scrollLeft + _boundaryLeft(lastKey) : _boundaryLeft(lastKey)) + 'px';
+      wrap.appendChild(overlay);
+      overlays.push(overlay);
 
-      /* 드래그 시작 시 초기 너비 스냅샷 */
-      const _startResize = (startX) => {
+      /* 드래그 공통 로직 — overlay·headerHandle 공유 */
+      const _startResize = (startX, actor) => {
         const initW = Object.fromEntries(keys.map(k => [k, _getColW(k)]));
         const initTotal = keys.reduce((s,k) => s + initW[k], 0);
-        handle.classList.add('dragging');
-        tbl.classList.add('resizing');
+        overlay.classList.add('dragging'); tbl.classList.add('resizing');
+        if (actor) actor.classList.add('dragging');
         return { startX, initW, initTotal };
       };
       const _applyDelta = ({ startX, initW, initTotal }, currentX) => {
@@ -1745,43 +1814,93 @@ thead th[data-col-key]{position:relative;overflow:visible;}
         keys.forEach(k => _setColW(k, Math.round(initW[k] * ratio)));
         _applyTableWidth();
       };
-      const _endResize = () => {
-        handle.classList.remove('dragging');
-        tbl.classList.remove('resizing');
+      const _endResize = (actor) => {
+        overlay.classList.remove('dragging'); tbl.classList.remove('resizing');
+        if (actor) actor.classList.remove('dragging');
         _saveKeys(keys);
       };
 
-      /* 마우스 드래그 */
-      handle.addEventListener('mousedown', e => {
-        e.preventDefault(); e.stopPropagation();
-        const ctx = _startResize(e.clientX);
-        const mv = ev => _applyDelta(ctx, ev.clientX);
-        const up = () => { _endResize(); document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); };
-        document.addEventListener('mousemove', mv);
-        document.addEventListener('mouseup', up);
-      });
+      const _bindDragOn = (el, actor) => {
+        el.addEventListener('mousedown', e => {
+          e.preventDefault(); e.stopPropagation();
+          const ctx = _startResize(e.clientX, actor);
+          const mv = ev => _applyDelta(ctx, ev.clientX);
+          const up = () => { _endResize(actor); document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); };
+          document.addEventListener('mousemove', mv);
+          document.addEventListener('mouseup', up);
+        });
+        el.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); }); // 정렬 클릭 차단
+        el.addEventListener('touchstart', e => {
+          e.preventDefault(); e.stopPropagation();
+          const ctx = _startResize(e.touches[0].clientX, actor);
+          const mv = ev => { ev.preventDefault(); _applyDelta(ctx, ev.touches[0].clientX); };
+          const up = () => { _endResize(actor); document.removeEventListener('touchmove', mv); document.removeEventListener('touchend', up); };
+          document.addEventListener('touchmove', mv, { passive:false });
+          document.addEventListener('touchend', up);
+        }, { passive:false });
+        el.addEventListener('dblclick', e => {
+          e.stopPropagation();
+          const defs = { fix:100, wq:56, wr:48, wp:44, wa:56, rq:44, ra:56, cm:200 };
+          keys.forEach(k => _setColW(k, defs[k] ?? 48));
+          _applyTableWidth();
+          const s = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
+          keys.forEach(k => delete s[k]);
+          localStorage.setItem('gr_col_widths', JSON.stringify(s));
+          _toast(`↩ ${label} 너비 초기화`, 'info');
+        });
+      };
 
-      /* 터치 드래그 */
-      handle.addEventListener('touchstart', e => {
-        e.preventDefault(); e.stopPropagation();
-        const ctx = _startResize(e.touches[0].clientX);
-        const mv = ev => { ev.preventDefault(); _applyDelta(ctx, ev.touches[0].clientX); };
-        const up = () => { _endResize(); document.removeEventListener('touchmove', mv); document.removeEventListener('touchend', up); };
-        document.addEventListener('touchmove', mv, { passive: false });
-        document.addEventListener('touchend', up);
-      }, { passive: false });
+      /* ① 바디 오버레이 */
+      _bindDragOn(overlay, null);
 
-      /* 더블클릭 → 그룹 기본값 복원 */
-      handle.addEventListener('dblclick', e => {
-        e.stopPropagation();
-        const defs = { fix:100, wq:56, wr:48, wp:44, wa:56, rq:44, ra:56, cm:200 };
-        keys.forEach(k => _setColW(k, defs[k] ?? 48));
-        _applyTableWidth();
-        const s = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
-        keys.forEach(k => delete s[k]);
-        localStorage.setItem('gr_col_widths', JSON.stringify(s));
-        _toast(`↩ ${label} 너비 초기화`, 'info');
-      });
+      /* ② 헤더 th에 sticky 핸들 추가 (스크롤 시에도 항상 클릭 차단·드래그 가능) */
+      const thSel = lastKey === 'fix'
+        ? 'thead tr.gs-cols th.gs-fix'
+        : `thead th[data-col-key="${lastKey}"]`;
+      const boundTh = tbl.querySelector(thSel);
+      if (boundTh) {
+        boundTh.querySelectorAll('.gs-grp-hdr-handle').forEach(el => el.remove());
+        const hdrHandle = document.createElement('div');
+        hdrHandle.className = 'gs-grp-hdr-handle';
+        hdrHandle.title = overlay.title;
+        boundTh.style.overflow = 'visible';
+        boundTh.appendChild(hdrHandle);
+        _bindDragOn(hdrHandle, hdrHandle);
+      }
+    });
+
+    /* fix 오버레이: 가로 스크롤 시 position 동기화 */
+    wrap._grpScrollHandler = () => {
+      const fixOv = wrap.querySelector('.gs-group-resizer-overlay[data-fix-col="1"]');
+      if (fixOv) fixOv.style.left = (wrap.scrollLeft + _boundaryLeft('fix')) + 'px';
+    };
+    wrap.addEventListener('scroll', wrap._grpScrollHandler);
+
+    /* 테이블 실제 높이로 오버레이 높이 설정 */
+    requestAnimationFrame(() => {
+      const h = tbl.offsetHeight;
+      overlays.forEach(ov => { ov.style.height = h + 'px'; });
+    });
+  }
+
+  /* 오버레이 위치·높이를 colgroup 너비 기준으로 재계산 */
+  function _repositionGroupResizers() {
+    const wrap = document.querySelector('.gr-sheet-wrap'); if (!wrap) return;
+    const tbl  = document.querySelector('.gr-sheet');      if (!tbl)  return;
+    const _boundaryLeft = lastKey => {
+      let left = 0;
+      for (const col of tbl.querySelectorAll('colgroup col')) {
+        left += parseInt(col.style.width) || 48;
+        if (col.dataset.colKey === lastKey) break;
+      }
+      return left;
+    };
+    const h = tbl.offsetHeight;
+    wrap.querySelectorAll('.gs-group-resizer-overlay').forEach(ov => {
+      const lk  = ov.dataset.lastKey;
+      const fix = ov.dataset.fixCol === '1';
+      ov.style.left   = (fix ? wrap.scrollLeft + _boundaryLeft(lk) : _boundaryLeft(lk)) + 'px';
+      if (h > 0) ov.style.height = h + 'px';
     });
   }
 
@@ -4233,7 +4352,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     _slideTo, _ts, _te,
     _onCtxTable, _closeCtxMenu,
     saveOne, saveAll, resetOne,
-    _setLayout, _setHdrFontSize, _exportAllGrades, _importAllGrades, _toggleGraph, _setChartStyle, _setPageSize, _setRptFontSize, _setGraphAlign, _setDivider, _setLogoSize, _setTableRound, _applyTableWidth, _bindColResize, _bindGroupResizers, _resetColWidths, _onCmtInput, _setFontFamily, _openFloatCfg, _setReportBold, _deliverReport, _setRptBg, _setRptScale,
+    _setLayout, _setHdrFontSize, _exportAllGrades, _importAllGrades, _toggleGraph, _setChartStyle, _setPageSize, _setRptFontSize, _setGraphAlign, _setDivider, _setLogoSize, _setTableRound, _applyTableWidth, _bindColResize, _bindGroupResizers, _repositionGroupResizers, _resetColWidths, _onCmtInput, _setFontFamily, _openFloatCfg, _setReportBold, _deliverReport, _setRptBg, _setRptScale,
     _setTitleAlign, _setTblColor, _applyTheme, _applyRptStyles,
     _setGraphStyleMode, _fixStickyHeaderTops,
     _copyReport, _shareReport, _printReport, _captureReport, _captureAllReports, _showShareModal, _showDeliverModal,
