@@ -111,16 +111,16 @@ const GradeApp = (() => {
 .gr-sheet thead .gs-fix{z-index:6;background:var(--surf2);}
 .gr-sheet .gs-fix.sel,.gr-sheet .gs-fix:hover{background:var(--a10);}
 /* row1: 얇은 섹션 라벨 띠 — 높이 고정 20px */
-.gr-sheet thead tr.gs-band th{height:20px;padding:0 4px;font-size:9px;font-weight:700;line-height:20px;border-bottom:none;}
+.gr-sheet thead tr.gs-band th{height:20px;padding:0 4px;font-size:9px;font-weight:600;line-height:20px;border-bottom:none;}
 /* row2: 실제 컬럼 헤더 */
 .gr-sheet thead tr.gs-cols th{padding:5px 4px;}
 .gr-sheet thead tr.gs-rd-cols th{padding:4px 4px;background:var(--surf2);}
 
 /* header */
-.gs-th{background:var(--surf2);border:1px solid var(--bdr);padding:5px 4px;font-size:11px;font-weight:800;color:var(--tx2);text-align:center;white-space:nowrap;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;}
-.gs-th.sec-w{background:var(--a10);color:var(--a);font-size:10px;}
-.gs-th.sec-r{background:rgba(139,92,246,.1);color:#8b5cf6;font-size:10px;}
-.gs-th.sec-c{background:rgba(5,150,105,.08);color:var(--green);font-size:11px;}
+.gs-th{background:var(--surf2);border:1px solid var(--bdr);padding:5px 4px;font-size:11px;font-weight:600;color:var(--tx2);text-align:center;white-space:nowrap;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;}
+.gs-th.sec-w{background:var(--a10);color:var(--a);font-size:11px;font-weight:600;}
+.gs-th.sec-r{background:rgba(139,92,246,.1);color:#8b5cf6;font-size:11px;font-weight:600;}
+.gs-th.sec-c{background:rgba(5,150,105,.08);color:var(--green);font-size:11px;font-weight:600;}
 .gs-th.sortable{cursor:pointer;user-select:none;}
 .gs-th.sortable:hover{background:var(--a20);}
 .gs-th.sort-on{color:var(--a);background:var(--a10);}
@@ -153,7 +153,7 @@ const GradeApp = (() => {
 /* 인라인 textarea */
 .gs-cm-ta{
   flex:1;padding:7px 9px;border:none;outline:none;
-  background:transparent;font-size:15px;color:var(--tx);
+  background:transparent;font-size:12px;color:var(--tx);
   font-family:var(--font);resize:none;line-height:1.6;
   min-height:92px;width:100%;box-sizing:border-box;
   white-space:pre-wrap;word-break:break-word;
@@ -546,8 +546,8 @@ thead th[data-col-key]{position:relative;overflow:visible;}
           <button id="gr-save-btn" class="gr-save-all-btn" onclick="GradeApp.saveAll()" style="display:none">
             💾 저장<span class="gr-dirty-count" id="gr-dirty-cnt"></span>
           </button>
-          <button onclick="GradeApp._exportAllGrades()" style="padding:6px 11px;border-radius:9px;background:rgba(5,150,105,.1);border:1.5px solid rgba(5,150,105,.3);color:#059669;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">📥 전체내보내기</button>
-          <label style="padding:6px 11px;border-radius:9px;background:rgba(99,102,241,.1);border:1.5px solid rgba(99,102,241,.3);color:var(--a);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">📤 전체불러오기<input type="file" accept=".xlsx" style="display:none" onchange="GradeApp._importAllGrades(this.files[0]);this.value=''"></label>
+          <button onclick="GradeApp._exportAllGrades()" style="display:none;padding:6px 11px;border-radius:9px;background:rgba(5,150,105,.1);border:1.5px solid rgba(5,150,105,.3);color:#059669;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">📥 전체내보내기</button>
+          <label style="display:none;padding:6px 11px;border-radius:9px;background:rgba(99,102,241,.1);border:1.5px solid rgba(99,102,241,.3);color:var(--a);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">📤 전체불러오기<input type="file" accept=".xlsx" style="display:none" onchange="GradeApp._importAllGrades(this.files[0]);this.value=''"></label>
         </div>
         <!-- ★ 반만 선택 시 overview 전용 컨트롤 -->
         <div id="gr-ov-ctrls" style="display:none;align-items:center;gap:8px">
@@ -727,16 +727,16 @@ thead th[data-col-key]{position:relative;overflow:visible;}
 
     /* Row2 — 리딩 서브 컬럼 (그룹 헤더: 정답 수 / 점수) */
     const rdRow2Sub = hasRd ? `
-      <th class="gs-th" data-col-key="rq" rowspan="2" style="background:rgba(139,92,246,.06);color:#8b5cf6;font-size:10px">총문제</th>
-      <th class="gs-th sec-r" colspan="${rvN}" style="font-size:10px">정답 수</th>
-      <th class="gs-th sec-r" colspan="${rvN}" style="font-size:10px">점수</th>
+      <th class="gs-th" data-col-key="rq" rowspan="2" style="background:rgba(139,92,246,.06);color:#8b5cf6">총문제</th>
+      <th class="gs-th sec-r" colspan="${rvN}">정답 수</th>
+      <th class="gs-th sec-r" colspan="${rvN}">점수</th>
       <th class="gs-th sortable sec-r ${_st.sortCol==='rdAch'?'sort-on':''}" data-col-key="ra" rowspan="2"
-          onclick="GradeApp._toggleSort('rdAch')" style="font-size:10px">성취율 ${rdIcon}</th>` : '';
+          onclick="GradeApp._toggleSort('rdAch')">성취율 ${rdIcon}</th>` : '';
 
     /* Row3 — 리딩 Review별 서브컬럼 (정답 수 N개 + 점수 N개) */
     const rdRow3Sub = hasRd ? `
-      ${actRevs.map((rv,i)=>`<th class="gs-th sec-r" data-col-key="rr${i}" style="font-size:9px">${_e(rv.name)}</th>`).join('')}
-      ${actRevs.map((rv,i)=>`<th class="gs-th sec-r" data-col-key="rs${i}" style="font-size:9px">${_e(rv.name)}</th>`).join('')}` : '';
+      ${actRevs.map((rv,i)=>`<th class="gs-th sec-r" data-col-key="rr${i}">${_e(rv.name)}</th>`).join('')}
+      ${actRevs.map((rv,i)=>`<th class="gs-th sec-r" data-col-key="rs${i}">${_e(rv.name)}</th>`).join('')}` : '';
 
     /* colgroup */
     const _cw  = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
@@ -759,20 +759,20 @@ thead th[data-col-key]{position:relative;overflow:visible;}
             <tr class="gs-band">
               <th class="gs-fix gs-th" style="border-bottom:none;background:var(--surf2)"></th>
               <th class="gs-th sec-w" colspan="4" style="letter-spacing:.5px">🔤 단어 평가</th>
-              ${hasRd ? `<th class="gs-th sec-r" colspan="${rdH1span}" style="letter-spacing:.5px">📖 리딩 평가</th>` : ''}
+              ${hasRd ? `<th class="gs-th sec-r" colspan="${rdH1span}">📖 리딩 평가</th>` : ''}
               <th class="gs-th sec-c" data-col-key="cm" style="border-bottom:none;background:rgba(5,150,105,.08)"></th>
             </tr>
             <!-- Row2: 실제 컬럼 헤더 -->
             <tr class="gs-cols">
               <th class="gs-fix gs-th sortable ${_st.sortCol==='name'?'sort-on':''}"
                   onclick="GradeApp._toggleSort('name')" ${hasRd?'rowspan="2"':''}>학생 ${nmIcon}</th>
-              <th class="gs-th" data-col-key="wq" ${hasRd?'rowspan="2"':''} style="background:var(--a10);color:var(--a);font-size:10px">총 테스트<br>(문제) 수</th>
-              <th class="gs-th" data-col-key="wr" ${hasRd?'rowspan="2"':''} style="background:var(--a10);color:var(--a);font-size:10px">재시험</th>
-              <th class="gs-th" data-col-key="wp" ${hasRd?'rowspan="2"':''} style="background:var(--a10);font-size:10px">통과</th>
-              <th class="gs-th sortable ${_st.sortCol==='wordAch'?'sort-on':''}" data-col-key="wa"
-                  onclick="GradeApp._toggleSort('wordAch')" ${hasRd?'rowspan="2"':''} style="background:var(--a10);font-size:10px">성취율 ${wIcon}</th>
+              <th class="gs-th sec-w" data-col-key="wq" ${hasRd?'rowspan="2"':''}>총 테스트<br>(문제) 수</th>
+              <th class="gs-th sec-w" data-col-key="wr" ${hasRd?'rowspan="2"':''}>재시험</th>
+              <th class="gs-th sec-w" data-col-key="wp" ${hasRd?'rowspan="2"':''}>통과</th>
+              <th class="gs-th sec-w sortable ${_st.sortCol==='wordAch'?'sort-on':''}" data-col-key="wa"
+                  onclick="GradeApp._toggleSort('wordAch')" ${hasRd?'rowspan="2"':''}>성취율 ${wIcon}</th>
               ${rdRow2Sub}
-              <th class="gs-th sec-c" data-col-key="cm" ${hasRd?'rowspan="2"':''} style="font-size:11px">💬 Teacher's Comment</th>
+              <th class="gs-th sec-c" data-col-key="cm" ${hasRd?'rowspan="2"':''}>💬 Teacher's Comment</th>
             </tr>
             <!-- Row3: 리딩 Review 서브컬럼 (리딩 활성화 시에만) -->
             ${hasRd ? `<tr class="gs-rd-cols">${rdRow3Sub}</tr>` : ''}
@@ -789,15 +789,10 @@ thead th[data-col-key]{position:relative;overflow:visible;}
       _bindColResize();
       _bindGroupResizers();
       _fixStickyHeaderTops();
+      // 저장된 헤더 폰트 크기 항상 적용
+      _setHdrFontSize(_st.excelFontSize || 11);
       // 레이아웃 완전히 끝난 뒤 한번 더 정확히 재계산
       requestAnimationFrame(_fixStickyHeaderTops);
-      if (_st.excelFontSize && _st.excelFontSize !== 12) {
-        document.querySelectorAll('.gr-sheet thead th').forEach(th => {
-          th.style.fontSize = _st.excelFontSize + 'px';
-          th.style.whiteSpace = 'nowrap';
-        });
-        requestAnimationFrame(_fixStickyHeaderTops);
-      }
     });
     setTimeout(() => _renderChart(students, actRevs), 30);
   }
