@@ -153,7 +153,7 @@ const GradeApp = (() => {
 /* 인라인 textarea */
 .gs-cm-ta{
   flex:1;padding:7px 9px;border:none;outline:none;
-  background:transparent;font-size:12px;color:var(--tx);
+  background:transparent;font-size:14px;color:var(--tx);
   font-family:var(--font);resize:none;line-height:1.6;
   min-height:92px;width:100%;box-sizing:border-box;
   white-space:pre-wrap;word-break:break-word;
@@ -287,9 +287,13 @@ thead th[data-col-key]{position:relative;overflow:visible;}
 .gr-col-reset-btn{padding:5px 9px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--bdr2);background:var(--surf2);color:var(--tx3);white-space:nowrap;transition:all .15s;}
 .gr-col-reset-btn:hover{border-color:var(--a);color:var(--a);background:var(--a10);}
 
-/* average row */
+/* average row — tfoot sticky bottom */
 .gr-avg-row td{background:var(--surf2)!important;}
 .gr-avg-row .gs-fix{color:var(--a);font-weight:800;font-size:12px;}
+.gr-sheet tfoot td{
+  position:sticky;bottom:0;z-index:6;
+  border-top:2px solid var(--bdr2)!important;
+}
 
 /* chart */
 .gr-chart-wrap{padding:10px 12px 6px;border-top:1.5px solid var(--bdr);background:var(--surf2);flex-shrink:0;}
@@ -779,8 +783,10 @@ thead th[data-col-key]{position:relative;overflow:visible;}
           </thead>
           <tbody>
             ${students.map((s,ri) => _excelRow(s, ri, config, totalWQ, actRevs, totalRQ, hasRd)).join('')}
-            ${_avgRow(students, config, totalWQ, actRevs, hasRd)}
           </tbody>
+          <tfoot>
+            ${_avgRow(students, config, totalWQ, actRevs, hasRd)}
+          </tfoot>
         </table>
       </div>`;
     cnt.innerHTML = html;
