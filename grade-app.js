@@ -129,7 +129,7 @@ const GradeApp = (() => {
 .gs-td{border:1px solid var(--bdr);text-align:center;padding:0;vertical-align:middle;min-width:28px;}
 /* 계산값 (읽기 전용) - 연한 배경으로 구분 */
 .gs-td.ro{background:var(--surf2);}
-.gs-td.ro .gs-val{padding:9px 6px;font-size:13px;font-weight:700;display:block;}
+.gs-td.ro .gs-val{padding:12px 6px;font-size:13px;font-weight:700;display:block;}
 .gs-td.ro.pass-c .gs-val{color:#16a34a;}
 .gs-td.ro.fail-c .gs-val{color:#f97316;}
 .gs-td.ro.score-c .gs-val{color:var(--a);}
@@ -143,7 +143,7 @@ const GradeApp = (() => {
 .gr-sheet tbody tr.sel-row .gs-fix{background:var(--a20)!important;}
 
 /* number input */
-.gs-inp{width:100%;min-width:28px;padding:9px 2px;border:none;outline:none;background:transparent;font-size:12px;font-weight:700;color:var(--a);text-align:center;font-family:var(--font);-moz-appearance:textfield;cursor:text;}
+.gs-inp{width:100%;min-width:28px;padding:12px 2px;border:none;outline:none;background:transparent;font-size:12px;font-weight:700;color:var(--a);text-align:center;font-family:var(--font);-moz-appearance:textfield;cursor:text;}
 .gs-inp::-webkit-outer-spin-button,.gs-inp::-webkit-inner-spin-button{-webkit-appearance:none;}
 .gs-inp:focus{background:rgba(99,102,241,.08);border-radius:4px;}
 
@@ -155,7 +155,7 @@ const GradeApp = (() => {
   flex:1;padding:7px 9px;border:none;outline:none;
   background:transparent;font-size:15px;color:var(--tx);
   font-family:var(--font);resize:none;line-height:1.6;
-  min-height:64px;width:100%;box-sizing:border-box;
+  min-height:92px;width:100%;box-sizing:border-box;
   white-space:pre-wrap;word-break:break-word;
 }
 .gs-cm-ta:focus{background:rgba(5,150,105,.04);}
@@ -1593,12 +1593,13 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     });
     _applyTableWidth();
 
-    /* th[data-col-key] 마다 핸들 부착 (그룹 경계 컬럼은 그룹 리사이저가 담당) */
-    const GROUP_BOUNDARY = new Set(['wa', 'ra']);
+    /* th[data-col-key] 마다 핸들 부착
+     * 단어/리딩 그룹 내부 컬럼은 그룹 리사이저가 전담 → 개별 슬라이더 제거 */
+    const isGroupCol = key => /^(wq|wr|wp|wa|rq|ra|rr\d+|rs\d+)$/.test(key);
     tbl.querySelectorAll('thead th[data-col-key]').forEach(th => {
       if (th.querySelector('.gs-col-resizer')) return;
       const key = th.dataset.colKey;
-      if (GROUP_BOUNDARY.has(key)) return; // 그룹 리사이저가 처리
+      if (isGroupCol(key)) return; // 그룹 리사이저가 처리
 
       const handle = document.createElement('div');
       handle.className = 'gs-col-resizer';
