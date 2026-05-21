@@ -500,7 +500,19 @@ thead th[data-col-key]{position:relative;overflow:visible;}
 .rpt-tbl .rpt-fail{color:#ea580c;font-weight:700;}
 .rpt-tbl .rpt-achv{color:#8b5cf6;font-weight:800;}
 .rpt-tbl .rpt-avg td{background:#f8fafc;font-weight:700;}
-.rpt-comment-box{border:1.5px solid #e2e8f0;border-radius:8px;padding:12px 14px;min-height:60px;font-size:12px;color:#374151;line-height:1.8;background:#fafafa;}
+.rpt-comment-box{border:1.5px solid #e2e8f0;border-radius:8px;padding:12px 14px;min-height:60px;font-size:12px;color:#374151;line-height:1.8;background:#fafafa;word-break:break-word;overflow-wrap:break-word;}
+/* 모바일: 코멘트가 페이지 높이를 밀지 않도록 max-height 제한 + 내부 스크롤 */
+@media(max-width:640px){
+  .rpt-comment-box{
+    max-height:160px;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  /* 리포트 전체도 가로 넘침 방지 */
+  .rpt-wrap{overflow-x:hidden;word-break:break-word;}
+  .rpt-tbl{table-layout:fixed;word-break:break-word;}
+  .rpt-tbl td,.rpt-tbl th{word-break:break-word;overflow-wrap:break-word;}
+}
 .rpt-graph-wrap{margin:8px 0 12px;}
 .rpt-acts{display:flex;gap:8px;flex-wrap:wrap;padding:10px 14px 14px;}
 .rpt-btn{flex:1;min-width:60px;padding:10px 6px;border-radius:10px;border:none;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);transition:all .15s;}
@@ -2995,7 +3007,13 @@ thead th[data-col-key]{position:relative;overflow:visible;}
       .rpt-fail{color:#ea580c;font-weight:700;}
       .rpt-achv{color:#8b5cf6;font-weight:800;}
       .rpt-avg td{font-weight:700;background:#f8fafc !important;}
-      .rpt-comment-box{border:1.5px solid ${_st.dividerColor||'#e2e8f0'};border-radius:8px;padding:12px 14px;min-height:60px;font-size:${_st.reportBodySize||12}px;color:#374151;line-height:1.8;background:#fafafa;margin:0 24px 20px;}
+      .rpt-comment-box{border:1.5px solid ${_st.dividerColor||'#e2e8f0'};border-radius:8px;padding:12px 14px;min-height:60px;font-size:${_st.reportBodySize||12}px;color:#374151;line-height:1.8;background:#fafafa;margin:0 24px 20px;word-break:break-word;overflow-wrap:break-word;}
+      @media(max-width:640px){
+        .rpt-comment-box{max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+        .rpt-wrap{overflow-x:hidden;word-break:break-word;}
+        .rpt-tbl{table-layout:fixed;}
+        .rpt-tbl td,.rpt-tbl th{word-break:break-word;overflow-wrap:break-word;}
+      }
       .rpt-graph-wrap{margin:8px 24px 16px;text-align:${_st.graphAlign||'left'};}
       svg{display:block;}
       img{max-width:100%;height:auto;}
