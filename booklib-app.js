@@ -2481,7 +2481,11 @@ const BooklibApp = (() => {
         <div class="bl-share-stats">
           ${[{n:undone.length,l:'미수행',bg:'rgba(234,88,12,.08)',nc:undone.length?'#ea580c':'var(--green)'},{n:done.length,l:'수행',bg:'rgba(5,150,105,.07)',nc:'var(--green)'},{n:total,l:'평가범위',bg:'var(--card2)',nc:'var(--tx)'}].map(it=>`<div class="bl-share-stat" style="background:${it.bg}"><div class="bl-share-stat-n" style="color:${it.nc}">${it.n}</div><div class="bl-share-stat-l">${it.l}</div></div>`).join('')}
         </div>
+<<<<<<< HEAD
         <div class="bl-share-box" id="bl-share-detail-box" style="font-size:${sharePrintFs}px">${_e(text)}</div>
+=======
+        <div class="bl-share-box">${_e(text)}</div>
+>>>>>>> parent of da9ace3 (Update booklib-app.js)
       </div>
       <div class="bl-share-acts">
         <button class="bl-sbtn copy"  onclick="BooklibApp._copyText(BooklibApp._getShareText())">📋 복사</button>
@@ -2548,7 +2552,11 @@ const BooklibApp = (() => {
           <tbody>${summaryRows}</tbody>
         </table>
         <div style="font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:1px;margin-bottom:4px">상세 (복사·출력용)</div>
+<<<<<<< HEAD
         <div class="bl-share-box" id="bl-rpt-detail-box" style="font-size:${rptPrintFs}px">${_e(_st.reportText)}</div>
+=======
+        <div class="bl-share-box">${_e(_st.reportText)}</div>
+>>>>>>> parent of da9ace3 (Update booklib-app.js)
       </div>
       <div class="bl-share-acts">
         <button class="bl-sbtn copy"  onclick="BooklibApp._copyText(BooklibApp._getReportText())">📋 복사</button>
@@ -2591,8 +2599,12 @@ const BooklibApp = (() => {
       'td{padding:7px 10px;border:1px solid #cbd5e1;font-size:12px}'+
       'tr:nth-child(even) td{background:#f8fafc}'+
 <<<<<<< HEAD
+<<<<<<< HEAD
       /* 상세(pre) 글자 크기만 사용자 설정 적용 */'+
       'pre{white-space:pre-wrap;word-break:break-all;font-family:inherit;font-size:'+fs+'px;line-height:1.9;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin:0}'+
+=======
+      'pre{white-space:pre-wrap;word-break:break-all;font-family:inherit;font-size:11px;line-height:1.8;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin:0}'+
+>>>>>>> parent of da9ace3 (Update booklib-app.js)
 =======
       'pre{white-space:pre-wrap;word-break:break-all;font-family:inherit;font-size:11px;line-height:1.8;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin:0}'+
 >>>>>>> parent of da9ace3 (Update booklib-app.js)
@@ -2610,6 +2622,7 @@ const BooklibApp = (() => {
   }
 
   
+<<<<<<< HEAD
 <<<<<<< HEAD
   /* ── 인쇄 글자 크기 조정 ── */
   function _adjSharePrintFs(delta){
@@ -2697,6 +2710,8 @@ const BooklibApp = (() => {
     if(w.document.readyState==='complete'){setTimeout(function(){w.print();},400);}
   }
 
+=======
+>>>>>>> parent of da9ace3 (Update booklib-app.js)
 =======
 >>>>>>> parent of da9ace3 (Update booklib-app.js)
   const _getShareText=()=>_st.shareText;
