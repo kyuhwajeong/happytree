@@ -2483,7 +2483,7 @@ const BooklibApp = (() => {
         <div class="bl-share-stats">
           ${[{n:undone.length,l:'미수행',bg:'rgba(234,88,12,.08)',nc:undone.length?'#ea580c':'var(--green)'},{n:done.length,l:'수행',bg:'rgba(5,150,105,.07)',nc:'var(--green)'},{n:total,l:'평가범위',bg:'var(--card2)',nc:'var(--tx)'}].map(it=>`<div class="bl-share-stat" style="background:${it.bg}"><div class="bl-share-stat-n" style="color:${it.nc}">${it.n}</div><div class="bl-share-stat-l">${it.l}</div></div>`).join('')}
         </div>
-        <div class="bl-share-box">${_e(text)}</div>
+        <div class="bl-share-box" id="bl-share-detail-box" style="font-size:${sharePrintFs}px">${_e(text)}</div>
       </div>
       <!-- 인쇄 글자 크기 조정 -->
       <div style="display:flex;align-items:center;gap:6px;background:var(--surf2);border-radius:10px;padding:7px 12px;margin:6px 0 4px;border:1px solid var(--bdr)">
@@ -2559,7 +2559,7 @@ const BooklibApp = (() => {
           <tbody>${summaryRows}</tbody>
         </table>
         <div style="font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:1px;margin-bottom:4px">상세 (복사·출력용)</div>
-        <div class="bl-share-box">${_e(_st.reportText)}</div>
+        <div class="bl-share-box" id="bl-rpt-detail-box" style="font-size:${rptPrintFs}px">${_e(_st.reportText)}</div>
       </div>
       <!-- 인쇄 글자 크기 조정 -->
       <div style="display:flex;align-items:center;gap:6px;background:var(--surf2);border-radius:10px;padding:7px 12px;margin:6px 0 4px;border:1px solid var(--bdr)">
@@ -2600,16 +2600,17 @@ const BooklibApp = (() => {
     w.document.write('<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">'+
       '<style>'+
       '@page{size:A4 portrait;margin:15mm}'+
-      'body{font-family:"Noto Sans KR","맑은 고딕",sans-serif;font-size:'+fs+'px;color:#111;margin:0;padding:16px;background:#fff}'+
+      'body{font-family:"Noto Sans KR","맑은 고딕",sans-serif;font-size:12px;color:#111;margin:0;padding:16px;background:#fff}'+
       '.ph{border-bottom:2px solid #334155;margin-bottom:14px;padding-bottom:8px}'+
-      '.ph h1{font-size:'+Math.round(fs*1.4)+'px;font-weight:900;margin:0 0 4px;color:#1e293b}'+
-      '.ph p{font-size:'+Math.round(fs*0.85)+'px;color:#64748b;margin:0}'+
-      'h2{font-size:'+Math.round(fs*1.05)+'px;font-weight:800;color:#334155;margin:16px 0 6px;letter-spacing:.5px;border-left:3px solid #6366f1;padding-left:8px}'+
+      '.ph h1{font-size:18px;font-weight:900;margin:0 0 4px;color:#1e293b}'+
+      '.ph p{font-size:11px;color:#64748b;margin:0}'+
+      'h2{font-size:13px;font-weight:800;color:#334155;margin:16px 0 6px;letter-spacing:.5px;border-left:3px solid #6366f1;padding-left:8px}'+
       'table{width:100%;border-collapse:collapse;margin-bottom:12px}'+
-      'th{background:#f1f5f9;font-size:'+Math.round(fs*0.9)+'px;font-weight:700;padding:7px 10px;border:1px solid #cbd5e1;text-align:left}'+
-      'td{padding:7px 10px;border:1px solid #cbd5e1;font-size:'+fs+'px}'+
+      'th{background:#f1f5f9;font-size:11px;font-weight:700;padding:7px 10px;border:1px solid #cbd5e1;text-align:left}'+
+      'td{padding:7px 10px;border:1px solid #cbd5e1;font-size:12px}'+
       'tr:nth-child(even) td{background:#f8fafc}'+
-      'pre{white-space:pre-wrap;word-break:break-all;font-family:inherit;font-size:'+fs+'px;line-height:1.85;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin:0}'+
+      /* 상세(pre) 글자 크기만 사용자 설정 적용 */'+
+      'pre{white-space:pre-wrap;word-break:break-all;font-family:inherit;font-size:'+fs+'px;line-height:1.9;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin:0}'+
       '</style></head><body>'+
       body+
       '</body></html>');
@@ -2629,15 +2630,21 @@ const BooklibApp = (() => {
     const cur=parseInt(localStorage.getItem('bl_share_print_fs'))||13;
     const ns=Math.min(22,Math.max(9,cur+delta));
     localStorage.setItem('bl_share_print_fs',ns);
-    const el=document.getElementById('bl-share-fs-val');
-    if(el)el.textContent=ns+'px';
+    const lbl=document.getElementById('bl-share-fs-val');
+    if(lbl)lbl.textContent=ns+'px';
+    // 화면 미리보기 실시간 반영
+    const box=document.getElementById('bl-share-detail-box');
+    if(box)box.style.fontSize=ns+'px';
   }
   function _adjReportPrintFs(delta){
     const cur=parseInt(localStorage.getItem('bl_rpt_print_fs'))||13;
     const ns=Math.min(22,Math.max(9,cur+delta));
     localStorage.setItem('bl_rpt_print_fs',ns);
-    const el=document.getElementById('bl-rpt-fs-val');
-    if(el)el.textContent=ns+'px';
+    const lbl=document.getElementById('bl-rpt-fs-val');
+    if(lbl)lbl.textContent=ns+'px';
+    // 화면 미리보기 실시간 반영
+    const box=document.getElementById('bl-rpt-detail-box');
+    if(box)box.style.fontSize=ns+'px';
   }
 
   /* ── 개별 학생 학습현황 인쇄 ── */
@@ -2670,7 +2677,7 @@ const BooklibApp = (() => {
       </div>
       <div class="pct-wrap"><div class="pct-bar" style="width:${pct}%"></div><span class="pct-lbl">${pct}%</span></div>
       ${undone.length?`<h2>⬜ 미수행 (${undone.length}개)</h2>
-        <table><tbody>${undoneRows}</tbody></table>`:'<p style="color:#10b981;font-weight:800;font-size:'+Math.round(fs*1.1)+'px">🎉 모든 항목 완료!</p>'}
+        <table><tbody>${undoneRows}</tbody></table>`:'<p style="color:#10b981;font-weight:800;font-size:'+fs+'px">🎉 모든 항목 완료!</p>'}
       ${done.length?`<h2>✅ 수행 (${done.length}개)</h2>
         <table><tbody>${doneRows}</tbody></table>`:''}
     `;
@@ -2681,21 +2688,22 @@ const BooklibApp = (() => {
     w.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
       <style>
         @page{size:A4 portrait;margin:15mm}
-        body{font-family:"Noto Sans KR","맑은 고딕",sans-serif;font-size:${fs}px;color:#111;margin:0;padding:16px;background:#fff}
+        body{font-family:"Noto Sans KR","맑은 고딕",sans-serif;font-size:12px;color:#111;margin:0;padding:16px;background:#fff}
         .ph{border-bottom:2px solid #334155;margin-bottom:14px;padding-bottom:8px}
-        .ph h1{font-size:${Math.round(fs*1.4)}px;font-weight:900;margin:0 0 4px;color:#1e293b}
-        .ph p{font-size:${Math.round(fs*0.85)}px;color:#64748b;margin:0}
-        h2{font-size:${Math.round(fs*1.05)}px;font-weight:800;color:#334155;margin:16px 0 6px;border-left:3px solid #6366f1;padding-left:8px}
+        .ph h1{font-size:18px;font-weight:900;margin:0 0 4px;color:#1e293b}
+        .ph p{font-size:11px;color:#64748b;margin:0}
+        h2{font-size:13px;font-weight:800;color:#334155;margin:16px 0 6px;border-left:3px solid #6366f1;padding-left:8px}
         table{width:100%;border-collapse:collapse;margin-bottom:12px}
+        /* 항목 목록 글자 크기만 사용자 설정 적용 */
         td{padding:6px 10px;border:1px solid #cbd5e1;font-size:${fs}px}
         tr:nth-child(even) td{background:#f8fafc}
         .stat-row{display:flex;gap:10px;margin:10px 0}
         .stat-box{flex:1;border:2px solid #cbd5e1;border-radius:8px;padding:8px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:2px}
-        .stat-n{font-size:${Math.round(fs*1.7)}px;font-weight:900;line-height:1}
-        .stat-l{font-size:${Math.round(fs*0.8)}px;color:#64748b}
+        .stat-n{font-size:22px;font-weight:900;line-height:1}
+        .stat-l{font-size:10px;color:#64748b}
         .pct-wrap{display:flex;align-items:center;gap:8px;margin:6px 0 14px}
         .pct-bar{height:8px;background:linear-gradient(90deg,#6366f1,#10b981);border-radius:4px;flex-shrink:0}
-        .pct-lbl{font-size:${Math.round(fs*0.85)}px;color:#64748b;font-weight:700}
+        .pct-lbl{font-size:11px;color:#64748b;font-weight:700}
       </style></head><body>${body}</body></html>`);
     w.document.close();
     w.focus();
