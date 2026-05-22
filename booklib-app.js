@@ -18,8 +18,6 @@ const BooklibApp = (() => {
   const MAX_CH_W   = 420;
   const STU_W      = 72;
   const DOW_KO = ['일','월','화','수','목','금','토'];
-  const LS_PRINT_FONT_SIZE = 'bl_print_fontsize';
-  const DEF_PRINT_FONT_SIZE = 12;
 
   let _st = {
     subTab:'library', editBookId:null,
@@ -29,7 +27,6 @@ const BooklibApp = (() => {
     chCollapsed:false, shareText:'', reportText:'',
     /* 편집 중 임시 리포트 설정 */
     editConfig: null,
-    printFontSize: parseInt(localStorage.getItem(LS_PRINT_FONT_SIZE) || DEF_PRINT_FONT_SIZE),
   };
   let _checks={}, _stamps={};
 
@@ -2096,16 +2093,7 @@ const BooklibApp = (() => {
     }
   }
 
-  function _updatePrintFontSize(value){
-    const size=parseInt(value);
-    if(isNaN(size)||size<10||size>16)return;
-    _st.printFontSize=size;
-    localStorage.setItem(LS_PRINT_FONT_SIZE,size);
-    const disp=document.getElementById('bl-print-font-value');
-    if(disp)disp.textContent=size+'px';
-  }
-
-  async function toggleStamp(chId){
+  async function _toggleStamp(chId){
     const cid=_st.matrixClassId,bid=_st.matrixBookId; if(!cid||!bid)return;
     if(_stamps[chId]){
       /* ③ 스탬프 해제 → stampInfo 함께 삭제 */
@@ -2553,15 +2541,6 @@ const BooklibApp = (() => {
           </label>
         </div>
       </div>
-      <!-- ★ 출력 글자 크기 조절 -->
-      <div style="background:var(--surf2);border-radius:10px;padding:10px 14px;margin:6px 0 10px;border:1px solid var(--bdr)">
-        <div style="font-size:11px;font-weight:800;color:var(--tx3);margin-bottom:8px">🔤 출력 글자 크기</div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <input type="range" id="bl-print-font-slider" min="10" max="16" value="${_st.printFontSize}" style="flex:1;cursor:pointer" onchange="BooklibApp._updatePrintFontSize(this.value)">
-          <span id="bl-print-font-value" style="font-size:12px;font-weight:700;color:var(--tx);min-width:30px;text-align:right">${_st.printFontSize}px</span>
-        </div>
-        <div style="font-size:10px;color:var(--tx3);margin-top:6px">ℹ️ 인쇄 시 글자 크기를 조정할 수 있습니다 (설정이 자동 저장됨)</div>
-      </div>
       <div class="bl-share-scroll">
         <div style="margin:10px 0 6px;font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:1px">학생별 요약</div>
         <table style="width:100%;border-collapse:collapse;border:1px solid var(--bdr);border-radius:8px;overflow:hidden;margin-bottom:10px;font-size:13px">
@@ -2599,24 +2578,19 @@ const BooklibApp = (() => {
     const w=window.open('','_blank','width=900,height=700');
     if(!w){_toast('⚠️ 팝업이 차단됐습니다. 팝업을 허용해주세요.','error');return;}
     w.document.open();
-    const fontSize=_st.printFontSize;
-    const h2FontSize=Math.max(13,fontSize-1);
-    const thFontSize=Math.max(11,fontSize-2);
-    const tdFontSize=fontSize;
-    const preFontSize=Math.max(11,fontSize-2);
     w.document.write('<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">'+
       '<style>'+
       '@page{size:A4 portrait;margin:15mm}'+
-      'body{font-family:"Noto Sans KR","맑은 고딕",sans-serif;font-size:'+fontSize+'px;color:#111;margin:0;padding:16px;background:#fff}'+
+      'body{font-family:"Noto Sans KR","맑은 고딕",sans-serif;font-size:12px;color:#111;margin:0;padding:16px;background:#fff}'+
       '.ph{border-bottom:2px solid #334155;margin-bottom:14px;padding-bottom:8px}'+
-      '.ph h1{font-size:'+Math.max(18,fontSize+6)+'px;font-weight:900;margin:0 0 4px;color:#1e293b}'+
-      '.ph p{font-size:'+Math.max(11,fontSize-2)+'px;color:#64748b;margin:0}'+
-      'h2{font-size:'+h2FontSize+'px;font-weight:800;color:#334155;margin:16px 0 6px;letter-spacing:.5px;border-left:3px solid #6366f1;padding-left:8px}'+
+      '.ph h1{font-size:18px;font-weight:900;margin:0 0 4px;color:#1e293b}'+
+      '.ph p{font-size:11px;color:#64748b;margin:0}'+
+      'h2{font-size:13px;font-weight:800;color:#334155;margin:16px 0 6px;letter-spacing:.5px;border-left:3px solid #6366f1;padding-left:8px}'+
       'table{width:100%;border-collapse:collapse;margin-bottom:12px}'+
-      'th{background:#f1f5f9;font-size:'+thFontSize+'px;font-weight:700;padding:7px 10px;border:1px solid #cbd5e1;text-align:left}'+
-      'td{padding:7px 10px;border:1px solid #cbd5e1;font-size:'+tdFontSize+'px}'+
+      'th{background:#f1f5f9;font-size:11px;font-weight:700;padding:7px 10px;border:1px solid #cbd5e1;text-align:left}'+
+      'td{padding:7px 10px;border:1px solid #cbd5e1;font-size:12px}'+
       'tr:nth-child(even) td{background:#f8fafc}'+
-      'pre{white-space:pre-wrap;word-break:break-all;font-family:inherit;font-size:'+preFontSize+'px;line-height:1.8;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin:0}'+
+      'pre{white-space:pre-wrap;word-break:break-all;font-family:inherit;font-size:11px;line-height:1.8;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin:0}'+
       '</style></head><body>'+
       body+
       '</body></html>');
