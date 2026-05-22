@@ -8,7 +8,7 @@ const GeminiAI = (() => {
 
   /* ── API 설정 ─────────────────────────────────────────────── */
   // 공백 누락이나 복사 오류를 방지하기 위해 .trim()을 붙였습니다.
-  const API_KEY = 'AIzaSyCNMOPq1yVkblrcs1oQ2ikzemwxU4YWvfo'.trim(); 
+  const API_KEY = 'AIzaSyB9mhHcdftl13b3BvnvLgBkrjnsmqNKcSQ'.trim(); 
 
   /**
    * 모델 폴백 순서
