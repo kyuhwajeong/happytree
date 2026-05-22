@@ -2331,7 +2331,68 @@ thead th[data-col-key]{position:relative;overflow:visible;}
 
     try {
       await _waitFonts();
-      const canvas = await _captureEl(el);
+
+      // scale 임시 해제 (gr-rpt-outer transform 제거)
+      const outer = document.getElementById('gr-rpt-outer');
+      const prevTransform = outer?.style.transform || '';
+      const prevOrigin    = outer?.style.transformOrigin || '';
+      if (outer) { outer.style.transform = 'none'; outer.style.transformOrigin = ''; }
+
+      // 두 프레임 대기 (레이아웃 재계산)
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      const fullH = el.scrollHeight;
+      const fullW = el.scrollWidth;
+
+      const opts = {
+        ..._captureOpts(_st.rptBg || '#ffffff'),
+        // 스크롤된 내용 포함하여 전체 높이 캡처
+        width:        fullW,
+        height:       fullH,
+        windowWidth:  Math.max(fullW, window.innerWidth),
+        windowHeight: fullH,
+        scrollX:      0,
+        scrollY:      0,
+        onclone: (clonedDoc) => {
+          // ① 기존 onclone 처리 (scale 제거, 폰트 동기화)
+          const clonedOuter = clonedDoc.getElementById('gr-rpt-outer');
+          if (clonedOuter) { clonedOuter.style.transform = 'none'; clonedOuter.style.transformOrigin = ''; }
+          [...document.querySelectorAll('link[rel="stylesheet"]')].forEach(lk => {
+            if (!clonedDoc.querySelector(`link[href="${lk.href}"]`)) {
+              const nl = clonedDoc.createElement('link'); nl.rel = 'stylesheet'; nl.href = lk.href;
+              clonedDoc.head.appendChild(nl);
+            }
+          });
+          clonedDoc.body.style.fontFamily = `'${_st.fontFamily||"Noto Sans KR"}', sans-serif`;
+
+          // ② 핵심: 모바일 CSS로 잘린 comment-box를 클론에서만 전체 높이로 펼침
+          //    → 실제 화면은 그대로, 캡처 이미지에만 전체 내용 반영
+          clonedDoc.querySelectorAll('.rpt-comment-box').forEach(box => {
+            box.style.maxHeight   = 'none';
+            box.style.height      = 'auto';
+            box.style.overflow    = 'visible';
+            box.style.overflowY   = 'visible';
+          });
+
+          // ③ 클론된 preview도 스크롤 잠금 해제
+          const clonedPreview = clonedDoc.getElementById('gr-rpt-preview');
+          if (clonedPreview) {
+            clonedPreview.style.overflow   = 'visible';
+            clonedPreview.style.maxHeight  = 'none';
+            clonedPreview.style.height     = 'auto';
+          }
+          const clonedArea = clonedDoc.getElementById('gr-pm-report-area');
+          if (clonedArea) {
+            clonedArea.style.overflow  = 'visible';
+            clonedArea.style.maxHeight = 'none';
+          }
+        },
+      };
+
+      const canvas = await html2canvas(el, opts);
+
+      // scale 복원
+      if (outer) { outer.style.transform = prevTransform; outer.style.transformOrigin = prevOrigin; }
 
       // 파일명 생성
       const stu  = _getStudents().find(s => s.id === _st.studentId) || _getStudents()[0];
@@ -2345,7 +2406,6 @@ thead th[data-col-key]{position:relative;overflow:visible;}
         if (!blob) { _toast('⚠️ 캡처 실패'); return; }
         const file = new File([blob], fname, { type: 'image/png' });
 
-        // Web Share API (모바일 네이티브 공유)
         if (navigator.share && navigator.canShare({ files: [file] })) {
           try {
             await navigator.share({
@@ -2358,10 +2418,10 @@ thead th[data-col-key]{position:relative;overflow:visible;}
             if (e.name !== 'AbortError') _pmDownloadFallback(canvas, fname);
           }
         } else {
-          // 공유 미지원 → 다운로드 fallback
           _pmDownloadFallback(canvas, fname);
         }
       }, 'image/png');
+
     } catch (e) {
       _toast('⚠️ 캡처 오류: ' + e.message);
     } finally {
