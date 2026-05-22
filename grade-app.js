@@ -150,30 +150,47 @@ const GradeApp = (() => {
 /* comment 셀 — 인라인 직접 편집 */
 .gs-cm-cell{min-width:160px;max-width:400px;padding:0;vertical-align:top;}
 .gs-cm-wrap{display:flex;align-items:stretch;height:100%;position:relative;}
-/* 인라인 textarea — 버튼과 독립적으로 전체 너비 사용 */
+
+/* 인라인 textarea — 스크롤바 평소 투명, 포커스 시에만 표시 */
 .gs-cm-ta{
   flex:1;padding:7px 9px;border:none;outline:none;
   background:transparent;font-size:14px;color:var(--tx);
   font-family:var(--font);resize:none;line-height:1.6;
   min-height:92px;width:100%;box-sizing:border-box;
   white-space:pre-wrap;word-break:break-word;
+  /* 스크롤바: 평소 숨김 */
+  scrollbar-width:none;
 }
-.gs-cm-ta:focus{background:rgba(5,150,105,.04);}
+.gs-cm-ta:focus{
+  background:rgba(5,150,105,.04);
+  /* 포커스 시 얇은 스크롤바 표시 (Firefox) */
+  scrollbar-width:thin;
+  scrollbar-color:var(--bdr2) transparent;
+}
+.gs-cm-ta::-webkit-scrollbar{width:0;}
+.gs-cm-ta:focus::-webkit-scrollbar{width:3px;}
+.gs-cm-ta::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:2px;}
 .gs-cm-ta::placeholder{color:var(--tx3);font-style:italic;}
 
-/* 우측 상단 삼각형 인디케이터 (항상 표시) */
-.gs-cm-wrap::after{
+/* ── 삼각형 호버존: textarea 가리지 않는 작은 코너 영역 ── */
+.gs-cm-tri{
+  position:absolute;top:0;right:0;z-index:3;
+  width:64px;height:36px; /* AI 버튼 전체를 덮는 히트존 */
+  cursor:default;pointer-events:auto;
+}
+/* 시각적 삼각형 — 항상 보이되 흐리게, hover 시 선명 */
+.gs-cm-tri::before{
   content:'';position:absolute;top:0;right:0;
   width:0;height:0;border-style:solid;
-  border-width:0 12px 12px 0;
+  border-width:0 13px 13px 0;
   border-color:transparent var(--a40) transparent transparent;
-  transition:border-color .15s;pointer-events:none;z-index:2;
+  transition:border-color .15s;pointer-events:none;
 }
-.gs-cm-wrap:hover::after{border-color:transparent var(--a) transparent transparent;}
+.gs-cm-tri:hover::before{border-color:transparent var(--a) transparent transparent;}
 
-/* AI 버튼 — 평소 hidden, 셀 hover·textarea focus 시 스무드 reveal */
+/* AI 버튼 — 평소 hidden */
 .gs-cm-icon{
-  position:absolute;top:5px;right:5px;z-index:3;
+  position:absolute;top:5px;right:5px;z-index:4;
   padding:3px 8px;border-radius:6px;
   background:var(--a);color:#fff;
   font-size:11px;font-weight:700;
@@ -183,13 +200,26 @@ const GradeApp = (() => {
   pointer-events:none;
   box-shadow:0 2px 8px var(--a40);
 }
-.gs-cm-wrap:hover .gs-cm-icon,
+/* 삼각형 호버 시 버튼 등장 (~ = 이후 형제 선택) */
+.gs-cm-tri:hover ~ .gs-cm-icon,
+.gs-cm-icon:hover,
 .gs-cm-ta:focus ~ .gs-cm-icon{
   opacity:1;transform:translateY(0) scale(1);
   pointer-events:auto;
 }
 .gs-cm-icon.has-cmt{background:var(--green);box-shadow:0 2px 8px rgba(5,150,105,.4);}
 .gs-cm-icon:hover{filter:brightness(1.1);}
+
+/* ── 가로 스크롤바: hover 시에만 표시 ── */
+.gr-sheet-wrap::-webkit-scrollbar{height:5px;width:5px;}
+.gr-sheet-wrap::-webkit-scrollbar-track{background:transparent;}
+.gr-sheet-wrap::-webkit-scrollbar-thumb{
+  background:transparent;border-radius:3px;
+  transition:background .2s;
+}
+.gr-sheet-wrap:hover::-webkit-scrollbar-thumb{background:var(--bdr2);}
+.gr-sheet-wrap{scrollbar-width:thin;scrollbar-color:transparent transparent;}
+.gr-sheet-wrap:hover{scrollbar-color:var(--bdr2) transparent;}
 
 /* ══ Comment 대형 팝업 (✏️버튼 전용) ══ */
 .gr-cmt-modal{
@@ -1047,6 +1077,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
               data-sid="${s.id}"
               oninput="GradeApp._onCmtInput('${s.id}',this.value)"
             >${_e(d.comment || '')}</textarea>
+            <div class="gs-cm-tri"></div>
             <div class="gs-cm-icon${d.comment?.trim()?' has-cmt':''}"
               id="gr-cmtbtn-${s.id}"
               onclick="GradeApp._openCommentPop(event,'${s.id}')"
