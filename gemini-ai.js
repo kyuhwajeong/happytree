@@ -106,14 +106,14 @@ ${comment.trim()}`;
           errors.push(`${model}: 모델없음(404)`);
           continue;
         }
-        if (!res.ok) {
-          const t = await res.text().catch(() => '');
-          // 400 key expired → 즉시 throw (다음 모델도 동일한 키라 무의미)
-          if (res.status === 400 && t.includes('API key')) {
-            throw new Error('API 키가 만료되었습니다. 새 키로 교체해 주세요.');
-          }
-          throw new Error(`Gemini API ${res.status}: ${t.slice(0, 100)}`);
-        }
+	if (!res.ok) {
+	  const t = await res.text().catch(() => '');
+	  // 401(인증실패) 또는 API key 오류 메시지가 있으면 루프를 즉시 중단하고 에러 발생
+	  if (res.status === 401 || (res.status === 400 && t.includes('API key'))) {
+	    throw new Error('API 키가 유효하지 않거나 만료되었습니다. 키를 다시 확인해 주세요.');
+	  }
+	  throw new Error(`Gemini API ${res.status}: ${t.slice(0, 100)}`);
+	}
 
         const data = await res.json();
         const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
