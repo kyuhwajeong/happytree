@@ -1952,7 +1952,8 @@ const BooklibApp = (() => {
                 onclick="document.getElementById('bl-csv-inp').click()" title="XLSX/CSV 파일로 학습현황 자동 반영">📊 XLSX</button>
         <input type="file" id="bl-csv-inp" accept=".xlsx,.xls,.csv" style="display:none"
                onchange="if(this.files[0]){BooklibApp.openCsvImportModal(this.files[0]);this.value=''}">
-
+        <button class="bl-report-btn" onclick="BooklibApp._exportDebugData()" title="현재 체크 데이터 JSON 내보내기"
+          style="background:rgba(139,92,246,.1);border-color:rgba(139,92,246,.4);color:#7c3aed">📤 내보내기</button>
       </div>
     </div>
     <div style="font-size:10px;color:var(--tx3);padding:4px 12px;flex-shrink:0;background:var(--surf2);border-bottom:1px solid var(--bdr)">${stampNote}</div>
@@ -2472,10 +2473,7 @@ const BooklibApp = (() => {
     // ★ 반 미배정 교재: cls가 없어도 동작 (학생 직접 배정)
     const cls=_getCls(classId)||{id:'',name:student?.name||'학생'};
     const{text,undone,done,total}=_buildShareData(sid,book,cls);
-    _st.shareText=text;
-    _st._shareSid=sid;_st._shareClassId=classId;_st._shareBookId=bookId;
-    const pct=total?Math.round(done.length/total*100):100;
-    const sharePrintFs=parseInt(localStorage.getItem('bl_share_print_fs'))||13;
+    _st.shareText=text;const pct=total?Math.round(done.length/total*100):100;
     sh.innerHTML=`<div class="sh-handle"></div>
       <div class="sh-title">📤 학습 현황 공유</div>
       <div class="sh-sub">${_e(student?.name||'학생')} · ${_e(book.name)} · ${pct}%</div>
@@ -2485,16 +2483,8 @@ const BooklibApp = (() => {
         </div>
         <div class="bl-share-box" id="bl-share-detail-box" style="font-size:${sharePrintFs}px">${_e(text)}</div>
       </div>
-      <!-- 인쇄 글자 크기 조정 -->
-      <div style="display:flex;align-items:center;gap:6px;background:var(--surf2);border-radius:10px;padding:7px 12px;margin:6px 0 4px;border:1px solid var(--bdr)">
-        <span style="font-size:11px;font-weight:700;color:var(--tx3);flex:1">🖨️ 인쇄 글자 크기</span>
-        <button class="bl-wbtn" onclick="BooklibApp._adjSharePrintFs(-1)">A−</button>
-        <span id="bl-share-fs-val" style="font-size:12px;font-weight:800;color:var(--tx);min-width:36px;text-align:center">${sharePrintFs}px</span>
-        <button class="bl-wbtn" onclick="BooklibApp._adjSharePrintFs(1)">A+</button>
-      </div>
       <div class="bl-share-acts">
         <button class="bl-sbtn copy"  onclick="BooklibApp._copyText(BooklibApp._getShareText())">📋 복사</button>
-        <button class="bl-sbtn print" onclick="BooklibApp._printShare()">🖨️ 인쇄</button>
         <button class="bl-sbtn share" onclick="BooklibApp._webShare('share')">📤 공유</button>
       </div>
       <div style="margin-top:8px"><button class="btn-x" style="width:100%" onclick="BooklibApp.closeShare()">닫기</button></div>`;
@@ -2529,7 +2519,6 @@ const BooklibApp = (() => {
     students.forEach(s=>{const undone=evalChs.filter(ch=>_checks[`${s.id}__${ch.id}`]);if(undone.length){hasAny=true;(()=>{const _A=['🐶','🐱','🐹','🐰','🐻','🦊','🐼','🐨','🐸','🐯'];let _h=0;for(let _i=0;_i<s.name.length;_i++)_h=(_h*31+s.name.charCodeAt(_i))&0xffff;lines.push(`${_A[_h%10]} ${s.name}  (${undone.length}/${evalChs.length})`);})();undone.forEach(ch=>{const parsed=BookLibDB._parseCheck(_checks[`${s.id}__${ch.id}`]);const ts=parsed.tasks.length?` [${parsed.tasks.join('/')}]`:'';lines.push(`  ${ch.title}`);});lines.push('');}});
     if(!hasAny)lines.push('🎉 모든 학생이 완료했습니다!');
     _st.reportText=lines.join('\n');
-    const rptPrintFs=parseInt(localStorage.getItem('bl_rpt_print_fs'))||13;
     const summaryRows=students.map(s=>{const uc=evalChs.filter(ch=>_checks[`${s.id}__${ch.id}`]).length;const pct=evalChs.length?Math.round((evalChs.length-uc)/evalChs.length*100):100;return`<tr><td style="padding:6px 10px;border-bottom:1px solid var(--bdr);font-weight:700">${_e(s.name)}</td><td style="padding:6px 10px;border-bottom:1px solid var(--bdr);color:${uc?'#ea580c':'var(--green)'}">${uc?`⬜ ${uc}개`:'✅'}</td><td style="padding:6px 10px;border-bottom:1px solid var(--bdr)"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:6px;background:var(--bdr);border-radius:3px;overflow:hidden;min-width:60px"><div style="height:100%;width:${pct}%;background:${uc?'#f97316':'#10b981'};border-radius:3px"></div></div><span style="font-size:11px;color:var(--tx3)">${pct}%</span></div></td></tr>`;}).join('');
     sh.innerHTML=`<div class="sh-handle"></div>
       <div class="sh-title">📋 전체 미수행 현황</div>
@@ -2561,13 +2550,6 @@ const BooklibApp = (() => {
         <div style="font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:1px;margin-bottom:4px">상세 (복사·출력용)</div>
         <div class="bl-share-box" id="bl-rpt-detail-box" style="font-size:${rptPrintFs}px">${_e(_st.reportText)}</div>
       </div>
-      <!-- 인쇄 글자 크기 조정 -->
-      <div style="display:flex;align-items:center;gap:6px;background:var(--surf2);border-radius:10px;padding:7px 12px;margin:6px 0 4px;border:1px solid var(--bdr)">
-        <span style="font-size:11px;font-weight:700;color:var(--tx3);flex:1">🖨️ 인쇄 글자 크기</span>
-        <button class="bl-wbtn" onclick="BooklibApp._adjReportPrintFs(-1)">A−</button>
-        <span id="bl-rpt-fs-val" style="font-size:12px;font-weight:800;color:var(--tx);min-width:36px;text-align:center">${rptPrintFs}px</span>
-        <button class="bl-wbtn" onclick="BooklibApp._adjReportPrintFs(1)">A+</button>
-      </div>
       <div class="bl-share-acts">
         <button class="bl-sbtn copy"  onclick="BooklibApp._copyText(BooklibApp._getReportText())">📋 복사</button>
         <button class="bl-sbtn print" onclick="BooklibApp._printReport()">🖨️ 인쇄</button>
@@ -2587,7 +2569,6 @@ const BooklibApp = (() => {
     const prn3=document.getElementById('bl-prn-ck3')?.checked!==false;
     if(!prn1&&!prn2&&!prn3){_toast('⚠️ 출력할 항목을 하나 이상 선택해주세요','error');return;}
 
-    const fs=parseInt(localStorage.getItem('bl_rpt_print_fs'))||13;
     const today=new Date().toLocaleDateString('ko-KR');
     let body='';
     if(prn1) body+='<div class="ph"><h1>📋 '+_e(clsName)+' · '+_e(book.name)+' — 미수행 현황</h1><p>출력일: '+today+'</p></div>';
@@ -2609,8 +2590,12 @@ const BooklibApp = (() => {
       'th{background:#f1f5f9;font-size:11px;font-weight:700;padding:7px 10px;border:1px solid #cbd5e1;text-align:left}'+
       'td{padding:7px 10px;border:1px solid #cbd5e1;font-size:12px}'+
       'tr:nth-child(even) td{background:#f8fafc}'+
+<<<<<<< HEAD
       /* 상세(pre) 글자 크기만 사용자 설정 적용 */'+
       'pre{white-space:pre-wrap;word-break:break-all;font-family:inherit;font-size:'+fs+'px;line-height:1.9;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin:0}'+
+=======
+      'pre{white-space:pre-wrap;word-break:break-all;font-family:inherit;font-size:11px;line-height:1.8;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin:0}'+
+>>>>>>> parent of da9ace3 (Update booklib-app.js)
       '</style></head><body>'+
       body+
       '</body></html>');
@@ -2625,6 +2610,7 @@ const BooklibApp = (() => {
   }
 
   
+<<<<<<< HEAD
   /* ── 인쇄 글자 크기 조정 ── */
   function _adjSharePrintFs(delta){
     const cur=parseInt(localStorage.getItem('bl_share_print_fs'))||13;
@@ -2711,6 +2697,8 @@ const BooklibApp = (() => {
     if(w.document.readyState==='complete'){setTimeout(function(){w.print();},400);}
   }
 
+=======
+>>>>>>> parent of da9ace3 (Update booklib-app.js)
   const _getShareText=()=>_st.shareText;
   const _getReportText=()=>_st.reportText;
   async function _copyText(text){try{await navigator.clipboard.writeText(text);_toast('📋 복사됐습니다','success');}catch{_toast('⚠️ 복사 실패');}}
@@ -4786,7 +4774,7 @@ const BooklibApp = (() => {
     _toggleStamp,_toggleCheck,_batchToggle,
     _saveSubTasks,_closeSubPopup,
     _chWider,_chNarrow,_applyChWidth,_mtblFontSize,_applyFontSize,_toggleMemo,_saveMemo,_restoreMemoState,_toggleCollapse,
-    openShare,closeShare,_copyText,_getShareText,_printShare,_adjSharePrintFs,_adjReportPrintFs,
+    openShare,closeShare,_copyText,_getShareText,
     openClassReport,closeReport,_getReportText,_webShare,_printReport,
     importCsv, openCsvImportModal, _confirmCsvImport, _syncChaptersFromXlsx, _applyClassCardData, _exportDebugData,
     openBatchImport, _addBatchFiles, _removeBatchFile, _runBatchImport,
