@@ -200,10 +200,9 @@ const GradeApp = (() => {
   pointer-events:none;
   box-shadow:0 2px 8px var(--a40);
 }
-/* 삼각형 호버 시 버튼 등장 (~ = 이후 형제 선택) */
+/* 삼각형 호버 시만 등장, 버튼 자체 hover 유지 — textarea 포커스(입력 중)에는 표시 안 함 */
 .gs-cm-tri:hover ~ .gs-cm-icon,
-.gs-cm-icon:hover,
-.gs-cm-ta:focus ~ .gs-cm-icon{
+.gs-cm-icon:hover{
   opacity:1;transform:translateY(0) scale(1);
   pointer-events:auto;
 }
@@ -681,7 +680,10 @@ thead th[data-col-key]{position:relative;overflow:visible;}
   .gr-pm-mob-drawer-body::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:2px;}
 }
 @media(min-width:641px){
-  .gr-pm-mob-fab,.gr-pm-mob-drawer{display:none!important;}
+  .gr-pm-mob-fab,.gr-pm-mob-drawer,.gr-pm-mob-only{display:none!important;}
+}
+@media(max-width:640px){
+  .gr-pm-desk-only{display:none!important;}
 }
 `;
     document.head.appendChild(s);
@@ -2162,17 +2164,22 @@ thead th[data-col-key]{position:relative;overflow:visible;}
       <div class="gr-pm-bar">
         <div class="gr-pm-bar-left">
           <span class="gr-pm-bar-title">🔍 리포트 미리보기</span>
-          <span class="gr-pm-bar-sub">설정 변경이 즉시 반영됩니다</span>
+          <span class="gr-pm-bar-sub gr-pm-bar-sub--desk">설정 변경이 즉시 반영됩니다</span>
         </div>
         <div class="gr-pm-bar-right">
-          <button class="gr-pm-bar-btn" id="gr-pm-cfg-toggle"
+          <!-- 데스크탑 전용 버튼 -->
+          <button class="gr-pm-bar-btn gr-pm-desk-only" id="gr-pm-cfg-toggle"
             onclick="GradeApp._togglePmFloat()">⚙️ 설정</button>
+          <!-- 모바일 캡처+전달 버튼 (모바일 전용) -->
+          <button class="gr-pm-bar-btn gr-pm-mob-only" id="gr-pm-capture-btn"
+            onclick="GradeApp._pmCaptureShare()"
+            style="background:rgba(255,255,255,.25)">📸 캡처·전달</button>
           <button class="gr-pm-bar-btn"
             onclick="GradeApp._closePreviewMode()">✕ 닫기</button>
         </div>
       </div>
       <div class="gr-pm-report-area" id="gr-pm-report-area"></div>
-      <!-- 모바일 전용 FAB -->
+      <!-- 모바일 전용 FAB (⚙️ 설정) -->
       <button class="gr-pm-mob-fab" id="gr-pm-mob-fab"
         onclick="GradeApp._togglePmDrawer()">⚙️</button>
       <!-- 모바일 드로어 -->
@@ -2309,6 +2316,65 @@ thead th[data-col-key]{position:relative;overflow:visible;}
   /* 모바일: 슬라이드 드로어 토글 */
   function _togglePmDrawer() {
     document.getElementById('gr-pm-mob-drawer')?.classList.toggle('open');
+  }
+
+  /* 모바일 미리보기: 캡처 → Web Share API로 전달 */
+  async function _pmCaptureShare() {
+    if (typeof html2canvas === 'undefined') {
+      _toast('⚠️ html2canvas 라이브러리가 필요합니다'); return;
+    }
+    const el = document.getElementById('gr-rpt-preview');
+    if (!el) { _toast('⚠️ 리포트가 없습니다'); return; }
+
+    const btn = document.getElementById('gr-pm-capture-btn');
+    if (btn) { btn.textContent = '⏳ 캡처 중…'; btn.disabled = true; }
+
+    try {
+      await _waitFonts();
+      const canvas = await _captureEl(el);
+
+      // 파일명 생성
+      const stu  = _getStudents().find(s => s.id === _st.studentId) || _getStudents()[0];
+      const cls  = _st.classId ? _getCls(_st.classId) : null;
+      const safe = s => (s||'').replace(/[\\/:"*?<>|]/g,'').replace(/\s+/g,'_');
+      const now  = new Date();
+      const ymd  = now.toISOString().slice(0,10).replace(/-/g,'');
+      const fname = `${safe(cls?.name)}_${safe(stu?.name)}_Report_${ymd}.png`;
+
+      canvas.toBlob(async blob => {
+        if (!blob) { _toast('⚠️ 캡처 실패'); return; }
+        const file = new File([blob], fname, { type: 'image/png' });
+
+        // Web Share API (모바일 네이티브 공유)
+        if (navigator.share && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              title: `${stu?.name || ''} 성적 리포트`,
+              text:  `${cls?.name || ''} 성적 리포트`,
+              files: [file],
+            });
+            _toast('📲 전달 완료', 'success');
+          } catch (e) {
+            if (e.name !== 'AbortError') _pmDownloadFallback(canvas, fname);
+          }
+        } else {
+          // 공유 미지원 → 다운로드 fallback
+          _pmDownloadFallback(canvas, fname);
+        }
+      }, 'image/png');
+    } catch (e) {
+      _toast('⚠️ 캡처 오류: ' + e.message);
+    } finally {
+      if (btn) { btn.textContent = '📸 캡처·전달'; btn.disabled = false; }
+    }
+  }
+
+  function _pmDownloadFallback(canvas, fname) {
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = fname;
+    a.click();
+    _toast('📸 이미지 저장 완료', 'success');
   }
 
   // ── 설정 패널 HTML 빌더 (float 패널 · 미리보기 모드 공유) ──
@@ -4682,7 +4748,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     _slideTo, _ts, _te,
     _onCtxTable, _closeCtxMenu,
     saveOne, saveAll, resetOne,
-    _setLayout, _setHdrFontSize, _exportAllGrades, _importAllGrades, _toggleGraph, _setChartStyle, _setPageSize, _setRptFontSize, _setGraphAlign, _setDivider, _setLogoSize, _setTableRound, _applyTableWidth, _bindColResize, _bindGroupResizers, _repositionGroupResizers, _resetColWidths, _onCmtInput, _setFontFamily, _openFloatCfg, _setReportBold, _deliverReport, _setRptBg, _setRptScale, _openPreviewMode, _closePreviewMode, _togglePmFloat, _openPmFloat, _togglePmDrawer,
+    _setLayout, _setHdrFontSize, _exportAllGrades, _importAllGrades, _toggleGraph, _setChartStyle, _setPageSize, _setRptFontSize, _setGraphAlign, _setDivider, _setLogoSize, _setTableRound, _applyTableWidth, _bindColResize, _bindGroupResizers, _repositionGroupResizers, _resetColWidths, _onCmtInput, _setFontFamily, _openFloatCfg, _setReportBold, _deliverReport, _setRptBg, _setRptScale, _openPreviewMode, _closePreviewMode, _togglePmFloat, _openPmFloat, _togglePmDrawer, _pmCaptureShare,
     _setTitleAlign, _setTblColor, _applyTheme, _applyRptStyles,
     _setGraphStyleMode, _fixStickyHeaderTops,
     _copyReport, _shareReport, _printReport, _captureReport, _captureAllReports, _showShareModal, _showDeliverModal,
