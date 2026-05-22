@@ -7,7 +7,7 @@
 const GeminiAI = (() => {
 
   /* ── API 설정 ─────────────────────────────────────────────── */
-  const API_KEY = 'AIzaSyCRtu_qWYXsCt2iuVAB5AHh9IXYWt1_qRQ'; // ← 키 교체 위치
+  const API_KEY = 'AIzaSyD2Wb42KuIPr_juXkwPHOB0YQW2otBBZhU'; // ← 키 교체 위치
 
   /**
    * 모델 폴백 순서
