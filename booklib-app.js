@@ -202,6 +202,16 @@ const BooklibApp = (() => {
 .bl-share-stat-n{font-size:22px;font-weight:900;line-height:1;}
 .bl-share-stat-l{font-size:11px;color:var(--tx3);margin-top:3px;}
 .bl-share-box{background:var(--surf2);border-radius:10px;padding:13px 14px;font-size:12px;line-height:2;color:var(--tx);white-space:pre-wrap;word-break:break-all;border:1px solid var(--bdr);max-height:340px;overflow-y:auto;font-family:var(--font);margin:8px 0;}
+/* 전체 미수행 현황 모달 — 넓은 화면 전용 너비 확장 */
+/* report 모달 타이틀 크게 */
+#bl-report-sh .sh-title{font-size:20px!important;padding-top:18px;}
+#bl-report-sh .sh-sub{font-size:14px!important;}
+
+@media(min-width:600px){#bl-report-sh{max-width:700px!important;padding:0 22px 32px;}}
+@media(min-width:920px){#bl-report-sh{max-width:860px!important;padding:0 28px 36px;}}
+#bl-report-sh .bl-share-box{max-height:none;}
+#bl-report-sh .bl-share-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+
 .bl-share-scroll{flex:1;overflow-y:auto;}
 .bl-share-acts{display:flex;gap:8px;flex-wrap:wrap;}
 .bl-sbtn{flex:1;min-width:80px;padding:12px 8px;border-radius:10px;border:none;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);transition:all .15s;}
@@ -275,7 +285,7 @@ const BooklibApp = (() => {
       <div class="sh" id="bl-share-sh" onclick="event.stopPropagation()" style="max-height:88vh;display:flex;flex-direction:column;"></div>
     </div>
     <div id="bl-report-ov" class="ov hidden" onclick="if(event.target.id==='bl-report-ov')BooklibApp.closeReport()">
-      <div class="sh" id="bl-report-sh" onclick="event.stopPropagation()" style="max-height:92vh;display:flex;flex-direction:column;"></div>
+      <div class="sh" id="bl-report-sh" onclick="event.stopPropagation()" style="max-height:94vh;display:flex;flex-direction:column;"></div>
     </div>`;}
 
   function switchTab(tab){
@@ -2526,14 +2536,14 @@ const BooklibApp = (() => {
     students.forEach(s=>{const undone=evalChs.filter(ch=>_checks[`${s.id}__${ch.id}`]);if(undone.length){hasAny=true;(()=>{const _A=['🐶','🐱','🐹','🐰','🐻','🦊','🐼','🐨','🐸','🐯'];let _h=0;for(let _i=0;_i<s.name.length;_i++)_h=(_h*31+s.name.charCodeAt(_i))&0xffff;lines.push(`${_A[_h%10]} ${s.name}  (${undone.length}/${evalChs.length})`);})();undone.forEach(ch=>{const parsed=BookLibDB._parseCheck(_checks[`${s.id}__${ch.id}`]);const ts=parsed.tasks.length?` [${parsed.tasks.join('/')}]`:'';lines.push(`  ${ch.title}`);});lines.push('');}});
     if(!hasAny)lines.push('🎉 모든 학생이 완료했습니다!');
     _st.reportText=lines.join('\n');
-    const _rptPrintFs=parseInt(localStorage.getItem('bl_rpt_print_fs'))||12;
-    const summaryRows=students.map(s=>{const uc=evalChs.filter(ch=>_checks[`${s.id}__${ch.id}`]).length;const pct=evalChs.length?Math.round((evalChs.length-uc)/evalChs.length*100):100;return`<tr><td style="padding:6px 10px;border-bottom:1px solid var(--bdr);font-weight:700">${_e(s.name)}</td><td style="padding:6px 10px;border-bottom:1px solid var(--bdr);color:${uc?'#ea580c':'var(--green)'}">${uc?`⬜ ${uc}개`:'✅'}</td><td style="padding:6px 10px;border-bottom:1px solid var(--bdr)"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:6px;background:var(--bdr);border-radius:3px;overflow:hidden;min-width:60px"><div style="height:100%;width:${pct}%;background:${uc?'#f97316':'#10b981'};border-radius:3px"></div></div><span style="font-size:11px;color:var(--tx3)">${pct}%</span></div></td></tr>`;}).join('');
+    const _rptPrintFs=parseInt(localStorage.getItem('bl_rpt_print_fs'))||14;
+    const summaryRows=students.map(s=>{const uc=evalChs.filter(ch=>_checks[`${s.id}__${ch.id}`]).length;const pct=evalChs.length?Math.round((evalChs.length-uc)/evalChs.length*100):100;return`<tr><td style="padding:9px 12px;border-bottom:1px solid var(--bdr);font-weight:800;font-size:15px">${_e(s.name)}</td><td style="padding:9px 12px;border-bottom:1px solid var(--bdr);font-size:15px;color:${uc?'#ea580c':'var(--green)'}">${uc?`⬜ ${uc}개`:'✅'}</td><td style="padding:9px 12px;border-bottom:1px solid var(--bdr)"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:7px;background:var(--bdr);border-radius:4px;overflow:hidden;min-width:60px"><div style="height:100%;width:${pct}%;background:${uc?'#f97316':'#10b981'};border-radius:4px"></div></div><span style="font-size:12px;color:var(--tx3)">${pct}%</span></div></td></tr>`;}).join('');
     sh.innerHTML=`<div class="sh-handle"></div>
       <div class="sh-title">📋 전체 미수행 현황</div>
       <div class="sh-sub">${_e(clsName)} · ${_e(book.name)}</div>
       <!-- ★ 출력 항목 선택 체크박스 -->
       <div style="background:var(--surf2);border-radius:10px;padding:10px 14px;margin:6px 0 10px;border:1px solid var(--bdr)">
-        <div style="font-size:11px;font-weight:800;color:var(--tx3);margin-bottom:8px">🖨️ 출력할 항목 선택</div>
+        <div style="font-size:13px;font-weight:800;color:var(--tx3);margin-bottom:8px">🖨️ 출력할 항목 선택</div>
         <div style="display:flex;flex-direction:column;gap:6px">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:700;color:var(--tx)">
             <input type="checkbox" id="bl-prn-ck1" checked style="width:16px;height:16px;accent-color:var(--a)">
@@ -2550,19 +2560,19 @@ const BooklibApp = (() => {
         </div>
       </div>
       <div class="bl-share-scroll">
-        <div style="margin:10px 0 6px;font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:1px">학생별 요약</div>
-        <table style="width:100%;border-collapse:collapse;border:1px solid var(--bdr);border-radius:8px;overflow:hidden;margin-bottom:10px;font-size:13px">
-          <thead><tr style="background:var(--surf2)"><th style="padding:7px 10px;text-align:left;font-size:11px;color:var(--tx3)">학생</th><th style="padding:7px 10px;text-align:left;font-size:11px;color:var(--tx3)">미수행</th><th style="padding:7px 10px;text-align:left;font-size:11px;color:var(--tx3)">수행률</th></tr></thead>
+        <div style="margin:12px 0 8px;font-size:12px;font-weight:800;color:var(--tx3);letter-spacing:1px">학생별 요약</div>
+        <table id="bl-rpt-summary-tbl" style="width:100%;border-collapse:collapse;border:1px solid var(--bdr);border-radius:8px;overflow:hidden;margin-bottom:10px;font-size:15px">
+          <thead><tr style="background:var(--surf2)"><th style="padding:9px 12px;text-align:left;font-size:13px;font-weight:800;color:var(--tx3)">학생</th><th style="padding:9px 12px;text-align:left;font-size:13px;font-weight:800;color:var(--tx3)">미수행</th><th style="padding:9px 12px;text-align:left;font-size:13px;font-weight:800;color:var(--tx3)">수행률</th></tr></thead>
           <tbody>${summaryRows}</tbody>
         </table>
-        <div style="font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:1px;margin-bottom:4px">상세 (복사·출력용)</div>
+        <div style="font-size:12px;font-weight:800;color:var(--tx3);letter-spacing:1px;margin-bottom:6px">상세 (복사·출력용)</div>
         <div class="bl-share-box" id="bl-rpt-detail-box" style="font-size:${_rptPrintFs}px">${_e(_st.reportText)}</div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;background:var(--surf2);border-radius:9px;padding:5px 10px;margin:4px 0;border:1px solid var(--bdr)">
-        <span style="font-size:11px;font-weight:700;color:var(--tx3);flex:1">🖨️ 상세 글자 크기</span>
-        <button class="bl-wbtn" onclick="BooklibApp._adjReportPrintFs(-1)">A−</button>
-        <span id="bl-rpt-fs-val" style="font-size:12px;font-weight:800;color:var(--tx);min-width:36px;text-align:center">${_rptPrintFs}px</span>
-        <button class="bl-wbtn" onclick="BooklibApp._adjReportPrintFs(1)">A+</button>
+        <span style="font-size:13px;font-weight:700;color:var(--tx3);flex:1">🖨️ 상세 글자 크기</span>
+        <button class="bl-wbtn" style="font-size:13px;padding:4px 10px" onclick="BooklibApp._adjReportPrintFs(-1)">A−</button>
+        <span id="bl-rpt-fs-val" style="font-size:14px;font-weight:800;color:var(--tx);min-width:40px;text-align:center">${_rptPrintFs}px</span>
+        <button class="bl-wbtn" style="font-size:13px;padding:4px 10px" onclick="BooklibApp._adjReportPrintFs(1)">A+</button>
       </div>
       <div class="bl-share-acts">
         <button class="bl-sbtn copy"  onclick="BooklibApp._copyText(BooklibApp._getReportText())">📋 복사</button>
