@@ -1,21 +1,32 @@
 /**
- * staff-app.js — v2.0
- * 직원 관리 UI
+ * staff-app.js — v3.0  (알바·정직원 통합 고도화 UI)
+ * ════════════════════════════════════════════════════════════════
+ *  v3 신규 UI 기능
+ *  ─────────────────────────────────────────────────────────────
+ *  [1] 고용 형태 분기 표시
+ *      · 직원 카드: 정직원(월급) / 알바(시급) 배지 구분
+ *      · 직원 등록/편집: employType 선택 + 필드 동적 노출
  *
- * v2 신규 기능
- * ────────────
- * 1. 주간 템플릿 편집 & 적용
- *    · 직원 편집 모달 내 요일별 근무 등록
- *    · 달력 우상단 "📋 템플릿 적용" 버튼 → 해당 월 자동 적용
- *    · mode: replace(기본) / append
+ *  [2] 일괄 등록 모달 (Batch Insert)
+ *      · 날짜 범위 + 요일 체크박스 + 휴게시간 + 야간 시급
+ *      · 중첩 감지 → 덮어쓰기 경고 모달
+ *      · 등록 직후 [전체 취소] 버튼 동적 노출 (Undo)
  *
- * 2. 롱프레스 복사
- *    · 달력 근무 항목 롱프레스(700ms) → 복사 모드 진입
- *    · 달력에서 대상 날짜 탭(멀티선택) → 확인 → 복사
+ *  [3] 주휴수당 실시간 프로그레스 바 (알바 달력)
+ *      · 이번 주 근무시간 / 15h 프로그레스 바
+ *      · 15h 달성 시 ✅ 배지 + 예상 주휴수당 표시
  *
- * 3. 소수점 시간
- *    · 시작/종료 시간 입력 시 분 단위 자동 환산 (예: 1.5h = 1시간 30분)
- *    · 수동 입력 필드도 소수점 허용
+ *  [4] 체크박스 다중 선택 삭제
+ *      · 달력 근무 항목에 체크박스 제공
+ *      · [선택 삭제] 비동기 처리, F5 없이 즉시 반영
+ *
+ *  [5] 급여 계산 UI 확장
+ *      · 알바: 기본급 / 야간수당 / 주휴수당 항목별 표시
+ *      · 정직원: 고정 월급 or 시급합산 표시
+ *      · [이번 달 엑셀 다운로드] 버튼 (SheetJS)
+ *
+ *  [6] 전원 급여 일괄 계산 탭
+ * ════════════════════════════════════════════════════════════════
  */
 const StaffApp = (() => {
   /* ══ 상태 ══ */
@@ -35,185 +46,238 @@ const StaffApp = (() => {
     copyMode:     false,
     copyFromDate: '',
     copyTargets:  new Set(),
+    /* 다중 삭제 */
+    selectMode:   false,
+    selected:     new Set(),  // "date::entryId"
+    /* 마지막 배치 */
+    lastBatchId:  null,
+    lastBatchCount: 0,
   };
 
   const DOW = StaffDB.DOW_KO;
   const WORK_DAYS = ['월','화','수','목','금','토','일'];
 
   /* ══════════════════════════════════════════
-   * CSS
+   * CSS — v3
    * ══════════════════════════════════════════ */
   function _css() {
     if (document.getElementById('sf-styles')) return;
     const s = document.createElement('style');
     s.id = 'sf-styles';
     s.textContent = `
-#page-staff { display:none; flex-direction:column; height:100%; overflow:hidden; }
-#page-staff.on { display:flex; }
+/* ── 레이아웃 ── */
+#page-staff{display:none;flex-direction:column;height:100%;overflow:hidden}
+#page-staff.on{display:flex}
+.sf-stabs{display:flex;background:var(--surf);border-bottom:1.5px solid var(--bdr);flex-shrink:0;overflow-x:auto;scrollbar-width:none}
+.sf-stabs::-webkit-scrollbar{display:none}
+.sf-stab{flex:1;min-width:70px;padding:11px 4px;text-align:center;font-size:12px;font-weight:700;color:var(--tx3);cursor:pointer;border-bottom:2.5px solid transparent;background:none;border-top:none;border-left:none;border-right:none;font-family:var(--font);transition:color .18s,border-color .18s;white-space:nowrap}
+.sf-stab.on{color:var(--a);border-bottom-color:var(--a)}
+.sf-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 14px 120px}
+.sf-lbl{display:block;font-size:9px;font-weight:800;color:var(--tx3);letter-spacing:1.2px;text-transform:uppercase;padding:8px 2px 5px}
 
-.sf-stabs { display:flex; background:var(--surf); border-bottom:1.5px solid var(--bdr); flex-shrink:0; overflow-x:auto; scrollbar-width:none; }
-.sf-stabs::-webkit-scrollbar { display:none; }
-.sf-stab { flex:1; min-width:76px; padding:11px 6px; text-align:center; font-size:13px; font-weight:700; color:var(--tx3); cursor:pointer; border-bottom:2.5px solid transparent; background:none; border-top:none; border-left:none; border-right:none; font-family:var(--font); transition:color .18s,border-color .18s; white-space:nowrap; }
-.sf-stab.on { color:var(--a); border-bottom-color:var(--a); }
+/* ── 직원 카드 ── */
+.sf-card{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--bdr);border-radius:var(--r);padding:12px 14px;margin-bottom:9px;box-shadow:var(--sh);animation:cardIn .22s ease both;transition:border-color .15s}
+.sf-card:hover{border-color:var(--a40)}
+.sf-av{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;flex-shrink:0;background:linear-gradient(135deg,var(--a20),rgba(5,150,105,.2));color:var(--a)}
+.sf-av.off{background:linear-gradient(135deg,rgba(156,163,175,.2),rgba(156,163,175,.1));color:var(--tx3)}
+.sf-av.pt{background:linear-gradient(135deg,rgba(245,158,11,.2),rgba(217,119,6,.1));color:#d97706}
+.sf-ci{flex:1;min-width:0}
+.sf-cn{font-size:15px;font-weight:800;color:var(--tx)}
+.sf-cm{font-size:12px;color:var(--tx3);margin-top:3px;display:flex;gap:5px;flex-wrap:wrap}
+.sf-bdg{display:inline-flex;align-items:center;gap:2px;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:700;background:var(--card2);border:1px solid var(--bdr);color:var(--tx2)}
+.sf-bdg.ok{background:rgba(5,150,105,.1);border-color:rgba(5,150,105,.3);color:var(--green)}
+.sf-bdg.off{background:rgba(156,163,175,.1);border-color:rgba(156,163,175,.3);color:var(--tx3)}
+.sf-bdg.ctrt{background:rgba(139,92,246,.1);border-color:rgba(139,92,246,.3);color:#8b5cf6}
+.sf-bdg.ft{background:rgba(37,99,235,.1);border-color:rgba(37,99,235,.3);color:#2563eb}
+.sf-bdg.pt{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3);color:#d97706}
+.sf-cacts{display:flex;flex-direction:column;gap:5px;align-items:flex-end;flex-shrink:0}
+.sf-empty{text-align:center;padding:56px 20px;color:var(--tx3);font-size:14px;line-height:2.2}
 
-.sf-scroll { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:12px 14px 120px; }
-.sf-lbl { display:block; font-size:9px; font-weight:800; color:var(--tx3); letter-spacing:1.2px; text-transform:uppercase; padding:8px 2px 5px; }
+/* ── 편집 폼 ── */
+.sf-fg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sf-fg .sf-full{grid-column:1/-1}
+.sf-fl{display:block;font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:.5px;margin-bottom:4px}
+.sf-fi{width:100%;padding:9px 12px;border-radius:9px;background:var(--surf2);border:1.5px solid var(--bdr);font-size:13px;color:var(--tx);outline:none;font-family:var(--font);transition:border-color .2s;box-sizing:border-box}
+.sf-fi:focus{border-color:var(--a);background:var(--a10)}
+.sf-fi::placeholder{color:var(--tx3)}
 
-/* 직원 카드 */
-.sf-card { display:flex; align-items:center; gap:12px; background:var(--card); border:1px solid var(--bdr); border-radius:var(--r); padding:12px 14px; margin-bottom:9px; box-shadow:var(--sh); animation:cardIn .22s ease both; transition:border-color .15s; }
-.sf-card:hover { border-color:var(--a40); }
-.sf-av { width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:900; flex-shrink:0; background:linear-gradient(135deg,var(--a20),rgba(5,150,105,.2)); color:var(--a); }
-.sf-av.off { background:linear-gradient(135deg,rgba(156,163,175,.2),rgba(156,163,175,.1)); color:var(--tx3); }
-.sf-ci { flex:1; min-width:0; }
-.sf-cn { font-size:15px; font-weight:800; color:var(--tx); }
-.sf-cm { font-size:12px; color:var(--tx3); margin-top:3px; display:flex; gap:7px; flex-wrap:wrap; }
-.sf-bdg { display:inline-flex; align-items:center; gap:2px; padding:2px 7px; border-radius:6px; font-size:10px; font-weight:700; background:var(--card2); border:1px solid var(--bdr); color:var(--tx2); }
-.sf-bdg.ok   { background:rgba(5,150,105,.1); border-color:rgba(5,150,105,.3); color:var(--green); }
-.sf-bdg.off  { background:rgba(156,163,175,.1); border-color:rgba(156,163,175,.3); color:var(--tx3); }
-.sf-bdg.ctrt { background:rgba(139,92,246,.1); border-color:rgba(139,92,246,.3); color:#8b5cf6; }
-.sf-cacts { display:flex; flex-direction:column; gap:5px; align-items:flex-end; flex-shrink:0; }
-.sf-empty { text-align:center; padding:56px 20px; color:var(--tx3); font-size:14px; line-height:2.2; }
-
-/* 편집 폼 */
-.sf-fg { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-.sf-fg .sf-full { grid-column:1/-1; }
-.sf-fl { display:block; font-size:10px; font-weight:800; color:var(--tx3); letter-spacing:.5px; margin-bottom:4px; }
-.sf-fi { width:100%; padding:9px 12px; border-radius:9px; background:var(--surf2); border:1.5px solid var(--bdr); font-size:13px; color:var(--tx); outline:none; font-family:var(--font); transition:border-color .2s; box-sizing:border-box; }
-.sf-fi:focus { border-color:var(--a); background:var(--a10); }
-.sf-fi::placeholder { color:var(--tx3); }
-.sf-rate-row { display:flex; gap:8px; align-items:flex-end; }
-.sf-rate-row .sf-fi { flex:1; }
-.sf-mw { font-size:10px; color:var(--tx3); white-space:nowrap; padding-bottom:10px; line-height:1.5; }
-
-/* ── 주간 템플릿 편집 ── */
-.sf-templ-sec { margin-top:4px; }
-.sf-templ-dow-row { display:flex; gap:6px; align-items:center; margin-bottom:6px; flex-wrap:wrap; }
-.sf-dow-lbl { min-width:22px; font-size:12px; font-weight:800; color:var(--a); flex-shrink:0; }
-.sf-templ-entries { flex:1; min-width:0; display:flex; flex-direction:column; gap:4px; }
-.sf-templ-entry { display:flex; align-items:center; gap:5px; background:var(--surf2); border-radius:8px; padding:5px 8px; font-size:11px; }
-.sf-templ-entry-type { font-size:10px; font-weight:700; padding:2px 6px; border-radius:5px; flex-shrink:0; }
-.sf-templ-entry-type.class   { background:var(--a10); color:var(--a); }
-.sf-templ-entry-type.general { background:rgba(5,150,105,.1); color:var(--green); }
-.sf-templ-entry-info { flex:1; color:var(--tx2); }
-.sf-templ-del { background:none; border:none; color:var(--tx3); cursor:pointer; padding:2px 5px; font-size:11px; border-radius:4px; font-family:var(--font); }
-.sf-templ-del:hover { color:#ef4444; }
-.sf-templ-add-btn { font-size:10px; padding:4px 8px; border-radius:7px; background:var(--a10); border:1px solid var(--a40); color:var(--a); cursor:pointer; font-family:var(--font); font-weight:700; white-space:nowrap; flex-shrink:0; transition:all .12s; }
-.sf-templ-add-btn:active { transform:scale(.93); }
+/* ── 주간 템플릿 ── */
+.sf-templ-sec{margin-top:4px}
+.sf-templ-dow-row{display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
+.sf-dow-lbl{min-width:22px;font-size:12px;font-weight:800;color:var(--a);flex-shrink:0}
+.sf-templ-entries{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.sf-templ-entry{display:flex;align-items:center;gap:5px;background:var(--surf2);border-radius:8px;padding:5px 8px;font-size:11px}
+.sf-templ-entry-type{font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;flex-shrink:0}
+.sf-templ-entry-type.class{background:var(--a10);color:var(--a)}
+.sf-templ-entry-type.general{background:rgba(5,150,105,.1);color:var(--green)}
+.sf-templ-entry-info{flex:1;color:var(--tx2)}
+.sf-templ-del{background:none;border:none;color:var(--tx3);cursor:pointer;padding:2px 5px;font-size:11px;border-radius:4px;font-family:var(--font)}
+.sf-templ-del:hover{color:#ef4444}
+.sf-templ-add-btn{font-size:10px;padding:4px 8px;border-radius:7px;background:var(--a10);border:1px solid var(--a40);color:var(--a);cursor:pointer;font-family:var(--font);font-weight:700;white-space:nowrap;flex-shrink:0;transition:all .12s}
+.sf-templ-add-btn:active{transform:scale(.93)}
 
 /* ── 달력 ── */
-.sf-cal-nav { display:flex; align-items:center; justify-content:space-between; padding:8px 14px; background:var(--surf2); border-bottom:1px solid var(--bdr); flex-shrink:0; }
-.sf-cal-arr { width:34px; height:34px; border-radius:9px; border:1px solid var(--bdr2); background:var(--card); color:var(--tx2); font-size:17px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:all .12s; }
-.sf-cal-arr:active { background:var(--card2); transform:scale(.92); }
-.sf-cal-ym   { font-size:16px; font-weight:800; color:var(--tx); }
-.sf-cal-info { font-size:11px; color:var(--tx3); margin-top:2px; }
+.sf-cal-nav{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:var(--surf2);border-bottom:1px solid var(--bdr);flex-shrink:0}
+.sf-cal-arr{width:34px;height:34px;border-radius:9px;border:1px solid var(--bdr2);background:var(--card);color:var(--tx2);font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .12s}
+.sf-cal-arr:active{background:var(--card2);transform:scale(.92)}
+.sf-cal-ym{font-size:16px;font-weight:800;color:var(--tx)}
+.sf-cal-info{font-size:11px;color:var(--tx3);margin-top:2px}
+.sf-cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
+.sf-wd{padding:5px 2px;text-align:center;font-size:10px;font-weight:800;color:var(--tx3);background:var(--surf2);border:1px solid var(--bdr)}
+.sf-wd:first-child{color:#dc2626}
+.sf-wd:last-child{color:#4f46e5}
+.sf-cell{border:1px solid var(--bdr);min-height:66px;padding:4px;background:var(--card);cursor:pointer;position:relative;vertical-align:top;transition:background .12s}
+.sf-cell:hover:not(.sf-ec){background:var(--a10)}
+.sf-cell.sf-today{background:var(--a10)!important}
+.sf-cell.sf-today .sf-dn{color:var(--a);font-weight:900}
+.sf-cell.sf-ec{background:var(--surf2);cursor:default}
+.sf-cell.sf-sun .sf-dn{color:#dc2626}
+.sf-cell.sf-sat .sf-dn{color:#4f46e5}
+.sf-cell.copy-target{outline:2.5px solid var(--a);background:var(--a10)!important}
+.sf-dn{font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:2px}
+.sf-ce{border-radius:4px;padding:2px 4px;font-size:10px;font-weight:700;margin-bottom:2px;display:flex;align-items:center;gap:2px;position:relative;cursor:pointer}
+.sf-ce.class{background:var(--a10);color:var(--a);border:1px solid var(--a40)}
+.sf-ce.general{background:rgba(5,150,105,.1);color:var(--green);border:1px solid rgba(5,150,105,.3)}
+.sf-ce.copying{background:#fef3c7!important;border-color:#f59e0b!important}
+.sf-ce.selected-entry{outline:2px solid #ef4444;background:#fee2e2!important}
+.sf-cell-total{position:absolute;bottom:2px;right:4px;font-size:9px;font-weight:800;color:var(--tx3)}
 
-.sf-cal-grid { display:grid; grid-template-columns:repeat(7,1fr); }
-.sf-wd { padding:5px 2px; text-align:center; font-size:10px; font-weight:800; color:var(--tx3); background:var(--surf2); border:1px solid var(--bdr); }
-.sf-wd:first-child { color:#dc2626; }
-.sf-wd:last-child  { color:#4f46e5; }
+/* ── 복사 배너 ── */
+.sf-copy-banner{background:#fef3c7;border-bottom:2px solid #f59e0b;padding:8px 14px;flex-shrink:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sf-copy-banner-txt{font-size:12px;font-weight:700;color:#92400e;flex:1}
+.sf-copy-confirm{padding:6px 14px;border-radius:8px;background:#f59e0b;color:#fff;border:none;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font)}
+.sf-copy-cancel{padding:6px 14px;border-radius:8px;background:var(--card);border:1px solid var(--bdr2);color:var(--tx2);font-size:12px;cursor:pointer;font-family:var(--font)}
 
-.sf-cell { border:1px solid var(--bdr); min-height:62px; padding:4px; background:var(--card); cursor:pointer; position:relative; vertical-align:top; transition:background .12s; }
-.sf-cell:hover:not(.sf-ec) { background:var(--a10); }
-.sf-cell.sf-today { background:var(--a10) !important; }
-.sf-cell.sf-today .sf-dn { color:var(--a); font-weight:900; }
-.sf-cell.sf-ec    { background:var(--surf2); cursor:default; }
-.sf-cell.sf-sun .sf-dn { color:#dc2626; }
-.sf-cell.sf-sat .sf-dn { color:#4f46e5; }
-/* 복사 모드 타겟 선택 */
-.sf-cell.copy-target { outline:2.5px solid var(--a); background:var(--a10) !important; }
-.sf-dn { font-size:11px; font-weight:700; color:var(--tx2); margin-bottom:2px; }
-.sf-ce { border-radius:4px; padding:2px 4px; font-size:10px; font-weight:700; margin-bottom:2px; display:flex; align-items:center; gap:2px; position:relative; }
-.sf-ce.class   { background:var(--a10); color:var(--a); border:1px solid var(--a40); }
-.sf-ce.general { background:rgba(5,150,105,.1); color:var(--green); border:1px solid rgba(5,150,105,.3); }
-.sf-ce.copying { background:#fef3c7 !important; border-color:#f59e0b !important; }
-.sf-cell-total { position:absolute; bottom:2px; right:4px; font-size:9px; font-weight:800; color:var(--tx3); }
+/* ── 선택 삭제 배너 ── */
+.sf-sel-banner{background:#fee2e2;border-bottom:2px solid #ef4444;padding:8px 14px;flex-shrink:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sf-sel-banner-txt{font-size:12px;font-weight:700;color:#991b1b;flex:1}
+.sf-sel-del{padding:6px 14px;border-radius:8px;background:#ef4444;color:#fff;border:none;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font)}
+.sf-sel-cancel{padding:6px 14px;border-radius:8px;background:var(--card);border:1px solid var(--bdr2);color:var(--tx2);font-size:12px;cursor:pointer;font-family:var(--font)}
 
-/* 복사 모드 배너 */
-.sf-copy-banner { background:#fef3c7; border-bottom:2px solid #f59e0b; padding:8px 14px; flex-shrink:0; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.sf-copy-banner-txt { font-size:12px; font-weight:700; color:#92400e; flex:1; }
-.sf-copy-confirm { padding:6px 14px; border-radius:8px; background:#f59e0b; color:#fff; border:none; font-size:12px; font-weight:700; cursor:pointer; font-family:var(--font); }
-.sf-copy-cancel  { padding:6px 14px; border-radius:8px; background:var(--card); border:1px solid var(--bdr2); color:var(--tx2); font-size:12px; cursor:pointer; font-family:var(--font); }
+/* ── 주휴수당 프로그레스 ── */
+.sf-holiday-bar{background:var(--surf2);border-bottom:1px solid var(--bdr);padding:8px 14px;flex-shrink:0}
+.sf-hb-title{font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:.8px;margin-bottom:6px}
+.sf-hb-row{display:flex;align-items:center;gap:8px}
+.sf-hb-track{flex:1;height:8px;border-radius:4px;background:var(--bdr);overflow:hidden}
+.sf-hb-fill{height:100%;border-radius:4px;transition:width .4s cubic-bezier(.4,0,.2,1);background:linear-gradient(90deg,#f59e0b,#ef4444)}
+.sf-hb-fill.done{background:linear-gradient(90deg,#059669,#10b981)}
+.sf-hb-label{font-size:11px;font-weight:700;color:var(--tx2);white-space:nowrap}
+.sf-hb-badge{font-size:13px;flex-shrink:0}
+.sf-holiday-weeks{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.sf-hw-chip{padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;border:1px solid var(--bdr);background:var(--card)}
+.sf-hw-chip.q{background:rgba(5,150,105,.1);border-color:rgba(5,150,105,.3);color:var(--green)}
+.sf-hw-chip.nq{background:var(--card2);color:var(--tx3)}
 
-/* 근무 입력 모달 */
-.sf-wtype-row { display:flex; gap:8px; margin-bottom:10px; }
-.sf-wbtn { flex:1; padding:10px 6px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; font-family:var(--font); border:2px solid var(--bdr2); background:var(--card); color:var(--tx2); transition:all .15s; }
-.sf-wbtn.on.class   { border-color:var(--a); background:var(--a10); color:var(--a); }
-.sf-wbtn.on.general { border-color:var(--green); background:rgba(5,150,105,.1); color:var(--green); }
-.sf-wbtn:active { transform:scale(.94); }
-.sf-time-row { display:flex; gap:8px; align-items:flex-end; margin-bottom:8px; }
-.sf-time-row label { flex:1; }
-.sf-tl { font-size:10px; color:var(--tx3); font-weight:700; margin-bottom:3px; display:block; }
-.sf-ti { width:100%; padding:9px 10px; border-radius:9px; box-sizing:border-box; background:var(--surf); border:1.5px solid var(--bdr); font-size:13px; color:var(--tx); outline:none; font-family:var(--font); }
-.sf-ti:focus { border-color:var(--a); }
-.sf-hrs { padding:8px 12px; border-radius:9px; border:1.5px solid var(--a40); font-size:14px; font-weight:800; color:var(--a); background:var(--a10); white-space:nowrap; flex-shrink:0; align-self:flex-end; display:flex; align-items:center; min-width:62px; justify-content:center; }
-.sf-note { width:100%; padding:8px 10px; border-radius:9px; box-sizing:border-box; background:var(--surf); border:1.5px solid var(--bdr); font-size:12px; color:var(--tx); outline:none; font-family:var(--font); margin-bottom:8px; }
-.sf-note:focus { border-color:var(--a); }
-.sf-ei { display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:8px; transition:background .12s; }
-.sf-ei:hover { background:var(--card2); }
-.sf-edot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+/* ── Undo 배너 ── */
+.sf-undo-banner{background:#eff6ff;border-bottom:2px solid #3b82f6;padding:8px 14px;flex-shrink:0;display:flex;align-items:center;gap:8px}
+.sf-undo-txt{font-size:12px;font-weight:700;color:#1e40af;flex:1}
+.sf-undo-btn{padding:6px 14px;border-radius:8px;background:#3b82f6;color:#fff;border:none;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font)}
 
-/* 급여 */
-.sf-pay-bar { padding:10px 14px; background:var(--surf); border-bottom:1px solid var(--bdr); flex-shrink:0; display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; }
-.sf-pay-item { flex:1; min-width:90px; }
-.sf-pay-lbl { display:block; font-size:9px; font-weight:800; color:var(--tx3); letter-spacing:1px; text-transform:uppercase; margin-bottom:4px; }
-.sf-pay-item select { width:100%; padding:8px 10px; border-radius:10px; background:var(--surf2); border:1.5px solid var(--bdr); font-size:13px; color:var(--tx); outline:none; font-family:var(--font); -webkit-appearance:none; }
-.sf-calc-btn { padding:9px 18px; border-radius:10px; background:var(--a); color:#fff; font-weight:700; font-size:13px; border:none; cursor:pointer; font-family:var(--font); box-shadow:0 3px 10px var(--a40); white-space:nowrap; align-self:flex-end; transition:all .15s; }
-.sf-calc-btn:active { transform:scale(.95); }
-.sf-pcard { background:var(--card); border:1px solid var(--bdr); border-radius:var(--r); box-shadow:var(--sh); overflow:hidden; animation:cardIn .22s ease both; margin-bottom:14px; }
-.sf-phead { padding:14px 16px; background:linear-gradient(135deg,rgba(5,150,105,.08),var(--a10)); border-bottom:1px solid var(--bdr); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
-.sf-pname   { font-size:15px; font-weight:900; color:var(--tx); }
-.sf-pperiod { font-size:11px; color:var(--tx3); margin-top:3px; }
-.sf-ptot-w  { text-align:right; }
-.sf-ptot-l  { font-size:10px; color:var(--tx3); }
-.sf-ptot    { font-size:26px; font-weight:900; color:var(--a); }
-.sf-prows { padding:12px 16px; }
-.sf-pr { display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--bdr); font-size:13px; }
-.sf-pr:last-child { border-bottom:none; }
-.sf-pr-l { color:var(--tx2); display:flex; align-items:center; gap:8px; }
-.sf-pr-v { font-weight:700; color:var(--tx); }
-.sf-pr.sf-tot { padding-top:12px; border-top:2px solid var(--a); margin-top:4px; }
-.sf-pr.sf-tot .sf-pr-l { font-weight:800; font-size:14px; color:var(--tx); }
-.sf-pr.sf-tot .sf-pr-v { font-size:17px; color:var(--a); }
-.sf-drow { display:flex; gap:8px; padding:5px 8px; border-radius:8px; font-size:12px; transition:background .12s; }
-.sf-drow:hover { background:var(--card2); }
-.sf-ddt { font-weight:700; color:var(--tx3); min-width:58px; flex-shrink:0; }
-.sf-dtgs { display:flex; gap:4px; flex-wrap:wrap; }
-.sf-acts2 { display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--bdr); flex-wrap:wrap; }
-.sf-ab { flex:1; min-width:72px; padding:11px 6px; border-radius:10px; font-size:12px; font-weight:700; cursor:pointer; font-family:var(--font); transition:all .15s; border:none; }
-.sf-ab.copy  { background:var(--a10); color:var(--a); border:1px solid var(--a40); }
-.sf-ab.pdf   { background:rgba(5,150,105,.1); color:var(--green); border:1px solid rgba(5,150,105,.3); }
-.sf-ab.share { background:var(--a); color:#fff; box-shadow:0 3px 10px var(--a40); }
-.sf-ab.cal   { background:var(--card2); color:var(--tx2); border:1px solid var(--bdr2); }
-.sf-ab:active { transform:scale(.96); }
+/* ── 근무 입력 ── */
+.sf-wtype-row{display:flex;gap:8px;margin-bottom:10px}
+.sf-wbtn{flex:1;padding:10px 6px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);border:2px solid var(--bdr2);background:var(--card);color:var(--tx2);transition:all .15s}
+.sf-wbtn.on.class{border-color:var(--a);background:var(--a10);color:var(--a)}
+.sf-wbtn.on.general{border-color:var(--green);background:rgba(5,150,105,.1);color:var(--green)}
+.sf-wbtn:active{transform:scale(.94)}
+.sf-time-row{display:flex;gap:8px;align-items:flex-end;margin-bottom:8px}
+.sf-time-row label{flex:1}
+.sf-tl{font-size:10px;color:var(--tx3);font-weight:700;margin-bottom:3px;display:block}
+.sf-ti{width:100%;padding:9px 10px;border-radius:9px;box-sizing:border-box;background:var(--surf);border:1.5px solid var(--bdr);font-size:13px;color:var(--tx);outline:none;font-family:var(--font)}
+.sf-ti:focus{border-color:var(--a)}
+.sf-hrs{padding:8px 12px;border-radius:9px;border:1.5px solid var(--a40);font-size:14px;font-weight:800;color:var(--a);background:var(--a10);white-space:nowrap;flex-shrink:0;align-self:flex-end;display:flex;align-items:center;min-width:62px;justify-content:center}
+.sf-note{width:100%;padding:8px 10px;border-radius:9px;box-sizing:border-box;background:var(--surf);border:1.5px solid var(--bdr);font-size:12px;color:var(--tx);outline:none;font-family:var(--font);margin-bottom:8px}
+.sf-note:focus{border-color:var(--a)}
+.sf-ei{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;transition:background .12s;cursor:pointer}
+.sf-ei:hover{background:var(--card2)}
+.sf-ei.sel{background:#fee2e2}
+.sf-edot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.sf-echk{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--bdr2);flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--card)}
+.sf-echk.chk{background:#ef4444;border-color:#ef4444;color:#fff;font-size:10px}
 
-/* 학원명 */
-.sf-acad-row { display:flex; gap:6px; align-items:center; padding:6px 14px; background:var(--surf2); border-bottom:1px solid var(--bdr); font-size:11px; color:var(--tx3); flex-shrink:0; }
-.sf-acad-inp { flex:1; padding:5px 10px; border-radius:8px; background:var(--surf); border:1.5px solid var(--bdr); font-size:12px; color:var(--tx); outline:none; font-family:var(--font); }
-.sf-acad-inp:focus { border-color:var(--a); }
-.sf-acad-save { padding:5px 10px; border-radius:8px; background:var(--a10); border:1px solid var(--a40); color:var(--a); font-size:11px; font-weight:700; cursor:pointer; font-family:var(--font); }
+/* ── 일괄 등록 ── */
+.sf-batch-section{background:var(--surf2);border-radius:10px;padding:12px;margin-bottom:10px}
+.sf-batch-title{font-size:11px;font-weight:800;color:var(--a);letter-spacing:.5px;margin-bottom:10px}
+.sf-dow-checks{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.sf-dow-chk{display:flex;align-items:center;gap:3px;padding:4px 8px;border-radius:7px;border:1.5px solid var(--bdr);background:var(--card);cursor:pointer;font-size:11px;font-weight:700;color:var(--tx2);transition:all .14s}
+.sf-dow-chk.on{border-color:var(--a);background:var(--a10);color:var(--a)}
+.sf-dow-chk.sun.on{border-color:#dc2626;background:rgba(220,38,38,.08);color:#dc2626}
+.sf-dow-chk.sat.on{border-color:#4f46e5;background:rgba(79,70,229,.08);color:#4f46e5}
+.sf-rate-info{font-size:10px;color:var(--tx3);padding:4px 6px;background:var(--card);border-radius:6px;border:1px solid var(--bdr)}
 
-/* PDF */
-#sf-pf { display:none; }
-@media print {
-  body > *:not(#sf-pf) { display:none !important; }
-  #sf-pf { display:block !important; position:fixed; inset:0; z-index:9999; background:#fff; padding:28px 36px; overflow:auto; font-family:'Noto Sans KR',sans-serif; font-size:12px; color:#111; }
-  #sf-pf * { box-sizing:border-box; }
+/* ── 급여 ── */
+.sf-pay-bar{padding:10px 14px;background:var(--surf);border-bottom:1px solid var(--bdr);flex-shrink:0;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+.sf-pay-item{flex:1;min-width:90px}
+.sf-pay-lbl{display:block;font-size:9px;font-weight:800;color:var(--tx3);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px}
+.sf-pay-item select{width:100%;padding:8px 10px;border-radius:10px;background:var(--surf2);border:1.5px solid var(--bdr);font-size:13px;color:var(--tx);outline:none;font-family:var(--font);-webkit-appearance:none}
+.sf-calc-btn{padding:9px 18px;border-radius:10px;background:var(--a);color:#fff;font-weight:700;font-size:13px;border:none;cursor:pointer;font-family:var(--font);box-shadow:0 3px 10px var(--a40);white-space:nowrap;align-self:flex-end;transition:all .15s}
+.sf-calc-btn:active{transform:scale(.95)}
+.sf-pcard{background:var(--card);border:1px solid var(--bdr);border-radius:var(--r);box-shadow:var(--sh);overflow:hidden;animation:cardIn .22s ease both;margin-bottom:14px}
+.sf-phead{padding:14px 16px;background:linear-gradient(135deg,rgba(5,150,105,.08),var(--a10));border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.sf-pname{font-size:15px;font-weight:900;color:var(--tx)}
+.sf-pperiod{font-size:11px;color:var(--tx3);margin-top:3px}
+.sf-ptot-w{text-align:right}
+.sf-ptot-l{font-size:10px;color:var(--tx3)}
+.sf-ptot{font-size:26px;font-weight:900;color:var(--a)}
+.sf-prows{padding:12px 16px}
+.sf-pr{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bdr);font-size:13px}
+.sf-pr:last-child{border-bottom:none}
+.sf-pr-l{color:var(--tx2);display:flex;align-items:center;gap:8px}
+.sf-pr-v{font-weight:700;color:var(--tx)}
+.sf-pr.sf-tot{padding-top:12px;border-top:2px solid var(--a);margin-top:4px}
+.sf-pr.sf-tot .sf-pr-l{font-weight:800;font-size:14px;color:var(--tx)}
+.sf-pr.sf-tot .sf-pr-v{font-size:17px;color:var(--a)}
+.sf-pr.holiday-row .sf-pr-v{color:#059669}
+.sf-pr.night-row .sf-pr-v{color:#7c3aed}
+.sf-drow{display:flex;gap:8px;padding:5px 8px;border-radius:8px;font-size:12px;transition:background .12s}
+.sf-drow:hover{background:var(--card2)}
+.sf-ddt{font-weight:700;color:var(--tx3);min-width:58px;flex-shrink:0}
+.sf-dtgs{display:flex;gap:4px;flex-wrap:wrap}
+.sf-acts2{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--bdr);flex-wrap:wrap}
+.sf-ab{flex:1;min-width:72px;padding:11px 6px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);transition:all .15s;border:none}
+.sf-ab.copy{background:var(--a10);color:var(--a);border:1px solid var(--a40)}
+.sf-ab.pdf{background:rgba(5,150,105,.1);color:var(--green);border:1px solid rgba(5,150,105,.3)}
+.sf-ab.share{background:var(--a);color:#fff;box-shadow:0 3px 10px var(--a40)}
+.sf-ab.cal{background:var(--card2);color:var(--tx2);border:1px solid var(--bdr2)}
+.sf-ab.xls{background:rgba(5,150,105,.9);color:#fff;box-shadow:0 3px 10px rgba(5,150,105,.3)}
+.sf-ab:active{transform:scale(.96)}
+
+/* ── 학원명 ── */
+.sf-acad-row{display:flex;gap:6px;align-items:center;padding:6px 14px;background:var(--surf2);border-bottom:1px solid var(--bdr);font-size:11px;color:var(--tx3);flex-shrink:0}
+.sf-acad-inp{flex:1;padding:5px 10px;border-radius:8px;background:var(--surf);border:1.5px solid var(--bdr);font-size:12px;color:var(--tx);outline:none;font-family:var(--font)}
+.sf-acad-inp:focus{border-color:var(--a)}
+.sf-acad-save{padding:5px 10px;border-radius:8px;background:var(--a10);border:1px solid var(--a40);color:var(--a);font-size:11px;font-weight:700;cursor:pointer;font-family:var(--font)}
+
+/* ── 전원 급여 테이블 ── */
+.sf-all-tbl{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}
+.sf-all-tbl th{background:var(--surf2);padding:7px 8px;text-align:left;font-size:10px;font-weight:800;color:var(--tx3);border:1px solid var(--bdr);white-space:nowrap}
+.sf-all-tbl td{padding:7px 8px;border:1px solid var(--bdr);color:var(--tx);vertical-align:top}
+.sf-all-tbl tr:nth-child(even) td{background:var(--surf2)}
+.sf-all-tot td{font-weight:800;background:var(--a10)!important;color:var(--a)}
+.sf-holiday-tag{display:inline-flex;align-items:center;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;background:rgba(5,150,105,.12);color:var(--green);border:1px solid rgba(5,150,105,.3)}
+.sf-night-tag{display:inline-flex;align-items:center;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;background:rgba(124,58,237,.1);color:#7c3aed;border:1px solid rgba(124,58,237,.25)}
+
+/* ── PDF 인쇄 ── */
+#sf-pf{display:none}
+@media print{
+  body>*:not(#sf-pf){display:none!important}
+  #sf-pf{display:block!important;position:fixed;inset:0;z-index:9999;background:#fff;padding:28px 36px;overflow:auto;font-family:'Noto Sans KR',sans-serif;font-size:12px;color:#111}
+  #sf-pf *{box-sizing:border-box}
 }
-.sfp-hdr  { display:flex; align-items:center; gap:16px; margin-bottom:12px; }
-.sfp-logo { width:48px; height:48px; object-fit:contain; }
-.sfp-org-name { font-size:18px; font-weight:900; color:#111; }
-.sfp-title    { font-size:13px; color:#555; margin-top:2px; }
-.sfp-date     { font-size:11px; color:#888; text-align:right; flex:1; }
-.sfp-div  { border:none; border-top:2px solid #111; margin:10px 0; }
-.sfp-tbl  { width:100%; border-collapse:collapse; margin-bottom:12px; }
-.sfp-tbl th { background:#eef2ff; padding:7px 10px; text-align:left; font-size:11px; font-weight:800; color:#333; border:1px solid #c7d2fe; }
-.sfp-tbl td { padding:7px 10px; font-size:12px; color:#111; border:1px solid #ddd; }
-.sfp-tbl tr:nth-child(even) td { background:#fafafa; }
-.sfp-tot td  { background:#eef2ff !important; font-weight:900; font-size:13px; }
-.sfp-sign { margin-top:24px; display:flex; justify-content:flex-end; gap:40px; }
-.sfp-sign-box { text-align:center; font-size:12px; }
-.sfp-sign-line { border-bottom:1px solid #aaa; width:80px; margin:28px auto 4px; }
-.sfp-footer { font-size:10px; color:#aaa; text-align:center; margin-top:16px; }
+.sfp-hdr{display:flex;align-items:center;gap:16px;margin-bottom:12px}
+.sfp-logo{width:48px;height:48px;object-fit:contain}
+.sfp-org-name{font-size:18px;font-weight:900;color:#111}
+.sfp-title{font-size:13px;color:#555;margin-top:2px}
+.sfp-date{font-size:11px;color:#888;text-align:right;flex:1}
+.sfp-div{border:none;border-top:2px solid #111;margin:10px 0}
+.sfp-tbl{width:100%;border-collapse:collapse;margin-bottom:12px}
+.sfp-tbl th{background:#eef2ff;padding:7px 10px;text-align:left;font-size:11px;font-weight:800;color:#333;border:1px solid #c7d2fe}
+.sfp-tbl td{padding:7px 10px;font-size:12px;color:#111;border:1px solid #ddd}
+.sfp-tbl tr:nth-child(even) td{background:#fafafa}
+.sfp-tot td{background:#eef2ff!important;font-weight:900;font-size:13px}
+.sfp-sign{margin-top:24px;display:flex;justify-content:flex-end;gap:40px}
+.sfp-sign-box{text-align:center;font-size:12px}
+.sfp-sign-line{border-bottom:1px solid #aaa;width:80px;margin:28px auto 4px}
+.sfp-footer{font-size:10px;color:#aaa;text-align:center;margin-top:16px}
 `;
     document.head.appendChild(s);
   }
@@ -230,14 +294,16 @@ const StaffApp = (() => {
       if (!pg?.classList.contains('on')) return;
       if (_st.subTab === 'list') _renderList();
     });
-    console.log('[StaffApp] ✅ v2');
+    console.log('[StaffApp v3] ✅');
   }
 
   /* ══ RENDER ══ */
   function render() {
     const pg = document.getElementById('page-staff'); if (!pg) return;
     pg.innerHTML = _shell();
-    if (_st.subTab === 'list') _renderList(); else _renderSalary();
+    if (_st.subTab === 'list')   _renderList();
+    else if (_st.subTab === 'salary') _renderSalary();
+    else if (_st.subTab === 'all')    _renderAll();
   }
 
   function _shell() {
@@ -253,8 +319,9 @@ const StaffApp = (() => {
         <div class="phr"><button class="ibtn" onclick="StaffApp.openAdd()" title="직원 추가">➕</button></div>
       </div>
       <div class="sf-stabs">
-        <button class="sf-stab ${_st.subTab==='list'?'on':''}"   onclick="StaffApp.switchTab('list')">👥 직원 목록</button>
-        <button class="sf-stab ${_st.subTab==='salary'?'on':''}" onclick="StaffApp.switchTab('salary')">💰 급여 계산</button>
+        <button class="sf-stab ${_st.subTab==='list'?'on':''}"   onclick="StaffApp.switchTab('list')">👥 직원</button>
+        <button class="sf-stab ${_st.subTab==='salary'?'on':''}" onclick="StaffApp.switchTab('salary')">💰 급여</button>
+        <button class="sf-stab ${_st.subTab==='all'?'on':''}"    onclick="StaffApp.switchTab('all')">📊 전원정산</button>
       </div>
       <div id="sf-cnt" style="flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;"></div>
       <div id="sf-edit-ov" class="ov hidden" onclick="if(event.target.id==='sf-edit-ov')StaffApp.closeEdit()">
@@ -266,6 +333,12 @@ const StaffApp = (() => {
       <div id="sf-work-ov" class="ov hidden" onclick="if(event.target.id==='sf-work-ov')StaffApp.closeWork()">
         <div class="sh" id="sf-work-sh" onclick="event.stopPropagation()" style="max-height:88vh;display:flex;flex-direction:column;"></div>
       </div>
+      <div id="sf-batch-ov" class="ov hidden" onclick="if(event.target.id==='sf-batch-ov')StaffApp.closeBatch()">
+        <div class="sh" id="sf-batch-sh" onclick="event.stopPropagation()" style="max-height:92vh;display:flex;flex-direction:column;"></div>
+      </div>
+      <div id="sf-overlap-ov" class="ov hidden" onclick="event.stopPropagation()">
+        <div class="sh" id="sf-overlap-sh" onclick="event.stopPropagation()" style="max-height:80vh;display:flex;flex-direction:column;"></div>
+      </div>
       <div id="sf-templ-add-ov" class="ov hidden" onclick="if(event.target.id==='sf-templ-add-ov')StaffApp.closeTemplAdd()">
         <div class="sh" id="sf-templ-add-sh" onclick="event.stopPropagation()" style="max-height:80vh;display:flex;flex-direction:column;"></div>
       </div>`;
@@ -273,94 +346,120 @@ const StaffApp = (() => {
 
   function switchTab(tab) {
     _st.subTab = tab;
-    document.querySelectorAll('.sf-stab').forEach((b,i)=>b.classList.toggle('on',(i===0&&tab==='list')||(i===1&&tab==='salary')));
-    if (tab==='list') _renderList(); else _renderSalary();
+    document.querySelectorAll('.sf-stab').forEach((b, i) => {
+      b.classList.toggle('on', ['list','salary','all'][i] === tab);
+    });
+    if (tab === 'list')   _renderList();
+    else if (tab === 'salary') _renderSalary();
+    else if (tab === 'all')    _renderAll();
   }
 
   /* ══════════════════════════════════════════
    * 직원 목록
    * ══════════════════════════════════════════ */
   function _renderList() {
-    const cnt=document.getElementById('sf-cnt'); if(!cnt) return;
-    const all=StaffDB.getAll(), active=all.filter(s=>s.status!=='퇴직'), left=all.filter(s=>s.status==='퇴직');
-    const sub=document.getElementById('sf-sub');
-    if(sub) sub.textContent=`재직 ${active.length}명 · 퇴직 ${left.length}명`;
-    cnt.innerHTML=`
+    const cnt = document.getElementById('sf-cnt'); if (!cnt) return;
+    const all    = StaffDB.getAll();
+    const active = all.filter(s => s.status !== '퇴직');
+    const left   = all.filter(s => s.status === '퇴직');
+    const sub    = document.getElementById('sf-sub');
+    if (sub) {
+      const ft = active.filter(s => s.employType !== 'parttime').length;
+      const pt = active.filter(s => s.employType === 'parttime').length;
+      sub.textContent = `재직 ${active.length}명 (정직원 ${ft} · 알바 ${pt})`;
+    }
+    cnt.innerHTML = `
       <div class="sf-scroll">
-        ${all.length===0?`<div class="sf-empty"><div style="font-size:48px;margin-bottom:10px">👩‍💼</div>등록된 직원이 없습니다<br><small>우상단 + 버튼으로 추가</small></div>`:`
-          ${active.length?`<span class="sf-lbl">재직 (${active.length}명)</span>${active.map(_cardHTML).join('')}`:''}
-          ${left.length?`<span class="sf-lbl" style="margin-top:12px">퇴직 (${left.length}명)</span>${left.map(_cardHTML).join('')}`:''}`}
+        ${all.length === 0
+          ? `<div class="sf-empty"><div style="font-size:48px;margin-bottom:10px">👩‍💼</div>등록된 직원이 없습니다<br><small>우상단 + 버튼으로 추가</small></div>`
+          : `${active.length ? `<span class="sf-lbl">재직 (${active.length}명)</span>${active.map(_cardHTML).join('')}` : ''}
+             ${left.length   ? `<span class="sf-lbl" style="margin-top:12px">퇴직 (${left.length}명)</span>${left.map(_cardHTML).join('')}` : ''}`}
       </div>`;
   }
 
   function _cardHTML(s) {
-    const off=s.status==='퇴직';
-    const ctrt=s.contractType==='contract';
+    const off  = s.status === '퇴직';
+    const isPt = s.employType === 'parttime';
+    const mw   = StaffDB.getMinWage();
+    const rateLabel = isPt
+      ? `시급 ${_fmt(s.baseHourlyRate || mw)}원`
+      : (s.monthlySalary > 0 ? `월 ${_fmt(s.monthlySalary)}원` : `수업 ${_fmt(s.classRate)}원/h`);
+
     return `<div class="sf-card">
-      <div class="sf-av ${off?'off':''}">${_e((s.name||'?')[0])}</div>
+      <div class="sf-av ${off ? 'off' : (isPt ? 'pt' : '')}">${_e((s.name || '?')[0])}</div>
       <div class="sf-ci">
         <div class="sf-cn">${_e(s.name)}</div>
         <div class="sf-cm">
-          <span class="sf-bdg ${off?'off':'ok'}">${s.status}</span>
-          ${ctrt?`<span class="sf-bdg ctrt">계약직</span>`:''}
-          ${s.phone?`<span class="sf-bdg">📞 ${_e(s.phone)}</span>`:''}
-          ${s.hireDate?`<span class="sf-bdg">📅 ${s.hireDate.slice(0,7)}</span>`:''}
-          <span class="sf-bdg">수업 ${_fmt(s.classRate)}원/h</span>
-          <span class="sf-bdg">일반 ${_fmt(s.generalRate)}원/h</span>
+          <span class="sf-bdg ${off ? 'off' : 'ok'}">${s.status}</span>
+          <span class="sf-bdg ${isPt ? 'pt' : 'ft'}">${isPt ? '⏱ 알바' : '🏢 정직원'}</span>
+          ${s.contractType === 'contract' ? `<span class="sf-bdg ctrt">계약직</span>` : ''}
+          ${s.phone ? `<span class="sf-bdg">📞 ${_e(s.phone)}</span>` : ''}
+          ${s.hireDate ? `<span class="sf-bdg">📅 ${s.hireDate.slice(0, 7)}</span>` : ''}
+          <span class="sf-bdg">${rateLabel}</span>
         </div>
       </div>
       <div class="sf-cacts">
-        <button class="ibtn" title="근무 달력" onclick="StaffApp.openCal('${s.id}')">📅</button>
-        <button class="ibtn" title="편집"      onclick="StaffApp.openEdit('${s.id}')">✏️</button>
-        <button class="ibtn red" title="삭제"  onclick="StaffApp.deleteStaff('${s.id}')">🗑</button>
+        <button class="ibtn" title="근무 달력"  onclick="StaffApp.openCal('${s.id}')">📅</button>
+        <button class="ibtn" title="편집"       onclick="StaffApp.openEdit('${s.id}')">✏️</button>
+        <button class="ibtn red" title="삭제"   onclick="StaffApp.deleteStaff('${s.id}')">🗑</button>
       </div>
     </div>`;
   }
 
   /* ══════════════════════════════════════════
-   * 직원 편집 모달 (주간 템플릿 포함)
+   * 직원 편집 모달
    * ══════════════════════════════════════════ */
-  /* 편집 시 임시 템플릿 상태 */
   let _editTempl = {};
 
-  function openAdd() { _st.editId=null; _editTempl={}; _drawEdit(null); document.getElementById('sf-edit-ov')?.classList.remove('hidden'); history.pushState({pg:'staff',modal:'edit'},''); }
-  function openEdit(id) { _st.editId=id; _editTempl=JSON.parse(JSON.stringify(StaffDB.getTemplate(id)||{})); _drawEdit(StaffDB.getById(id)); document.getElementById('sf-edit-ov')?.classList.remove('hidden'); history.pushState({pg:'staff',modal:'edit'},''); }
+  function openAdd()    { _st.editId = null; _editTempl = {}; _drawEdit(null); document.getElementById('sf-edit-ov')?.classList.remove('hidden'); history.pushState({ pg:'staff', modal:'edit' }, ''); }
+  function openEdit(id) { _st.editId = id;   _editTempl = JSON.parse(JSON.stringify(StaffDB.getTemplate(id)||{})); _drawEdit(StaffDB.getById(id)); document.getElementById('sf-edit-ov')?.classList.remove('hidden'); history.pushState({ pg:'staff', modal:'edit' }, ''); }
 
   function _drawEdit(s) {
-    const sh=document.getElementById('sf-edit-sh'); if(!sh) return;
-    const mw=StaffDB.getMinWage();
-    sh.innerHTML=`
+    const sh = document.getElementById('sf-edit-sh'); if (!sh) return;
+    const mw = StaffDB.getMinWage();
+    const isPt = s?.employType === 'parttime';
+    sh.innerHTML = `
       <div class="sh-handle"></div>
-      <div class="sh-title">${s?'✏️ 직원 수정':'➕ 직원 추가'}</div>
+      <div class="sh-title">${s ? '✏️ 직원 수정' : '➕ 직원 추가'}</div>
       <div style="flex:1;overflow-y:auto;padding:4px 0 8px">
         <div class="sf-fg">
           <div class="sf-full"><span class="sf-fl">이름 *</span><input class="sf-fi" id="sf-f-name" placeholder="직원 이름" value="${_e(s?.name||'')}"></div>
           <div><span class="sf-fl">연락처</span><input class="sf-fi" id="sf-f-phone" type="tel" placeholder="010-0000-0000" value="${_e(s?.phone||'')}"></div>
           <div><span class="sf-fl">생년월일</span><input class="sf-fi" id="sf-f-birth" type="date" value="${_e(s?.birthDate||'')}"></div>
-          <div><span class="sf-fl">입사일 *</span><input class="sf-fi" id="sf-f-hire" type="date" value="${_e(s?.hireDate||'')}"></div>
+          <div><span class="sf-fl">입사일</span><input class="sf-fi" id="sf-f-hire" type="date" value="${_e(s?.hireDate||'')}"></div>
           <div><span class="sf-fl">퇴사일</span><input class="sf-fi" id="sf-f-leave" type="date" value="${_e(s?.leaveDate||'')}"></div>
-          <div><span class="sf-fl">고용 유형</span>
+          <div><span class="sf-fl">계약 유형</span>
             <select class="sf-fi" id="sf-f-ctype">
               <option value="regular"  ${(s?.contractType||'regular')==='regular' ?'selected':''}>정규직</option>
               <option value="contract" ${(s?.contractType||'regular')==='contract'?'selected':''}>계약직</option>
             </select>
           </div>
-          <div class="sf-full"><span class="sf-fl">주소</span><input class="sf-fi" id="sf-f-addr" placeholder="주소" value="${_e(s?.address||'')}"></div>
-          <div><span class="sf-fl">수업 시급 (원/h)</span>
-            <div class="sf-rate-row"><input class="sf-fi" id="sf-f-cr" type="number" min="0" step="100" placeholder="${mw}" value="${s?.classRate||''}"><span class="sf-mw">최저<br>${_fmt(mw)}원</span></div>
+          <div class="sf-full"><span class="sf-fl">⭐ 고용 형태 *</span>
+            <select class="sf-fi" id="sf-f-etype" onchange="StaffApp._toggleEtype()">
+              <option value="fulltime" ${!isPt?'selected':''}>🏢 정직원 (고정 월급)</option>
+              <option value="parttime" ${isPt?'selected':''}>⏱ 알바 (시급제)</option>
+            </select>
           </div>
-          <div><span class="sf-fl">일반 시급 (원/h)</span>
-            <div class="sf-rate-row"><input class="sf-fi" id="sf-f-gr" type="number" min="0" step="100" placeholder="${mw}" value="${s?.generalRate||''}"><span class="sf-mw">최저<br>${_fmt(mw)}원</span></div>
+          <!-- 정직원 필드 -->
+          <div class="sf-full" id="sf-f-monthly-wrap" ${isPt?'style="display:none"':''}>
+            <span class="sf-fl">월 고정급 (0=시급합산)</span>
+            <input class="sf-fi" id="sf-f-monthly" type="number" min="0" placeholder="0" value="${s?.monthlySalary||0}">
           </div>
+          <!-- 알바 필드 -->
+          <div class="sf-full" id="sf-f-hourly-wrap" ${!isPt?'style="display:none"':''}>
+            <span class="sf-fl">기본 시급 (0=최저시급 ${_fmt(mw)}원)</span>
+            <input class="sf-fi" id="sf-f-hourly" type="number" min="0" placeholder="${mw}" value="${s?.baseHourlyRate||0}">
+          </div>
+          <div><span class="sf-fl">수업 시급</span><input class="sf-fi" id="sf-f-cr" type="number" min="0" value="${s?.classRate||mw}"></div>
+          <div><span class="sf-fl">일반 시급</span><input class="sf-fi" id="sf-f-gr" type="number" min="0" value="${s?.generalRate||mw}"></div>
           <div><span class="sf-fl">급여 지급일</span><input class="sf-fi" id="sf-f-pd" type="number" min="0" max="31" placeholder="0=말일" value="${s?.payDay??0}"></div>
+          <div class="sf-full"><span class="sf-fl">주소</span><input class="sf-fi" id="sf-f-addr" placeholder="주소" value="${_e(s?.address||'')}"></div>
           <div class="sf-full"><span class="sf-fl">메모</span><input class="sf-fi" id="sf-f-memo" placeholder="메모" value="${_e(s?.memo||'')}"></div>
         </div>
-
-        <!-- 주간 템플릿 -->
         <div class="sf-templ-sec">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
             <span class="sf-lbl" style="padding:0">📋 주간 근무 템플릿</span>
-            <span style="font-size:10px;color:var(--tx3)">요일별 고정 근무를 등록하세요</span>
+            <span style="font-size:10px;color:var(--tx3)">요일별 고정 근무</span>
           </div>
           <div id="sf-templ-rows">${_templRowsHTML()}</div>
         </div>
@@ -371,16 +470,22 @@ const StaffApp = (() => {
       </div>`;
   }
 
+  function _toggleEtype() {
+    const t = document.getElementById('sf-f-etype')?.value;
+    document.getElementById('sf-f-monthly-wrap')?.style.setProperty('display', t === 'parttime' ? 'none' : '');
+    document.getElementById('sf-f-hourly-wrap')?.style.setProperty('display', t === 'parttime' ? '' : 'none');
+  }
+
   function _templRowsHTML() {
     return WORK_DAYS.map(dow => {
       const entries = _editTempl[dow] || [];
       return `<div class="sf-templ-dow-row">
         <span class="sf-dow-lbl">${dow}</span>
         <div class="sf-templ-entries">
-          ${entries.map((e,i)=>`
+          ${entries.map((e, i) => `
             <div class="sf-templ-entry">
-              <span class="sf-templ-entry-type ${e.type}">${e.type==='class'?'수업':'일반'}</span>
-              <span class="sf-templ-entry-info">${_e(e.start)}~${_e(e.end)} (${_fmtHrs(e.hours)}h) ${e.note?'· '+_e(e.note):''}</span>
+              <span class="sf-templ-entry-type ${e.type}">${e.type === 'class' ? '수업' : '일반'}</span>
+              <span class="sf-templ-entry-info">${_e(e.start)}~${_e(e.end)} (${_fmtHrs(e.hours)}h)${e.note ? ' · ' + _e(e.note) : ''}</span>
               <button class="sf-templ-del" onclick="StaffApp._templDel('${dow}',${i})">✕</button>
             </div>`).join('')}
         </div>
@@ -390,20 +495,20 @@ const StaffApp = (() => {
   }
 
   function _templDel(dow, idx) {
-    (_editTempl[dow] = _editTempl[dow]||[]).splice(idx,1);
-    const el=document.getElementById('sf-templ-rows');
-    if(el) el.innerHTML=_templRowsHTML();
+    (_editTempl[dow] = _editTempl[dow] || []).splice(idx, 1);
+    const el = document.getElementById('sf-templ-rows');
+    if (el) el.innerHTML = _templRowsHTML();
   }
 
   /* 템플릿 항목 추가 모달 */
   let _templAddDow = '';
   function openTemplAdd(dow) {
     _templAddDow = dow;
-    const sh = document.getElementById('sf-templ-add-sh');
+    const sh  = document.getElementById('sf-templ-add-sh');
     const sid = _st.editId;
     const s   = sid ? StaffDB.getById(sid) : null;
     const mw  = StaffDB.getMinWage();
-    sh.innerHTML=`
+    sh.innerHTML = `
       <div class="sh-handle"></div>
       <div class="sh-title">📋 ${dow}요일 근무 추가</div>
       <div style="padding:8px 0">
@@ -423,290 +528,619 @@ const StaffApp = (() => {
         <button class="btn-ok" onclick="StaffApp._addTemplEntry()">추가</button>
       </div>`;
     document.getElementById('sf-templ-add-ov')?.classList.remove('hidden');
-    _taType='class'; _taHrs();
+    _taType = 'class'; _taHrs();
   }
 
-  let _taType='class';
-  function _taWtype(t){
-    _taType=t;
-    document.getElementById('sf-ta-wb-class')?.classList.toggle('on',t==='class');
-    document.getElementById('sf-ta-wb-class')?.classList.toggle('class',t==='class');
-    document.getElementById('sf-ta-wb-general')?.classList.toggle('on',t==='general');
-    document.getElementById('sf-ta-wb-general')?.classList.toggle('general',t==='general');
+  let _taType = 'class';
+  function _taWtype(t) {
+    _taType = t;
+    document.getElementById('sf-ta-wb-class')?.classList.toggle('on', t === 'class');
+    document.getElementById('sf-ta-wb-class')?.classList.toggle('class', t === 'class');
+    document.getElementById('sf-ta-wb-general')?.classList.toggle('on', t === 'general');
+    document.getElementById('sf-ta-wb-general')?.classList.toggle('general', t === 'general');
   }
-  function _taHrs(){
-    const s=document.getElementById('sf-ta-s')?.value,e=document.getElementById('sf-ta-e')?.value,b=document.getElementById('sf-ta-hrs');
-    if(!s||!e||!b)return;
-    const [sh,sm]=s.split(':').map(Number),[eh,em]=e.split(':').map(Number);
-    let d=(eh*60+em)-(sh*60+sm);if(d<0)d+=1440;
-    b.textContent=d>0?_fmtHrs(d/60)+'h':'-';
+  function _taHrs() {
+    const sv = document.getElementById('sf-ta-s')?.value, ev = document.getElementById('sf-ta-e')?.value, b = document.getElementById('sf-ta-hrs');
+    if (!sv || !ev || !b) return;
+    const [sh, sm] = sv.split(':').map(Number), [eh, em] = ev.split(':').map(Number);
+    let d = (eh * 60 + em) - (sh * 60 + sm); if (d < 0) d += 1440;
+    b.textContent = d > 0 ? _fmtHrs(d / 60) + 'h' : '-';
   }
-  function _addTemplEntry(){
-    const start=document.getElementById('sf-ta-s')?.value,end=document.getElementById('sf-ta-e')?.value,note=document.getElementById('sf-ta-note')?.value?.trim()||'';
-    if(!start||!end){_toast('⚠️ 시간을 입력해주세요');return;}
-    const [sh,sm]=start.split(':').map(Number),[eh,em]=end.split(':').map(Number);
-    let d=(eh*60+em)-(sh*60+sm);if(d<=0){_toast('⚠️ 종료가 시작보다 늦어야 합니다');return;}
-    const hours=Math.round(d/60*100)/100;
-    if(!_editTempl[_templAddDow])_editTempl[_templAddDow]=[];
-    _editTempl[_templAddDow].push({type:_taType,start,end,hours,note});
+  function _addTemplEntry() {
+    const start = document.getElementById('sf-ta-s')?.value, end = document.getElementById('sf-ta-e')?.value, note = document.getElementById('sf-ta-note')?.value?.trim() || '';
+    if (!start || !end) { _toast('⚠️ 시간을 입력해주세요'); return; }
+    const [sh, sm] = start.split(':').map(Number), [eh, em] = end.split(':').map(Number);
+    let d = (eh * 60 + em) - (sh * 60 + sm); if (d <= 0) { _toast('⚠️ 종료가 시작보다 늦어야 합니다'); return; }
+    const hours = Math.round(d / 60 * 100) / 100;
+    if (!_editTempl[_templAddDow]) _editTempl[_templAddDow] = [];
+    _editTempl[_templAddDow].push({ type: _taType, start, end, hours, note });
     closeTemplAdd();
-    const el=document.getElementById('sf-templ-rows');if(el)el.innerHTML=_templRowsHTML();
-    _toast(`✅ ${_templAddDow}요일 항목 추가`,'success');
+    const el = document.getElementById('sf-templ-rows'); if (el) el.innerHTML = _templRowsHTML();
+    _toast(`✅ ${_templAddDow}요일 항목 추가`, 'success');
   }
-  function closeTemplAdd(){document.getElementById('sf-templ-add-ov')?.classList.add('hidden');}
+  function closeTemplAdd() { document.getElementById('sf-templ-add-ov')?.classList.add('hidden'); }
 
   async function saveStaff() {
-    const name=document.getElementById('sf-f-name')?.value?.trim();
-    if(!name){_toast('⚠️ 이름은 필수입니다');return;}
-    const mw=StaffDB.getMinWage();
-    const data={
-      name,phone:document.getElementById('sf-f-phone')?.value?.trim()||'',
-      birthDate:document.getElementById('sf-f-birth')?.value||'',
-      hireDate:document.getElementById('sf-f-hire')?.value||'',
-      leaveDate:document.getElementById('sf-f-leave')?.value||'',
-      contractType:document.getElementById('sf-f-ctype')?.value||'regular',
-      address:document.getElementById('sf-f-addr')?.value?.trim()||'',
-      classRate:Number(document.getElementById('sf-f-cr')?.value)||mw,
-      generalRate:Number(document.getElementById('sf-f-gr')?.value)||mw,
-      payDay:Number(document.getElementById('sf-f-pd')?.value)||0,
-      memo:document.getElementById('sf-f-memo')?.value?.trim()||'',
+    const name = document.getElementById('sf-f-name')?.value?.trim();
+    if (!name) { _toast('⚠️ 이름은 필수입니다'); return; }
+    const mw   = StaffDB.getMinWage();
+    const data = {
+      name,
+      phone:          document.getElementById('sf-f-phone')?.value?.trim() || '',
+      birthDate:      document.getElementById('sf-f-birth')?.value || '',
+      hireDate:       document.getElementById('sf-f-hire')?.value  || '',
+      leaveDate:      document.getElementById('sf-f-leave')?.value || '',
+      contractType:   document.getElementById('sf-f-ctype')?.value || 'regular',
+      employType:     document.getElementById('sf-f-etype')?.value || 'fulltime',
+      address:        document.getElementById('sf-f-addr')?.value?.trim() || '',
+      monthlySalary:  Number(document.getElementById('sf-f-monthly')?.value) || 0,
+      baseHourlyRate: Number(document.getElementById('sf-f-hourly')?.value)  || 0,
+      classRate:      Number(document.getElementById('sf-f-cr')?.value)      || mw,
+      generalRate:    Number(document.getElementById('sf-f-gr')?.value)      || mw,
+      payDay:         Number(document.getElementById('sf-f-pd')?.value)      || 0,
+      memo:           document.getElementById('sf-f-memo')?.value?.trim()    || '',
     };
-    let id=_st.editId;
-    if(id) await StaffDB.updateStaff(id,data);
-    else   { const s=await StaffDB.addStaff(data); id=s.id; }
-    /* 템플릿 저장 */
+    let id = _st.editId;
+    if (id) await StaffDB.updateStaff(id, data);
+    else    { const s = await StaffDB.addStaff(data); id = s.id; }
     await StaffDB.saveTemplate(id, _editTempl);
-    closeEdit();_renderList();_toast(`✅ ${name} ${_st.editId?'수정':'등록'}`,'success');
+    closeEdit(); _renderList(); _toast(`✅ ${name} ${_st.editId ? '수정' : '등록'}`, 'success');
   }
 
-  function closeEdit(){document.getElementById('sf-edit-ov')?.classList.add('hidden');_st.editId=null;}
+  function closeEdit() { document.getElementById('sf-edit-ov')?.classList.add('hidden'); _st.editId = null; }
 
-  async function deleteStaff(id){
-    const s=StaffDB.getById(id);if(!s)return;
-    if(!confirm(`${s.name} 직원을 삭제할까요?`))return;
-    await StaffDB.deleteStaff(id);_renderList();_toast(`🗑 ${s.name} 삭제`);
+  async function deleteStaff(id) {
+    const s = StaffDB.getById(id); if (!s) return;
+    if (!confirm(`${s.name} 직원을 삭제할까요?`)) return;
+    await StaffDB.deleteStaff(id); _renderList(); _toast(`🗑 ${s.name} 삭제`);
   }
 
   /* ══════════════════════════════════════════
-   * 달력 (근무 입력 + 롱프레스 복사 + 템플릿 적용)
+   * 달력 (근무 + 주휴수당 프로그레스 + 배치 등록)
    * ══════════════════════════════════════════ */
-  function openCal(sid){_st.calStaffId=sid;_st.copyMode=false;_st.copyTargets=new Set();_drawCal();document.getElementById('sf-cal-ov')?.classList.remove('hidden');history.pushState({pg:'staff',modal:'cal'},'');}
-  function closeCal(){document.getElementById('sf-cal-ov')?.classList.add('hidden');_st.calStaffId=null;_cancelCopy();}
+  function openCal(sid) {
+    _st.calStaffId  = sid;
+    _st.copyMode    = false;
+    _st.selectMode  = false;
+    _st.selected    = new Set();
+    _st.copyTargets = new Set();
+    _drawCal();
+    document.getElementById('sf-cal-ov')?.classList.remove('hidden');
+    history.pushState({ pg: 'staff', modal: 'cal' }, '');
+  }
+  function closeCal() {
+    document.getElementById('sf-cal-ov')?.classList.add('hidden');
+    _st.calStaffId = null; _cancelCopy(); _cancelSelect();
+  }
 
-  function _drawCal(){
-    const sh=document.getElementById('sf-cal-sh');if(!sh||!_st.calStaffId)return;
-    const s=StaffDB.getById(_st.calStaffId);
-    const y=_st.calYear,m=_st.calMonth;
-    const ym=`${y}-${String(m).padStart(2,'0')}`;
-    const work=StaffDB.getWorkMonth(_st.calStaffId,ym);
-    const today=new Date().toISOString().slice(0,10);
-    const hasTempl=Object.values(StaffDB.getTemplate(_st.calStaffId)||{}).some(v=>v?.length>0);
+  function _drawCal() {
+    const sh = document.getElementById('sf-cal-sh'); if (!sh || !_st.calStaffId) return;
+    const s  = StaffDB.getById(_st.calStaffId);
+    const y  = _st.calYear, m = _st.calMonth;
+    const ym = `${y}-${String(m).padStart(2, '0')}`;
+    const work    = StaffDB.getWorkMonth(_st.calStaffId, ym);
+    const today   = new Date().toISOString().slice(0, 10);
+    const isPt    = s?.employType === 'parttime';
+    const hasTempl = Object.values(StaffDB.getTemplate(_st.calStaffId) || {}).some(v => v?.length > 0);
 
-    let mc=0,mg=0;
-    Object.values(work).forEach(es=>es.forEach(e=>{if(e.type==='class')mc+=Number(e.hours||0);else mg+=Number(e.hours||0);}));
-    const mPay=Math.round(mc*(s?.classRate||0)+mg*(s?.generalRate||0));
-    const firstDow=new Date(y,m-1,1).getDay(),lastDay=new Date(y,m,0).getDate();
+    let mc = 0, mg = 0;
+    Object.values(work).forEach(es => es.forEach(e => {
+      if (e.type === 'class') mc += Number(e.hours || 0); else mg += Number(e.hours || 0);
+    }));
+    const mPay = isPt
+      ? (StaffDB.calcPay(_st.calStaffId, y, m)?.totalPay || 0)
+      : Math.round(mc * (s?.classRate || 0) + mg * (s?.generalRate || 0));
 
-    sh.innerHTML=`
+    const firstDow = new Date(y, m - 1, 1).getDay();
+    const lastDay  = new Date(y, m, 0).getDate();
+
+    /* 주휴수당 주차 통계 */
+    const weeklyStats = isPt ? StaffDB.getWeeklyStats(_st.calStaffId, y, m) : [];
+    const weeklyBarHTML = isPt ? _weeklyBarHTML(weeklyStats, s) : '';
+
+    sh.innerHTML = `
       <div class="sh-handle"></div>
-      ${_st.copyMode?`<div class="sf-copy-banner">
-        <span class="sf-copy-banner-txt">📋 ${_st.copyFromDate} 복사 중 · ${_st.copyTargets.size}개 날짜 선택됨<br><small>대상 날짜를 탭하여 선택하세요</small></span>
+      ${_st.copyMode ? `<div class="sf-copy-banner">
+        <span class="sf-copy-banner-txt">📋 ${_st.copyFromDate} 복사 중 · ${_st.copyTargets.size}개 선택<br><small>대상 날짜를 탭하세요</small></span>
         <button class="sf-copy-confirm" onclick="StaffApp._confirmCopy()">복사 (${_st.copyTargets.size})</button>
         <button class="sf-copy-cancel"  onclick="StaffApp._cancelCopy()">취소</button>
-      </div>`:''}
+      </div>` : ''}
+      ${_st.selectMode ? `<div class="sf-sel-banner">
+        <span class="sf-sel-banner-txt">☑️ ${_st.selected.size}개 선택됨 — 삭제할 항목을 탭하세요</span>
+        <button class="sf-sel-del"    onclick="StaffApp._deleteSelected()">삭제 (${_st.selected.size})</button>
+        <button class="sf-sel-cancel" onclick="StaffApp._cancelSelect()">취소</button>
+      </div>` : ''}
+      ${_st.lastBatchId && !_st.copyMode && !_st.selectMode ? `<div class="sf-undo-banner">
+        <span class="sf-undo-txt">✅ ${_st.lastBatchCount}일 일괄 등록 완료</span>
+        <button class="sf-undo-btn" onclick="StaffApp._undoBatch()">↩️ 전체 취소</button>
+      </div>` : ''}
+      ${weeklyBarHTML}
       <div class="sf-cal-nav">
         <button class="sf-cal-arr" onclick="StaffApp._calPrev()">‹</button>
         <div style="text-align:center">
           <div class="sf-cal-ym">${y}년 ${m}월</div>
-          <div class="sf-cal-info">${_e(s?.name||'')} · 수업 ${_fmtHrs(mc)}h / 일반 ${_fmtHrs(mg)}h · <strong style="color:var(--a)">${_fmt(mPay)}원</strong></div>
+          <div class="sf-cal-info">${_e(s?.name || '')} ${isPt ? '⏱알바' : '🏢정직원'} · <strong style="color:var(--a)">${_fmt(mPay)}원</strong></div>
         </div>
         <button class="sf-cal-arr" onclick="StaffApp._calNext()">›</button>
       </div>
       <div class="sf-cal-grid" style="flex-shrink:0;border-bottom:1px solid var(--bdr)">
-        ${DOW.map(d=>`<div class="sf-wd">${d}</div>`).join('')}
+        ${DOW.map(d => `<div class="sf-wd">${d}</div>`).join('')}
       </div>
       <div style="flex:1;overflow-y:auto">
         <div class="sf-cal-grid">
-          ${Array.from({length:firstDow},()=>`<div class="sf-cell sf-ec"></div>`).join('')}
-          ${Array.from({length:lastDay},(_,i)=>{
-            const day=i+1;
-            const date=`${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-            const dow=new Date(y,m-1,day).getDay();
-            const es=work[date]||[];
-            let ch=0,gh=0;es.forEach(e=>{if(e.type==='class')ch+=Number(e.hours||0);else gh+=Number(e.hours||0);});
-            const tot=ch+gh;
-            const isCopyFrom=_st.copyFromDate===date;
-            const isCopyTarget=_st.copyTargets.has(date);
+          ${Array.from({ length: firstDow }, () => `<div class="sf-cell sf-ec"></div>`).join('')}
+          ${Array.from({ length: lastDay }, (_, i) => {
+            const day  = i + 1;
+            const date = `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+            const dow  = new Date(y, m - 1, day).getDay();
+            const es   = work[date] || [];
+            let ch = 0, gh = 0;
+            es.forEach(e => { if (e.type === 'class') ch += Number(e.hours||0); else gh += Number(e.hours||0); });
+            const tot = ch + gh;
+            const isCopyFrom   = _st.copyFromDate === date;
+            const isCopyTarget = _st.copyTargets.has(date);
             return `<div class="sf-cell ${date===today?'sf-today':''} ${dow===0?'sf-sun':dow===6?'sf-sat':''} ${isCopyTarget?'copy-target':''}"
                          data-date="${date}"
-                         onclick="StaffApp._calCellClick('${date}',${dow===0||dow===6})"
+                         onclick="StaffApp._calCellClick('${date}')"
                          id="sf-cell-${date}">
               <div class="sf-dn">${day}</div>
-              ${es.map(e=>`<div class="sf-ce ${e.type} ${isCopyFrom?'copying':''}"
-                  data-eid="${e.id}" data-date="${date}">${e.type==='class'?'수':'일'} ${_fmtHrs(Number(e.hours||0))}h</div>`).join('')}
-              ${tot?`<div class="sf-cell-total">${_fmtHrs(tot)}h</div>`:''}
+              ${es.map(e => {
+                const key = `${date}::${e.id}`;
+                const isSel = _st.selected.has(key);
+                return `<div class="sf-ce ${e.type} ${isCopyFrom?'copying':''} ${isSel?'selected-entry':''}"
+                    data-eid="${e.id}" data-date="${date}"
+                    onclick="event.stopPropagation();StaffApp._entryClick('${date}','${e.id}',event)"
+                    >${e.type==='class'?'수':'일'} ${_fmtHrs(Number(e.hours||0))}h${e.nightHours>0?' 🌙':''}</div>`;
+              }).join('')}
+              ${tot ? `<div class="sf-cell-total">${_fmtHrs(tot)}h</div>` : ''}
             </div>`;
           }).join('')}
         </div>
       </div>
       <div style="padding:10px 14px;border-top:1px solid var(--bdr);flex-shrink:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        ${hasTempl?`<button class="btn-ok" style="flex:1" onclick="StaffApp._applyTemplModal()">📋 템플릿 적용</button>`:''}
-        <button class="btn-ok" style="flex:1" onclick="StaffApp._calToSalary()">💰 급여 계산</button>
+        <button class="btn-ok" style="flex:2" onclick="StaffApp.openBatch()">📦 일괄 등록</button>
+        ${hasTempl ? `<button class="btn-ok" style="flex:1;background:var(--surf2);color:var(--a);border:1px solid var(--a40)" onclick="StaffApp._applyTemplModal()">📋 템플릿</button>` : ''}
+        <button class="btn-ok" style="flex:1;background:var(--surf2);color:var(--tx2);border:1px solid var(--bdr2)" onclick="StaffApp._toggleSelectMode()">☑️ 선택삭제</button>
+        <button class="btn-ok" style="flex:1" onclick="StaffApp._calToSalary()">💰 급여</button>
         <button class="btn-x"  onclick="StaffApp.closeCal()">닫기</button>
       </div>`;
 
-    /* 롱프레스 이벤트 바인딩 */
     _bindLongPress();
   }
 
-  /* ── 롱프레스 ── */
-  let _lpTimer=null;
-  function _bindLongPress(){
-    document.querySelectorAll('.sf-ce').forEach(el=>{
-      el.addEventListener('pointerdown',e=>{
-        _lpTimer=setTimeout(()=>{
-          const date=el.dataset.date;
-          if(!date)return;
-          _st.copyMode=true;
-          _st.copyFromDate=date;
-          _st.copyTargets=new Set();
+  /* ── 주휴수당 프로그레스 바 ── */
+  function _weeklyBarHTML(weeklyStats, s) {
+    if (!weeklyStats.length) return '';
+    const curHours  = StaffDB.getCurrentWeekHours(_st.calStaffId);
+    const pct       = Math.min(100, Math.round(curHours / 15 * 100));
+    const qualified = curHours >= 15;
+    const mw        = StaffDB.getMinWage();
+    const rate      = s?.baseHourlyRate > 0 ? s.baseHourlyRate : mw;
+    const estPay    = qualified ? Math.round((curHours / 5) * rate) : 0;
+
+    const weekChips = weeklyStats.map(w =>
+      `<span class="sf-hw-chip ${w.qualified ? 'q' : 'nq'}">${w.qualified ? '✅' : '⬜'} ${w.weekLabel.split(' ')[0]} ${_fmtHrs(w.hours)}h${w.qualified ? ` +${_fmt(w.holidayPay)}원` : ''}</span>`
+    ).join('');
+
+    return `<div class="sf-holiday-bar">
+      <div class="sf-hb-title">⏱ 주휴수당 달성 현황 (알바 전용)</div>
+      <div class="sf-hb-row">
+        <div class="sf-hb-track"><div class="sf-hb-fill ${qualified ? 'done' : ''}" style="width:${pct}%"></div></div>
+        <span class="sf-hb-label">${_fmtHrs(curHours)} / 15h</span>
+        <span class="sf-hb-badge">${qualified ? '✅' : '🟡'}</span>
+      </div>
+      ${qualified ? `<div style="font-size:10px;color:var(--green);font-weight:700;margin-top:3px">이번 주 예상 주휴수당: +${_fmt(estPay)}원</div>` : ''}
+      <div class="sf-holiday-weeks" style="margin-top:6px">${weekChips}</div>
+    </div>`;
+  }
+
+  /* ── 롱프레스 (복사 진입) ── */
+  let _lpTimer = null;
+  function _bindLongPress() {
+    document.querySelectorAll('.sf-ce').forEach(el => {
+      el.addEventListener('pointerdown', () => {
+        if (_st.selectMode) return;
+        _lpTimer = setTimeout(() => {
+          const date = el.dataset.date; if (!date) return;
+          _st.copyMode     = true;
+          _st.copyFromDate = date;
+          _st.copyTargets  = new Set();
           _drawCal();
-          _toast(`📋 ${date} 복사 모드 — 대상 날짜를 탭하세요`,'success');
-        },700);
+          _toast(`📋 ${date} 복사 모드 — 대상 날짜를 탭하세요`, 'success');
+        }, 700);
       });
-      el.addEventListener('pointerup',  ()=>clearTimeout(_lpTimer));
-      el.addEventListener('pointerleave',()=>clearTimeout(_lpTimer));
+      el.addEventListener('pointerup',    () => clearTimeout(_lpTimer));
+      el.addEventListener('pointerleave', () => clearTimeout(_lpTimer));
     });
   }
 
-  function _calCellClick(date, isWeekend){
-    if(_st.copyMode){
-      if(date===_st.copyFromDate)return;
-      if(_st.copyTargets.has(date)) _st.copyTargets.delete(date);
-      else                           _st.copyTargets.add(date);
-      _drawCal();
-      return;
+  function _calCellClick(date) {
+    if (_st.copyMode) {
+      if (date === _st.copyFromDate) return;
+      if (_st.copyTargets.has(date)) _st.copyTargets.delete(date); else _st.copyTargets.add(date);
+      _drawCal(); return;
+    }
+    if (_st.selectMode) return;
+    StaffApp.openWork(date);
+  }
+
+  function _entryClick(date, eid, evt) {
+    if (_st.selectMode) {
+      const key = `${date}::${eid}`;
+      if (_st.selected.has(key)) _st.selected.delete(key); else _st.selected.add(key);
+      _drawCal(); return;
     }
     StaffApp.openWork(date);
   }
 
-  async function _confirmCopy(){
-    if(!_st.copyTargets.size){_toast('⚠️ 대상 날짜를 선택해주세요');return;}
-    const n=await StaffDB.copyEntries(_st.calStaffId,_st.copyFromDate,[..._st.copyTargets]);
-    _cancelCopy();
-    _toast(`✅ ${n}일에 복사 완료`,'success');
+  /* ── 선택 삭제 ── */
+  function _toggleSelectMode() {
+    _st.selectMode = !_st.selectMode;
+    _st.selected   = new Set();
+    _drawCal();
+    if (_st.selectMode) _toast('☑️ 삭제할 항목을 탭하세요', 'success');
   }
-  function _cancelCopy(){_st.copyMode=false;_st.copyFromDate='';_st.copyTargets=new Set();_drawCal();}
 
-  /* ── 템플릿 적용 모달 ── */
-  function _applyTemplModal(){
-    if(!confirm(`${_st.calYear}년 ${_st.calMonth}월에 주간 템플릿을 적용하시겠습니까?\n기존 데이터가 있는 날짜는 덮어씁니다.`))return;
-    StaffDB.applyTemplate(_st.calStaffId,_st.calYear,_st.calMonth,'replace').then(n=>{
-      _drawCal();_toast(`✅ ${n}일에 템플릿 적용`,'success');
+  async function _deleteSelected() {
+    if (!_st.selected.size) { _toast('⚠️ 선택된 항목이 없습니다'); return; }
+    const list = [..._st.selected].map(key => {
+      const [date, entryId] = key.split('::');
+      return { date, entryId };
+    });
+    const n = await StaffDB.deleteWorkEntries(_st.calStaffId, list);
+    _st.selectMode  = false;
+    _st.selected    = new Set();
+    _st.lastBatchId = null;
+    _drawCal();
+    _toast(`🗑 ${n}개 항목 삭제`, 'success');
+  }
+
+  function _cancelSelect() { _st.selectMode = false; _st.selected = new Set(); _drawCal(); }
+
+  /* ── 복사 ── */
+  async function _confirmCopy() {
+    if (!_st.copyTargets.size) { _toast('⚠️ 대상 날짜를 선택해주세요'); return; }
+    const n = await StaffDB.copyEntries(_st.calStaffId, _st.copyFromDate, [..._st.copyTargets]);
+    _cancelCopy();
+    _toast(`✅ ${n}일에 복사 완료`, 'success');
+  }
+  function _cancelCopy() { _st.copyMode = false; _st.copyFromDate = ''; _st.copyTargets = new Set(); _drawCal(); }
+
+  /* ── 템플릿 ── */
+  function _applyTemplModal() {
+    if (!confirm(`${_st.calYear}년 ${_st.calMonth}월에 주간 템플릿을 적용하시겠습니까?\n기존 데이터가 있는 날짜는 덮어씁니다.`)) return;
+    StaffDB.applyTemplate(_st.calStaffId, _st.calYear, _st.calMonth, 'replace').then(n => {
+      _drawCal(); _toast(`✅ ${n}일에 템플릿 적용`, 'success');
     });
   }
 
-  function _calPrev(){if(--_st.calMonth<1){_st.calMonth=12;_st.calYear--;}  _drawCal();}
-  function _calNext(){if(++_st.calMonth>12){_st.calMonth=1;_st.calYear++;} _drawCal();}
-  function _calToSalary(){_st.payStaffId=_st.calStaffId;_st.payYear=_st.calYear;_st.payMonth=_st.calMonth;closeCal();switchTab('salary');setTimeout(_calcAndRender,120);}
+  /* ── Undo ── */
+  async function _undoBatch() {
+    if (!_st.lastBatchId) return;
+    const n = await StaffDB.batchDelete(_st.calStaffId, _st.lastBatchId);
+    _st.lastBatchId   = null;
+    _st.lastBatchCount = 0;
+    _drawCal();
+    _toast(`↩️ ${n}개 항목 취소`, 'success');
+  }
+
+  function _calPrev() { if (--_st.calMonth < 1)  { _st.calMonth = 12; _st.calYear--; } _drawCal(); }
+  function _calNext() { if (++_st.calMonth > 12) { _st.calMonth = 1;  _st.calYear++; } _drawCal(); }
+  function _calToSalary() { _st.payStaffId = _st.calStaffId; _st.payYear = _st.calYear; _st.payMonth = _st.calMonth; closeCal(); switchTab('salary'); setTimeout(_calcAndRender, 120); }
 
   /* ══════════════════════════════════════════
-   * 근무 입력 모달 (소수점 시간)
+   * 일괄 등록 모달
    * ══════════════════════════════════════════ */
-  function openWork(date){_st.workDate=date;_st.workType='class';_drawWork();document.getElementById('sf-work-ov')?.classList.remove('hidden');history.pushState({pg:'staff',modal:'work'},'');}
-  function closeWork(){document.getElementById('sf-work-ov')?.classList.add('hidden');_drawCal();}
+  let _batchDow = new Set([1, 2, 3, 4, 5]); // 기본: 월~금
 
-  function _drawWork(){
-    const sh=document.getElementById('sf-work-sh');if(!sh)return;
-    const s=StaffDB.getById(_st.calStaffId);
-    const es=StaffDB.getWorkDay(_st.calStaffId,_st.workDate);
-    const dow=DOW[new Date(_st.workDate).getDay()];
-    sh.innerHTML=`
+  function openBatch() {
+    const s   = StaffDB.getById(_st.calStaffId);
+    const mw  = StaffDB.getMinWage();
+    const isPt = s?.employType === 'parttime';
+    const rate  = isPt ? (s.baseHourlyRate > 0 ? s.baseHourlyRate : mw) : (s?.classRate || mw);
+    const y = _st.calYear, m = _st.calMonth;
+    const firstDay = `${y}-${String(m).padStart(2,'0')}-01`;
+    const lastDay  = `${y}-${String(m).padStart(2,'0')}-${new Date(y,m,0).getDate()}`;
+
+    const DOW_LABELS = ['일','월','화','수','목','금','토'];
+    const DOW_CLASSES = ['sun','','','','','','sat'];
+
+    const sh = document.getElementById('sf-batch-sh');
+    sh.innerHTML = `
+      <div class="sh-handle"></div>
+      <div class="sh-title">📦 일괄 근무 등록</div>
+      <div style="flex:1;overflow-y:auto;padding:4px 0 8px">
+        <div class="sf-batch-section">
+          <div class="sf-batch-title">📅 등록 기간</div>
+          <div class="sf-fg">
+            <div><span class="sf-fl">시작일</span><input class="sf-fi" id="sfb-sd" type="date" value="${firstDay}"></div>
+            <div><span class="sf-fl">종료일</span><input class="sf-fi" id="sfb-ed" type="date" value="${lastDay}"></div>
+          </div>
+          <span class="sf-fl" style="margin-top:6px">적용 요일</span>
+          <div class="sf-dow-checks" id="sfb-dow-row">
+            ${DOW_LABELS.map((d, i) => `
+              <div class="sf-dow-chk ${_batchDow.has(i)?'on':''} ${DOW_CLASSES[i]}" onclick="StaffApp._toggleDow(${i},this)" data-dow="${i}">
+                ${d}
+              </div>`).join('')}
+          </div>
+        </div>
+        <div class="sf-batch-section">
+          <div class="sf-batch-title">⏰ 근무 시간</div>
+          <div class="sf-time-row" style="margin-bottom:10px">
+            <label><span class="sf-tl">출근</span><input class="sf-ti" id="sfb-st" type="time" value="09:00" oninput="StaffApp._batchHrs()"></label>
+            <label><span class="sf-tl">퇴근</span><input class="sf-ti" id="sfb-et" type="time" value="18:00" oninput="StaffApp._batchHrs()"></label>
+            <div class="sf-hrs" id="sfb-hrs">—</div>
+          </div>
+          <div class="sf-fg">
+            <div><span class="sf-fl">무급 휴게(분)</span><input class="sf-fi" id="sfb-brk" type="number" min="0" max="480" placeholder="60" value="60" oninput="StaffApp._batchHrs()"></div>
+            <div><span class="sf-fl">근무 유형</span>
+              <select class="sf-fi" id="sfb-type">
+                <option value="general">🏢 일반 업무</option>
+                <option value="class">📚 수업</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        ${isPt ? `<div class="sf-batch-section">
+          <div class="sf-batch-title">💰 시급 설정 (알바)</div>
+          <div class="sf-fg">
+            <div><span class="sf-fl">기본 시급 (0=자동 ${_fmt(rate)}원)</span><input class="sf-fi" id="sfb-rate" type="number" min="0" placeholder="${rate}" value="0" oninput="StaffApp._batchRateHint()"></div>
+            <div><span class="sf-fl">야간 시급 (0=자동 1.5배)</span><input class="sf-fi" id="sfb-nrate" type="number" min="0" placeholder="${Math.round(rate*1.5)}" value="0"></div>
+          </div>
+          <div class="sf-rate-info" id="sfb-rate-info">기본 시급 자동 적용: ${_fmt(rate)}원 / 야간 자동: ${_fmt(Math.round(rate*1.5))}원</div>
+        </div>` : ''}
+        <div class="sf-batch-section">
+          <div class="sf-batch-title">📝 메모</div>
+          <input class="sf-fi" id="sfb-note" placeholder="메모 (선택사항)">
+        </div>
+      </div>
+      <div class="sh-acts">
+        <button class="btn-x"  onclick="StaffApp.closeBatch()">취소</button>
+        <button class="btn-ok" onclick="StaffApp._doBatch()">✅ 등록</button>
+      </div>`;
+    document.getElementById('sf-batch-ov')?.classList.remove('hidden');
+    _batchHrs();
+  }
+
+  function closeBatch() { document.getElementById('sf-batch-ov')?.classList.add('hidden'); }
+
+  function _toggleDow(i, el) {
+    if (_batchDow.has(i)) _batchDow.delete(i); else _batchDow.add(i);
+    el.classList.toggle('on', _batchDow.has(i));
+  }
+
+  function _batchHrs() {
+    const sv = document.getElementById('sfb-st')?.value, ev = document.getElementById('sfb-et')?.value;
+    const brk = Number(document.getElementById('sfb-brk')?.value) || 0;
+    const b   = document.getElementById('sfb-hrs');
+    if (!sv || !ev || !b) return;
+    const [sh, sm] = sv.split(':').map(Number), [eh, em] = ev.split(':').map(Number);
+    let d = (eh * 60 + em) - (sh * 60 + sm); if (d < 0) d += 1440;
+    const net = Math.max(0, d - brk);
+    const { baseHours, nightHours } = StaffDB.splitNightHours(sv, ev, brk);
+    b.innerHTML = `<span style="font-size:11px;text-align:center">${_fmtHrs(net/60)}h<br><small style="font-size:9px;opacity:.7">${nightHours>0?`야간 ${_fmtHrs(nightHours)}h`:'야간없음'}</small></span>`;
+  }
+
+  function _batchRateHint() {
+    const v   = Number(document.getElementById('sfb-rate')?.value) || 0;
+    const s   = StaffDB.getById(_st.calStaffId);
+    const mw  = StaffDB.getMinWage();
+    const base = v > 0 ? v : (s?.baseHourlyRate > 0 ? s.baseHourlyRate : mw);
+    const el  = document.getElementById('sfb-rate-info');
+    if (el) el.textContent = `적용 시급: ${_fmt(base)}원 / 야간 자동: ${_fmt(Math.round(base * 1.5))}원`;
+  }
+
+  async function _doBatch() {
+    const sd   = document.getElementById('sfb-sd')?.value;
+    const ed   = document.getElementById('sfb-ed')?.value;
+    const st   = document.getElementById('sfb-st')?.value;
+    const et   = document.getElementById('sfb-et')?.value;
+    const brk  = Number(document.getElementById('sfb-brk')?.value) || 0;
+    const type = document.getElementById('sfb-type')?.value || 'general';
+    const rate  = Number(document.getElementById('sfb-rate')?.value)  || 0;
+    const nrate = Number(document.getElementById('sfb-nrate')?.value) || 0;
+    const note  = document.getElementById('sfb-note')?.value?.trim() || '';
+
+    if (!sd || !ed || !st || !et) { _toast('⚠️ 필수 항목을 입력해주세요'); return; }
+    if (sd > ed) { _toast('⚠️ 시작일이 종료일보다 늦습니다'); return; }
+    if (!_batchDow.size) { _toast('⚠️ 요일을 하나 이상 선택해주세요'); return; }
+
+    // 날짜 목록 생성
+    const dates = [];
+    let cur = new Date(sd), end = new Date(ed);
+    while (cur <= end) {
+      if (_batchDow.has(cur.getDay())) dates.push(cur.toISOString().slice(0, 10));
+      cur.setDate(cur.getDate() + 1);
+    }
+    if (!dates.length) { _toast('⚠️ 선택한 요일에 해당하는 날짜가 없습니다'); return; }
+
+    // 중첩 감지
+    const overlaps = StaffDB.checkOverlap(_st.calStaffId, dates);
+    if (overlaps.length > 0) {
+      _showOverlapModal(overlaps, dates, { startDate:sd, endDate:ed, startTime:st, endTime:et, breakMin:brk, type, hourlyRate:rate, nightRate:nrate, note });
+      return;
+    }
+
+    await _executeBatch({ startDate:sd, endDate:ed, startTime:st, endTime:et, breakMin:brk, type, hourlyRate:rate, nightRate:nrate, note, overwrite:true });
+  }
+
+  function _showOverlapModal(overlaps, dates, opts) {
+    const sh = document.getElementById('sf-overlap-sh');
+    sh.innerHTML = `
+      <div class="sh-handle"></div>
+      <div class="sh-title" style="color:#ef4444">⚠️ 기존 데이터 중첩 감지</div>
+      <div style="padding:12px;flex:1;overflow-y:auto">
+        <p style="font-size:13px;color:var(--tx2);margin:0 0 10px">
+          선택한 기간 중 <strong style="color:#ef4444">${overlaps.length}일</strong>에 이미 근무 기록이 있습니다.<br>
+          최신 데이터로 덮어쓰시겠습니까?
+        </p>
+        <div style="background:var(--surf2);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--tx3);max-height:140px;overflow-y:auto">
+          ${overlaps.map(d => `<div style="padding:2px 0">📅 ${d}</div>`).join('')}
+        </div>
+        <p style="font-size:11px;color:var(--tx3);margin:8px 0 0">취소하면 기존 데이터를 보존합니다.</p>
+      </div>
+      <div class="sh-acts">
+        <button class="btn-x"  onclick="StaffApp._closeOverlap()">취소 (보존)</button>
+        <button class="btn-ok" style="background:#ef4444;box-shadow:0 3px 10px rgba(239,68,68,.3)" onclick="StaffApp._confirmOverlap()">덮어쓰기</button>
+      </div>`;
+    document.getElementById('sf-overlap-ov')?.classList.remove('hidden');
+    _pendingBatchOpts = opts;
+  }
+
+  let _pendingBatchOpts = null;
+  function _closeOverlap() {
+    document.getElementById('sf-overlap-ov')?.classList.add('hidden');
+    _pendingBatchOpts = null;
+  }
+  async function _confirmOverlap() {
+    _closeOverlap();
+    if (_pendingBatchOpts) await _executeBatch({ ..._pendingBatchOpts, overwrite: true });
+  }
+
+  async function _executeBatch(opts) {
+    try {
+      const { batchId, count } = await StaffDB.batchInsert(_st.calStaffId, { ...opts, daysOfWeek: [..._batchDow] });
+      _st.lastBatchId    = batchId;
+      _st.lastBatchCount = count;
+      closeBatch();
+      _drawCal();
+      _toast(`✅ ${count}일 일괄 등록 완료`, 'success');
+    } catch(e) {
+      _toast(`⚠️ 오류: ${e.message}`);
+    }
+  }
+
+  /* ══════════════════════════════════════════
+   * 근무 입력 모달 (단일 날짜)
+   * ══════════════════════════════════════════ */
+  function openWork(date) { _st.workDate = date; _st.workType = 'class'; _drawWork(); document.getElementById('sf-work-ov')?.classList.remove('hidden'); history.pushState({ pg:'staff', modal:'work' }, ''); }
+  function closeWork()    { document.getElementById('sf-work-ov')?.classList.add('hidden'); _drawCal(); }
+
+  function _drawWork() {
+    const sh = document.getElementById('sf-work-sh'); if (!sh) return;
+    const s  = StaffDB.getById(_st.calStaffId);
+    const es = StaffDB.getWorkDay(_st.calStaffId, _st.workDate);
+    const dow = DOW[new Date(_st.workDate).getDay()];
+    const isPt = s?.employType === 'parttime';
+    const mw   = StaffDB.getMinWage();
+    const rate  = isPt ? (s.baseHourlyRate > 0 ? s.baseHourlyRate : mw) : (s?.classRate || mw);
+
+    sh.innerHTML = `
       <div class="sh-handle"></div>
       <div class="sh-title">📅 근무 입력</div>
-      <div class="sh-sub">${_st.workDate} (${dow}) · ${_e(s?.name||'')}</div>
+      <div class="sh-sub">${_st.workDate} (${dow}) · ${_e(s?.name || '')}</div>
       <div style="flex:1;overflow-y:auto;padding:4px 0 8px">
         <div class="sf-wtype-row">
-          <button class="sf-wbtn ${_st.workType==='class'?'on class':''}" id="sf-wb-class" onclick="StaffApp._wtype('class')">
-            📚 수업<br><small>${_fmt(s?.classRate||0)}원/h</small>
-          </button>
-          <button class="sf-wbtn ${_st.workType==='general'?'on general':''}" id="sf-wb-gen" onclick="StaffApp._wtype('general')">
-            🏢 일반<br><small>${_fmt(s?.generalRate||0)}원/h</small>
-          </button>
+          <button class="sf-wbtn ${_st.workType==='class'?'on class':''}"   id="sf-wb-class" onclick="StaffApp._wtype('class')">📚 수업<br><small>${_fmt(s?.classRate||mw)}원/h</small></button>
+          <button class="sf-wbtn ${_st.workType==='general'?'on general':''}" id="sf-wb-gen" onclick="StaffApp._wtype('general')">🏢 일반<br><small>${_fmt(s?.generalRate||mw)}원/h</small></button>
         </div>
         <div class="sf-time-row">
           <label><span class="sf-tl">시작 시간</span><input class="sf-ti" id="sf-ws" type="time" value="09:00" oninput="StaffApp._chrs()"></label>
-          <label><span class="sf-tl">종료 시간</span><input class="sf-ti" id="sf-we" type="time" value="11:00" oninput="StaffApp._chrs()"></label>
-          <div class="sf-hrs" id="sf-whrs">2h</div>
+          <label><span class="sf-tl">종료 시간</span><input class="sf-ti" id="sf-we" type="time" value="18:00" oninput="StaffApp._chrs()"></label>
+          <div class="sf-hrs" id="sf-whrs">—</div>
         </div>
+        ${isPt ? `<div class="sf-fg" style="margin-bottom:8px">
+          <div><span class="sf-fl">무급 휴게(분)</span><input class="sf-fi" id="sf-wbrk" type="number" min="0" placeholder="0" value="0" oninput="StaffApp._chrs()"></div>
+          <div><span class="sf-fl">시급 (0=자동 ${_fmt(rate)}원)</span><input class="sf-fi" id="sf-wrate" type="number" min="0" placeholder="${rate}" value="0"></div>
+        </div>` : ''}
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-          <span style="font-size:11px;color:var(--tx3);flex-shrink:0">직접 입력 (h):</span>
-          <input type="number" min="0" max="24" step="0.25" placeholder="ex) 1.5" id="sf-wh-manual"
+          <span style="font-size:11px;color:var(--tx3);flex-shrink:0">직접 입력(h):</span>
+          <input type="number" min="0" max="24" step="0.25" placeholder="예) 1.5" id="sf-wh-manual"
                  style="flex:1;padding:7px 10px;border-radius:9px;border:1.5px solid var(--bdr);background:var(--surf);font-size:13px;color:var(--tx);font-family:var(--font);outline:none"
                  oninput="StaffApp._manualHrs(this.value)">
         </div>
         <input class="sf-note" id="sf-wn" placeholder="메모 (선택사항)">
         <button class="btn-ok" style="width:100%;margin-bottom:14px" onclick="StaffApp._addEntry()">✅ 근무 등록</button>
         <div style="font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:1px;margin-bottom:6px">이 날 근무 (${es.length}건)</div>
-        <div id="sf-el">${es.length?es.map(_entryHTML).join(''):'<div style="font-size:12px;color:var(--tx3);padding:6px 4px">등록된 근무 없음</div>'}</div>
+        <div id="sf-el">${es.length ? es.map(e => _entryHTML(e, s)).join('') : '<div style="font-size:12px;color:var(--tx3);padding:6px 4px">등록된 근무 없음</div>'}</div>
       </div>
       <div class="sh-acts"><button class="btn-x" onclick="StaffApp.closeWork()">닫기</button></div>`;
     _chrs();
   }
 
-  function _entryHTML(e){
-    const c=e.type==='class'?{tx:'var(--a)',l:'수업'}:{tx:'var(--green)',l:'일반'};
+  function _entryHTML(e, s) {
+    const c     = e.type === 'class' ? { tx: 'var(--a)', l: '수업' } : { tx: 'var(--green)', l: '일반' };
+    const night = e.nightHours > 0 ? ` 🌙야간 ${_fmtHrs(e.nightHours)}h` : '';
+    const rateInfo = e.appliedRate ? ` @${_fmt(e.appliedRate)}원` : '';
     return `<div class="sf-ei">
       <div class="sf-edot" style="background:${c.tx}"></div>
       <span style="font-size:11px;font-weight:700;color:${c.tx};min-width:28px">${c.l}</span>
-      <span style="font-size:12px;color:var(--tx2);flex:1">${_e(e.start||'')}~${_e(e.end||'')} <strong>${_fmtHrs(e.hours)}h</strong>${e.note?` · ${_e(e.note)}`:''}</span>
+      <span style="font-size:12px;color:var(--tx2);flex:1">${_e(e.start||'')}~${_e(e.end||'')} <strong>${_fmtHrs(e.hours)}h</strong>${night}${rateInfo}${e.note ? ' · ' + _e(e.note) : ''}</span>
       <button class="ibtn red" style="width:28px;height:28px;font-size:12px" onclick="StaffApp._delEntry('${e.id}')">✕</button>
     </div>`;
   }
 
-  function _wtype(t){
-    _st.workType=t;
-    document.getElementById('sf-wb-class')?.classList.toggle('on',t==='class');document.getElementById('sf-wb-class')?.classList.toggle('class',t==='class');
-    document.getElementById('sf-wb-gen')?.classList.toggle('on',t==='general');document.getElementById('sf-wb-gen')?.classList.toggle('general',t==='general');
+  function _wtype(t) {
+    _st.workType = t;
+    document.getElementById('sf-wb-class')?.classList.toggle('on', t === 'class');
+    document.getElementById('sf-wb-class')?.classList.toggle('class', t === 'class');
+    document.getElementById('sf-wb-gen')?.classList.toggle('on', t === 'general');
+    document.getElementById('sf-wb-gen')?.classList.toggle('general', t === 'general');
   }
 
   let _manualHrsVal = null;
-  function _chrs(){
-    _manualHrsVal=null;
-    const sv=document.getElementById('sf-ws')?.value,ev=document.getElementById('sf-we')?.value,b=document.getElementById('sf-whrs');
-    const m=document.getElementById('sf-wh-manual');if(m)m.value='';
-    if(!sv||!ev||!b)return;
-    const [sh,sm]=sv.split(':').map(Number),[eh,em]=ev.split(':').map(Number);
-    let d=(eh*60+em)-(sh*60+sm);if(d<0)d+=1440;
-    const h=Math.round(d/60*100)/100;
-    b.textContent=d>0?_fmtHrs(h)+'h':'-';
+  function _chrs() {
+    _manualHrsVal = null;
+    const sv = document.getElementById('sf-ws')?.value, ev = document.getElementById('sf-we')?.value;
+    const brk = Number(document.getElementById('sf-wbrk')?.value) || 0;
+    const b   = document.getElementById('sf-whrs');
+    const m   = document.getElementById('sf-wh-manual'); if (m) m.value = '';
+    if (!sv || !ev || !b) return;
+    const { baseHours, nightHours } = StaffDB.splitNightHours(sv, ev, brk);
+    const total = baseHours + nightHours;
+    b.innerHTML = `<span style="font-size:11px;text-align:center">${_fmtHrs(total)}h<br><small style="font-size:9px;opacity:.7">${nightHours > 0 ? `🌙${_fmtHrs(nightHours)}h` : '야간없음'}</small></span>`;
   }
-  function _manualHrs(v){_manualHrsVal=v?Math.round(Number(v)*100)/100:null;const b=document.getElementById('sf-whrs');if(b&&_manualHrsVal!=null)b.textContent=_fmtHrs(_manualHrsVal)+'h';}
+  function _manualHrs(v) {
+    _manualHrsVal = v ? Math.round(Number(v) * 100) / 100 : null;
+    const b = document.getElementById('sf-whrs');
+    if (b && _manualHrsVal != null) b.innerHTML = `<span>${_fmtHrs(_manualHrsVal)}h</span>`;
+  }
 
-  async function _addEntry(){
-    const start=document.getElementById('sf-ws')?.value,end=document.getElementById('sf-we')?.value,note=document.getElementById('sf-wn')?.value?.trim()||'';
-    let hours;
-    if(_manualHrsVal!=null&&_manualHrsVal>0){ hours=_manualHrsVal; }
-    else {
-      if(!start||!end){_toast('⚠️ 시작/종료 시간을 입력해주세요');return;}
-      const [sh,sm]=start.split(':').map(Number),[eh,em]=end.split(':').map(Number);
-      let d=(eh*60+em)-(sh*60+sm);if(d<=0){_toast('⚠️ 종료가 시작보다 늦어야 합니다');return;}
-      hours=Math.round(d/60*100)/100;
+  async function _addEntry() {
+    const start = document.getElementById('sf-ws')?.value, end = document.getElementById('sf-we')?.value;
+    const note  = document.getElementById('sf-wn')?.value?.trim() || '';
+    const brk   = Number(document.getElementById('sf-wbrk')?.value)  || 0;
+    const manualRate = Number(document.getElementById('sf-wrate')?.value) || 0;
+
+    let hours, baseHours, nightHours;
+    if (_manualHrsVal != null && _manualHrsVal > 0) {
+      hours = _manualHrsVal; baseHours = hours; nightHours = 0;
+    } else {
+      if (!start || !end) { _toast('⚠️ 시작/종료 시간을 입력해주세요'); return; }
+      const split = StaffDB.splitNightHours(start, end, brk);
+      baseHours = split.baseHours; nightHours = split.nightHours;
+      hours     = baseHours + nightHours;
     }
-    await StaffDB.addWorkEntry(_st.calStaffId,_st.workDate,{type:_st.workType,start,end,hours,note});
-    _drawWork();_toast(`✅ ${_st.workType==='class'?'수업':'일반'} ${_fmtHrs(hours)}h 등록`,'success');
+    if (hours <= 0) { _toast('⚠️ 근무 시간이 0입니다'); return; }
+
+    const s = StaffDB.getById(_st.calStaffId);
+    const mw = StaffDB.getMinWage();
+    const appliedRate      = manualRate > 0 ? manualRate : (s?.baseHourlyRate > 0 ? s.baseHourlyRate : mw);
+    const appliedNightRate = Math.round(appliedRate * 1.5);
+
+    await StaffDB.addWorkEntry(_st.calStaffId, _st.workDate, {
+      type: _st.workType, start, end, hours, baseHours, nightHours,
+      breakMin: brk, appliedRate, appliedNightRate, note,
+    });
+    _drawWork();
+    _toast(`✅ ${_st.workType==='class'?'수업':'일반'} ${_fmtHrs(hours)}h 등록`, 'success');
   }
 
-  async function _delEntry(eid){await StaffDB.deleteWorkEntry(_st.calStaffId,_st.workDate,eid);_drawWork();_toast('삭제');}
+  async function _delEntry(eid) {
+    await StaffDB.deleteWorkEntry(_st.calStaffId, _st.workDate, eid);
+    _drawWork();
+    _toast('삭제');
+  }
 
   /* ══════════════════════════════════════════
-   * 급여 계산 탭
+   * 급여 계산 탭 (개인)
    * ══════════════════════════════════════════ */
-  function _renderSalary(){
-    const cnt=document.getElementById('sf-cnt');if(!cnt)return;
-    const staff=StaffDB.getActive(),now=new Date(),y=_st.payYear,m=_st.payMonth;
-    const acad=StaffDB.getAcad();
-    cnt.innerHTML=`
+  function _renderSalary() {
+    const cnt   = document.getElementById('sf-cnt'); if (!cnt) return;
+    const staff = StaffDB.getActive(), now = new Date();
+    const y = _st.payYear, m = _st.payMonth;
+    const acad = StaffDB.getAcad();
+    cnt.innerHTML = `
       <div class="sf-acad-row">
         <span>🏫</span>
         <input class="sf-acad-inp" id="sf-acad-inp" value="${_e(acad.name)}" placeholder="학원명 입력">
@@ -716,7 +1150,7 @@ const StaffApp = (() => {
         <div class="sf-pay-item"><span class="sf-pay-lbl">👤 직원</span>
           <select id="sf-ps" onchange="StaffApp._onSel()">
             <option value="">— 직원 선택 —</option>
-            ${staff.map(s=>`<option value="${s.id}" ${_st.payStaffId===s.id?'selected':''}>${_e(s.name)}</option>`).join('')}
+            ${staff.map(s => `<option value="${s.id}" ${_st.payStaffId===s.id?'selected':''}>${_e(s.name)} (${s.employType==='parttime'?'알바':'정직원'})</option>`).join('')}
           </select>
         </div>
         <div class="sf-pay-item"><span class="sf-pay-lbl">📅 연도</span>
@@ -732,82 +1166,271 @@ const StaffApp = (() => {
         <button class="sf-calc-btn" onclick="StaffApp._calcAndRender()">계산</button>
       </div>
       <div id="sf-pb" class="sf-scroll">
-        ${_st.payResult?_payHTML(_st.payResult):`<div class="sf-empty" style="padding:48px 20px"><div style="font-size:44px;margin-bottom:8px">💰</div>직원과 연월을 선택하고 계산 버튼을 누르세요<br><small style="font-size:12px">급여 기간: 1일~말일</small></div>`}
+        ${_st.payResult ? _payHTML(_st.payResult)
+          : `<div class="sf-empty" style="padding:48px 20px"><div style="font-size:44px;margin-bottom:8px">💰</div>직원과 연월을 선택하고 계산 버튼을 누르세요<br><small style="font-size:12px">급여 기간: 1일~말일</small></div>`}
       </div>`;
   }
 
-  function _onSel(){_st.payStaffId=document.getElementById('sf-ps')?.value||null;_st.payYear=Number(document.getElementById('sf-py')?.value)||new Date().getFullYear();_st.payMonth=Number(document.getElementById('sf-pm')?.value)||new Date().getMonth()+1;}
-  function _calcAndRender(){_onSel();if(!_st.payStaffId){_toast('⚠️ 직원을 선택해주세요');return;}const r=StaffDB.calcPay(_st.payStaffId,_st.payYear,_st.payMonth);_st.payResult=r;const pb=document.getElementById('sf-pb');if(pb)pb.innerHTML=_payHTML(r);}
-  function _saveAcad(){const name=document.getElementById('sf-acad-inp')?.value?.trim();if(!name)return;StaffDB.setAcad({name});_toast(`🏫 "${name}" 저장`,'success');}
+  function _onSel() {
+    _st.payStaffId = document.getElementById('sf-ps')?.value || null;
+    _st.payYear    = Number(document.getElementById('sf-py')?.value) || new Date().getFullYear();
+    _st.payMonth   = Number(document.getElementById('sf-pm')?.value) || new Date().getMonth() + 1;
+  }
+  function _calcAndRender() {
+    _onSel();
+    if (!_st.payStaffId) { _toast('⚠️ 직원을 선택해주세요'); return; }
+    const r = StaffDB.calcPay(_st.payStaffId, _st.payYear, _st.payMonth);
+    _st.payResult = r;
+    const pb = document.getElementById('sf-pb');
+    if (pb) pb.innerHTML = _payHTML(r);
+  }
+  function _saveAcad() { const name = document.getElementById('sf-acad-inp')?.value?.trim(); if (!name) return; StaffDB.setAcad({ name }); _toast(`🏫 "${name}" 저장`, 'success'); }
 
-  function _payHTML(r){
-    if(!r)return'';
-    const s=r.staff,pd=Number(s.payDay||0),pdStr=pd===0?'말일':`${pd}일`,today=new Date().toLocaleDateString('ko-KR');
-    const dayRows=Object.keys(r.byDay).sort().map(date=>{
-      const d=r.byDay[date],dow=DOW[new Date(date).getDay()];
-      const amt=Math.round(d.classHrs*s.classRate+d.generalHrs*s.generalRate);
+  function _payHTML(r) {
+    if (!r) return '';
+    const s   = r.staff;
+    const pd  = Number(s.payDay || 0);
+    const pdStr = pd === 0 ? '말일' : `${pd}일`;
+    const isPt = r.type === 'parttime';
+
+    const dayRows = Object.keys(r.byDay).sort().map(date => {
+      const d   = r.byDay[date], dow = DOW[new Date(date).getDay()];
+      const baseAmt = isPt
+        ? d.entries.reduce((sum, e) => {
+            const rate = Number(e.appliedRate || s.baseHourlyRate || StaffDB.getMinWage(r.year));
+            return sum + (Number(e.baseHours || e.hours || 0) * rate);
+          }, 0)
+        : Math.round(d.classHrs * s.classRate + d.generalHrs * s.generalRate);
+      const nightAmt = d.entries.reduce((sum, e) => {
+        const nr = Number(e.appliedNightRate || 0);
+        return sum + (Number(e.nightHours || 0) * nr);
+      }, 0);
+      const amt = Math.round(baseAmt + nightAmt);
       return `<div class="sf-drow">
         <span class="sf-ddt">${date.slice(5)} (${dow})</span>
         <div class="sf-dtgs">
-          ${d.classHrs  ?`<span class="sf-ce class"   style="font-size:11px">수업 ${_fmtHrs(d.classHrs)}h</span>`:''}
-          ${d.generalHrs?`<span class="sf-ce general" style="font-size:11px">일반 ${_fmtHrs(d.generalHrs)}h</span>`:''}
+          ${d.classHrs  ? `<span class="sf-ce class"   style="font-size:11px">수업 ${_fmtHrs(d.classHrs)}h</span>` : ''}
+          ${d.generalHrs? `<span class="sf-ce general" style="font-size:11px">일반 ${_fmtHrs(d.generalHrs)}h</span>` : ''}
+          ${(d.nightHrs||0)>0? `<span class="sf-night-tag">🌙야간 ${_fmtHrs(d.nightHrs)}h</span>` : ''}
         </div>
         <span style="font-size:11px;color:var(--tx3);margin-left:auto">${_fmt(amt)}원</span>
       </div>`;
     }).join('');
 
+    /* 주휴수당 주차 행 */
+    const weekRows = isPt && r.weeklyStats?.length ? r.weeklyStats.map(w =>
+      `<div class="sf-pr holiday-row">
+        <span class="sf-pr-l">
+          <span class="sf-holiday-tag">주휴</span>
+          ${w.weekLabel} (${_fmtHrs(w.hours)}h${w.qualified ? ` ≥15h ✅` : ` <15h ❌`})
+        </span>
+        <span class="sf-pr-v">${w.qualified ? '+' + _fmt(w.holidayPay) + '원' : '-'}</span>
+      </div>`
+    ).join('') : '';
+
     return `<div class="sf-pcard">
       <div class="sf-phead">
         <div>
-          <div class="sf-pname">💰 ${_e(s.name)} 급여 명세</div>
+          <div class="sf-pname">${isPt ? '⏱ 알바 —' : '🏢 정직원 —'} ${_e(s.name)} 급여</div>
           <div class="sf-pperiod">📅 ${r.from} ~ ${r.to} · 지급일 ${r.year}년 ${r.month}월 ${pdStr}</div>
         </div>
         <div class="sf-ptot-w"><div class="sf-ptot-l">세전 합계</div><div class="sf-ptot">${_fmt(r.totalPay)}원</div></div>
       </div>
       <div class="sf-prows">
-        <div class="sf-pr">
-          <span class="sf-pr-l"><span style="width:10px;height:10px;border-radius:50%;background:var(--a);display:inline-block;margin-right:2px"></span>📚 수업 (${_fmtHrs(r.classHrs)}h × ${_fmt(s.classRate)}원)</span>
-          <span class="sf-pr-v">${_fmt(r.classPay)}원</span>
-        </div>
-        <div class="sf-pr">
-          <span class="sf-pr-l"><span style="width:10px;height:10px;border-radius:50%;background:var(--green);display:inline-block;margin-right:2px"></span>🏢 일반 (${_fmtHrs(r.generalHrs)}h × ${_fmt(s.generalRate)}원)</span>
-          <span class="sf-pr-v">${_fmt(r.generalPay)}원</span>
-        </div>
-        <div class="sf-pr sf-tot">
-          <span class="sf-pr-l">⏱ 총 ${_fmtHrs(r.classHrs+r.generalHrs)}h · 세전 합계</span>
-          <span class="sf-pr-v">${_fmt(r.totalPay)}원</span>
-        </div>
+        ${isPt ? `
+          <div class="sf-pr">
+            <span class="sf-pr-l">💰 기본 시급 (${_fmtHrs(r.classHrs+r.generalHrs)}h × ${_fmt(r.hourlyRate)}원)</span>
+            <span class="sf-pr-v">${_fmt(r.basePay)}원</span>
+          </div>
+          ${r.nightPay > 0 ? `<div class="sf-pr night-row">
+            <span class="sf-pr-l">🌙 야간 수당 <small style="font-size:10px">(22:00 이후 1.5배)</small></span>
+            <span class="sf-pr-v">+${_fmt(r.nightPay)}원</span>
+          </div>` : ''}
+          ${weekRows}
+          <div class="sf-pr sf-tot">
+            <span class="sf-pr-l">⏱ 알바 세전 합계</span>
+            <span class="sf-pr-v">${_fmt(r.totalPay)}원</span>
+          </div>
+        ` : `
+          <div class="sf-pr">
+            <span class="sf-pr-l"><span style="width:10px;height:10px;border-radius:50%;background:var(--a);display:inline-block;margin-right:4px"></span>📚 수업 (${_fmtHrs(r.classHrs)}h × ${_fmt(s.classRate)}원)</span>
+            <span class="sf-pr-v">${_fmt(r.classPay)}원</span>
+          </div>
+          <div class="sf-pr">
+            <span class="sf-pr-l"><span style="width:10px;height:10px;border-radius:50%;background:var(--green);display:inline-block;margin-right:4px"></span>🏢 일반 (${_fmtHrs(r.generalHrs)}h × ${_fmt(s.generalRate)}원)</span>
+            <span class="sf-pr-v">${_fmt(r.generalPay)}원</span>
+          </div>
+          ${r.monthlyFixed ? `<div class="sf-pr" style="background:var(--a10);border-radius:8px;padding:8px 10px;border:1px solid var(--a40)">
+            <span class="sf-pr-l" style="font-weight:800">🏢 고정 월급 적용</span>
+            <span class="sf-pr-v" style="color:var(--a)">${_fmt(s.monthlySalary)}원</span>
+          </div>` : ''}
+          <div class="sf-pr sf-tot">
+            <span class="sf-pr-l">⏱ 총 ${_fmtHrs(r.classHrs+r.generalHrs)}h · 세전 합계</span>
+            <span class="sf-pr-v">${_fmt(r.totalPay)}원</span>
+          </div>
+        `}
       </div>
-      ${dayRows?`<div style="padding:4px 14px 12px;border-top:1px solid var(--bdr)"><span class="sf-lbl" style="padding-top:10px">근무 상세</span>${dayRows}</div>`:`<div style="padding:14px 16px;text-align:center;color:var(--tx3);font-size:13px">이 기간에 등록된 근무가 없습니다</div>`}
+      ${dayRows ? `<div style="padding:4px 14px 12px;border-top:1px solid var(--bdr)"><span class="sf-lbl" style="padding-top:10px">근무 상세</span>${dayRows}</div>` : `<div style="padding:14px 16px;text-align:center;color:var(--tx3);font-size:13px">이 기간에 등록된 근무가 없습니다</div>`}
       <div class="sf-acts2">
-        <button class="sf-ab cal"  onclick="StaffApp.openCal('${s.id}')">📅 달력</button>
-        <button class="sf-ab copy" onclick="StaffApp._copy()">📋 복사</button>
-        <button class="sf-ab pdf"  onclick="StaffApp._pdf()">🖨️ PDF</button>
+        <button class="sf-ab cal"   onclick="StaffApp.openCal('${s.id}')">📅 달력</button>
+        <button class="sf-ab copy"  onclick="StaffApp._copy()">📋 복사</button>
+        <button class="sf-ab pdf"   onclick="StaffApp._pdf()">🖨️ PDF</button>
         <button class="sf-ab share" onclick="StaffApp._share()">📤 공유</button>
       </div>
     </div>`;
   }
 
-  /* ── 급여 공유/PDF/복사 ── */
-  function _payText(){
-    const r=_st.payResult;if(!r)return'';const s=r.staff;
-    const pd=Number(s.payDay||0),pdStr=pd===0?`${r.year}년 ${r.month}월 말일`:`${r.year}년 ${r.month}월 ${pd}일`;
-    const today=new Date().toLocaleDateString('ko-KR');const acad=StaffDB.getAcad();
-    return[`══════════════════════`,`🏫 ${acad.name}`,`💰 급여 명세서`,`══════════════════════`,`👤 ${s.name}`,`📅 ${r.from} ~ ${r.to}`,`🗓 발행일: ${today} · 지급일: ${pdStr}`,`─────────────────────`,`📚 수업: ${_fmtHrs(r.classHrs)}h × ${_fmt(s.classRate)}원 = ${_fmt(r.classPay)}원`,`🏢 일반: ${_fmtHrs(r.generalHrs)}h × ${_fmt(s.generalRate)}원 = ${_fmt(r.generalPay)}원`,`─────────────────────`,`세전 합계: ${_fmt(r.totalPay)}원`].join('\n');
-  }
-  async function _copy(){try{await navigator.clipboard.writeText(_payText());_toast('📋 복사됐습니다','success');}catch{_toast('⚠️ 복사 실패');}}
-  async function _share(){const r=_st.payResult;if(!r)return;const t=_payText();const sd={title:`${r.staff.name} 급여 명세`,text:t};if(navigator.share&&navigator.canShare?.(sd)){try{await navigator.share(sd);_toast('📤 공유 완료','success');return;}catch(e){if(e.name==='AbortError')return;}}_copy();}
+  /* ══════════════════════════════════════════
+   * 전원 급여 일괄 정산 탭
+   * ══════════════════════════════════════════ */
+  function _renderAll() {
+    const cnt   = document.getElementById('sf-cnt'); if (!cnt) return;
+    const staff = StaffDB.getActive();
+    const now   = new Date();
+    const y = _st.payYear, m = _st.payMonth;
 
-  function _pdf(){
-    const r=_st.payResult;if(!r)return;
-    const s=r.staff,acad=StaffDB.getAcad();
-    const pd=Number(s.payDay||0),pdStr=pd===0?`${r.year}년 ${r.month}월 말일`:`${r.year}년 ${r.month}월 ${pd}일`;
-    const today=new Date().toLocaleDateString('ko-KR');
-    const logoSrc=(typeof LOGO!=='undefined'&&LOGO.small)?LOGO.small:'';
-    const dayRows=Object.keys(r.byDay).sort().map(date=>{const d=r.byDay[date],dow=DOW[new Date(date).getDay()];const amt=Math.round(d.classHrs*s.classRate+d.generalHrs*s.generalRate);return `<tr><td>${date} (${dow})</td><td style="text-align:center">${d.classHrs?_fmtHrs(d.classHrs):'-'}</td><td style="text-align:center">${d.generalHrs?_fmtHrs(d.generalHrs):'-'}</td><td style="text-align:right">${_fmt(amt)}원</td></tr>`;}).join('');
-    let frame=document.getElementById('sf-pf');if(!frame){frame=document.createElement('div');frame.id='sf-pf';document.body.appendChild(frame);}
-    frame.innerHTML=`
-      <div class="sfp-hdr">${logoSrc?`<img class="sfp-logo" src="${logoSrc}" alt="logo">`:''}
+    cnt.innerHTML = `
+      <div class="sf-pay-bar">
+        <div class="sf-pay-item"><span class="sf-pay-lbl">📅 연도</span>
+          <select id="sf-all-y" onchange="StaffApp._calcAll()">
+            ${[now.getFullYear()-1,now.getFullYear(),now.getFullYear()+1].map(yr=>`<option value="${yr}" ${y===yr?'selected':''}>${yr}년</option>`).join('')}
+          </select>
+        </div>
+        <div class="sf-pay-item"><span class="sf-pay-lbl">📅 월</span>
+          <select id="sf-all-m" onchange="StaffApp._calcAll()">
+            ${Array.from({length:12},(_,i)=>i+1).map(mo=>`<option value="${mo}" ${m===mo?'selected':''}>${mo}월</option>`).join('')}
+          </select>
+        </div>
+        <button class="sf-calc-btn" onclick="StaffApp._calcAll()">계산</button>
+        <button class="sf-ab xls" style="flex:none;padding:9px 14px;font-size:12px" onclick="StaffApp._downloadExcel()">📥 엑셀</button>
+      </div>
+      <div id="sf-all-body" class="sf-scroll">
+        <div class="sf-empty" style="padding:40px 20px"><div style="font-size:40px;margin-bottom:8px">📊</div>계산 버튼을 눌러 전원 급여를 정산하세요</div>
+      </div>`;
+  }
+
+  function _calcAll() {
+    _st.payYear  = Number(document.getElementById('sf-all-y')?.value) || new Date().getFullYear();
+    _st.payMonth = Number(document.getElementById('sf-all-m')?.value) || new Date().getMonth() + 1;
+    const staff  = StaffDB.getActive();
+    const body   = document.getElementById('sf-all-body'); if (!body) return;
+
+    if (!staff.length) { body.innerHTML = '<div class="sf-empty">등록된 직원이 없습니다</div>'; return; }
+
+    const results = staff.map(s => StaffDB.calcPay(s.id, _st.payYear, _st.payMonth)).filter(Boolean);
+    const grandTotal = results.reduce((sum, r) => sum + r.totalPay, 0);
+
+    body.innerHTML = `
+      <div style="overflow-x:auto;margin-bottom:12px">
+        <table class="sf-all-tbl">
+          <thead><tr>
+            <th>직원</th><th>형태</th><th>근무일</th><th>총시간</th>
+            <th>기본급</th><th>야간수당</th><th>주휴수당</th><th>세전합계</th><th>비고</th>
+          </tr></thead>
+          <tbody>
+            ${results.map(r => {
+              const s   = r.staff;
+              const isPt = r.type === 'parttime';
+              const days = Object.keys(r.byDay).length;
+              const totalHrs = r.classHrs + r.generalHrs;
+              const nightPay  = isPt ? (r.nightPay || 0) : 0;
+              const holPay    = isPt ? (r.totalHolidayPay || 0) : 0;
+              const holWks    = isPt ? r.weeklyStats?.filter(w=>w.qualified).length : 0;
+
+              return `<tr>
+                <td style="font-weight:700">${_e(s.name)}</td>
+                <td><span class="sf-bdg ${isPt?'pt':'ft'}">${isPt?'알바':'정직원'}</span></td>
+                <td style="text-align:center">${days}일</td>
+                <td style="text-align:center">${_fmtHrs(totalHrs)}h</td>
+                <td style="text-align:right">${_fmt(isPt?(r.basePay||0):r.totalPay)}원</td>
+                <td style="text-align:right">${nightPay > 0 ? `<span class="sf-night-tag">+${_fmt(nightPay)}원</span>` : '-'}</td>
+                <td style="text-align:right">${holPay > 0 ? `<span class="sf-holiday-tag">+${_fmt(holPay)}원 (${holWks}주)</span>` : '-'}</td>
+                <td style="text-align:right;font-weight:700;color:var(--a)">${_fmt(r.totalPay)}원</td>
+                <td style="font-size:11px;color:var(--tx3)">${isPt?`시급${_fmt(r.hourlyRate)}원`:(s.monthlySalary>0?'고정월급':'시급합산')}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+          <tfoot><tr class="sf-all-tot">
+            <td colspan="7" style="text-align:right">🏫 ${_st.payYear}년 ${_st.payMonth}월 전체 급여 합계</td>
+            <td style="text-align:right">${_fmt(grandTotal)}원</td>
+            <td></td>
+          </tr></tfoot>
+        </table>
+      </div>
+      <div style="font-size:11px;color:var(--tx3);text-align:center;padding:8px">
+        * 세전 기준입니다. 4대보험·세금 공제 전 금액입니다.
+      </div>`;
+  }
+
+  /* ── Excel 다운로드 ── */
+  function _downloadExcel() {
+    if (typeof XLSX === 'undefined') {
+      _toast('⚠️ SheetJS 라이브러리 로드 실패'); return;
+    }
+    _st.payYear  = Number(document.getElementById('sf-all-y')?.value) || _st.payYear;
+    _st.payMonth = Number(document.getElementById('sf-all-m')?.value) || _st.payMonth;
+
+    const rows  = StaffDB.buildExcelData(_st.payYear, _st.payMonth);
+    const ws    = XLSX.utils.aoa_to_sheet(rows);
+    const wb    = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `${_st.payYear}년${_st.payMonth}월 급여`);
+
+    // 열 너비
+    ws['!cols'] = [16,8,8,8,8,8,8,12,10,10,12,24,14].map(w => ({ wpx: w * 6 }));
+    XLSX.writeFile(wb, `${StaffDB.getAcad().name}_${_st.payYear}년${_st.payMonth}월_급여명세.xlsx`);
+    _toast('📥 엑셀 다운로드 완료', 'success');
+  }
+
+  /* ── 급여 공유/PDF/복사 ── */
+  function _payText() {
+    const r = _st.payResult; if (!r) return '';
+    const s   = r.staff;
+    const pd  = Number(s.payDay || 0);
+    const pdStr = pd === 0 ? `${r.year}년 ${r.month}월 말일` : `${r.year}년 ${r.month}월 ${pd}일`;
+    const acad  = StaffDB.getAcad();
+    const isPt  = r.type === 'parttime';
+    const lines = [
+      `══════════════════════`, `🏫 ${acad.name}`, `💰 급여 명세서`,
+      `══════════════════════`, `👤 ${s.name} (${isPt?'알바':'정직원'})`,
+      `📅 ${r.from} ~ ${r.to}`, `🗓 발행: ${new Date().toLocaleDateString('ko-KR')} · 지급: ${pdStr}`,
+      `─────────────────────`,
+    ];
+    if (isPt) {
+      lines.push(`💰 기본급: ${_fmtHrs(r.classHrs+r.generalHrs)}h × ${_fmt(r.hourlyRate)}원 = ${_fmt(r.basePay)}원`);
+      if (r.nightPay > 0) lines.push(`🌙 야간수당: ${_fmt(r.nightPay)}원`);
+      if (r.totalHolidayPay > 0) lines.push(`✅ 주휴수당: ${_fmt(r.totalHolidayPay)}원`);
+    } else {
+      lines.push(`📚 수업: ${_fmtHrs(r.classHrs)}h × ${_fmt(s.classRate)}원 = ${_fmt(r.classPay)}원`);
+      lines.push(`🏢 일반: ${_fmtHrs(r.generalHrs)}h × ${_fmt(s.generalRate)}원 = ${_fmt(r.generalPay)}원`);
+    }
+    lines.push(`─────────────────────`, `세전 합계: ${_fmt(r.totalPay)}원`);
+    return lines.join('\n');
+  }
+
+  async function _copy()  { try { await navigator.clipboard.writeText(_payText()); _toast('📋 복사됐습니다', 'success'); } catch { _toast('⚠️ 복사 실패'); } }
+  async function _share() { const r = _st.payResult; if (!r) return; const t = _payText(); const sd = { title: `${r.staff.name} 급여 명세`, text: t }; if (navigator.share && navigator.canShare?.(sd)) { try { await navigator.share(sd); _toast('📤 공유 완료', 'success'); return; } catch(e) { if (e.name === 'AbortError') return; } } _copy(); }
+
+  function _pdf() {
+    const r = _st.payResult; if (!r) return;
+    const s = r.staff, acad = StaffDB.getAcad();
+    const pd = Number(s.payDay || 0);
+    const pdStr = pd === 0 ? `${r.year}년 ${r.month}월 말일` : `${r.year}년 ${r.month}월 ${pd}일`;
+    const today = new Date().toLocaleDateString('ko-KR');
+    const logoSrc = (typeof LOGO !== 'undefined' && LOGO.small) ? LOGO.small : '';
+    const isPt = r.type === 'parttime';
+
+    const dayRows = Object.keys(r.byDay).sort().map(date => {
+      const d = r.byDay[date], dow = DOW[new Date(date).getDay()];
+      const amt = isPt
+        ? Math.round(d.entries.reduce((s, e) => s + Number(e.baseHours||e.hours||0)*Number(e.appliedRate||r.hourlyRate) + Number(e.nightHours||0)*Number(e.appliedNightRate||r.nightHourlyRate), 0))
+        : Math.round(d.classHrs * s.classRate + d.generalHrs * s.generalRate);
+      return `<tr><td>${date} (${dow})</td><td style="text-align:center">${d.classHrs?_fmtHrs(d.classHrs):'-'}</td><td style="text-align:center">${d.generalHrs?_fmtHrs(d.generalHrs):'-'}</td><td style="text-align:center">${(d.nightHrs||0)>0?_fmtHrs(d.nightHrs):'-'}</td><td style="text-align:right">${_fmt(amt)}원</td></tr>`;
+    }).join('');
+
+    let frame = document.getElementById('sf-pf');
+    if (!frame) { frame = document.createElement('div'); frame.id = 'sf-pf'; document.body.appendChild(frame); }
+    frame.innerHTML = `
+      <div class="sfp-hdr">${logoSrc ? `<img class="sfp-logo" src="${logoSrc}" alt="logo">` : ''}
         <div><div class="sfp-org-name">${_e(acad.name)}</div><div class="sfp-title">급 여 명 세 서</div></div>
         <div class="sfp-date">발행일: ${today}</div>
       </div>
@@ -815,46 +1438,58 @@ const StaffApp = (() => {
       <table class="sfp-tbl" style="margin-bottom:10px">
         <tr><th>성&nbsp;&nbsp;명</th><td>${_e(s.name)}</td><th>급여 기간</th><td>${r.from} ~ ${r.to}</td></tr>
         <tr><th>지 급 일</th><td>${pdStr}</td><th>연락처</th><td>${_e(s.phone||'-')}</td></tr>
-        <tr><th>고용 유형</th><td>${s.contractType==='contract'?'계약직':'정규직'}</td><th>수업/일반 시급</th><td>${_fmt(s.classRate)}원 / ${_fmt(s.generalRate)}원</td></tr>
+        <tr><th>고용 형태</th><td>${isPt?'알바(시급제)':'정직원'} / ${s.contractType==='contract'?'계약직':'정규직'}</td><th>${isPt?'기본 시급':'수업/일반 시급'}</th><td>${isPt?`${_fmt(r.hourlyRate)}원`:`${_fmt(s.classRate)}원 / ${_fmt(s.generalRate)}원`}</td></tr>
       </table>
       <table class="sfp-tbl">
-        <thead><tr><th>항&nbsp;&nbsp;목</th><th style="text-align:center">근무시간</th><th style="text-align:right">시&nbsp;&nbsp;급</th><th style="text-align:right">지급금액</th></tr></thead>
+        <thead><tr><th>항&nbsp;&nbsp;목</th><th style="text-align:center">내&nbsp;&nbsp;역</th><th style="text-align:right">지급금액</th></tr></thead>
         <tbody>
-          <tr><td>📚 수업</td><td style="text-align:center">${_fmtHrs(r.classHrs)}h</td><td style="text-align:right">${_fmt(s.classRate)}원</td><td style="text-align:right">${_fmt(r.classPay)}원</td></tr>
-          <tr><td>🏢 일반</td><td style="text-align:center">${_fmtHrs(r.generalHrs)}h</td><td style="text-align:right">${_fmt(s.generalRate)}원</td><td style="text-align:right">${_fmt(r.generalPay)}원</td></tr>
+          ${isPt ? `
+            <tr><td>💰 기본 근무</td><td style="text-align:center">${_fmtHrs(r.classHrs+r.generalHrs)}h × ${_fmt(r.hourlyRate)}원</td><td style="text-align:right">${_fmt(r.basePay)}원</td></tr>
+            ${r.nightPay>0?`<tr><td>🌙 야간 수당</td><td style="text-align:center">22:00 이후 1.5배</td><td style="text-align:right">${_fmt(r.nightPay)}원</td></tr>`:''}
+            ${r.totalHolidayPay>0?`<tr><td>✅ 주휴수당</td><td style="text-align:center">주 15h 이상 ${r.weeklyStats.filter(w=>w.qualified).length}주</td><td style="text-align:right">${_fmt(r.totalHolidayPay)}원</td></tr>`:''}
+          ` : `
+            <tr><td>📚 수업</td><td style="text-align:center">${_fmtHrs(r.classHrs)}h × ${_fmt(s.classRate)}원</td><td style="text-align:right">${_fmt(r.classPay)}원</td></tr>
+            <tr><td>🏢 일반</td><td style="text-align:center">${_fmtHrs(r.generalHrs)}h × ${_fmt(s.generalRate)}원</td><td style="text-align:right">${_fmt(r.generalPay)}원</td></tr>
+            ${r.monthlyFixed?`<tr><td colspan="2" style="font-weight:700">🏢 고정 월급 적용</td><td style="text-align:right;font-weight:700">${_fmt(s.monthlySalary)}원</td></tr>`:''}
+          `}
         </tbody>
-        <tfoot><tr class="sfp-tot"><td colspan="3"><strong>세전 합계 (총 ${_fmtHrs(r.classHrs+r.generalHrs)}시간)</strong></td><td style="text-align:right"><strong>${_fmt(r.totalPay)}원</strong></td></tr></tfoot>
+        <tfoot><tr class="sfp-tot"><td colspan="2"><strong>세전 합계</strong></td><td style="text-align:right"><strong>${_fmt(r.totalPay)}원</strong></td></tr></tfoot>
       </table>
-      ${dayRows?`<table class="sfp-tbl" style="margin-top:8px"><thead><tr><th>날&nbsp;&nbsp;짜</th><th style="text-align:center">수업(h)</th><th style="text-align:center">일반(h)</th><th style="text-align:right">일 급여</th></tr></thead><tbody>${dayRows}</tbody></table>`:''}
+      ${dayRows ? `<table class="sfp-tbl" style="margin-top:8px"><thead><tr><th>날짜</th><th>수업(h)</th><th>일반(h)</th><th>야간(h)</th><th>일 급여</th></tr></thead><tbody>${dayRows}</tbody></table>` : ''}
       <div class="sfp-sign">
-        <div class="sfp-sign-box"><div>확&nbsp;&nbsp;&nbsp;인</div><div class="sfp-sign-line"></div><div>${_e(s.name)} (서명)</div></div>
-        <div class="sfp-sign-box"><div>원&nbsp;&nbsp;&nbsp;장</div><div class="sfp-sign-line"></div><div>${_e(acad.name)}</div></div>
+        <div class="sfp-sign-box"><div>확&nbsp;&nbsp;인</div><div class="sfp-sign-line"></div><div>${_e(s.name)} (서명)</div></div>
+        <div class="sfp-sign-box"><div>원&nbsp;&nbsp;장</div><div class="sfp-sign-line"></div><div>${_e(acad.name)}</div></div>
       </div>
       <div class="sfp-footer">본 명세서는 ${_e(acad.name)}에서 발행되었습니다.</div>`;
-    window.print();setTimeout(()=>frame.remove(),1500);
+    window.print();
+    setTimeout(() => frame.remove(), 1500);
   }
 
   /* ══ 유틸 ══ */
-  /**
-   * 소수점 시간 표시
-   * 1.5 → "1.5"  1.0 → "1"  1.75 → "1.75"
-   */
-  const _fmtHrs = h => {
-    const n = Math.round(Number(h||0)*100)/100;
-    return n % 1 === 0 ? String(n) : String(n);
-  };
-  const _fmt = n => Number(n).toLocaleString('ko-KR');
-  const _e   = v => String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  function _toast(msg,type){const el=document.getElementById('toast');if(!el)return;el.textContent=msg;el.className=type==='success'?'success':'';el.classList.remove('hidden');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.add('hidden'),3000);}
+  const _fmtHrs = h => { const n = Math.round(Number(h || 0) * 100) / 100; return n % 1 === 0 ? String(n) : String(n); };
+  const _fmt    = n => Number(n).toLocaleString('ko-KR');
+  const _e      = v => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  function _toast(msg, type) {
+    const el = document.getElementById('toast'); if (!el) return;
+    el.textContent = msg; el.className = type === 'success' ? 'success' : '';
+    el.classList.remove('hidden'); clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.add('hidden'), 3000);
+  }
 
+  /* ══ 퍼블릭 ══ */
   return {
     init, render, switchTab,
-    openAdd, openEdit, closeEdit, saveStaff, deleteStaff,
+    openAdd, openEdit, closeEdit, saveStaff, deleteStaff, _toggleEtype,
     openCal, closeCal, _calPrev, _calNext, _calToSalary,
-    _calCellClick, _confirmCopy, _cancelCopy, _applyTemplModal,
+    _calCellClick, _entryClick, _confirmCopy, _cancelCopy, _applyTemplModal,
+    _toggleSelectMode, _deleteSelected, _cancelSelect,
+    _undoBatch,
+    openBatch, closeBatch, _toggleDow, _batchHrs, _batchRateHint, _doBatch,
+    _closeOverlap, _confirmOverlap,
     openWork, closeWork, _wtype, _chrs, _manualHrs, _addEntry, _delEntry,
     openTemplAdd, closeTemplAdd, _taWtype, _taHrs, _addTemplEntry, _templDel,
     _onSel, _calcAndRender, _saveAcad,
+    _calcAll, _downloadExcel,
     _copy, _pdf, _share,
   };
 })();
