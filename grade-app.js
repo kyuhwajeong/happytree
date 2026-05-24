@@ -4888,7 +4888,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
             <div class="gcm-sec-title">📌 꼭 넣을 말 (고정 멘트)</div>
             <div class="gpm-wrap">
               <div class="gpm-tabs">
-                <button class="gpm-tab on" id="gcm-tab-book">📚 이 교재 전용</button>
+                <button class="gpm-tab on" id="gcm-tab-book">🏫 이 교재 전용</button>
                 <button class="gpm-tab" id="gcm-tab-global">🌐 공용 (모든 교재)</button>
               </div>
               <div class="gpm-chip-wrap" id="gcm-pin-list"></div>
@@ -4897,7 +4897,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
                 <button class="gpm-addbtn" id="gcm-pin-add-btn">＋</button>
               </div>
               <div class="gpm-legend">
-                <span><span class="dot-b"></span>이 교재 전용 멘트</span>
+                <span><span class="dot-b"></span>🏫 이 교재 전용</span>
                 <span><span class="dot-g"></span>공용 멘트 (모든 교재 공유)</span>
               </div>
             </div>
@@ -5036,8 +5036,8 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     _updateDna(); _renderPins();
     // 탭 전환
     if (tabBook && tabGlobal) {
-      tabBook.onclick   = () => { _pinTab='book';   tabBook.classList.add('on'); tabGlobal.classList.remove('on'); _renderPins(); pinInp.placeholder='예) 발음이 좋아졌어요… (이 교재 전용)'; };
-      tabGlobal.onclick = () => { _pinTab='global'; tabGlobal.classList.add('on'); tabBook.classList.remove('on'); _renderPins(); pinInp.placeholder='예) 수업 태도가 좋아요… (모든 교재 공유)'; };
+      tabBook.onclick   = () => { _pinTab='book';   tabBook.classList.add('on'); tabGlobal.classList.remove('on'); _renderPins(); pinInp.placeholder='🏫 예) 발음이 좋아졌어요… (이 교재 전용)'; };
+      tabGlobal.onclick = () => { _pinTab='global'; tabGlobal.classList.add('on'); tabBook.classList.remove('on'); _renderPins(); pinInp.placeholder='🌐 예) 수업 태도가 좋아요… (모든 교재 공유)'; };
     }
     bookDone.onchange = () => { nextWrap.style.display = bookDone.checked ? 'block' : 'none'; };
     ta.addEventListener('input', () => { charEl.textContent = ta.value.length + '자'; });
@@ -5298,7 +5298,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
         <div class="gbk-pin-mgr-title">📌 고정 멘트 관리</div>
         <div class="gpm-wrap">
           <div class="gpm-tabs">
-            <button class="gpm-tab on" id="gbk-tab-book">📚 이 교재 전용</button>
+            <button class="gpm-tab on" id="gbk-tab-book">🏫 이 교재 전용</button>
             <button class="gpm-tab" id="gbk-tab-global">🌐 공용 (모든 교재)</button>
           </div>
           <div class="gpm-chip-wrap" id="gbk-pin-list"></div>
@@ -5307,8 +5307,8 @@ thead th[data-col-key]{position:relative;overflow:visible;}
             <button class="gpm-addbtn" id="gbk-pin-addbtn">＋</button>
           </div>
           <div class="gpm-legend">
-            <span><span class="dot-b"></span>이 교재 전용</span>
-            <span><span class="dot-g"></span>공용 (모든 교재 공유)</span>
+            <span><span class="dot-b"></span>🏫 이 교재 전용</span>
+            <span><span class="dot-g"></span>🌐 공용 (모든 교재 공유)</span>
             <span style="margin-left:auto;font-size:10px;color:var(--tx3)">클릭: 활성/비활성 · ✕: 삭제</span>
           </div>
         </div>
@@ -5453,11 +5453,11 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     // 탭 전환
     if (gbkTabBook) gbkTabBook.onclick = () => {
       _gbkPinTab='book'; gbkTabBook.classList.add('on'); gbkTabGlo.classList.remove('on');
-      gbkPinInp.placeholder='예) 발음이 좋아졌어요… (이 교재 전용)'; _gbkRenderPins();
+      gbkPinInp.placeholder='🏫 예) 발음이 좋아졌어요… (이 교재 전용)'; _gbkRenderPins();
     };
     if (gbkTabGlo) gbkTabGlo.onclick = () => {
       _gbkPinTab='global'; gbkTabGlo.classList.add('on'); gbkTabBook.classList.remove('on');
-      gbkPinInp.placeholder='예) 수업 태도가 좋아요… (모든 교재 공유)'; _gbkRenderPins();
+      gbkPinInp.placeholder='🌐 예) 수업 태도가 좋아요… (모든 교재 공유)'; _gbkRenderPins();
     };
     // 추가
     const _gbkAddPin = () => {
@@ -5560,37 +5560,43 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     };
     _renderTable(); _updateSelInfo();
 
-    btnStart.onclick = async () => {
-      if (_running) return;
-      if (!_selected.size) { _toast('⚠ 생성할 학생을 선택하세요'); return; }
-      _running = true; _stopFlag = false;
-      btnStart.style.display = 'none'; btnStop.style.display = '';
-      btnSave.disabled = true;
-      overlay.querySelector('#gbk-close').disabled = true;
-      progWrap.style.display = '';
-
-      const prefix     = (prefixEl.value || '').trim();
-      const doSkip     = skipExist.checked;
-      const isCompl    = bookDoneCk.checked;
-      const nextBook   = nextBookIn.value.trim();
-      const activePins = _gbkGetActive();
-      const targets    = stuData.filter(sd => {
-        if (!_selected.has(sd.id)) return false;
-        if (doSkip && _results[sd.id].comment && _results[sd.id].status === 'has') return false;
-        return true;
-      });
+    // ── 공통: 일괄 생성 실행 헬퍼 ─────────────────────────────
+    const _runBulkGenerate = async (targets, extraMemo, skipHas) => {
+      if (!targets.length) {
+        progTxt.textContent = '생성할 대상이 없습니다.';
+        _running = false;
+        btnStart.style.display = ''; btnStop.style.display = 'none';
+        btnStart.disabled = false; btnProof.disabled = false; btnStyle.disabled = false;
+        overlay.querySelector('#gbk-close').disabled = false;
+        return;
+      }
+      const prefix   = (prefixEl.value || '').trim();
+      const isCompl  = bookDoneCk.checked;
+      const nextBook = nextBookIn.value.trim();
+      // activePins: 일괄화면 _gbkActMap 기반 (함수 정의 이후 호출이므로 안전)
+      const aPins = _gbkGetActive();
 
       let done = 0;
       _updateProgress(0, targets.length);
+
       for (const sd of targets) {
         if (_stopFlag) break;
-        _results[sd.id].status = 'doing'; _updateRowStatus(sd.id);
+        _results[sd.id].status = 'doing';
+        _updateRowStatus(sd.id);
         document.getElementById('gbk-tr-' + sd.id)?.scrollIntoView({ block:'nearest', behavior:'smooth' });
         try {
           const info     = { name: sd.name, word: sd.word, reading: sd.reading };
-          const bkStatus = { currentBook: bookName, isCompleted: isCompl, nextBook };
-          let comment = await GeminiAI.generateComment(info, bkStatus, { prevComments: sd.prevComments, activePins });
-          // ★ 공통 앞말 삽입
+          const bkStatus = {
+            currentBook: bookName,
+            bookId:      _st.bookId || '',
+            isCompleted: isCompl,
+            nextBook:    nextBook,
+          };
+          if (extraMemo) bkStatus.teacherMemo = extraMemo;
+          let comment = await GeminiAI.generateComment(info, bkStatus, {
+            prevComments: sd.prevComments,
+            activePins:   aPins,
+          });
           if (prefix) comment = prefix + '\n' + comment;
           _results[sd.id].comment = comment;
           _results[sd.id].status  = 'done';
@@ -5599,22 +5605,45 @@ thead th[data-col-key]{position:relative;overflow:visible;}
           _st.dirty.add(sd.id);
         } catch(err) {
           _results[sd.id].status = 'err';
-          _results[sd.id].err    = (err.message || '').slice(0, 80);
+          _results[sd.id].err    = String(err && err.message ? err.message : err).slice(0, 120);
+          console.error('[BulkGen] 오류:', sd.name, _results[sd.id].err);
         }
         _updateRowStatus(sd.id);
-        done++; _updateProgress(done, targets.length);
-        if (done < targets.length && !_stopFlag) await new Promise(r => setTimeout(r, 700));
+        done++;
+        _updateProgress(done, targets.length);
+        if (done < targets.length && !_stopFlag) await new Promise(r => setTimeout(r, 750));
       }
+    };
+
+    btnStart.onclick = async () => {
+      if (_running) return;
+      if (!_selected.size) { _toast('⚠ 생성할 학생을 선택하세요'); return; }
+      _running = true; _stopFlag = false;
+      btnStart.style.display = 'none'; btnStop.style.display = '';
+      btnStart.disabled = true; btnProof.disabled = true; btnStyle.disabled = true;
+      btnSave.disabled = true;
+      overlay.querySelector('#gbk-close').disabled = true;
+      progWrap.style.display = '';
+
+      const doSkip = skipExist.checked;
+      const targets = stuData.filter(sd => {
+        if (!_selected.has(sd.id)) return false;
+        if (doSkip && _results[sd.id].comment && _results[sd.id].status === 'has') return false;
+        return true;
+      });
+
+      await _runBulkGenerate(targets, '', false);
 
       _running = false;
       btnStart.style.display = ''; btnStop.style.display = 'none';
       btnStart.textContent = '🔄 다시 생성';
+      btnStart.disabled = false; btnProof.disabled = false; btnStyle.disabled = false;
       overlay.querySelector('#gbk-close').disabled = false;
       const ok  = Object.values(_results).filter(r => r.status === 'done').length;
-      const err = Object.values(_results).filter(r => r.status === 'err').length;
+      const er  = Object.values(_results).filter(r => r.status === 'err').length;
       progTxt.textContent = _stopFlag
         ? '⏹ 중단됨 — ' + ok + '명 완료'
-        : '✓ 완료 — ' + ok + '명 성공' + (err ? ' / ' + err + '명 오류' : '');
+        : '✓ 완료 — ' + ok + '명 성공' + (er ? ' / ' + er + '명 오류 (해당 행 툴팁 확인)' : '');
       if (ok > 0) { btnSave.disabled = false; btnProof.disabled = false; _refreshDirtyUI(); }
     };
 
@@ -5664,56 +5693,48 @@ thead th[data-col-key]{position:relative;overflow:visible;}
       if (!_selected.size) { _toast('⚠ 학생을 선택하세요'); return; }
       if (typeof GeminiAI === 'undefined') return;
 
-      // 1. 기존 선생님 코멘트 수집 (현재 교재 전체 학생 + DB 기록)
+      // 1. 기존 선생님 코멘트 수집 (현재 결과 + DB 기록 + localStorage 샘플)
       const existingComments = [];
       stuData.forEach(sd => {
-        // 현재 입력된 것
         if (_results[sd.id].comment) existingComments.push(_results[sd.id].comment);
-        // DB 과거 기록
-        sd.prevComments.forEach(c => { if (c) existingComments.push(c); });
+        (sd.prevComments || []).forEach(c => { if (c) existingComments.push(c); });
       });
-      // localStorage 샘플도 포함
       GeminiAI.getStyleSamples().forEach(s => existingComments.push(s));
-      const unique = [...new Set(existingComments)].filter(c => c.length > 10);
+      const unique = [...new Set(existingComments)].filter(c => c && c.length > 10);
 
       if (unique.length < 1) {
-        _toast('⚠ 분석할 기존 코멘트가 없습니다. 먼저 일부 학생 코멘트를 직접 입력하거나, 개별 화면에서 스타일 샘플을 저장해 주세요.');
+        _toast('⚠ 분석할 기존 코멘트가 없습니다. 먼저 일부 학생 코멘트를 직접 입력하거나 개별 화면에서 스타일 샘플을 저장해 주세요.');
         return;
       }
 
-      // 2. Style DNA 패널 열고 분석 중 표시
+      // 2. Style DNA 패널 열고 분석 표시
       dnaPanel.classList.add('show');
       _refreshDnaPanel();
       dnaResult.className = 'gbk-dna-empty';
       dnaResult.textContent = '⟳ AI가 선생님 문체를 분석 중입니다…';
 
-      // 3. AI에 스타일 분석 요청
+      // 3. 샘플 저장 + AI 분석
+      unique.slice(0, 10).forEach(c => GeminiAI.addStyleSample(c));
       let styleAnalysis = '';
       try {
-        // 샘플을 GeminiAI에 저장 (중복 제거)
-        unique.slice(0, 8).forEach(c => GeminiAI.addStyleSample(c));
         styleAnalysis = await GeminiAI.analyzeStyle();
         dnaResult.className = 'gbk-dna-result';
         dnaResult.textContent = styleAnalysis;
         _refreshDnaPanel();
       } catch(err) {
         dnaResult.className = 'gbk-dna-empty';
-        dnaResult.textContent = '⚠ 분석 실패: ' + err.message.slice(0, 60);
-        // 분석 실패해도 샘플은 등록됐으므로 계속 진행
+        dnaResult.textContent = '⚠ 분석 실패 (생성은 계속 진행): ' + String(err && err.message ? err.message : err).slice(0, 60);
       }
 
-      // 4. 분석된 스타일을 반영해서 빈 학생만 생성 (기존 있는 건 건너뜀)
-      const prefix     = (prefixEl.value || '').trim();
-      const isCompl    = bookDoneCk.checked;
-      const nextBook   = nextBookIn.value.trim();
-      const activePins = _gbkGetActive();
-      const targets    = stuData.filter(sd => {
+      // 4. 선택된 학생 전체 대상 (기존 코멘트 있어도 덮어쓰기)
+      //    단, 이미 이번 세션에서 'done' 상태인 것은 건너뜀
+      const targets = stuData.filter(sd => {
         if (!_selected.has(sd.id)) return false;
-        if (_results[sd.id].comment && _results[sd.id].status === 'has') return false; // 기존 있으면 건너뜀
-        return true;
+        return true; // 'has'(기존) 포함, 모두 재생성
       });
+
       if (!targets.length) {
-        progTxt.textContent = '🧬 스타일 분석 완료 — 생성할 빈 항목 없음 (기존 있는 학생은 건너뜀)';
+        progTxt.textContent = '🧬 스타일 분석 완료 — 선택된 학생이 없습니다';
         return;
       }
 
@@ -5722,37 +5743,17 @@ thead th[data-col-key]{position:relative;overflow:visible;}
       btnStop.style.display = ''; btnSave.disabled = true;
       overlay.querySelector('#gbk-close').disabled = true;
       progWrap.style.display = '';
-      let done = 0;
-      _updateProgress(0, targets.length);
 
-      for (const sd of targets) {
-        if (_stopFlag) break;
-        _results[sd.id].status = 'doing'; _updateRowStatus(sd.id);
-        document.getElementById('gbk-tr-' + sd.id)?.scrollIntoView({ block:'nearest', behavior:'smooth' });
-        try {
-          const info     = { name: sd.name, word: sd.word, reading: sd.reading };
-          const bkStatus = { currentBook: bookName, isCompleted: isCompl, nextBook };
-          // ★ 분석된 스타일을 teacherMemo에 힌트로 추가 전달
-          if (styleAnalysis) bkStatus.teacherMemo = '[스타일 가이드] ' + styleAnalysis.slice(0, 200);
-          let comment = await GeminiAI.generateComment(info, bkStatus, { prevComments: sd.prevComments, activePins });
-          if (prefix) comment = prefix + '\n' + comment;
-          _results[sd.id].comment = comment; _results[sd.id].status = 'done';
-          _ensureData(sd.id); _st.data[sd.id].comment = comment; _st.dirty.add(sd.id);
-        } catch(err) {
-          _results[sd.id].status = 'err';
-          _results[sd.id].err    = (err.message || '').slice(0, 80);
-        }
-        _updateRowStatus(sd.id);
-        done++; _updateProgress(done, targets.length);
-        if (done < targets.length && !_stopFlag) await new Promise(r => setTimeout(r, 700));
-      }
+      const memo = styleAnalysis ? '[스타일 가이드] ' + styleAnalysis.slice(0, 200) : '';
+      await _runBulkGenerate(targets, memo, false);
+
       _running = false;
       btnStart.disabled = false; btnProof.disabled = false; btnStyle.disabled = false;
       btnStop.style.display = 'none';
       overlay.querySelector('#gbk-close').disabled = false;
-      const ok  = Object.values(_results).filter(r => r.status === 'done').length;
-      const err = Object.values(_results).filter(r => r.status === 'err').length;
-      progTxt.textContent = '🧬 스타일 학습 생성 완료 — ' + ok + '명 성공' + (err ? ' / ' + err + '명 오류' : '');
+      const ok = Object.values(_results).filter(r => r.status === 'done').length;
+      const er = Object.values(_results).filter(r => r.status === 'err').length;
+      progTxt.textContent = '🧬 스타일 학습 생성 완료 — ' + ok + '명 성공' + (er ? ' / ' + er + '명 오류' : '');
       if (ok > 0) { btnSave.disabled = false; _refreshDirtyUI(); }
     };
 
