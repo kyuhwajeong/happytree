@@ -283,6 +283,20 @@ const BookLibDB = (() => {
     }
   }
 
+  // ★ 확장 프로그램용: 특정 반+교재의 체크 데이터 전체 초기화
+  async function clearChecks(classId, bookId) {
+    const ck = _ck(classId, bookId);
+    if (_checks[ck]) {
+      delete _checks[ck];
+      _ls(LS_CHECKS, _checks);
+    }
+    if (_fb()) {
+      try {
+        await FireDB.remove(`${FB_CHECKS}/${ck}`);
+      } catch(e) { console.warn('[BookLibDB] clearChecks Firebase 오류:', e); }
+    }
+  }
+
   async function setSubTasks(classId, bookId, studentId, chapterId, tasks) {
     const ck=_ck(classId,bookId), sk=_sk(studentId,chapterId);
     if (!_checks[ck]?.[sk]) return;
@@ -383,7 +397,7 @@ const BookLibDB = (() => {
     setChapters, deleteChapter,
     getBooksForClass, isBookInClass, assignBook, unassignBook,
     getMatrixChecks, getRawCheck, isChecked, getCheckParsed, getSubTasks,
-    setCheck, setSubTasks, listenMatrix,
+    setCheck, setSubTasks, clearChecks, listenMatrix,
     getStamps, setStamp, removeStamp, listenStamps,
     detectChapterType, getSubtaskOptions, SUBTASKS,
     _parseCheck, _serCheck,

@@ -103,26 +103,24 @@ const GradeApp = (() => {
 
 /* ══ EXCEL MODE ══ */
 .gr-sheet-wrap{width:100%;overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 280px);position:relative;}
-.gr-sheet{border-collapse:collapse;font-size:12px;width:100%;}
-
+.gr-sheet{border-collapse:collapse;font-size:12px;table-layout:fixed;width:auto;min-width:100%;}
+.gr-sheet thead th{overflow:hidden;white-space:nowrap;position:sticky;z-index:4;background:var(--surf2);}
+.gr-sheet tbody td{overflow:hidden;}
 /* fixed student col */
-.gr-sheet .gs-fix{position:sticky;left:0;z-index:3;background:var(--surf);border:1px solid var(--bdr);padding:5px 8px;min-width:130px;width:130px;cursor:pointer;}
+.gr-sheet .gs-fix{position:sticky;left:0;z-index:3;background:var(--surf);border:1px solid var(--bdr);padding:5px 7px;min-width:100px;width:100px;cursor:pointer;}
 .gr-sheet thead .gs-fix{z-index:6;background:var(--surf2);}
 .gr-sheet .gs-fix.sel,.gr-sheet .gs-fix:hover{background:var(--a10);}
-/* ★ 헤더 3행 모두 sticky 고정 */
-.gr-sheet thead th{position:sticky;z-index:4;background:var(--surf2);}
-.gr-sheet thead tr:first-child th{top:0;}
-.gr-sheet thead tr:nth-child(2) th{top:34px;}
-.gr-sheet thead tr:nth-child(3) th{top:68px;}
-.gr-sheet thead tr:first-child .gs-fix{top:0;z-index:7;}
-.gr-sheet thead tr:nth-child(2) .gs-fix{top:34px;z-index:7;}
-.gr-sheet thead tr:nth-child(3) .gs-fix{top:68px;z-index:7;}
+/* row1: 얇은 섹션 라벨 띠 — 높이 고정 20px */
+.gr-sheet thead tr.gs-band th{height:20px;padding:0 4px;font-size:9px;font-weight:600;line-height:20px;border-bottom:none;}
+/* row2: 실제 컬럼 헤더 */
+.gr-sheet thead tr.gs-cols th{padding:5px 4px;}
+.gr-sheet thead tr.gs-rd-cols th{padding:4px 4px;background:var(--surf2);}
 
 /* header */
-.gs-th{background:var(--surf2);border:1px solid var(--bdr);padding:5px 4px;font-size:11px;font-weight:800;color:var(--tx2);text-align:center;white-space:nowrap;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;}
-.gs-th.sec-w{background:var(--a10);color:var(--a);font-size:10px;}
-.gs-th.sec-r{background:rgba(139,92,246,.1);color:#8b5cf6;font-size:10px;}
-.gs-th.sec-c{background:rgba(5,150,105,.08);color:var(--green);font-size:11px;}
+.gs-th{background:var(--surf2);border:1px solid var(--bdr);padding:5px 4px;font-size:11px;font-weight:600;color:var(--tx2);text-align:center;white-space:nowrap;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;}
+.gs-th.sec-w{background:var(--a10);color:var(--a);font-size:11px;font-weight:600;}
+.gs-th.sec-r{background:rgba(139,92,246,.1);color:#8b5cf6;font-size:11px;font-weight:600;}
+.gs-th.sec-c{background:rgba(5,150,105,.08);color:var(--green);font-size:11px;font-weight:600;}
 .gs-th.sortable{cursor:pointer;user-select:none;}
 .gs-th.sortable:hover{background:var(--a20);}
 .gs-th.sort-on{color:var(--a);background:var(--a10);}
@@ -131,7 +129,7 @@ const GradeApp = (() => {
 .gs-td{border:1px solid var(--bdr);text-align:center;padding:0;vertical-align:middle;min-width:28px;}
 /* 계산값 (읽기 전용) - 연한 배경으로 구분 */
 .gs-td.ro{background:var(--surf2);}
-.gs-td.ro .gs-val{padding:5px 6px;font-size:13px;font-weight:700;display:block;}
+.gs-td.ro .gs-val{padding:12px 6px;font-size:13px;font-weight:700;display:block;}
 .gs-td.ro.pass-c .gs-val{color:#16a34a;}
 .gs-td.ro.fail-c .gs-val{color:#f97316;}
 .gs-td.ro.score-c .gs-val{color:var(--a);}
@@ -145,18 +143,233 @@ const GradeApp = (() => {
 .gr-sheet tbody tr.sel-row .gs-fix{background:var(--a20)!important;}
 
 /* number input */
-.gs-inp{width:100%;min-width:28px;padding:4px 2px;border:none;outline:none;background:transparent;font-size:12px;font-weight:700;color:var(--a);text-align:center;font-family:var(--font);-moz-appearance:textfield;cursor:text;}
+.gs-inp{width:100%;min-width:28px;padding:12px 2px;border:none;outline:none;background:transparent;font-size:12px;font-weight:700;color:var(--a);text-align:center;font-family:var(--font);-moz-appearance:textfield;cursor:text;}
 .gs-inp::-webkit-outer-spin-button,.gs-inp::-webkit-inner-spin-button{-webkit-appearance:none;}
 .gs-inp:focus{background:rgba(99,102,241,.08);border-radius:4px;}
 
-/* comment */
-.gs-cm-cell{width:40%;min-width:220px;}
-.gs-cm-inp{width:100%;padding:5px 8px;border:none;outline:none;background:transparent;font-size:13px;color:var(--tx);font-family:var(--font);resize:none;height:52px;line-height:1.5;cursor:text;box-sizing:border-box;}
-.gs-cm-inp:focus{background:rgba(5,150,105,.05);}
+/* comment 셀 — 인라인 직접 편집 */
+.gs-cm-cell{min-width:160px;max-width:400px;padding:0;vertical-align:top;}
+.gs-cm-wrap{display:flex;align-items:stretch;height:100%;position:relative;}
 
-/* average row */
+/* 인라인 textarea — 스크롤바 평소 투명, 포커스 시에만 표시 */
+.gs-cm-ta{
+  flex:1;padding:7px 9px;border:none;outline:none;
+  background:transparent;font-size:14px;color:var(--tx);
+  font-family:var(--font);resize:none;line-height:1.6;
+  min-height:92px;width:100%;box-sizing:border-box;
+  white-space:pre-wrap;word-break:break-word;
+  /* 스크롤바: 평소 숨김 */
+  scrollbar-width:none;
+}
+.gs-cm-ta:focus{
+  background:rgba(5,150,105,.04);
+  /* 포커스 시 얇은 스크롤바 표시 (Firefox) */
+  scrollbar-width:thin;
+  scrollbar-color:var(--bdr2) transparent;
+}
+.gs-cm-ta::-webkit-scrollbar{width:0;}
+.gs-cm-ta:focus::-webkit-scrollbar{width:3px;}
+.gs-cm-ta::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:2px;}
+.gs-cm-ta::placeholder{color:var(--tx3);font-style:italic;}
+
+/* ── 삼각형 호버존: textarea 가리지 않는 작은 코너 영역 ── */
+.gs-cm-tri{
+  position:absolute;top:0;right:0;z-index:3;
+  width:64px;height:36px; /* AI 버튼 전체를 덮는 히트존 */
+  cursor:default;pointer-events:auto;
+}
+/* 시각적 삼각형 — 항상 보이되 흐리게, hover 시 선명 */
+.gs-cm-tri::before{
+  content:'';position:absolute;top:0;right:0;
+  width:0;height:0;border-style:solid;
+  border-width:0 13px 13px 0;
+  border-color:transparent var(--a40) transparent transparent;
+  transition:border-color .15s;pointer-events:none;
+}
+.gs-cm-tri:hover::before{border-color:transparent var(--a) transparent transparent;}
+
+/* AI 버튼 — 평소 hidden */
+.gs-cm-icon{
+  position:absolute;top:5px;right:5px;z-index:4;
+  padding:3px 8px;border-radius:6px;
+  background:var(--a);color:#fff;
+  font-size:11px;font-weight:700;
+  cursor:pointer;white-space:nowrap;user-select:none;
+  opacity:0;transform:translateY(-4px) scale(.9);
+  transition:opacity .18s ease,transform .18s ease;
+  pointer-events:none;
+  box-shadow:0 2px 8px var(--a40);
+}
+/* 삼각형 호버 시만 등장, 버튼 자체 hover 유지 — textarea 포커스(입력 중)에는 표시 안 함 */
+.gs-cm-tri:hover ~ .gs-cm-icon,
+.gs-cm-icon:hover{
+  opacity:1;transform:translateY(0) scale(1);
+  pointer-events:auto;
+}
+.gs-cm-icon.has-cmt{background:var(--green);box-shadow:0 2px 8px rgba(5,150,105,.4);}
+.gs-cm-icon:hover{filter:brightness(1.1);}
+
+/* ── 가로 스크롤바: hover 시에만 표시 ── */
+.gr-sheet-wrap::-webkit-scrollbar{height:5px;width:5px;}
+.gr-sheet-wrap::-webkit-scrollbar-track{background:transparent;}
+.gr-sheet-wrap::-webkit-scrollbar-thumb{
+  background:transparent;border-radius:3px;
+  transition:background .2s;
+}
+.gr-sheet-wrap:hover::-webkit-scrollbar-thumb{background:var(--bdr2);}
+.gr-sheet-wrap{scrollbar-width:thin;scrollbar-color:transparent transparent;}
+.gr-sheet-wrap:hover{scrollbar-color:var(--bdr2) transparent;}
+
+/* ══ Comment 대형 팝업 (✏️버튼 전용) ══ */
+.gr-cmt-modal{
+  position:fixed;inset:0;background:rgba(0,0,0,.5);
+  z-index:600;display:flex;align-items:center;justify-content:center;
+  padding:16px;
+}
+.gr-cmt-box{
+  background:var(--card);border-radius:20px;
+  width:100%;max-width:560px;
+  box-shadow:0 8px 40px rgba(0,0,0,.22);
+  display:flex;flex-direction:column;
+  max-height:90vh;overflow:hidden;
+}
+.gr-cmt-header{
+  padding:20px 22px 14px;border-bottom:1px solid var(--bdr);
+  display:flex;align-items:center;justify-content:space-between;
+  flex-shrink:0;
+}
+.gr-cmt-title{font-size:18px;font-weight:800;color:var(--tx);}
+.gr-cmt-subtitle{font-size:13px;color:var(--tx3);margin-top:3px;}
+.gr-cmt-close{
+  width:36px;height:36px;border-radius:50%;border:none;
+  background:var(--surf2);cursor:pointer;font-size:18px;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--tx2);transition:background .12s;flex-shrink:0;
+}
+.gr-cmt-close:hover{background:var(--bdr);}
+.gr-cmt-body{padding:18px 22px;flex:1;overflow-y:auto;}
+/* 팝업 내 textarea — 크고 편하게 */
+.gr-cmt-textarea{
+  width:100%;box-sizing:border-box;
+  min-height:160px;padding:14px 16px;
+  border:2px solid var(--bdr);border-radius:12px;
+  background:var(--surf2);
+  font-size:16px;line-height:1.7;color:var(--tx);
+  font-family:var(--font);resize:vertical;
+  outline:none;transition:border-color .15s;
+}
+.gr-cmt-textarea:focus{border-color:var(--a);}
+/* AI 버튼 행 */
+.gr-cmt-ai-row{
+  display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;
+}
+.gr-cmt-ai-btn{
+  flex:1;min-width:120px;padding:13px 10px;
+  border-radius:12px;border:2px solid var(--bdr2);
+  background:var(--surf2);font-size:14px;font-weight:700;
+  cursor:pointer;color:var(--tx);transition:all .15s;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.gr-cmt-ai-btn:hover{border-color:var(--a);color:var(--a);background:var(--a10);}
+.gr-cmt-ai-btn:disabled{opacity:.4;cursor:not-allowed;}
+.gr-cmt-ai-btn.proof{border-color:rgba(139,92,246,.4);}
+.gr-cmt-ai-btn.proof:hover{border-color:#8b5cf6;color:#8b5cf6;background:rgba(139,92,246,.08);}
+/* 상태 메시지 */
+.gr-cmt-status{
+  margin-top:10px;min-height:20px;font-size:13px;
+  padding:8px 12px;border-radius:8px;display:none;
+}
+.gr-cmt-status.show{display:block;}
+.gr-cmt-status.loading{background:var(--a10);color:var(--a);}
+.gr-cmt-status.ok{background:rgba(22,163,74,.1);color:#16a34a;}
+.gr-cmt-status.err{background:rgba(239,68,68,.1);color:#ef4444;}
+/* 하단 버튼 */
+.gr-cmt-footer{
+  padding:14px 22px 20px;border-top:1px solid var(--bdr);
+  display:flex;gap:10px;flex-shrink:0;
+}
+.gr-cmt-cancel-btn{
+  flex:1;padding:14px;border-radius:12px;
+  background:var(--surf2);border:1.5px solid var(--bdr2);
+  font-size:15px;font-weight:700;cursor:pointer;color:var(--tx2);
+}
+.gr-cmt-save-btn{
+  flex:2;padding:14px;border-radius:12px;
+  background:var(--a);color:#fff;border:none;
+  font-size:15px;font-weight:800;cursor:pointer;
+  transition:opacity .12s;
+}
+.gr-cmt-save-btn:hover{opacity:.88;}
+.gr-cmt-char-count{font-size:12px;color:var(--tx3);text-align:right;margin-top:6px;}
+
+/* ── 컬럼 리사이저 핸들 ── */
+thead th[data-col-key]{position:relative;overflow:visible;}
+.gs-col-resizer{
+  position:absolute;right:-4px;top:0;width:9px;height:100%;
+  cursor:col-resize;z-index:20;user-select:none;
+}
+.gs-col-resizer::after{
+  content:'';position:absolute;left:50%;transform:translateX(-50%);
+  top:10%;height:80%;width:3px;
+  background:var(--bdr2);border-radius:2px;
+  transition:background .12s,box-shadow .12s;
+}
+.gs-col-resizer:hover::after,.gs-col-resizer.dragging::after{
+  background:var(--a);box-shadow:0 0 6px var(--a);width:4px;
+}
+.gr-sheet.resizing,.gr-sheet.resizing *{cursor:col-resize!important;user-select:none!important;}
+
+/* ── 그룹 리사이저 오버레이 (전체 높이, gr-sheet-wrap 위) ── */
+.gs-group-resizer-overlay{
+  position:absolute;top:0;width:16px;height:100%;
+  cursor:col-resize;z-index:20;user-select:none;
+  transform:translateX(-50%);
+}
+.gs-group-resizer-overlay::before{
+  /* 시각적 핸들 바 */
+  content:'';position:absolute;left:50%;transform:translateX(-50%);
+  top:0;height:100%;width:4px;
+  background:transparent;
+  transition:background .15s,width .15s,box-shadow .15s;
+  border-radius:2px;
+}
+.gs-group-resizer-overlay:hover::before,
+.gs-group-resizer-overlay.dragging::before{
+  background:var(--a);
+  box-shadow:0 0 10px var(--a40);
+  width:6px;
+}
+/* 헤더 th에 직접 붙는 sticky 핸들 — 스크롤 후에도 정렬 클릭 차단 */
+.gs-grp-hdr-handle{
+  position:absolute;right:-8px;top:0;
+  width:16px;height:100%;
+  cursor:col-resize;z-index:30;
+  user-select:none;
+}
+.gs-grp-hdr-handle::before{
+  content:'';position:absolute;left:50%;transform:translateX(-50%);
+  top:0;height:100%;width:4px;
+  background:transparent;
+  transition:background .15s,width .15s,box-shadow .15s;
+  border-radius:2px;
+}
+.gs-grp-hdr-handle:hover::before,
+.gs-grp-hdr-handle.dragging::before{
+  background:var(--a);
+  box-shadow:0 0 10px var(--a40);
+  width:6px;
+}
+/* 너비 초기화 버튼 */
+.gr-col-reset-btn{padding:5px 9px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--bdr2);background:var(--surf2);color:var(--tx3);white-space:nowrap;transition:all .15s;}
+.gr-col-reset-btn:hover{border-color:var(--a);color:var(--a);background:var(--a10);}
+
+/* average row — tfoot sticky bottom */
 .gr-avg-row td{background:var(--surf2)!important;}
 .gr-avg-row .gs-fix{color:var(--a);font-weight:800;font-size:12px;}
+.gr-sheet tfoot td{
+  position:sticky;bottom:0;z-index:6;
+  border-top:2px solid var(--bdr2)!important;
+}
 
 /* chart */
 .gr-chart-wrap{padding:10px 12px 6px;border-top:1.5px solid var(--bdr);background:var(--surf2);flex-shrink:0;}
@@ -221,11 +434,38 @@ const GradeApp = (() => {
 .gr-cdisp.achv{color:#8b5cf6;background:rgba(139,92,246,.1);border-color:rgba(139,92,246,.25);}
 
 /* card comment */
-.gr-card-cmt{width:100%;box-sizing:border-box;padding:8px 10px;border:none;outline:none;background:transparent;font-size:12px;color:var(--tx);font-family:var(--font);resize:none;min-height:60px;line-height:1.8;}
+.gr-card-cmt{width:100%;box-sizing:border-box;padding:12px 14px;border:none;outline:none;background:transparent;font-size:16px;color:var(--tx);font-family:var(--font);resize:vertical;min-height:150px;line-height:1.8;}
 .gr-card-cmt:focus{background:rgba(5,150,105,.04);}
 .gr-card-save-row{display:flex;gap:7px;padding:8px;}
 .gr-card-save-btn{flex:1;padding:10px;border:none;background:var(--a);color:#fff;font-size:12px;font-weight:800;cursor:pointer;font-family:var(--font);border-radius:9px;transition:all .15s;}
 .gr-card-save-btn:active{opacity:.85;}
+/* ── AI Comment Popover ── */
+.gr-cmt-icon-btn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:28px;padding:0;background:none;border:none;border-radius:6px;cursor:pointer;color:var(--tx3);font-size:15px;transition:color .15s,background .15s;position:relative;}
+.gr-cmt-icon-btn:hover{background:var(--a10);color:var(--tx);}
+.gr-cmt-icon-btn.has-cmt{color:var(--a);}
+.gr-cmt-dot{position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:var(--a);pointer-events:none;}
+.gr-cmt-pop{position:fixed;background:var(--card);border:1.5px solid var(--bdr2);border-radius:14px;padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.18);z-index:9990;animation:cpIn .12s ease;}
+@keyframes cpIn{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:translateY(0);}}
+.gr-cp-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;gap:8px;}
+.gr-cp-name{font-size:13px;font-weight:700;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+.gr-cp-tools{display:flex;gap:4px;flex-shrink:0;}
+.gr-cp-tool{display:inline-flex;align-items:center;gap:3px;font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--bdr2);background:var(--surf2);color:var(--tx);cursor:pointer;transition:background .12s;white-space:nowrap;}
+.gr-cp-tool:hover{background:var(--a10);color:var(--a);border-color:var(--a40);}
+.gr-cp-tool:disabled{opacity:.4;cursor:not-allowed;}
+.gr-cp-ta{width:100%;resize:vertical;min-height:72px;font-size:13px;line-height:1.55;padding:8px 10px;border-radius:8px;border:1.5px solid var(--bdr);background:var(--surf2);color:var(--tx);font-family:var(--font);box-sizing:border-box;transition:border-color .15s;}
+.gr-cp-ta:focus{outline:none;border-color:var(--a);}
+.gr-cp-status-line{font-size:11px;min-height:16px;margin-top:5px;line-height:1.4;}
+.gr-cp-status-line.cp-loading{color:var(--a);}
+.gr-cp-status-line.cp-ok{color:#16a34a;}
+.gr-cp-status-line.cp-err{color:#ef4444;}
+.gr-cp-foot{display:flex;align-items:center;justify-content:space-between;margin-top:9px;}
+.gr-cp-cnt{font-size:11px;color:var(--tx3);}
+.gr-cp-save{font-size:12px;padding:6px 14px;border-radius:7px;border:1.5px solid var(--a);background:var(--a10);color:var(--a);cursor:pointer;font-weight:700;transition:all .12s;}
+.gr-cp-save:hover{background:var(--a);color:#fff;}
+.gr-cp-cancel{font-size:12px;padding:6px 12px;border-radius:7px;border:1px solid var(--bdr2);background:none;color:var(--tx2);cursor:pointer;transition:background .12s;}
+.gr-cp-cancel:hover{background:var(--surf2);}
+.gr-cp-ai-row{display:flex;gap:5px;padding:4px 8px 5px;align-items:center;}
+
 
 /* ══ REPORT ══ */
 .gr-report-panel{padding:0;display:flex;flex-direction:column;height:100%;overflow:hidden;}
@@ -289,7 +529,19 @@ const GradeApp = (() => {
 .rpt-tbl .rpt-fail{color:#ea580c;font-weight:700;}
 .rpt-tbl .rpt-achv{color:#8b5cf6;font-weight:800;}
 .rpt-tbl .rpt-avg td{background:#f8fafc;font-weight:700;}
-.rpt-comment-box{border:1.5px solid #e2e8f0;border-radius:8px;padding:12px 14px;min-height:60px;font-size:12px;color:#374151;line-height:1.8;background:#fafafa;}
+.rpt-comment-box{border:1.5px solid #e2e8f0;border-radius:8px;padding:12px 14px;min-height:60px;font-size:12px;color:#374151;line-height:1.8;background:#fafafa;word-break:break-word;overflow-wrap:break-word;}
+/* 모바일: 코멘트가 페이지 높이를 밀지 않도록 max-height 제한 + 내부 스크롤 */
+@media(max-width:640px){
+  .rpt-comment-box{
+    max-height:160px;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  /* 리포트 전체도 가로 넘침 방지 */
+  .rpt-wrap{overflow-x:hidden;word-break:break-word;}
+  .rpt-tbl{table-layout:fixed;word-break:break-word;}
+  .rpt-tbl td,.rpt-tbl th{word-break:break-word;overflow-wrap:break-word;}
+}
 .rpt-graph-wrap{margin:8px 0 12px;}
 .rpt-acts{display:flex;gap:8px;flex-wrap:wrap;padding:10px 14px 14px;}
 .rpt-btn{flex:1;min-width:60px;padding:10px 6px;border-radius:10px;border:none;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);transition:all .15s;}
@@ -310,6 +562,129 @@ const GradeApp = (() => {
 
 @media print{body>*:not(#gr-pf){display:none!important;}#gr-pf{display:block!important;position:fixed;inset:0;z-index:9999;background:#fff;padding:24px;overflow:auto;}}
 #gr-pf{display:none;}
+
+/* ══ 리포트 미리보기 전체화면 모드 ══ */
+.gr-pm-ov{
+  position:fixed;inset:0;z-index:8000;
+  background:var(--surf2);
+  display:flex;flex-direction:column;
+  opacity:0;transform:scale(.97);
+  transition:opacity .22s ease,transform .22s ease;
+  pointer-events:none;
+}
+.gr-pm-ov.open{opacity:1;transform:scale(1);pointer-events:auto;}
+
+/* 상단 바 */
+.gr-pm-bar{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:8px 14px;background:var(--a);flex-shrink:0;
+  box-shadow:0 2px 8px rgba(0,0,0,.18);
+}
+.gr-pm-bar-left{display:flex;align-items:center;gap:10px;}
+.gr-pm-bar-title{font-size:14px;font-weight:800;color:#fff;letter-spacing:.2px;}
+.gr-pm-bar-sub{font-size:11px;color:rgba(255,255,255,.75);font-weight:400;}
+.gr-pm-bar-right{display:flex;align-items:center;gap:8px;}
+
+/* 상단 바 버튼 공통 */
+.gr-pm-bar-btn{
+  background:rgba(255,255,255,.2);border:none;color:#fff;
+  border-radius:8px;padding:5px 12px;cursor:pointer;
+  font-size:12px;font-weight:700;font-family:var(--font);
+  transition:background .15s;white-space:nowrap;
+}
+.gr-pm-bar-btn:hover{background:rgba(255,255,255,.35);}
+.gr-pm-bar-btn.active{background:rgba(255,255,255,.4);box-shadow:0 0 0 2px rgba(255,255,255,.5);}
+
+/* 리포트 미리보기 영역 (전체 차지) */
+.gr-pm-report-area{
+  flex:1;overflow:auto;display:flex;justify-content:center;
+  padding:24px 20px;min-width:0;
+}
+
+/* 데스크탑 플로팅 설정 패널 (드래그 가능, .gr-float-cfg 스타일 재사용) */
+.gr-pm-float{
+  position:fixed;z-index:8100;
+  background:var(--card);border:1.5px solid var(--bdr);border-radius:16px;
+  box-shadow:0 8px 32px rgba(0,0,0,.22);
+  width:300px;min-width:260px;max-width:92vw;
+  max-height:82vh;overflow:hidden;
+  display:flex;flex-direction:column;
+  transition:box-shadow .15s,opacity .18s ease,transform .18s ease;
+  user-select:none;
+}
+.gr-pm-float.entering{opacity:0;transform:translateY(-8px) scale(.96);}
+.gr-pm-float.dragging{box-shadow:0 16px 48px rgba(0,0,0,.28);opacity:.97;}
+.gr-pm-float-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px 8px;background:var(--a);
+  border-radius:14px 14px 0 0;cursor:grab;flex-shrink:0;
+}
+.gr-pm-float-hdr:active{cursor:grabbing;}
+.gr-pm-float-title{font-size:13px;font-weight:800;color:#fff;}
+.gr-pm-float-close{
+  background:rgba(255,255,255,.2);border:none;color:#fff;
+  border-radius:7px;padding:2px 8px;cursor:pointer;font-size:14px;font-weight:800;
+}
+.gr-pm-float-body{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 14px;flex:1;}
+.gr-pm-float-body::-webkit-scrollbar{width:4px;}
+.gr-pm-float-body::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:2px;}
+
+/* ── 모바일 (<= 640px): 플로팅 패널 숨기고 FAB + 드로어 사용 ── */
+@media(max-width:640px){
+  .gr-pm-float{display:none!important;}
+
+  .gr-pm-mob-fab{
+    position:absolute;bottom:18px;right:14px;
+    width:46px;height:46px;border-radius:50%;
+    background:var(--a);border:2px solid rgba(255,255,255,.3);
+    color:#fff;font-size:20px;cursor:pointer;
+    box-shadow:0 4px 16px var(--a40);
+    display:flex;align-items:center;justify-content:center;
+    z-index:8050;transition:transform .15s,box-shadow .15s;
+  }
+  .gr-pm-mob-fab:active{transform:scale(.88);}
+
+  .gr-pm-mob-drawer{
+    position:absolute;inset:0;z-index:8200;
+    background:rgba(0,0,0,.45);
+    opacity:0;pointer-events:none;
+    transition:opacity .2s ease;
+  }
+  .gr-pm-mob-drawer.open{opacity:1;pointer-events:auto;}
+
+  .gr-pm-mob-drawer-inner{
+    position:absolute;right:0;top:0;bottom:0;
+    width:86vw;max-width:330px;
+    background:var(--card);
+    display:flex;flex-direction:column;
+    transform:translateX(102%);
+    transition:transform .26s cubic-bezier(.32,.72,0,1);
+    box-shadow:-4px 0 24px rgba(0,0,0,.2);
+  }
+  .gr-pm-mob-drawer.open .gr-pm-mob-drawer-inner{transform:translateX(0);}
+
+  .gr-pm-mob-drawer-hdr{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:10px 14px 8px;background:var(--a);flex-shrink:0;
+  }
+  .gr-pm-mob-drawer-hdr span{font-size:13px;font-weight:800;color:#fff;}
+  .gr-pm-mob-drawer-close{
+    background:rgba(255,255,255,.2);border:none;color:#fff;
+    border-radius:6px;padding:3px 10px;cursor:pointer;font-size:14px;font-weight:800;
+  }
+  .gr-pm-mob-drawer-body{
+    overflow-y:auto;-webkit-overflow-scrolling:touch;
+    padding:12px 14px;flex:1;
+  }
+  .gr-pm-mob-drawer-body::-webkit-scrollbar{width:4px;}
+  .gr-pm-mob-drawer-body::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:2px;}
+}
+@media(min-width:641px){
+  .gr-pm-mob-fab,.gr-pm-mob-drawer,.gr-pm-mob-only{display:none!important;}
+}
+@media(max-width:640px){
+  .gr-pm-desk-only{display:none!important;}
+}
 `;
     document.head.appendChild(s);
   }
@@ -373,6 +748,7 @@ const GradeApp = (() => {
             </div>
           </div>
           <button id="gr-eval-btn" title="선택 교재 평가 설정" style="display:none;padding:6px 14px;border-radius:8px;background:rgba(245,158,11,.1);border:1.5px solid rgba(245,158,11,.4);color:#d97706;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:var(--font)">⚙️ 평가 설정</button>
+          <button id="gr-col-reset-btn" class="gr-col-reset-btn" style="display:none" onclick="GradeApp._resetColWidths()" title="컬럼 너비 초기화">↩ 너비초기화</button>
           <div class="gr-view-toggle" id="gr-view-toggle">
             <button class="gr-vbtn ${_st.viewMode==='excel'?'on':''}"  data-mode="excel"  onclick="GradeApp._setView('excel')">🔲 엑셀</button>
             <button class="gr-vbtn ${_st.viewMode==='card'?'on':''}"   data-mode="card"   onclick="GradeApp._setView('card')">🐱 카드</button>
@@ -385,8 +761,8 @@ const GradeApp = (() => {
           <button id="gr-save-btn" class="gr-save-all-btn" onclick="GradeApp.saveAll()" style="display:none">
             💾 저장<span class="gr-dirty-count" id="gr-dirty-cnt"></span>
           </button>
-          <button onclick="GradeApp._exportAllGrades()" style="padding:6px 11px;border-radius:9px;background:rgba(5,150,105,.1);border:1.5px solid rgba(5,150,105,.3);color:#059669;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">📥 전체내보내기</button>
-          <label style="padding:6px 11px;border-radius:9px;background:rgba(99,102,241,.1);border:1.5px solid rgba(99,102,241,.3);color:var(--a);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">📤 전체불러오기<input type="file" accept=".xlsx" style="display:none" onchange="GradeApp._importAllGrades(this.files[0]);this.value=''"></label>
+          <button onclick="GradeApp._exportAllGrades()" style="display:none;padding:6px 11px;border-radius:9px;background:rgba(5,150,105,.1);border:1.5px solid rgba(5,150,105,.3);color:#059669;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">📥 전체내보내기</button>
+          <label style="display:none;padding:6px 11px;border-radius:9px;background:rgba(99,102,241,.1);border:1.5px solid rgba(99,102,241,.3);color:var(--a);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">📤 전체불러오기<input type="file" accept=".xlsx" style="display:none" onchange="GradeApp._importAllGrades(this.files[0]);this.value=''"></label>
         </div>
         <!-- ★ 반만 선택 시 overview 전용 컨트롤 -->
         <div id="gr-ov-ctrls" style="display:none;align-items:center;gap:8px">
@@ -417,6 +793,7 @@ const GradeApp = (() => {
         <button class="gr-rpt-fab" onclick="GradeApp._printReport()" title="PDF"><span class="gr-rpt-fab-ico">🖨️</span><span class="gr-rpt-fab-lbl">PDF</span></button>
         <button class="gr-rpt-fab" onclick="GradeApp._captureReport()" title="캡처"><span class="gr-rpt-fab-ico">📸</span><span class="gr-rpt-fab-lbl">캡처</span></button>
         <button class="gr-rpt-fab" onclick="GradeApp._captureAllReports()" title="전체 캡처 저장" style="background:linear-gradient(135deg,var(--a10),rgba(99,102,241,.2));border-color:var(--a40)"><span class="gr-rpt-fab-ico">📂</span><span class="gr-rpt-fab-lbl" style="color:var(--a);font-weight:800">전체</span></button>
+        <button class="gr-rpt-fab" onclick="GradeApp._openPreviewMode()" title="미리보기 전체화면" style="background:linear-gradient(135deg,rgba(139,92,246,.12),rgba(99,102,241,.18));border-color:rgba(139,92,246,.4)"><span class="gr-rpt-fab-ico">🔍</span><span class="gr-rpt-fab-lbl" style="color:#7c3aed;font-weight:800">미리보기</span></button>
       </div>
       <!-- 성적표 모달 -->
       <div id="gr-rpt-ov" class="ov hidden" onclick="if(event.target.id==='gr-rpt-ov')GradeApp.closeReport()">
@@ -558,63 +935,82 @@ const GradeApp = (() => {
     const nmIcon = _st.sortCol==='name'   ?(_st.sortDesc?'↓':'↑'):'↕';
 
     /*
-     * 헤더 구조 (3행):
-     * Row1: [학생(3행)] [단어평가(4col)] [리딩평가(1+rvN+rvN+1)] [Comment(3행)]
-     * Row2: 단어서브4 | [총문제(2행)] [정답수(rvN)] [점수(rvN)] [성취율(2행)]
-     * Row3: 단어비어있음 | rvN서브Q | rvN서브S
+     * 헤더 구조 (리딩 활성화 시 3행, 비활성 시 2행):
+     * Row1 (얇은 띠): [빈칸] [🔤단어평가(4)] [📖리딩평가(N)] [빈칸(cm)]
+     * Row2 (실제 헤더): [학생] [총테스트|재시험|통과|성취율] [rdSubs] [💬Comment]
      */
     const rdH1span = hasRd ? 1 + rvN * 2 + 1 : 0;
-    const rdSection = hasRd ? `<th class="gs-th sec-r" colspan="${rdH1span}">📖 리딩 평가</th>` : '';
-    const rdRow2 = hasRd ? `
-      <th class="gs-th" rowspan="2" style="background:rgba(139,92,246,.06);color:#8b5cf6;vertical-align:middle">총문제</th>
+
+    /* Row2 — 리딩 서브 컬럼 (그룹 헤더: 정답 수 / 점수) */
+    const rdRow2Sub = hasRd ? `
+      <th class="gs-th" data-col-key="rq" rowspan="2" style="background:rgba(139,92,246,.06);color:#8b5cf6">총문제</th>
       <th class="gs-th sec-r" colspan="${rvN}">정답 수</th>
       <th class="gs-th sec-r" colspan="${rvN}">점수</th>
-      <th class="gs-th sortable sec-r ${_st.sortCol==='rdAch'?'sort-on':''}" rowspan="2"
-          onclick="GradeApp._toggleSort('rdAch')" style="vertical-align:middle">성취율 ${rdIcon}</th>` : '';
-    const rdRow3Q = hasRd ? actRevs.map(rv=>`<th class="gs-th" style="font-size:9px;background:rgba(139,92,246,.04)">${_e(rv.name)}</th>`).join('') : '';
-    const rdRow3S = hasRd ? actRevs.map(rv=>`<th class="gs-th" style="font-size:9px;background:rgba(139,92,246,.04)">${_e(rv.name)}</th>`).join('') : '';
+      <th class="gs-th sortable sec-r ${_st.sortCol==='rdAch'?'sort-on':''}" data-col-key="ra" rowspan="2"
+          onclick="GradeApp._toggleSort('rdAch')">성취율 ${rdIcon}</th>` : '';
+
+    /* Row3 — 리딩 Review별 서브컬럼 (정답 수 N개 + 점수 N개) */
+    const rdRow3Sub = hasRd ? `
+      ${actRevs.map((rv,i)=>`<th class="gs-th sec-r" data-col-key="rr${i}">${_e(rv.name)}</th>`).join('')}
+      ${actRevs.map((rv,i)=>`<th class="gs-th sec-r" data-col-key="rs${i}">${_e(rv.name)}</th>`).join('')}` : '';
+
+    /* colgroup */
+    const _cw  = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
+    const _cgs = (key, def) => `<col data-col-key="${key}" style="width:${_cw[key]||def}px">`;
+    let colHtml = _cgs('fix',100) + _cgs('wq',56) + _cgs('wr',48) + _cgs('wp',44) + _cgs('wa',56);
+    if (hasRd) {
+      colHtml += _cgs('rq',44);
+      for (let i=0;i<rvN;i++) colHtml += _cgs(`rr${i}`,48);
+      for (let i=0;i<rvN;i++) colHtml += _cgs(`rs${i}`,48);
+      colHtml += _cgs('ra',56);
+    }
+    colHtml += _cgs('cm', 200);
 
     const html = `
       <div class="gr-sheet-wrap">
         <table class="gr-sheet" oncontextmenu="GradeApp._onCtxTable(event)">
+          <colgroup>${colHtml}</colgroup>
           <thead>
-            <tr>
-              <th class="gs-fix gs-th sortable ${_st.sortCol==='name'?'sort-on':''}" rowspan="3"
-                  onclick="GradeApp._toggleSort('name')">학생 ${nmIcon}</th>
-              <th class="gs-th sec-w" colspan="4">🔤 단어 평가</th>
-              ${rdSection}
-              <th class="gs-th sec-c" rowspan="3" style="min-width:300px">💬 Teacher's Comment</th>
+            <!-- Row1: 얇은 섹션 라벨 띠 (rowspan 없음) -->
+            <tr class="gs-band">
+              <th class="gs-fix gs-th" style="border-bottom:none;background:var(--surf2)"></th>
+              <th class="gs-th sec-w" colspan="4" style="letter-spacing:.5px">🔤 단어 평가</th>
+              ${hasRd ? `<th class="gs-th sec-r" colspan="${rdH1span}">📖 리딩 평가</th>` : ''}
+              <th class="gs-th sec-c" data-col-key="cm" style="border-bottom:none;background:rgba(5,150,105,.08)"></th>
             </tr>
-            <tr>
-              <th class="gs-th" rowspan="2" style="background:var(--a10);color:var(--a);vertical-align:middle">총 테스트<br>(문제) 수</th>
-              <th class="gs-th" rowspan="2" style="background:var(--a10);color:var(--a);vertical-align:middle">재시험</th>
-              <th class="gs-th" rowspan="2" style="background:var(--a10);vertical-align:middle">통과</th>
-              <th class="gs-th sortable ${_st.sortCol==='wordAch'?'sort-on':''}" rowspan="2"
-                  onclick="GradeApp._toggleSort('wordAch')" style="background:var(--a10);vertical-align:middle">성취율 ${wIcon}</th>
-              ${rdRow2}
+            <!-- Row2: 실제 컬럼 헤더 -->
+            <tr class="gs-cols">
+              <th class="gs-fix gs-th sortable ${_st.sortCol==='name'?'sort-on':''}"
+                  onclick="GradeApp._toggleSort('name')" ${hasRd?'rowspan="2"':''}>학생 ${nmIcon}</th>
+              <th class="gs-th sec-w" data-col-key="wq" ${hasRd?'rowspan="2"':''}>총 테스트<br>(문제) 수</th>
+              <th class="gs-th sec-w" data-col-key="wr" ${hasRd?'rowspan="2"':''}>재시험</th>
+              <th class="gs-th sec-w" data-col-key="wp" ${hasRd?'rowspan="2"':''}>통과</th>
+              <th class="gs-th sec-w sortable ${_st.sortCol==='wordAch'?'sort-on':''}" data-col-key="wa"
+                  onclick="GradeApp._toggleSort('wordAch')" ${hasRd?'rowspan="2"':''}>성취율 ${wIcon}</th>
+              ${rdRow2Sub}
+              <th class="gs-th sec-c" data-col-key="cm" ${hasRd?'rowspan="2"':''}>💬 Teacher's Comment</th>
             </tr>
-            <tr>
-              ${rdRow3Q}${rdRow3S}
-            </tr>
+            <!-- Row3: 리딩 Review 서브컬럼 (리딩 활성화 시에만) -->
+            ${hasRd ? `<tr class="gs-rd-cols">${rdRow3Sub}</tr>` : ''}
           </thead>
           <tbody>
             ${students.map((s,ri) => _excelRow(s, ri, config, totalWQ, actRevs, totalRQ, hasRd)).join('')}
-            ${_avgRow(students, config, totalWQ, actRevs, hasRd)}
           </tbody>
+          <tfoot>
+            ${_avgRow(students, config, totalWQ, actRevs, hasRd)}
+          </tfoot>
         </table>
       </div>`;
     cnt.innerHTML = html;
-    /* Fix 3: 헤더 sticky top 값 동적 측정 (실제 렌더 후) */
     requestAnimationFrame(() => {
+      _applyTableWidth();
+      _bindColResize();
+      _bindGroupResizers();
       _fixStickyHeaderTops();
-      /* Fix 2: 엑셀 저장 폰트 복원 */
-      if (_st.excelFontSize && _st.excelFontSize !== 12) {
-        document.querySelectorAll('.gr-sheet thead th').forEach(th => {
-          th.style.fontSize = _st.excelFontSize + 'px';
-          th.style.whiteSpace = 'nowrap';
-        });
-        requestAnimationFrame(_fixStickyHeaderTops);
-      }
+      // 저장된 헤더 폰트 크기 항상 적용
+      _setHdrFontSize(_st.excelFontSize || 11);
+      // 레이아웃 완전히 끝난 뒤 한번 더 정확히 재계산
+      requestAnimationFrame(_fixStickyHeaderTops);
     });
     setTimeout(() => _renderChart(students, actRevs), 30);
   }
@@ -675,9 +1071,20 @@ const GradeApp = (() => {
           <span class="gs-val">${achW!==''?achW+'%':'—'}</span>
         </td>
         ${rdCells}
-        <td class="gs-td inp-cell gs-cm-cell">
-          <textarea class="gs-cm-inp" id="gr-cmt-${s.id}"
-            oninput="GradeApp._excelComment('${s.id}',this.value)">${_e(d.comment||'')}</textarea>
+        <td class="gs-td gs-cm-cell" style="padding:0;">
+          <div class="gs-cm-wrap">
+            <textarea class="gs-cm-ta"
+              id="gr-cmta-${s.id}"
+              placeholder="코멘트 입력…"
+              data-sid="${s.id}"
+              oninput="GradeApp._onCmtInput('${s.id}',this.value)"
+            >${_e(d.comment || '')}</textarea>
+            <div class="gs-cm-tri"></div>
+            <div class="gs-cm-icon${d.comment?.trim()?' has-cmt':''}"
+              id="gr-cmtbtn-${s.id}"
+              onclick="GradeApp._openCommentPop(event,'${s.id}')"
+              title="AI 생성 / 교정">✨ AI</div>
+          </div>
         </td>
       </tr>`;
   }
@@ -720,7 +1127,7 @@ const GradeApp = (() => {
       </td>
       <td class="gs-td ro"><span class="gs-val achv-c" id="gr-avg-w">${avgW!=null?avgW+'%':'—'}</span></td>
       ${rdAvgCells}
-      <td class="gs-td ro gs-cm-cell"></td>
+      <td class="gs-td ro" style="min-width:36px;width:36px"></td>
     </tr>`;
   }
 
@@ -1041,9 +1448,17 @@ const GradeApp = (() => {
         <div class="gr-csec-head"><div class="gr-csec-title">💬 Teacher's Comment</div></div>
         <div style="border:1px solid var(--bdr);border-top:none;border-radius:0 0 9px 9px">
           ${active
-            ? `<textarea class="gr-card-cmt" id="gr-cd-cmt-${s.id}"
-                         oninput="GradeApp._cardComment(this.value,'${s.id}')">${_e(d.comment||'')}</textarea>`
-            : `<div style="padding:8px 10px;font-size:11px;color:var(--tx2);min-height:40px;line-height:1.7">${_e(d.comment||'')}</div>`}
+            ? `<div>
+                <textarea class="gr-card-cmt" id="gr-cd-cmt-${s.id}"
+                  placeholder="코멘트를 직접 입력하거나 AI 생성을 눌러주세요…"
+                  oninput="GradeApp._cardComment(this.value,'${s.id}')">${_e(d.comment||'')}</textarea>
+                <div class="gr-cp-ai-row" style="padding:8px 10px;gap:8px;">
+                  <button class="gr-cp-tool" style="flex:1;padding:10px;font-size:14px;font-weight:700;border-radius:10px;" onclick="GradeApp._cardAiGen('${s.id}')">✨ AI 자동생성</button>
+                  <button class="gr-cp-tool" style="flex:1;padding:10px;font-size:14px;font-weight:700;border-radius:10px;" onclick="GradeApp._cardAiProof('${s.id}')">🔍 문법 교정</button>
+                </div>
+                <div id="gr-cd-cmt-st-${s.id}" class="gr-cp-status-line" style="padding:0 10px 8px;font-size:13px;min-height:20px"></div>
+              </div>`
+            : `<div style="padding:10px 14px;font-size:15px;color:var(--tx2);min-height:60px;line-height:1.8">${_e(d.comment||'')}</div>`}
         </div>
       </div>
       ${active?`<div class="gr-card-save-row">
@@ -1373,22 +1788,285 @@ const GradeApp = (() => {
   }
 
   /* ★ 컬럼 드래그 리사이즈 */
+  /* ── 테이블 총 너비를 colgroup 합산으로 확정 (table-layout:fixed 필수) ── */
+  function _applyTableWidth() {
+    const tbl = document.querySelector('.gr-sheet'); if (!tbl) return;
+    let total = 0;
+    tbl.querySelectorAll('colgroup col').forEach(col => { total += parseInt(col.style.width) || 52; });
+    tbl.style.width = total + 'px';
+    _repositionGroupResizers();
+  }
+
+  /* ── 컬럼 리사이저 핸들 바인딩 ── */
   function _bindColResize() {
-    const tbl=document.querySelector('.gr-sheet');if(!tbl)return;
-    tbl.querySelectorAll('thead .gs-th.sec-w,thead .gs-th.sec-r,thead .gs-cm-cell').forEach(th=>{
-      if(th.querySelector('.gs-col-resizer'))return;
-      const h=document.createElement('div');
-      h.className='gs-col-resizer';
-      th.appendChild(h);
-      let sx=0,sw=0;
-      h.addEventListener('mousedown',e=>{
-        e.preventDefault();e.stopPropagation();
-        sx=e.clientX;sw=th.offsetWidth;h.classList.add('dragging');
-        const mv=ev=>{const w=Math.max(60,sw+ev.clientX-sx);th.style.width=w+'px';th.style.minWidth=w+'px';};
-        const up=()=>{h.classList.remove('dragging');document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);};
-        document.addEventListener('mousemove',mv);
-        document.addEventListener('mouseup',up);
+    const tbl = document.querySelector('.gr-sheet'); if (!tbl) return;
+
+    /* 저장된 너비 col 에 즉시 반영 */
+    const saved = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
+    tbl.querySelectorAll('colgroup col[data-col-key]').forEach(col => {
+      if (saved[col.dataset.colKey]) col.style.width = saved[col.dataset.colKey] + 'px';
+    });
+    _applyTableWidth();
+
+    /* th[data-col-key] 마다 핸들 부착
+     * 단어/리딩 그룹 내부 컬럼은 그룹 리사이저가 전담 → 개별 슬라이더 제거 */
+    const isGroupCol = key => /^(wq|wr|wp|wa|rq|ra|rr\d+|rs\d+)$/.test(key);
+    tbl.querySelectorAll('thead th[data-col-key]').forEach(th => {
+      if (th.querySelector('.gs-col-resizer')) return;
+      const key = th.dataset.colKey;
+      if (isGroupCol(key)) return; // 그룹 리사이저가 처리
+
+      const handle = document.createElement('div');
+      handle.className = 'gs-col-resizer';
+      handle.title = '← → 드래그: 너비 조절  |  더블클릭: 초기화';
+      th.style.position = 'relative';
+      th.appendChild(handle);
+
+      const _col  = () => tbl.querySelector(`colgroup col[data-col-key="${key}"]`);
+      const _getW = () => { const c = _col(); return c ? (parseInt(c.style.width) || 52) : 52; };
+      const _setW = w  => {
+        const c = _col(); if (!c) return;
+        c.style.width = Math.max(36, w) + 'px';
+        _applyTableWidth();
+      };
+      const _save = () => {
+        const c = _col(); if (!c) return;
+        const s = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
+        s[key] = parseInt(c.style.width);
+        localStorage.setItem('gr_col_widths', JSON.stringify(s));
+      };
+
+      /* 마우스 드래그 */
+      handle.addEventListener('mousedown', e => {
+        e.preventDefault(); e.stopPropagation();
+        const sx = e.clientX, sw = _getW();
+        handle.classList.add('dragging');
+        tbl.classList.add('resizing');
+        const mv = ev => _setW(sw + ev.clientX - sx);
+        const up = () => {
+          handle.classList.remove('dragging');
+          tbl.classList.remove('resizing');
+          _save();
+          document.removeEventListener('mousemove', mv);
+          document.removeEventListener('mouseup', up);
+        };
+        document.addEventListener('mousemove', mv);
+        document.addEventListener('mouseup', up);
       });
+
+      /* 터치 드래그 */
+      handle.addEventListener('touchstart', e => {
+        e.preventDefault(); e.stopPropagation();
+        const sx = e.touches[0].clientX, sw = _getW();
+        tbl.classList.add('resizing');
+        const mv = ev => { ev.preventDefault(); _setW(sw + ev.touches[0].clientX - sx); };
+        const up = () => {
+          tbl.classList.remove('resizing');
+          _save();
+          document.removeEventListener('touchmove', mv);
+          document.removeEventListener('touchend', up);
+        };
+        document.addEventListener('touchmove', mv, { passive: false });
+        document.addEventListener('touchend', up);
+      }, { passive: false });
+
+      /* 더블클릭 → 해당 컬럼 초기화 */
+      handle.addEventListener('dblclick', e => {
+        e.stopPropagation();
+        const defs = { fix:100, wq:56, wr:48, wp:44, wa:56, rq:44, ra:56, cm:200 };
+        _setW(defs[key] ?? 48);
+        const s = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
+        delete s[key]; localStorage.setItem('gr_col_widths', JSON.stringify(s));
+        _toast('↩ 너비 초기화: ' + key.toUpperCase(), 'info');
+      });
+    });
+  }
+
+  /* ── 전체 컬럼 너비 초기화 ── */
+  function _resetColWidths() {
+    localStorage.removeItem('gr_col_widths');
+    const tbl = document.querySelector('.gr-sheet'); if (!tbl) return;
+    const defs = { fix:100, wq:56, wr:48, wp:44, wa:56, rq:44, ra:56, cm:200 };
+    tbl.querySelectorAll('colgroup col[data-col-key]').forEach(col => {
+      col.style.width = (defs[col.dataset.colKey] ?? 48) + 'px';
+    });
+    _applyTableWidth();
+    _toast('↩ 모든 컬럼 너비 초기화', 'info');
+  }
+
+  /* ── 그룹 리사이저 바인딩
+   *   오버레이를 .gr-sheet-wrap 에 직접 붙여 헤더 ~ 평균행까지 전체 높이 커버
+   *   · fix  : 학생 컬럼 우측 (scroll 이벤트로 position 동기화)
+   *   · wa   : 단어 성취율 컬럼 우측 (absolute, content와 함께 스크롤)
+   *   · ra   : 리딩 성취율 컬럼 우측 (absolute, content와 함께 스크롤)
+   * ─────────────────────────────────────────────────────── */
+  function _bindGroupResizers() {
+    const wrap = document.querySelector('.gr-sheet-wrap'); if (!wrap) return;
+    const tbl  = document.querySelector('.gr-sheet');      if (!tbl)  return;
+    const config  = GradeDB.getReportConfig(_st.bookId);
+    const actRevs = GradeDB.getActiveReviews(_st.bookId);
+    const hasRd   = config.reading?.enabled && actRevs.length > 0;
+
+    /* 기존 오버레이 + 이전 스크롤 리스너 제거 */
+    wrap.querySelectorAll('.gs-group-resizer-overlay').forEach(el => el.remove());
+    if (wrap._grpScrollHandler) {
+      wrap.removeEventListener('scroll', wrap._grpScrollHandler);
+      wrap._grpScrollHandler = null;
+    }
+
+    const _getColW = key => {
+      const c = tbl.querySelector(`colgroup col[data-col-key="${key}"]`);
+      return c ? (parseInt(c.style.width) || 48) : 48;
+    };
+    const _setColW = (key, w) => {
+      const c = tbl.querySelector(`colgroup col[data-col-key="${key}"]`);
+      if (c) c.style.width = Math.max(28, Math.round(w)) + 'px';
+    };
+    const _saveKeys = keys => {
+      const s = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
+      keys.forEach(k => {
+        const c = tbl.querySelector(`colgroup col[data-col-key="${k}"]`);
+        if (c) s[k] = parseInt(c.style.width);
+      });
+      localStorage.setItem('gr_col_widths', JSON.stringify(s));
+    };
+
+    /* colgroup 기준 누적 너비 → 경계 left 계산 */
+    const _boundaryLeft = lastKey => {
+      let left = 0;
+      for (const col of tbl.querySelectorAll('colgroup col')) {
+        left += parseInt(col.style.width) || 48;
+        if (col.dataset.colKey === lastKey) break;
+      }
+      return left;
+    };
+
+    /* 그룹 정의 */
+    const rdKeys = hasRd
+      ? ['rq', ...actRevs.map((_,i)=>`rr${i}`), ...actRevs.map((_,i)=>`rs${i}`), 'ra']
+      : [];
+
+    const groups = [
+      { lastKey:'fix', keys:['fix'],              label:'학생',     isFixCol:true  },
+      { lastKey:'wa',  keys:['wq','wr','wp','wa'], label:'단어 평가', isFixCol:false },
+      ...(hasRd ? [{ lastKey:'ra', keys:rdKeys, label:'리딩 평가', isFixCol:false }] : []),
+    ];
+
+    const overlays = [];
+
+    groups.forEach(({ lastKey, keys, label, isFixCol }) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'gs-group-resizer-overlay';
+      overlay.dataset.lastKey = lastKey;
+      overlay.dataset.fixCol  = isFixCol ? '1' : '0';
+      overlay.title = `← → ${label} 너비 조절  |  더블클릭: 초기화`;
+      /* height는 RAF에서 테이블 실제 높이로 설정 */
+      overlay.style.left = (isFixCol ? wrap.scrollLeft + _boundaryLeft(lastKey) : _boundaryLeft(lastKey)) + 'px';
+      wrap.appendChild(overlay);
+      overlays.push(overlay);
+
+      /* 드래그 공통 로직 — overlay·headerHandle 공유 */
+      const _startResize = (startX, actor) => {
+        const initW = Object.fromEntries(keys.map(k => [k, _getColW(k)]));
+        const initTotal = keys.reduce((s,k) => s + initW[k], 0);
+        overlay.classList.add('dragging'); tbl.classList.add('resizing');
+        if (actor) actor.classList.add('dragging');
+        return { startX, initW, initTotal };
+      };
+      const _applyDelta = ({ startX, initW, initTotal }, currentX) => {
+        const delta = currentX - startX;
+        const newTotal = Math.max(keys.length * 28, initTotal + delta);
+        const ratio = newTotal / initTotal;
+        keys.forEach(k => _setColW(k, Math.round(initW[k] * ratio)));
+        _applyTableWidth();
+      };
+      const _endResize = (actor) => {
+        overlay.classList.remove('dragging'); tbl.classList.remove('resizing');
+        if (actor) actor.classList.remove('dragging');
+        _saveKeys(keys);
+      };
+
+      const _bindDragOn = (el, actor) => {
+        el.addEventListener('mousedown', e => {
+          e.preventDefault(); e.stopPropagation();
+          const ctx = _startResize(e.clientX, actor);
+          const mv = ev => _applyDelta(ctx, ev.clientX);
+          const up = () => { _endResize(actor); document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); };
+          document.addEventListener('mousemove', mv);
+          document.addEventListener('mouseup', up);
+        });
+        el.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); }); // 정렬 클릭 차단
+        el.addEventListener('touchstart', e => {
+          e.preventDefault(); e.stopPropagation();
+          const ctx = _startResize(e.touches[0].clientX, actor);
+          const mv = ev => { ev.preventDefault(); _applyDelta(ctx, ev.touches[0].clientX); };
+          const up = () => { _endResize(actor); document.removeEventListener('touchmove', mv); document.removeEventListener('touchend', up); };
+          document.addEventListener('touchmove', mv, { passive:false });
+          document.addEventListener('touchend', up);
+        }, { passive:false });
+        el.addEventListener('dblclick', e => {
+          e.stopPropagation();
+          const defs = { fix:100, wq:56, wr:48, wp:44, wa:56, rq:44, ra:56, cm:200 };
+          keys.forEach(k => _setColW(k, defs[k] ?? 48));
+          _applyTableWidth();
+          const s = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
+          keys.forEach(k => delete s[k]);
+          localStorage.setItem('gr_col_widths', JSON.stringify(s));
+          _toast(`↩ ${label} 너비 초기화`, 'info');
+        });
+      };
+
+      /* ① 바디 오버레이 */
+      _bindDragOn(overlay, null);
+
+      /* ② 헤더 th에 sticky 핸들 추가 (스크롤 시에도 항상 클릭 차단·드래그 가능) */
+      const thSel = lastKey === 'fix'
+        ? 'thead tr.gs-cols th.gs-fix'
+        : `thead th[data-col-key="${lastKey}"]`;
+      const boundTh = tbl.querySelector(thSel);
+      if (boundTh) {
+        boundTh.querySelectorAll('.gs-grp-hdr-handle').forEach(el => el.remove());
+        const hdrHandle = document.createElement('div');
+        hdrHandle.className = 'gs-grp-hdr-handle';
+        hdrHandle.title = overlay.title;
+        boundTh.style.overflow = 'visible';
+        boundTh.appendChild(hdrHandle);
+        _bindDragOn(hdrHandle, hdrHandle);
+      }
+    });
+
+    /* fix 오버레이: 가로 스크롤 시 position 동기화 */
+    wrap._grpScrollHandler = () => {
+      const fixOv = wrap.querySelector('.gs-group-resizer-overlay[data-fix-col="1"]');
+      if (fixOv) fixOv.style.left = (wrap.scrollLeft + _boundaryLeft('fix')) + 'px';
+    };
+    wrap.addEventListener('scroll', wrap._grpScrollHandler);
+
+    /* 테이블 실제 높이로 오버레이 높이 설정 */
+    requestAnimationFrame(() => {
+      const h = tbl.offsetHeight;
+      overlays.forEach(ov => { ov.style.height = h + 'px'; });
+    });
+  }
+
+  /* 오버레이 위치·높이를 colgroup 너비 기준으로 재계산 */
+  function _repositionGroupResizers() {
+    const wrap = document.querySelector('.gr-sheet-wrap'); if (!wrap) return;
+    const tbl  = document.querySelector('.gr-sheet');      if (!tbl)  return;
+    const _boundaryLeft = lastKey => {
+      let left = 0;
+      for (const col of tbl.querySelectorAll('colgroup col')) {
+        left += parseInt(col.style.width) || 48;
+        if (col.dataset.colKey === lastKey) break;
+      }
+      return left;
+    };
+    const h = tbl.offsetHeight;
+    wrap.querySelectorAll('.gs-group-resizer-overlay').forEach(ov => {
+      const lk  = ov.dataset.lastKey;
+      const fix = ov.dataset.fixCol === '1';
+      ov.style.left   = (fix ? wrap.scrollLeft + _boundaryLeft(lk) : _boundaryLeft(lk)) + 'px';
+      if (h > 0) ov.style.height = h + 'px';
     });
   }
 
@@ -1467,42 +2145,313 @@ const GradeApp = (() => {
     {label:'Arial',value:'Arial,sans-serif'},
   ];
 
-  // ── 플로팅 설정 패널 열기/닫기 ──
-  function _openFloatCfg() {
-    const existing = document.getElementById('gr-float-cfg');
-    if (existing) { existing.remove(); return; }
+  // ══ 리포트 미리보기 전체화면 모드 ══
+  function _openPreviewMode() {
+    if (document.getElementById('gr-pm-ov')) return;
+    const srcPreview = document.getElementById('gr-rpt-preview');
+    if (!srcPreview) { _toast('⚠️ 리포트 탭에서 학생을 먼저 선택하세요'); return; }
+
+    const origParent = srcPreview.parentNode;
+    const origNext   = srcPreview.nextSibling;
+
+    const ov = document.createElement('div');
+    ov.id = 'gr-pm-ov';
+    ov.className = 'gr-pm-ov';
+    ov._origParent = origParent;
+    ov._origNext   = origNext;
+
+    ov.innerHTML = `
+      <div class="gr-pm-bar">
+        <div class="gr-pm-bar-left">
+          <span class="gr-pm-bar-title">🔍 리포트 미리보기</span>
+          <span class="gr-pm-bar-sub gr-pm-bar-sub--desk">설정 변경이 즉시 반영됩니다</span>
+        </div>
+        <div class="gr-pm-bar-right">
+          <!-- 데스크탑 전용 버튼 -->
+          <button class="gr-pm-bar-btn gr-pm-desk-only" id="gr-pm-cfg-toggle"
+            onclick="GradeApp._togglePmFloat()">⚙️ 설정</button>
+          <!-- 모바일 캡처+전달 버튼 (모바일 전용) -->
+          <button class="gr-pm-bar-btn gr-pm-mob-only" id="gr-pm-capture-btn"
+            onclick="GradeApp._pmCaptureShare()"
+            style="background:rgba(255,255,255,.25)">📸 캡처·전달</button>
+          <button class="gr-pm-bar-btn"
+            onclick="GradeApp._closePreviewMode()">✕ 닫기</button>
+        </div>
+      </div>
+      <div class="gr-pm-report-area" id="gr-pm-report-area"></div>
+      <!-- 모바일 전용 FAB (⚙️ 설정) -->
+      <button class="gr-pm-mob-fab" id="gr-pm-mob-fab"
+        onclick="GradeApp._togglePmDrawer()">⚙️</button>
+      <!-- 모바일 드로어 -->
+      <div class="gr-pm-mob-drawer" id="gr-pm-mob-drawer"
+        onclick="if(event.target===this)GradeApp._togglePmDrawer()">
+        <div class="gr-pm-mob-drawer-inner">
+          <div class="gr-pm-mob-drawer-hdr">
+            <span>⚙️ 리포트 설정</span>
+            <button class="gr-pm-mob-drawer-close"
+              onclick="GradeApp._togglePmDrawer()">✕</button>
+          </div>
+          <div class="gr-pm-mob-drawer-body gr-float-cfg-body">
+            ${_buildCfgBodyHTML()}
+          </div>
+        </div>
+      </div>`;
+
+    document.body.appendChild(ov);
+
+    // #gr-rpt-preview 를 미리보기 영역으로 물리 이동
+    document.getElementById('gr-pm-report-area').appendChild(srcPreview);
+
+    // 열림 애니메이션
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      ov.classList.add('open');
+      // 데스크탑: 설정 패널 자동 오픈
+      if (window.innerWidth > 640) _openPmFloat();
+    }));
+
+    // ESC 닫기
+    ov._escHandler = e => { if (e.key === 'Escape') GradeApp._closePreviewMode(); };
+    document.addEventListener('keydown', ov._escHandler);
+  }
+
+  function _closePreviewMode() {
+    const ov = document.getElementById('gr-pm-ov');
+    if (!ov) return;
+
+    // 플로팅 설정 패널 제거
+    document.getElementById('gr-pm-float')?.remove();
+
+    // #gr-rpt-preview 원래 위치 복원
+    const preview = document.getElementById('gr-rpt-preview');
+    if (preview && ov._origParent) {
+      if (ov._origNext) ov._origParent.insertBefore(preview, ov._origNext);
+      else              ov._origParent.appendChild(preview);
+    }
+
+    if (ov._escHandler) document.removeEventListener('keydown', ov._escHandler);
+    ov.classList.remove('open');
+    setTimeout(() => ov.remove(), 250);
+  }
+
+  /* 데스크탑: 드래그 가능한 플로팅 설정 패널 열기/닫기 토글 */
+  function _togglePmFloat() {
+    const existing = document.getElementById('gr-pm-float');
+    const btn = document.getElementById('gr-pm-cfg-toggle');
+    if (existing) {
+      existing.remove();
+      if (btn) btn.classList.remove('active');
+    } else {
+      _openPmFloat();
+    }
+  }
+
+  function _openPmFloat() {
+    if (document.getElementById('gr-pm-float')) return;
+    const btn = document.getElementById('gr-pm-cfg-toggle');
+    if (btn) btn.classList.add('active');
 
     const panel = document.createElement('div');
-    panel.id = 'gr-float-cfg';
-    panel.className = 'gr-float-cfg';
+    panel.id = 'gr-pm-float';
+    panel.className = 'gr-pm-float entering';
 
-    // 초기 위치: 화면 왼쪽 중앙
-    const initLeft = Math.max(8, window.innerWidth * 0.02);
-    const initTop  = Math.max(60, window.innerHeight * 0.15);
-    panel.style.left = initLeft + 'px';
-    panel.style.top  = initTop  + 'px';
-
-    const FONTS = [
-      { key: 'Noto Sans KR',      label: 'Noto',   style: "'Noto Sans KR', sans-serif" },
-      { key: 'IBM Plex Sans KR',  label: 'IBM',    style: "'IBM Plex Sans KR', sans-serif" },
-      { key: 'Nanum Gothic',      label: '나눔고딕', style: "'Nanum Gothic', sans-serif" },
-      { key: 'Nanum Myeongjo',    label: '명조',    style: "'Nanum Myeongjo', serif" },
-      { key: 'Spoqa Han Sans Neo',label: 'Spoqa',  style: "'Spoqa Han Sans Neo','Noto Sans KR',sans-serif" },
-    ];
+    // 초기 위치: 화면 우측 상단 (상단 바 아래)
+    panel.style.right = '16px';
+    panel.style.top   = '62px';
 
     panel.innerHTML = `
-      <div class="gr-float-cfg-hdr" id="gr-float-cfg-hdr">
-        <span class="gr-float-cfg-title">⚙️ 리포트 설정</span>
-        <button class="gr-float-cfg-close" id="gr-float-cfg-close-btn">✕</button>
+      <div class="gr-pm-float-hdr" id="gr-pm-float-hdr">
+        <span class="gr-pm-float-title">⚙️ 리포트 설정</span>
+        <button class="gr-pm-float-close"
+          onclick="GradeApp._togglePmFloat()">✕</button>
       </div>
-      <div class="gr-float-cfg-body">
+      <div class="gr-pm-float-body gr-float-cfg-body">
+        ${_buildCfgBodyHTML()}
+      </div>`;
 
+    document.body.appendChild(panel);
+
+    // entering → 트랜지션 트리거
+    requestAnimationFrame(() => requestAnimationFrame(() =>
+      panel.classList.remove('entering')
+    ));
+
+    // ── 드래그 ──
+    const hdr = document.getElementById('gr-pm-float-hdr');
+    let ox = 0, oy = 0, isDrag = false;
+
+    const _startDrag = (cx, cy) => {
+      isDrag = true;
+      const r = panel.getBoundingClientRect();
+      ox = cx - r.left; oy = cy - r.top;
+      // right→left 방식으로 전환 (드래그 시 right 제거)
+      panel.style.left  = r.left + 'px';
+      panel.style.top   = r.top  + 'px';
+      panel.style.right = 'auto';
+      panel.classList.add('dragging');
+    };
+    const _moveDrag = (cx, cy) => {
+      if (!isDrag) return;
+      panel.style.left = Math.max(0, Math.min(window.innerWidth  - panel.offsetWidth,  cx - ox)) + 'px';
+      panel.style.top  = Math.max(0, Math.min(window.innerHeight - 60,                 cy - oy)) + 'px';
+    };
+    const _endDrag = () => { isDrag = false; panel.classList.remove('dragging'); };
+
+    hdr.addEventListener('mousedown', e => {
+      if (e.target.classList.contains('gr-pm-float-close')) return;
+      e.preventDefault(); _startDrag(e.clientX, e.clientY);
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup',   onMouseUp);
+    });
+    const onMouseMove = e => _moveDrag(e.clientX, e.clientY);
+    const onMouseUp   = () => { _endDrag(); document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); };
+
+    hdr.addEventListener('touchstart', e => {
+      if (e.target.classList.contains('gr-pm-float-close')) return;
+      e.preventDefault(); const t = e.touches[0]; _startDrag(t.clientX, t.clientY);
+    }, { passive:false });
+    hdr.addEventListener('touchmove',  e => { const t = e.touches[0]; _moveDrag(t.clientX, t.clientY); e.preventDefault(); }, { passive:false });
+    hdr.addEventListener('touchend',   _endDrag);
+  }
+
+  /* 모바일: 슬라이드 드로어 토글 */
+  function _togglePmDrawer() {
+    document.getElementById('gr-pm-mob-drawer')?.classList.toggle('open');
+  }
+
+  /* 모바일 미리보기: 캡처 → Web Share API로 전달 */
+  async function _pmCaptureShare() {
+    if (typeof html2canvas === 'undefined') {
+      _toast('⚠️ html2canvas 라이브러리가 필요합니다'); return;
+    }
+    const el = document.getElementById('gr-rpt-preview');
+    if (!el) { _toast('⚠️ 리포트가 없습니다'); return; }
+
+    const btn = document.getElementById('gr-pm-capture-btn');
+    if (btn) { btn.textContent = '⏳ 캡처 중…'; btn.disabled = true; }
+
+    try {
+      await _waitFonts();
+
+      // scale 임시 해제 (gr-rpt-outer transform 제거)
+      const outer = document.getElementById('gr-rpt-outer');
+      const prevTransform = outer?.style.transform || '';
+      const prevOrigin    = outer?.style.transformOrigin || '';
+      if (outer) { outer.style.transform = 'none'; outer.style.transformOrigin = ''; }
+
+      // 두 프레임 대기 (레이아웃 재계산)
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      const fullH = el.scrollHeight;
+      const fullW = el.scrollWidth;
+
+      const opts = {
+        ..._captureOpts(_st.rptBg || '#ffffff'),
+        // 스크롤된 내용 포함하여 전체 높이 캡처
+        width:        fullW,
+        height:       fullH,
+        windowWidth:  Math.max(fullW, window.innerWidth),
+        windowHeight: fullH,
+        scrollX:      0,
+        scrollY:      0,
+        onclone: (clonedDoc) => {
+          // ① 기존 onclone 처리 (scale 제거, 폰트 동기화)
+          const clonedOuter = clonedDoc.getElementById('gr-rpt-outer');
+          if (clonedOuter) { clonedOuter.style.transform = 'none'; clonedOuter.style.transformOrigin = ''; }
+          [...document.querySelectorAll('link[rel="stylesheet"]')].forEach(lk => {
+            if (!clonedDoc.querySelector(`link[href="${lk.href}"]`)) {
+              const nl = clonedDoc.createElement('link'); nl.rel = 'stylesheet'; nl.href = lk.href;
+              clonedDoc.head.appendChild(nl);
+            }
+          });
+          clonedDoc.body.style.fontFamily = `'${_st.fontFamily||"Noto Sans KR"}', sans-serif`;
+
+          // ② 핵심: 모바일 CSS로 잘린 comment-box를 클론에서만 전체 높이로 펼침
+          //    → 실제 화면은 그대로, 캡처 이미지에만 전체 내용 반영
+          clonedDoc.querySelectorAll('.rpt-comment-box').forEach(box => {
+            box.style.maxHeight   = 'none';
+            box.style.height      = 'auto';
+            box.style.overflow    = 'visible';
+            box.style.overflowY   = 'visible';
+          });
+
+          // ③ 클론된 preview도 스크롤 잠금 해제
+          const clonedPreview = clonedDoc.getElementById('gr-rpt-preview');
+          if (clonedPreview) {
+            clonedPreview.style.overflow   = 'visible';
+            clonedPreview.style.maxHeight  = 'none';
+            clonedPreview.style.height     = 'auto';
+          }
+          const clonedArea = clonedDoc.getElementById('gr-pm-report-area');
+          if (clonedArea) {
+            clonedArea.style.overflow  = 'visible';
+            clonedArea.style.maxHeight = 'none';
+          }
+        },
+      };
+
+      const canvas = await html2canvas(el, opts);
+
+      // scale 복원
+      if (outer) { outer.style.transform = prevTransform; outer.style.transformOrigin = prevOrigin; }
+
+      // 파일명 생성
+      const stu  = _getStudents().find(s => s.id === _st.studentId) || _getStudents()[0];
+      const cls  = _st.classId ? _getCls(_st.classId) : null;
+      const safe = s => (s||'').replace(/[\\/:"*?<>|]/g,'').replace(/\s+/g,'_');
+      const now  = new Date();
+      const ymd  = now.toISOString().slice(0,10).replace(/-/g,'');
+      const fname = `${safe(cls?.name)}_${safe(stu?.name)}_Report_${ymd}.png`;
+
+      canvas.toBlob(async blob => {
+        if (!blob) { _toast('⚠️ 캡처 실패'); return; }
+        const file = new File([blob], fname, { type: 'image/png' });
+
+        if (navigator.share && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              title: `${stu?.name || ''} 성적 리포트`,
+              text:  `${cls?.name || ''} 성적 리포트`,
+              files: [file],
+            });
+            _toast('📲 전달 완료', 'success');
+          } catch (e) {
+            if (e.name !== 'AbortError') _pmDownloadFallback(canvas, fname);
+          }
+        } else {
+          _pmDownloadFallback(canvas, fname);
+        }
+      }, 'image/png');
+
+    } catch (e) {
+      _toast('⚠️ 캡처 오류: ' + e.message);
+    } finally {
+      if (btn) { btn.textContent = '📸 캡처·전달'; btn.disabled = false; }
+    }
+  }
+
+  function _pmDownloadFallback(canvas, fname) {
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = fname;
+    a.click();
+    _toast('📸 이미지 저장 완료', 'success');
+  }
+
+  // ── 설정 패널 HTML 빌더 (float 패널 · 미리보기 모드 공유) ──
+  function _buildCfgBodyHTML() {
+    const FONTS = [
+      { key: 'Noto Sans KR',      label: 'Noto',    style: "'Noto Sans KR', sans-serif" },
+      { key: 'IBM Plex Sans KR',  label: 'IBM',     style: "'IBM Plex Sans KR', sans-serif" },
+      { key: 'Nanum Gothic',      label: '나눔고딕', style: "'Nanum Gothic', sans-serif" },
+      { key: 'Nanum Myeongjo',    label: '명조',     style: "'Nanum Myeongjo', serif" },
+      { key: 'Spoqa Han Sans Neo',label: 'Spoqa',   style: "'Spoqa Han Sans Neo','Noto Sans KR',sans-serif" },
+    ];
+    return `
         <!-- 레이아웃 -->
         <div class="gr-float-section">
           <div class="gr-float-lbl">📐 레이아웃</div>
           <div class="gr-rpt-layouts">${[1,2,3,4,5].map(n=>`<button class="gr-rpt-lbtn ${_st.reportLayout===n?'on':''}" onclick="GradeApp._setLayout(${n})">L${n}</button>`).join('')}</div>
         </div>
-
         <!-- 폰트 -->
         <div class="gr-float-section">
           <div class="gr-float-lbl">🔤 본문 폰트</div>
@@ -1516,7 +2465,6 @@ const GradeApp = (() => {
             <span style="font-size:11px;font-weight:700">Bold 강조 적용</span>
           </label>
         </div>
-
         <!-- 글자 크기 -->
         <div class="gr-float-section">
           <div class="gr-float-lbl">🔡 글자 크기</div>
@@ -1531,7 +2479,6 @@ const GradeApp = (() => {
             </label>
           </div>
         </div>
-
         <!-- 페이지 -->
         <div class="gr-float-section">
           <div class="gr-float-lbl">📄 페이지 크기</div>
@@ -1551,13 +2498,11 @@ const GradeApp = (() => {
             <input type="range" min="40" max="160" value="${_st.logoSize}" oninput="GradeApp._setLogoSize(this.value)" style="flex:1;accent-color:var(--a)">
             <span id="gr-rpt-logo-sz" style="min-width:34px;text-align:right">${_st.logoSize}px</span>
           </label>
-          <!-- 확대/축소 -->
           <label style="font-size:11px;color:var(--tx2);display:flex;align-items:center;gap:6px;margin-top:6px">🔍 배율
             <input type="range" min="60" max="150" step="5" value="${_st.rptScale}" oninput="GradeApp._setRptScale(+this.value)" style="flex:1;accent-color:var(--a)">
             <span id="gr-rpt-scale-lbl" style="min-width:34px;text-align:right">${_st.rptScale}%</span>
           </label>
         </div>
-
         <!-- 배경색 -->
         <div class="gr-float-section">
           <div class="gr-float-lbl">🎨 배경색</div>
@@ -1566,7 +2511,6 @@ const GradeApp = (() => {
               `<button onclick="GradeApp._setRptBg('${c}')" title="${l}" style="width:24px;height:24px;border-radius:50%;border:2px solid ${_st.rptBg===c?'var(--a)':'#e5e7eb'};background:${c};cursor:pointer;box-shadow:${_st.rptBg===c?'0 0 0 2px var(--a)':'none'};transition:all .15s"></button>`).join('')}
           </div>
         </div>
-
         <!-- 그래프 & 라인 -->
         <div class="gr-float-section">
           <div class="gr-float-lbl">📊 그래프 · 🖊 라인</div>
@@ -1585,7 +2529,6 @@ const GradeApp = (() => {
             <label style="font-size:11px;color:var(--tx2);display:flex;align-items:center;gap:4px"><input type="checkbox" id="gr-tbl-round" ${_st.tableRound?'checked':''} onchange="GradeApp._setTableRound(this.checked)" style="accent-color:var(--a)"> 표 라운드</label>
           </div>
         </div>
-
         <!-- 제목 정렬 -->
         <div class="gr-float-section">
           <div class="gr-float-lbl">📐 제목 정렬 · 🗂 표 색상</div>
@@ -1599,7 +2542,6 @@ const GradeApp = (() => {
             <label style="font-size:10px;color:var(--tx2);display:flex;align-items:center;gap:3px">셀배경<input type="color" value="${_st.tblCellBg}" oninput="GradeApp._setTblColor('cellBg',this.value)" style="width:22px;height:16px;border:none;cursor:pointer;border-radius:3px;padding:0"></label>
           </div>
         </div>
-
         <!-- 추천 테마 -->
         <div class="gr-float-section">
           <div class="gr-float-lbl">✨ 추천 테마</div>
@@ -1608,9 +2550,29 @@ const GradeApp = (() => {
             <button onclick="GradeApp._applyTheme(2)" style="padding:5px 12px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:var(--font);border:1.5px solid #a5f3fc;background:linear-gradient(135deg,#ecfeff,#cffafe);color:#0e7490">🌊 블루</button>
             <button onclick="GradeApp._applyTheme(3)" style="padding:5px 12px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:var(--font);border:1.5px solid #fcd34d;background:linear-gradient(135deg,#fffbeb,#fef3c7);color:#92400e">🌟 골드</button>
           </div>
-        </div>
+        </div>`;
+  }
 
-      </div>`;
+  // ── 플로팅 설정 패널 열기/닫기 ──
+  function _openFloatCfg() {
+    const existing = document.getElementById('gr-float-cfg');
+    if (existing) { existing.remove(); return; }
+
+    const panel = document.createElement('div');
+    panel.id = 'gr-float-cfg';
+    panel.className = 'gr-float-cfg';
+
+    const initLeft = Math.max(8, window.innerWidth * 0.02);
+    const initTop  = Math.max(60, window.innerHeight * 0.15);
+    panel.style.left = initLeft + 'px';
+    panel.style.top  = initTop  + 'px';
+
+    panel.innerHTML = `
+      <div class="gr-float-cfg-hdr" id="gr-float-cfg-hdr">
+        <span class="gr-float-cfg-title">⚙️ 리포트 설정</span>
+        <button class="gr-float-cfg-close" id="gr-float-cfg-close-btn">✕</button>
+      </div>
+      <div class="gr-float-cfg-body">${_buildCfgBodyHTML()}</div>`;
 
     document.body.appendChild(panel);
 
@@ -1973,12 +2935,13 @@ const GradeApp = (() => {
     const rows = [...thead.querySelectorAll('tr')];
     let cumH = 0;
     rows.forEach(row => {
-      const h = row.getBoundingClientRect().height || 34;
+      // offsetHeight 우선(레이아웃 완료 후 정확), BoundingRect 폴백
+      const h = row.offsetHeight || Math.round(row.getBoundingClientRect().height) || (row.classList.contains('gs-band') ? 20 : 34);
       row.querySelectorAll('th').forEach(th => {
         th.style.position = 'sticky';
         th.style.top = cumH + 'px';
         th.style.zIndex = th.classList.contains('gs-fix') ? '7' : '4';
-        th.style.background = th.style.background || 'var(--surf2)';
+        if (!th.style.background) th.style.background = 'var(--surf2)';
       });
       cumH += h;
     });
@@ -2201,7 +3164,13 @@ const GradeApp = (() => {
       .rpt-fail{color:#ea580c;font-weight:700;}
       .rpt-achv{color:#8b5cf6;font-weight:800;}
       .rpt-avg td{font-weight:700;background:#f8fafc !important;}
-      .rpt-comment-box{border:1.5px solid ${_st.dividerColor||'#e2e8f0'};border-radius:8px;padding:12px 14px;min-height:60px;font-size:${_st.reportBodySize||12}px;color:#374151;line-height:1.8;background:#fafafa;margin:0 24px 20px;}
+      .rpt-comment-box{border:1.5px solid ${_st.dividerColor||'#e2e8f0'};border-radius:8px;padding:12px 14px;min-height:60px;font-size:${_st.reportBodySize||12}px;color:#374151;line-height:1.8;background:#fafafa;margin:0 24px 20px;word-break:break-word;overflow-wrap:break-word;}
+      @media(max-width:640px){
+        .rpt-comment-box{max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+        .rpt-wrap{overflow-x:hidden;word-break:break-word;}
+        .rpt-tbl{table-layout:fixed;}
+        .rpt-tbl td,.rpt-tbl th{word-break:break-word;overflow-wrap:break-word;}
+      }
       .rpt-graph-wrap{margin:8px 24px 16px;text-align:${_st.graphAlign||'left'};}
       svg{display:block;}
       img{max-width:100%;height:auto;}
@@ -2810,6 +3779,9 @@ const GradeApp = (() => {
     /* 평가 설정 버튼 */
     const evalBtn = document.getElementById('gr-eval-btn');
     if(evalBtn) evalBtn.style.display = (_st.bookId) ? 'inline-block' : 'none';
+    /* 컬럼 너비 초기화 버튼 */
+    const colResetBtn = document.getElementById('gr-col-reset-btn');
+    if(colResetBtn) colResetBtn.style.display = (isExcel && hasData) ? 'inline-block' : 'none';
     /* 헤더 폰트 버튼 */
     const fontBtn = document.getElementById('gr-hdr-font-btn');
     if(fontBtn) fontBtn.style.display = ((isExcel || _st.viewMode==='card') && hasData) ? '' : 'none';
@@ -3621,15 +4593,222 @@ const GradeApp = (() => {
     _renderContent();
   }
   
+  // ════════════════════════════════════════
+  // AI Comment Popover (엑셀뷰)
+  // ════════════════════════════════════════
+  let _activeCmtPop = null;
+
+  /* 인라인 textarea 입력 → 즉시 메모리 반영 (저장은 자동 or 수동) */
+  function _onCmtInput(sid, val) {
+    _ensureData(sid);
+    _st.data[sid].comment = val;
+    _st.dirty.add(sid);
+    _refreshDirtyUI();
+    // 아이콘 has-cmt 상태 갱신
+    const icon = document.getElementById('gr-cmtbtn-' + sid);
+    if (icon) icon.className = 'gs-cm-icon' + (val.trim() ? ' has-cmt' : '');
+  }
+
+  /* ✏️ 버튼 → 대형 AI 팝업 */
+  function _openCommentPop(e, sid) {
+    e.stopPropagation();
+    _closeCommentPop();
+    _ensureData(sid);
+    const stu = _getStudents().find(s => s.id === sid);
+    const d   = _st.data[sid] || {};
+
+    // ── 모달 생성 ──
+    const modal = document.createElement('div');
+    modal.className = 'gr-cmt-modal';
+    modal.id = 'gr-cmt-modal';
+    modal.onclick = e2 => { if (e2.target === modal) _closeCommentPop(); };
+
+    const box = document.createElement('div');
+    box.className = 'gr-cmt-box';
+
+    // 헤더
+    const header = document.createElement('div');
+    header.className = 'gr-cmt-header';
+    header.innerHTML = `
+      <div>
+        <div class="gr-cmt-title">✏️ Teacher's Comment</div>
+        <div class="gr-cmt-subtitle">${_e(stu ? (stu.name + (stu.nickname ? ' ('+stu.nickname+')' : '')) : sid)}</div>
+      </div>
+      <button class="gr-cmt-close" onclick="GradeApp._closeCommentPop()">✕</button>`;
+    box.appendChild(header);
+
+    // 본문
+    const body = document.createElement('div');
+    body.className = 'gr-cmt-body';
+
+    const ta = document.createElement('textarea');
+    ta.className = 'gr-cmt-textarea';
+    ta.placeholder = "Teacher's Comment를 입력하거나 아래 AI 버튼을 눌러보세요…";
+    ta.value = d.comment || '';
+    ta.rows = 6;
+    body.appendChild(ta);
+
+    const charCount = document.createElement('div');
+    charCount.className = 'gr-cmt-char-count';
+    charCount.textContent = ta.value.length + '자';
+    body.appendChild(charCount);
+    ta.addEventListener('input', () => { charCount.textContent = ta.value.length + '자'; });
+
+    // AI 버튼 행
+    const aiRow = document.createElement('div');
+    aiRow.className = 'gr-cmt-ai-row';
+    aiRow.innerHTML = `
+      <button class="gr-cmt-ai-btn" id="gr-cmt-gen">✨ AI 자동 생성</button>
+      <button class="gr-cmt-ai-btn proof" id="gr-cmt-proof">🔍 문법 교정</button>`;
+    body.appendChild(aiRow);
+
+    const status = document.createElement('div');
+    status.className = 'gr-cmt-status';
+    body.appendChild(status);
+
+    box.appendChild(body);
+
+    // 하단 버튼
+    const footer = document.createElement('div');
+    footer.className = 'gr-cmt-footer';
+    footer.innerHTML = `
+      <button class="gr-cmt-cancel-btn" onclick="GradeApp._closeCommentPop()">취소</button>
+      <button class="gr-cmt-save-btn" id="gr-cmt-save">💾 저장</button>`;
+    box.appendChild(footer);
+
+    modal.appendChild(box);
+    document.body.appendChild(modal);
+    _activeCmtPop = modal;
+    ta.focus();
+
+    // 상태 표시 헬퍼
+    const _st2 = (cls, msg) => {
+      status.className = 'gr-cmt-status show ' + cls;
+      status.textContent = msg;
+    };
+    const _loading = on => {
+      const genBtn   = modal.querySelector('#gr-cmt-gen');
+      const proofBtn = modal.querySelector('#gr-cmt-proof');
+      const saveBtn  = modal.querySelector('#gr-cmt-save');
+      [genBtn, proofBtn, saveBtn].forEach(b => { if(b) b.disabled = on; });
+    };
+
+    // AI 생성
+    modal.querySelector('#gr-cmt-gen').onclick = async () => {
+      if (typeof GeminiAI === 'undefined') { _st2('err','⚠ GeminiAI 모듈 미로드'); return; }
+      _st2('loading','✦ AI 생성 중… 잠시 기다려 주세요');
+      _loading(true);
+      try {
+        ta.value = await GeminiAI.generateComment({ name: stu ? stu.name : sid, word: d.word, reading: d.reading });
+        charCount.textContent = ta.value.length + '자';
+        _st2('ok','✓ 생성 완료 — 내용을 확인하고 저장하세요');
+      } catch(err) { _st2('err','⚠ ' + _cpMsg(err)); }
+      finally { _loading(false); }
+    };
+
+    // AI 교정
+    modal.querySelector('#gr-cmt-proof').onclick = async () => {
+      if (!ta.value.trim()) { _st2('err','교정할 텍스트를 먼저 입력하세요'); return; }
+      if (typeof GeminiAI === 'undefined') { _st2('err','⚠ GeminiAI 모듈 미로드'); return; }
+      _st2('loading','✦ 교정 중…');
+      _loading(true);
+      try {
+        ta.value = await GeminiAI.proofreadComment(ta.value);
+        charCount.textContent = ta.value.length + '자';
+        _st2('ok','✓ 교정 완료');
+      } catch(err) { _st2('err','⚠ ' + _cpMsg(err)); }
+      finally { _loading(false); }
+    };
+
+    // 저장
+    modal.querySelector('#gr-cmt-save').onclick = async () => {
+      _loading(true);
+      const val = ta.value.trim();
+      _st.data[sid].comment = val;
+      _st.dirty.add(sid);
+      _refreshDirtyUI();
+      // 인라인 textarea도 동기화
+      const inlineTa = document.getElementById('gr-cmta-' + sid);
+      if (inlineTa) inlineTa.value = val;
+      const icon = document.getElementById('gr-cmtbtn-' + sid);
+      if (icon) icon.className = 'gs-cm-icon' + (val ? ' has-cmt' : '');
+      try {
+        await saveOne(sid);
+        _closeCommentPop();
+      } catch(err) { _st2('err','⚠ 저장 실패: ' + _cpMsg(err)); _loading(false); }
+    };
+
+    // Esc 닫기
+    modal._keyH = e2 => { if (e2.key === 'Escape') _closeCommentPop(); };
+    document.addEventListener('keydown', modal._keyH);
+  }
+
+  function _closeCommentPop() {
+    const m = document.getElementById('gr-cmt-modal');
+    if (m) { if (m._keyH) document.removeEventListener('keydown', m._keyH); m.remove(); }
+    // 구버전 팝오버도 정리
+    if (_activeCmtPop && _activeCmtPop !== m) {
+      if (_activeCmtPop._keyH) document.removeEventListener('keydown', _activeCmtPop._keyH);
+      if (_activeCmtPop._clickH) document.removeEventListener('click', _activeCmtPop._clickH);
+      _activeCmtPop.remove();
+    }
+    _activeCmtPop = null;
+  }
+
+  function _cpSt(el, cls, msg) { el.className = 'gr-cp-status-line ' + cls; el.textContent = msg; }
+  function _cpLd(pop, on)      { pop.querySelectorAll('[data-cpa]').forEach(function(b){ b.disabled = on; }); }
+  function _cpMsg(err) {
+    var m = err && err.message ? err.message : String(err);
+    if (m.indexOf('403') >= 0) return 'API 키 오류 또는 할당량 초과';
+    if (m.indexOf('429') >= 0) return 'API 요청 한도 초과 (잠시 후 재시도)';
+    return m.slice(0, 80);
+  }
+
+  // ════════════════════════════════════════
+  // AI Comment — 카드뷰 전용
+  // ════════════════════════════════════════
+  async function _cardAiGen(sid) {
+    if (typeof GeminiAI === 'undefined') { _toast('⚠ gemini-ai.js 가 로드되지 않았습니다'); return; }
+    _ensureData(sid);
+    var stu    = _getStudents().find(function(s){ return s.id === sid; });
+    var d      = _st.data[sid] || {};
+    var ta     = document.getElementById('gr-cd-cmt-' + sid);
+    var status = document.getElementById('gr-cd-cmt-st-' + sid);
+    if (!ta) return;
+    _cpSt(status, 'cp-loading', '✦ AI 생성 중...');
+    try {
+      ta.value = await GeminiAI.generateComment({ name: stu ? stu.name : sid, word: d.word, reading: d.reading });
+      _cardComment(ta.value, sid);
+      _cpSt(status, 'cp-ok', '✓ 완료');
+      setTimeout(function(){ if(status) status.textContent=''; }, 3000);
+    } catch(err) { _cpSt(status, 'cp-err', '⚠ ' + _cpMsg(err)); }
+  }
+
+  async function _cardAiProof(sid) {
+    if (typeof GeminiAI === 'undefined') { _toast('⚠ gemini-ai.js 가 로드되지 않았습니다'); return; }
+    var ta     = document.getElementById('gr-cd-cmt-' + sid);
+    var status = document.getElementById('gr-cd-cmt-st-' + sid);
+    if (!ta || !ta.value.trim()) { _toast('⚠ 교정할 텍스트를 먼저 입력하세요'); return; }
+    _cpSt(status, 'cp-loading', '✦ 교정 중...');
+    try {
+      ta.value = await GeminiAI.proofreadComment(ta.value);
+      _cardComment(ta.value, sid);
+      _cpSt(status, 'cp-ok', '✓ 교정 완료');
+      setTimeout(function(){ if(status) status.textContent=''; }, 3000);
+    } catch(err) { _cpSt(status, 'cp-err', '⚠ ' + _cpMsg(err)); }
+  }
+
+
   return {
     init, render,
     _onCls, _onBk, _openEvalFromGrade, _showEvalPopup, _openEvalPopupDirect, _grAddReview, _saveEvalCfg, _refreshAfterEvalUpdate, _onStu, _setView, _toggleSort,
+    _openCommentPop, _closeCommentPop, _cardAiGen, _cardAiProof,
     _excelWordInput, _excelRdInput, _excelComment, _onKey,
     _cardWordInput, _cardRdInput, _cardComment,
     _slideTo, _ts, _te,
     _onCtxTable, _closeCtxMenu,
     saveOne, saveAll, resetOne,
-    _setLayout, _setHdrFontSize, _exportAllGrades, _importAllGrades, _toggleGraph, _setChartStyle, _setPageSize, _setRptFontSize, _setGraphAlign, _setDivider, _setLogoSize, _setTableRound, _bindColResize, _setFontFamily, _openFloatCfg, _setReportBold, _deliverReport, _setRptBg, _setRptScale,
+    _setLayout, _setHdrFontSize, _exportAllGrades, _importAllGrades, _toggleGraph, _setChartStyle, _setPageSize, _setRptFontSize, _setGraphAlign, _setDivider, _setLogoSize, _setTableRound, _applyTableWidth, _bindColResize, _bindGroupResizers, _repositionGroupResizers, _resetColWidths, _onCmtInput, _setFontFamily, _openFloatCfg, _setReportBold, _deliverReport, _setRptBg, _setRptScale, _openPreviewMode, _closePreviewMode, _togglePmFloat, _openPmFloat, _togglePmDrawer, _pmCaptureShare,
     _setTitleAlign, _setTblColor, _applyTheme, _applyRptStyles,
     _setGraphStyleMode, _fixStickyHeaderTops,
     _copyReport, _shareReport, _printReport, _captureReport, _captureAllReports, _showShareModal, _showDeliverModal,
