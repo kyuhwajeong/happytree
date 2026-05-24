@@ -5735,8 +5735,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
           // ★ 분석된 스타일을 teacherMemo에 힌트로 추가 전달
           if (styleAnalysis) bkStatus.teacherMemo = '[스타일 가이드] ' + styleAnalysis.slice(0, 200);
           let comment = await GeminiAI.generateComment(info, bkStatus, { prevComments: sd.prevComments, activePins });
-          if (prefix) comment = prefix + '
-' + comment;
+          if (prefix) comment = prefix + '\n' + comment;
           _results[sd.id].comment = comment; _results[sd.id].status = 'done';
           _ensureData(sd.id); _st.data[sd.id].comment = comment; _st.dirty.add(sd.id);
         } catch(err) {
