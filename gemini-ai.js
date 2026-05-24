@@ -1,86 +1,95 @@
 /**
- * gemini-ai.js — Happy Tree English Academy  v5.0
+ * gemini-ai.js — Happy Tree English Academy  v7.0
+ * ─────────────────────────────────────────────────
+ * ★ v7.0 Teacher's Comment AI 엔진 전면 개편
  *
- * ★ 무료 최대 안정성 전략 (2025년 5월 기준)
- * ─────────────────────────────────────────────────────────────
- *  핵심 구조: 3개 Google 계정(프로젝트) × 각 키 1개 = 3배 한도 확보
+ * 핵심 기능
+ *  1. 선생님 스타일 DNA 학습
+ *     - 과거 직접 작성한 코멘트에서 문체·어조·길이 패턴 자동 추출
+ *     - localStorage에 영구 저장, 최대 20개 샘플 유지
  *
- *  무료 한도 (프로젝트당):
- *    gemini-2.5-flash  : 10 RPM / 500 RPD
- *    gemini-2.5-flash-lite : 15 RPM / 1,000 RPD
+ *  2. 필수 포함 키워드/문구 PIN 시스템
+ *     - 선생님이 "꼭 들어갔으면 하는" 문구를 핀으로 등록
+ *     - 등록된 핀은 AI 생성 시 반드시 코멘트에 반영
  *
- *  키 3개 로테이션 시 실질 한도:
- *    gemini-2.5-flash-lite : 하루 최대 3,000 요청 (학원 용량 충분)
+ *  3. 교재 상태 연동
+ *     - 현재 교재 이수 완료 여부, 다음 교재 안내 자동 포함
  *
- *  ★ 적용 방법:
- *    아래 KEYS 배열에 서로 다른 Google 계정에서 발급받은 키를
- *    각각 채워넣으면 됩니다. (최소 1개, 권장 3개)
- *    키가 1개뿐이어도 동작하며, 더 많을수록 안정성이 높아집니다.
+ *  4. 이 학생 이전 코멘트 참조
+ *     - 동일 학생의 과거 코멘트 흐름을 이어받아 작성
  *
- *  작동 방식:
- *    1. 첫 번째 키로 시도
- *    2. 429(한도초과) → 즉시 다음 키로 교체 (폴백)
- *    3. 같은 키의 모델 간 폴백도 병행
- *    4. 모든 키·모델 소진 시 → 친절한 에러 메시지
- * ─────────────────────────────────────────────────────────────
+ *  5. 복수 버전 생성 (variants)
+ *     - 같은 조건에서 2~3개 버전 생성 → 선생님이 선택
+ *
+ *  6. 멀티 API 키 로테이션 (v5 유지)
+ * ─────────────────────────────────────────────────
  */
 const GeminiAI = (() => {
 
-  /* ══════════════════════════════════════════════════════════════
-   * ★★★ 여기에 API 키를 입력하세요 ★★★
-   *
-   *  - KEY_1: 현재 사용 중인 키 (필수)
-   *  - KEY_2: 두 번째 Google 계정 키 (권장)
-   *  - KEY_3: 세 번째 Google 계정 키 (권장)
-   *
-   *  키 발급: https://aistudio.google.com/apikey
-   *  (Google 계정 1개 = 1 프로젝트 = 1세트 한도)
-   * ══════════════════════════════════════════════════════════════ */
+  /* ══ API 키 (서로 다른 Google 계정에서 발급) ════════════════ */
   const KEYS = [
     'AIzaSyB9mhHcdftl13b3BvnvLgBkrjnsmqNKcSQ',   // KEY_1 (현재 키)  jkyuhwa
     'AIzaSyDov3-1Ct7xNjqXDW4OA20koF15hzMhfVE',   // KEY_2 ← 두 번째 계정 키 입력 kuha0879
     'AIzaSyD8zje-ZVKvuRCOsmOLbYrKQXruKH_xGd0',   // KEY_3 ← 세 번째 계정 키 입력 kuha7885
-  ].map(k => k.trim()).filter(k => k.length > 0);
+  ].map(k => k.trim()).filter(Boolean);
 
-  /* ══════════════════════════════════════════════════════════════
-   * 모델 목록 (2025년 5월 기준 안정 모델)
-   *
-   * gemini-2.5-flash-lite : 무료 한도 최대 (15 RPM / 1,000 RPD)
-   * gemini-2.5-flash      : 성능 우수  (10 RPM / 500 RPD)
-   *
-   * ※ gemini-2.0-flash 계열은 2026년 3월 6일부터 신규 프로젝트 접근 불가
-   * ══════════════════════════════════════════════════════════════ */
-  const MODELS = [
-    'gemini-2.5-flash-lite',   // 1순위: 한도 가장 넉넉
-    'gemini-2.5-flash',        // 2순위: 성능 우수
-  ];
+  const MODELS  = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
+  const _ep     = (m, k) => `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${k}`;
+  const _delay  = ms => new Promise(r => setTimeout(r, ms));
 
-  const _ep = (model, key) =>
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+  /* ══ 스타일 DNA 저장소 ═══════════════════════════════════════ */
+  const LS_STYLE = 'ht_style_samples';   // 코멘트 샘플 (최대 20개)
+  const LS_PINS  = 'ht_style_pins';      // 필수 포함 문구 핀 (최대 15개)
 
-  const _delay = ms => new Promise(r => setTimeout(r, ms));
+  const _lg = k => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } };
+  const _ls = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 
-  /* ══════════════════════════════════════════════════════════════
-   * 핵심 호출 — 키 × 모델 조합을 순차 시도
-   * 우선순위: 키1/모델1 → 키1/모델2 → 키2/모델1 → 키2/모델2 → ...
-   * ══════════════════════════════════════════════════════════════ */
-  async function _call(prompt, systemInstruction = '') {
-    if (KEYS.length === 0) {
-      throw new Error('API 키가 설정되지 않았습니다. gemini-ai.js의 KEYS 배열에 키를 입력해 주세요.');
-    }
+  /* ── 스타일 샘플 API ── */
+  function getStyleSamples()   { return _lg(LS_STYLE) || []; }
+  function addStyleSample(txt) {
+    const t = (txt || '').trim();
+    if (t.length < 10) return false;
+    const arr = getStyleSamples().filter(s => s !== t);
+    arr.push(t);
+    _ls(LS_STYLE, arr.slice(-20));
+    return true;
+  }
+  function removeStyleSample(idx) {
+    const arr = getStyleSamples();
+    arr.splice(idx, 1);
+    _ls(LS_STYLE, arr);
+  }
+  function clearStyleSamples() { localStorage.removeItem(LS_STYLE); }
 
+  /* ── 핀 API ── */
+  function getPins()          { return _lg(LS_PINS) || []; }
+  function addPin(txt)        {
+    const t = (txt || '').trim();
+    if (!t) return false;
+    const arr = getPins().filter(p => p !== t);
+    arr.push(t);
+    _ls(LS_PINS, arr.slice(-15));
+    return true;
+  }
+  function removePin(idx)     {
+    const arr = getPins();
+    arr.splice(idx, 1);
+    _ls(LS_PINS, arr);
+  }
+  function clearPins()        { localStorage.removeItem(LS_PINS); }
+
+  /* ══ 핵심 API 호출 ═══════════════════════════════════════════ */
+  async function _call(prompt, system = '') {
+    if (!KEYS.length) throw new Error('API 키 미설정 — gemini-ai.js KEYS 배열을 확인하세요.');
     const errors = [];
-
     for (const key of KEYS) {
       for (const model of MODELS) {
         try {
           const body = {
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
+            generationConfig: { temperature: 0.78, maxOutputTokens: 1024 }
           };
-          if (systemInstruction) {
-            body.systemInstruction = { parts: [{ text: systemInstruction }] };
-          }
+          if (system) body.systemInstruction = { parts: [{ text: system }] };
 
           const res = await fetch(_ep(model, key), {
             method: 'POST',
@@ -88,143 +97,182 @@ const GeminiAI = (() => {
             body: JSON.stringify(body)
           });
 
-          // ── 401: 키 자체 무효 → 이 키의 나머지 모델 건너뜀 ──
-          if (res.status === 401) {
-            const keyHint = key.slice(0, 8) + '...';
-            console.warn(`[GeminiAI] 키 무효(401): ${keyHint} → 다음 키 시도`);
-            errors.push(`키(${keyHint})/${model}: 키 무효(401)`);
-            break; // 이 key의 모델 루프 탈출 → 다음 key로
-          }
-
-          // ── 429: 이 키 한도 소진 → 다음 키로 ──
-          if (res.status === 429) {
-            const keyHint = key.slice(0, 8) + '...';
-            console.warn(`[GeminiAI] 한도 소진(429): 키(${keyHint})/${model} → 다음 키 시도`);
-            errors.push(`키(${keyHint})/${model}: 한도 소진(429)`);
-            break; // 이 key의 나머지 모델도 429일 가능성이 높으므로 바로 다음 key로
-          }
-
-          // ── 404: 모델 없음 → 다음 모델 시도 ──
-          if (res.status === 404) {
-            console.warn(`[GeminiAI] 모델 없음(404): ${model} → 다음 모델 시도`);
-            errors.push(`${model}: 모델 없음(404)`);
-            continue; // 다음 모델 시도
-          }
-
-          // ── 503: 서버 불안정 → 짧은 대기 후 다음 모델 ──
-          if (res.status === 503) {
-            console.warn(`[GeminiAI] 서버 불안정(503): ${model}`);
-            errors.push(`${model}: 서버 불안정(503)`);
-            await _delay(500);
-            continue;
-          }
-
-          // ── 기타 오류 ──
+          if (res.status === 401) { errors.push(`키(${key.slice(0,8)})/401`); break; }
+          if (res.status === 429) { errors.push(`키(${key.slice(0,8)})/429-한도소진`); break; }
+          if (res.status === 404) { errors.push(`${model}/404-모델없음`); continue; }
+          if (res.status === 503) { await _delay(500); errors.push(`${model}/503`); continue; }
           if (!res.ok) {
             const t = await res.text().catch(() => '');
-            if (res.status === 400 && t.toLowerCase().includes('api key')) {
-              const keyHint = key.slice(0, 8) + '...';
-              errors.push(`키(${keyHint})/${model}: 키 만료(400)`);
-              break;
-            }
+            if (res.status === 400 && t.toLowerCase().includes('api key')) { errors.push(`키(${key.slice(0,8)})/400-만료`); break; }
             throw new Error(`API ${res.status}: ${t.slice(0, 100)}`);
           }
 
-          // ── 정상 응답 ──
           const data = await res.json();
           const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
           if (!text) {
-            const reason = data?.candidates?.[0]?.finishReason ?? 'UNKNOWN';
-            if (reason === 'SAFETY') throw new Error('안전 필터에 의해 응답이 차단되었습니다.');
-            errors.push(`${model}: 빈 응답(${reason})`);
-            continue;
+            const r = data?.candidates?.[0]?.finishReason ?? '?';
+            if (r === 'SAFETY') throw new Error('안전 필터 차단');
+            errors.push(`${model}/빈응답(${r})`); continue;
           }
-
-          console.info(`[GeminiAI] ✓ 성공: 키(${key.slice(0,8)}...)/${model}`);
+          console.info(`[GeminiAI] ✓ ${key.slice(0,8)}/${model}`);
           return text.trim().replace(/^["']|["']$/g, '');
 
         } catch (e) {
           if (e.message.includes('안전 필터')) throw e;
-          errors.push(`${model}: ${e.message.slice(0, 60)}`);
+          errors.push(`${model}: ${e.message.slice(0, 50)}`);
         }
       }
     }
-
-    // 모든 키·모델 실패
-    const keyCount = KEYS.length;
     throw new Error(
-      `모든 API 키(${keyCount}개)와 모델이 실패했습니다.\n\n` +
-      `상세 오류:\n${errors.map(e => '  · ' + e).join('\n')}\n\n` +
-      `해결 방법:\n` +
-      `  1. 오늘의 한도 소진 → 자정(태평양 표준시) 이후 자동 초기화됩니다.\n` +
-      `  2. 여분 키 추가 → gemini-ai.js의 KEY_2, KEY_3에 다른 계정 키를 입력하세요.\n` +
-      `  3. 키 발급: https://aistudio.google.com/apikey`
+      `모든 키/모델 실패\n${errors.map(e => '  · ' + e).join('\n')}\n\n` +
+      '해결: 자정 이후 재시도 또는 KEY_2/KEY_3에 다른 계정 키를 추가하세요.\n(https://aistudio.google.com/apikey)'
     );
   }
 
-  /* ══════════════════════════════════════════════════════════════
-   * 1. 코멘트 생성
-   * ══════════════════════════════════════════════════════════════ */
-  async function generateComment(studentInfo, gradeData) {
-    const system =
-      '당신은 대한민국 영어학원의 따뜻하고 전문적인 선생님입니다. ' +
-      '학생의 성적 데이터를 바탕으로 학부모께 전달할 코멘트를 작성합니다. ' +
-      '반드시 한국어(존댓말, ~습니다/합니다 체)로만 작성하세요. ' +
-      '3~5문장으로: 노력 인정 → 잘한 점 → 개선 방향 순으로 작성하세요. ' +
-      '코멘트 텍스트만 반환하고, 부가 설명은 일절 포함하지 마세요.';
+  /* ══ 컨텍스트 빌더 (공통) ════════════════════════════════════ */
+  function _buildContext(opts = {}) {
+    const { studentInfo = {}, bookStatus = {}, prevComments = [], activePins = [] } = opts;
 
-    const name        = typeof studentInfo === 'object' ? (studentInfo.name || '학생') : studentInfo;
-    const wordData    = typeof studentInfo === 'object' ? studentInfo.word    : (gradeData?.word    ?? '');
-    const readingData = typeof studentInfo === 'object' ? studentInfo.reading : (gradeData?.reading ?? '');
+    const name    = typeof studentInfo === 'string' ? studentInfo : (studentInfo.name || '학생');
+    const word    = studentInfo.word;
+    const reading = studentInfo.reading;
+    const gender  = studentInfo.gender || '';
+
+    // 성취율
+    const wPct = word?.totalQ > 0 ? Math.round((word.pass / word.totalQ) * 100) : null;
+    const rVals = reading ? Object.values(reading).map(v => typeof v === 'object' ? v.score : null).filter(s => s != null) : [];
+    const rPct  = rVals.length ? Math.round(rVals.reduce((a,b)=>a+b,0)/rVals.length) : null;
+
+    // 교재 상태
+    let bookLine = '';
+    if (bookStatus.currentBook) {
+      bookLine = `\n현재 교재: ${bookStatus.currentBook}`;
+      if (bookStatus.isCompleted) {
+        bookLine += ' (이번 달 이수 완료 ✓)';
+        if (bookStatus.nextBook) bookLine += `\n다음 교재: ${bookStatus.nextBook}로 진행 예정`;
+      }
+    }
+
+    // 선생님 추가 메모
+    const memoLine = bookStatus.teacherMemo ? `\n선생님 메모: ${bookStatus.teacherMemo}` : '';
+
+    // 필수 포함 핀
+    const pinLine = activePins.length
+      ? `\n\n[반드시 포함할 내용 — 아래 문구를 코멘트에 자연스럽게 녹여 넣으세요]\n${activePins.map((p,i) => `PIN${i+1}: "${p}"`).join('\n')}`
+      : '';
+
+    // 이전 코멘트 참조
+    const prevLine = prevComments.length
+      ? `\n\n[이 학생의 이전 코멘트 — 동일 어조로 이어지도록]\n${prevComments.slice(0,3).map((c,i)=>`이전${i+1}: "${c}"`).join('\n')}`
+      : '';
+
+    // 스타일 DNA
+    const samples = getStyleSamples().filter(s => s.length > 10);
+    const styleLine = samples.length
+      ? `\n\n[선생님 작성 스타일 DNA — 이 문체와 어조를 최대한 흉내내세요]\n${samples.slice(-6).map((s,i)=>`샘플${i+1}: "${s}"`).join('\n')}`
+      : '';
 
     const prompt =
-      `학생 이름: ${name}\n` +
-      `단어 성적: ${JSON.stringify(wordData ?? gradeData ?? '')}\n` +
-      `리딩 성적: ${JSON.stringify(readingData ?? '')}\n` +
-      '위 데이터를 바탕으로 학부모께 전달할 선생님 코멘트를 작성해 주세요.';
+      `학생: ${name}${gender ? ` (${gender})` : ''}\n` +
+      `단어 성취율: ${wPct != null ? wPct + '%' : '미입력'}\n` +
+      `리딩 성취율: ${rPct != null ? rPct + '%' : '미입력'}` +
+      bookLine + memoLine + pinLine + prevLine + styleLine;
 
+    return prompt;
+  }
+
+  /* ══ 1. 코멘트 생성 (단일) ═══════════════════════════════════
+   * @param {object|string} studentInfo  { name, word, reading, gender? }
+   * @param {object}        bookStatus   { currentBook, isCompleted, nextBook, teacherMemo? }
+   * @param {object}        extraOpts    { prevComments?, activePins? }
+   * ════════════════════════════════════════════════════════════ */
+  async function generateComment(studentInfo, bookStatus = {}, extraOpts = {}) {
+    const prevComments = extraOpts.prevComments || [];
+    const activePins   = extraOpts.activePins   || getPins();  // 기본값: 등록된 모든 핀
+
+    const system =
+      '당신은 대한민국 초등학생 전담 영어학원 선생님입니다.\n' +
+      '학부모께 알림장처럼 전달하는 따뜻한 코멘트를 작성합니다.\n' +
+      '규칙:\n' +
+      '1. 반드시 한국어 존댓말(~습니다/합니다)만 사용\n' +
+      '2. 점수 숫자 대신 노력·성장·태도·참여도 위주로 칭찬\n' +
+      '3. 3~5문장: 잘한 점 → 구체적 칭찬 → 앞으로 응원\n' +
+      '4. PIN 문구가 있으면 반드시 자연스럽게 포함\n' +
+      '5. 코멘트 본문 텍스트만 반환, 그 외 일절 금지';
+
+    const prompt = _buildContext({ studentInfo, bookStatus, prevComments, activePins });
     return await _call(prompt, system);
   }
 
-  /* ══════════════════════════════════════════════════════════════
-   * 2. 코멘트 교정 (Proofread)
-   * ══════════════════════════════════════════════════════════════ */
-  async function proofreadComment(currentComment) {
+  /* ══ 2. 복수 버전 생성 ══════════════════════════════════════
+   * count개의 서로 다른 버전을 JSON 배열로 반환
+   * ════════════════════════════════════════════════════════════ */
+  async function generateVariants(studentInfo, bookStatus = {}, extraOpts = {}, count = 3) {
+    const prevComments = extraOpts.prevComments || [];
+    const activePins   = extraOpts.activePins   || getPins();
+
     const system =
-      '당신은 한국어 교정 전문가입니다. ' +
-      '주어진 텍스트의 맞춤법·문법 오류·어색한 표현을 교정하세요. ' +
-      '원래 의미와 존댓말 톤을 반드시 유지하세요. ' +
-      '교정된 텍스트만 반환하고, 설명·주석은 일절 포함하지 마세요.';
-    return await _call(currentComment, system);
+      '당신은 대한민국 초등학생 전담 영어학원 선생님입니다.\n' +
+      '학부모용 코멘트를 서로 다른 스타일로 정확히 ' + count + '개 작성합니다.\n' +
+      '규칙:\n' +
+      '1. 한국어 존댓말 전용\n' +
+      '2. 노력·성장 위주 칭찬 (점수 숫자 최소화)\n' +
+      '3. 각 버전은 길이, 강조점, 표현 방식이 달라야 함\n' +
+      '4. PIN 문구는 모든 버전에 반드시 자연스럽게 포함\n' +
+      '5. 아래 JSON 형식으로만 응답 (다른 텍스트 절대 금지):\n' +
+      '["버전1 전체 텍스트","버전2 전체 텍스트","버전3 전체 텍스트"]';
+
+    const prompt = _buildContext({ studentInfo, bookStatus, prevComments, activePins }) +
+      `\n\n위 정보로 ${count}개의 서로 다른 코멘트 버전을 JSON 배열로 작성하세요.`;
+
+    const raw = await _call(prompt, system);
+    try {
+      const cleaned = raw.replace(/```json|```/gi, '').trim();
+      const arr = JSON.parse(cleaned);
+      if (Array.isArray(arr) && arr.length > 0) return arr.map(s => String(s).trim());
+    } catch {}
+    // 파싱 실패 시 단일 결과 반환
+    return [raw];
   }
 
-  /* ══════════════════════════════════════════════════════════════
-   * 3. 연결 테스트 / 키 상태 진단
-   *    브라우저 콘솔: GeminiAI.testConnection().then(r=>console.log(r))
-   * ══════════════════════════════════════════════════════════════ */
+  /* ══ 3. 문법 교정 ════════════════════════════════════════════ */
+  async function proofreadComment(text) {
+    const system =
+      '한국어 교정 전문가. 맞춤법·문법·어색한 표현 교정.\n' +
+      '원래 의미와 존댓말 톤 유지. 교정된 텍스트만 반환.';
+    return await _call(text, system);
+  }
+
+  /* ══ 4. 스타일 분석 ══════════════════════════════════════════ */
+  async function analyzeStyle() {
+    const samples = getStyleSamples();
+    if (samples.length < 2) throw new Error('분석에는 샘플 2개 이상 필요합니다.');
+    const system = '글쓰기 스타일 분석가. 주어진 샘플들의 문체 특징을 5가지 이내 bullet로 한국어 요약.';
+    const prompt = '아래 선생님 코멘트 샘플들을 분석하세요:\n\n' +
+      samples.map((s,i) => `샘플${i+1}: "${s}"`).join('\n\n');
+    return await _call(prompt, system);
+  }
+
+  /* ══ 5. 연결 테스트 ══════════════════════════════════════════ */
   async function testConnection() {
     try {
-      const result = await _call('안녕. 테스트입니다. "OK"라고만 답해주세요.');
-      return { ok: true, message: result, keys: KEYS.length };
+      const r = await _call('"OK"라고만 답해주세요.');
+      return { ok: true, message: r, keys: KEYS.length, samples: getStyleSamples().length, pins: getPins().length };
     } catch (e) {
       return { ok: false, message: e.message, keys: KEYS.length };
     }
   }
 
-  /* ══════════════════════════════════════════════════════════════
-   * 4. 현재 키 설정 현황 확인
-   *    브라우저 콘솔: GeminiAI.status()
-   * ══════════════════════════════════════════════════════════════ */
   function status() {
-    const info = KEYS.map((k, i) => `  키${i+1}: ${k.slice(0,8)}...${k.slice(-4)}`).join('\n');
-    console.info(
-      `[GeminiAI] 설정된 키 ${KEYS.length}개\n${info}\n` +
-      `모델: ${MODELS.join(', ')}\n` +
-      `예상 일일 최대 요청: ~${KEYS.length * 1000}건 (gemini-2.5-flash-lite 기준)`
-    );
-    return { keyCount: KEYS.length, models: MODELS };
+    console.info(`[GeminiAI v7] 키:${KEYS.length} / 스타일샘플:${getStyleSamples().length} / 핀:${getPins().length}\n모델:${MODELS.join(',')}`);
+    return { keys: KEYS.length, samples: getStyleSamples().length, pins: getPins().length };
   }
 
-  return { generateComment, proofreadComment, testConnection, status };
-
+  return {
+    generateComment, generateVariants,
+    proofreadComment, analyzeStyle,
+    getStyleSamples, addStyleSample, removeStyleSample, clearStyleSamples,
+    getPins, addPin, removePin, clearPins,
+    testConnection, status,
+  };
 })();
