@@ -8,9 +8,9 @@
  *     - 과거 직접 작성한 코멘트에서 문체·어조·길이 패턴 자동 추출
  *     - localStorage에 영구 저장, 최대 20개 샘플 유지
  *
- *  2. 필수 포함 키워드/문구 PIN 시스템
- *     - 선생님이 "꼭 들어갔으면 하는" 문구를 핀으로 등록
- *     - 등록된 핀은 AI 생성 시 반드시 코멘트에 반영
+ *  2. 꼭 넣을 말 (고정 멘트) 시스템
+ *     - 선생님이 "꼭 들어갔으면 하는" 문구를 고정 멘트로 등록
+ *     - 등록된 고정 멘트는 AI 생성 시 반드시 코멘트에 반영
  *
  *  3. 교재 상태 연동
  *     - 현재 교재 이수 완료 여부, 다음 교재 안내 자동 포함
@@ -61,22 +61,41 @@ const GeminiAI = (() => {
   }
   function clearStyleSamples() { localStorage.removeItem(LS_STYLE); }
 
-  /* ── 핀 API ── */
-  function getPins()          { return _lg(LS_PINS) || []; }
+  /* ── 고정 멘트 API ──────────────────────────────────────────
+   * 공용(bookId 없음)과 교재별(bookId 있음) 두 레이어로 관리
+   * AI에는 교재별 + 공용 합산본이 전달됨
+   * ─────────────────────────────────────────────────────────── */
+  const _pinKey  = bid => bid ? LS_PINS + ':' + bid : LS_PINS;   // 교재별 키
+  const _pinKeyG = () => LS_PINS;                                 // 공용 키
+
+  /* 공용 고정 멘트 */
+  function getPins()          { return _lg(_pinKeyG()) || []; }
   function addPin(txt)        {
-    const t = (txt || '').trim();
-    if (!t) return false;
-    const arr = getPins().filter(p => p !== t);
-    arr.push(t);
-    _ls(LS_PINS, arr.slice(-15));
-    return true;
+    const t = (txt||'').trim(); if(!t) return false;
+    const arr = getPins().filter(p=>p!==t); arr.push(t);
+    _ls(_pinKeyG(), arr.slice(-15)); return true;
   }
-  function removePin(idx)     {
-    const arr = getPins();
-    arr.splice(idx, 1);
-    _ls(LS_PINS, arr);
+  function removePin(idx)     { const arr=getPins(); arr.splice(idx,1); _ls(_pinKeyG(),arr); }
+  function clearPins()        { localStorage.removeItem(_pinKeyG()); }
+
+  /* 교재별 고정 멘트 */
+  function getBookPins(bookId)       { return bookId ? (_lg(_pinKey(bookId))||[]) : []; }
+  function addBookPin(bookId, txt)   {
+    if(!bookId) return addPin(txt);
+    const t=(txt||'').trim(); if(!t) return false;
+    const arr=getBookPins(bookId).filter(p=>p!==t); arr.push(t);
+    _ls(_pinKey(bookId), arr.slice(-15)); return true;
   }
-  function clearPins()        { localStorage.removeItem(LS_PINS); }
+  function removeBookPin(bookId, idx){ const arr=getBookPins(bookId); arr.splice(idx,1); _ls(_pinKey(bookId),arr); }
+  function clearBookPins(bookId)     { if(bookId) localStorage.removeItem(_pinKey(bookId)); }
+
+  /* 공용 + 교재별 합산 (AI에 실제 전달되는 값) */
+  function getMergedPins(bookId) {
+    const g = getPins();
+    const b = getBookPins(bookId);
+    // 교재별이 앞에, 공용이 뒤에 (중복 제거)
+    return [...b, ...g.filter(p => !b.includes(p))];
+  }
 
   /* ══ 핵심 API 호출 ═══════════════════════════════════════════ */
   async function _call(prompt, system = '') {
@@ -131,7 +150,8 @@ const GeminiAI = (() => {
 
   /* ══ 컨텍스트 빌더 (공통) ════════════════════════════════════ */
   function _buildContext(opts = {}) {
-    const { studentInfo = {}, bookStatus = {}, prevComments = [], activePins = [] } = opts;
+    const bookId = bookStatus?.bookId || '';
+    const { studentInfo = {}, bookStatus: _bs = bookStatus, prevComments = [], activePins = getMergedPins(bookId) } = opts;
 
     const name    = typeof studentInfo === 'string' ? studentInfo : (studentInfo.name || '학생');
     const word    = studentInfo.word;
@@ -156,9 +176,9 @@ const GeminiAI = (() => {
     // 선생님 추가 메모
     const memoLine = bookStatus.teacherMemo ? `\n선생님 메모: ${bookStatus.teacherMemo}` : '';
 
-    // 필수 포함 핀
+    // 고정 멘트
     const pinLine = activePins.length
-      ? `\n\n[반드시 포함할 내용 — 아래 문구를 코멘트에 자연스럽게 녹여 넣으세요]\n${activePins.map((p,i) => `PIN${i+1}: "${p}"`).join('\n')}`
+      ? `\n\n[고정 멘트 — 아래 문구를 코멘트에 반드시 자연스럽게 녹여 넣으세요]\n${activePins.map((p,i) => `고정멘트${i+1}: "${p}"`).join('\n')}`
       : '';
 
     // 이전 코멘트 참조
@@ -188,7 +208,8 @@ const GeminiAI = (() => {
    * ════════════════════════════════════════════════════════════ */
   async function generateComment(studentInfo, bookStatus = {}, extraOpts = {}) {
     const prevComments = extraOpts.prevComments || [];
-    const activePins   = extraOpts.activePins   || getPins();  // 기본값: 등록된 모든 핀
+    const bkId        = bookStatus?.bookId || '';
+    const activePins   = extraOpts.activePins   || getMergedPins(bkId);
 
     const system =
       '당신은 대한민국 초등학생 전담 영어학원 선생님입니다.\n' +
@@ -197,7 +218,7 @@ const GeminiAI = (() => {
       '1. 반드시 한국어 존댓말(~습니다/합니다)만 사용\n' +
       '2. 점수 숫자 대신 노력·성장·태도·참여도 위주로 칭찬\n' +
       '3. 3~5문장: 잘한 점 → 구체적 칭찬 → 앞으로 응원\n' +
-      '4. PIN 문구가 있으면 반드시 자연스럽게 포함\n' +
+      '4. 고정 멘트가 있으면 반드시 자연스럽게 포함\n' +
       '5. 코멘트 본문 텍스트만 반환, 그 외 일절 금지';
 
     const prompt = _buildContext({ studentInfo, bookStatus, prevComments, activePins });
@@ -209,7 +230,8 @@ const GeminiAI = (() => {
    * ════════════════════════════════════════════════════════════ */
   async function generateVariants(studentInfo, bookStatus = {}, extraOpts = {}, count = 3) {
     const prevComments = extraOpts.prevComments || [];
-    const activePins   = extraOpts.activePins   || getPins();
+    const bkIdV        = bookStatus?.bookId || '';
+    const activePins   = extraOpts.activePins   || getMergedPins(bkIdV);
 
     const system =
       '당신은 대한민국 초등학생 전담 영어학원 선생님입니다.\n' +
@@ -218,7 +240,7 @@ const GeminiAI = (() => {
       '1. 한국어 존댓말 전용\n' +
       '2. 노력·성장 위주 칭찬 (점수 숫자 최소화)\n' +
       '3. 각 버전은 길이, 강조점, 표현 방식이 달라야 함\n' +
-      '4. PIN 문구는 모든 버전에 반드시 자연스럽게 포함\n' +
+      '4. 고정 멘트는 모든 버전에 반드시 자연스럽게 포함\n' +
       '5. 아래 JSON 형식으로만 응답 (다른 텍스트 절대 금지):\n' +
       '["버전1 전체 텍스트","버전2 전체 텍스트","버전3 전체 텍스트"]';
 
@@ -264,7 +286,7 @@ const GeminiAI = (() => {
   }
 
   function status() {
-    console.info(`[GeminiAI v7] 키:${KEYS.length} / 스타일샘플:${getStyleSamples().length} / 핀:${getPins().length}\n모델:${MODELS.join(',')}`);
+    console.info(`[GeminiAI v7] 키:${KEYS.length} / 스타일샘플:${getStyleSamples().length} / 공용멘트:${getPins().length}\n모델:${MODELS.join(',')}`);
     return { keys: KEYS.length, samples: getStyleSamples().length, pins: getPins().length };
   }
 
@@ -273,6 +295,7 @@ const GeminiAI = (() => {
     proofreadComment, analyzeStyle,
     getStyleSamples, addStyleSample, removeStyleSample, clearStyleSamples,
     getPins, addPin, removePin, clearPins,
+    getBookPins, addBookPin, removeBookPin, clearBookPins, getMergedPins,
     testConnection, status,
   };
 })();

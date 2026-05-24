@@ -877,6 +877,48 @@ thead th[data-col-key]{position:relative;overflow:visible;}
 .gbk-btn-cancel{background:var(--surf2);color:var(--tx2);border:1.5px solid var(--bdr2);}
 .gbk-btn-cancel:not(:disabled):hover{background:var(--bdr);}
 .gbk-sel-info{font-size:12px;color:var(--tx3);align-self:center;padding:0 4px;}
+/* ── 고정 멘트 탭 UI (개별 팝업 + 일괄 화면 공용) ── */
+.gpm-wrap{display:flex;flex-direction:column;gap:6px;}
+.gpm-tabs{display:flex;border-radius:9px;overflow:hidden;border:1.5px solid var(--bdr2);flex-shrink:0;margin-bottom:6px;}
+.gpm-tab{flex:1;padding:5px 6px;font-size:10px;font-weight:800;cursor:pointer;background:var(--surf2);color:var(--tx3);border:none;font-family:var(--font);transition:all .15s;text-align:center;line-height:1.3;}
+.gpm-tab.on{background:var(--a);color:#fff;}
+.gpm-chip-wrap{display:flex;flex-wrap:wrap;gap:5px;min-height:22px;}
+.gpm-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--bdr2);background:var(--surf2);color:var(--tx2);transition:all .15s;user-select:none;}
+.gpm-chip.active{background:linear-gradient(135deg,#fef3c7,#fde68a);border-color:#f59e0b;color:#92400e;}
+.gpm-chip.book-active{background:linear-gradient(135deg,#dbeafe,#bfdbfe);border-color:#3b82f6;color:#1d4ed8;}
+.gpm-chip .gpm-del{opacity:0;font-size:11px;transition:opacity .12s;margin-left:1px;}
+.gpm-chip:hover .gpm-del{opacity:.7;}
+.gpm-empty{font-size:11px;color:var(--tx3);font-style:italic;}
+.gpm-add{display:flex;gap:5px;margin-top:4px;}
+.gpm-inp{flex:1;padding:6px 9px;border-radius:8px;border:1.5px solid var(--bdr);background:var(--surf2);font-size:12px;color:var(--tx);font-family:var(--font);outline:none;min-width:0;transition:border-color .15s;}
+.gpm-inp:focus{border-color:var(--a);}
+.gpm-inp::placeholder{color:var(--tx3);}
+.gpm-addbtn{padding:6px 10px;border-radius:8px;border:none;background:var(--a);color:#fff;font-size:14px;cursor:pointer;flex-shrink:0;transition:opacity .15s;}
+.gpm-addbtn:hover{opacity:.85;}
+.gpm-legend{display:flex;gap:8px;font-size:10px;color:var(--tx3);flex-wrap:wrap;margin-top:3px;}
+.gpm-legend span{display:inline-flex;align-items:center;gap:3px;}
+.gpm-legend .dot-g{width:8px;height:8px;border-radius:50%;background:#f59e0b;flex-shrink:0;}
+.gpm-legend .dot-b{width:8px;height:8px;border-radius:50%;background:#3b82f6;flex-shrink:0;}
+/* 일괄 화면 고정 멘트 관리 */
+.gbk-pin-mgr{padding:8px 20px 10px;border-bottom:1.5px solid var(--bdr);background:var(--surf);flex-shrink:0;}
+.gbk-pin-mgr-title{font-size:10px;font-weight:800;letter-spacing:.6px;color:var(--tx3);text-transform:uppercase;margin-bottom:7px;display:flex;align-items:center;gap:6px;}
+.gbk-pin-mgr-title::after{content:'';flex:1;height:1px;background:var(--bdr);}
+.gbk-btn-proof{background:rgba(139,92,246,.12);color:#7c3aed;border:1.5px solid rgba(139,92,246,.3);}
+.gbk-btn-proof:not(:disabled):hover{background:rgba(139,92,246,.2);}
+.gbk-btn-style{background:linear-gradient(135deg,rgba(245,158,11,.15),rgba(239,68,68,.1));color:#d97706;border:1.5px solid rgba(245,158,11,.4);}
+.gbk-btn-style:not(:disabled):hover{background:linear-gradient(135deg,rgba(245,158,11,.25),rgba(239,68,68,.18));}
+/* Style DNA 패널 */
+.gbk-dna-panel{padding:10px 20px;border-bottom:1.5px solid var(--bdr);background:var(--surf);flex-shrink:0;display:none;}
+.gbk-dna-panel.show{display:block;}
+.gbk-dna-panel-title{font-size:10px;font-weight:800;letter-spacing:.7px;color:var(--tx3);text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:7px;}
+.gbk-dna-panel-title::after{content:'';flex:1;height:1px;background:var(--bdr);}
+.gbk-dna-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+@media(max-width:600px){.gbk-dna-grid{grid-template-columns:1fr;}}
+.gbk-dna-card{padding:10px 12px;border-radius:10px;border:1.5px solid var(--bdr);background:var(--surf2);font-size:11px;line-height:1.6;color:var(--tx2);position:relative;}
+.gbk-dna-card-lbl{font-size:9px;font-weight:800;letter-spacing:.5px;color:var(--tx3);text-transform:uppercase;margin-bottom:4px;}
+.gbk-dna-result{font-size:12px;color:var(--tx);line-height:1.7;white-space:pre-wrap;margin-top:6px;padding:8px 10px;background:var(--a10);border-radius:8px;border:1px solid var(--a40);}
+.gbk-dna-empty{font-size:11px;color:var(--tx3);font-style:italic;}
+.gbk-status-badge.proofing{background:rgba(139,92,246,.1);color:#7c3aed;}
 `;
     document.head.appendChild(s);
   }
@@ -4843,11 +4885,21 @@ thead th[data-col-key]{position:relative;overflow:visible;}
             <button class="gcm-dna-analyze" id="gcm-dna-analyze">🔍 내 문체 분석하기</button>
           </div>
           <div class="gcm-sec">
-            <div class="gcm-sec-title">📌 필수 포함 문구 PIN</div>
-            <div class="gcm-pin-list" id="gcm-pin-list"></div>
-            <div class="gcm-pin-add">
-              <input class="gcm-pin-inp" id="gcm-pin-inp" placeholder="꼭 넣고 싶은 문구…" maxlength="40">
-              <button class="gcm-pin-addbtn" id="gcm-pin-add-btn">＋</button>
+            <div class="gcm-sec-title">📌 꼭 넣을 말 (고정 멘트)</div>
+            <div class="gpm-wrap">
+              <div class="gpm-tabs">
+                <button class="gpm-tab on" id="gcm-tab-book">📚 이 교재 전용</button>
+                <button class="gpm-tab" id="gcm-tab-global">🌐 공용 (모든 교재)</button>
+              </div>
+              <div class="gpm-chip-wrap" id="gcm-pin-list"></div>
+              <div class="gpm-add">
+                <input class="gpm-inp" id="gcm-pin-inp" placeholder="예) 발음이 좋아졌어요…" maxlength="40">
+                <button class="gpm-addbtn" id="gcm-pin-add-btn">＋</button>
+              </div>
+              <div class="gpm-legend">
+                <span><span class="dot-b"></span>이 교재 전용 멘트</span>
+                <span><span class="dot-g"></span>공용 멘트 (모든 교재 공유)</span>
+              </div>
             </div>
           </div>
           <div class="gcm-sec">
@@ -4902,6 +4954,10 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     const statusEl  = overlay.querySelector('#gcm-status');
     const pinList   = overlay.querySelector('#gcm-pin-list');
     const pinInp    = overlay.querySelector('#gcm-pin-inp');
+    const tabBook   = overlay.querySelector('#gcm-tab-book');
+    const tabGlobal = overlay.querySelector('#gcm-tab-global');
+    let _pinTab = 'book';  // 'book' | 'global'
+    const _curBookId = () => _st.bookId || '';
     const dnaCount  = overlay.querySelector('#gcm-dna-count');
     const varPanel  = overlay.querySelector('#gcm-variants');
     const vList     = overlay.querySelector('#gcm-vlist');
@@ -4926,20 +4982,36 @@ thead th[data-col-key]{position:relative;overflow:visible;}
       const c = (typeof GeminiAI !== 'undefined') ? GeminiAI.getStyleSamples().length : 0;
       dnaCount.textContent = '샘플 ' + c + '개 학습됨';
     };
-    let _activePins = new Set();
+    // _activePins: Map(key → Set of idx) — key는 'book:교재id' 또는 'global'
+    const _activeMap = { book: new Set(), global: new Set() };
     const _renderPins = () => {
       if (typeof GeminiAI === 'undefined') return;
-      const pins = GeminiAI.getPins();
+      const bookId = _curBookId();
+      const bPins  = GeminiAI.getBookPins(bookId);   // 교재별
+      const gPins  = GeminiAI.getPins();              // 공용
+      const isBook = _pinTab === 'book';
+      const pins   = isBook ? bPins : gPins;
+      const actSet = isBook ? _activeMap.book : _activeMap.global;
       pinList.innerHTML = '';
-      if (!pins.length) { pinList.innerHTML = '<span style="font-size:11px;color:var(--tx3)">등록된 핀이 없습니다</span>'; return; }
-      if (_activePins.size === 0) pins.forEach((_, i) => _activePins.add(i));
+      if (!pins.length) {
+        const em = document.createElement('span');
+        em.className = 'gpm-empty';
+        em.textContent = isBook ? '이 교재 전용 멘트가 없습니다' : '공용 멘트가 없습니다';
+        pinList.appendChild(em); return;
+      }
+      if (actSet.size === 0) pins.forEach((_, i) => actSet.add(i));
       pins.forEach((p, i) => {
         const chip = document.createElement('span');
-        chip.className = 'gcm-pin-chip' + (_activePins.has(i) ? ' active' : '');
-        chip.innerHTML = _e(p) + ' <span class="gcm-pin-del" title="삭제">✕</span>';
+        const isAct = actSet.has(i);
+        chip.className = 'gpm-chip' + (isAct ? (isBook ? ' book-active' : ' active') : '');
+        chip.innerHTML = _e(p) + ' <span class="gpm-del" title="삭제">✕</span>';
         chip.onclick = ev => {
-          if (ev.target.classList.contains('gcm-pin-del')) { GeminiAI.removePin(i); _activePins.delete(i); _renderPins(); return; }
-          if (_activePins.has(i)) _activePins.delete(i); else _activePins.add(i);
+          if (ev.target.classList.contains('gpm-del')) {
+            if (isBook) GeminiAI.removeBookPin(bookId, i);
+            else        GeminiAI.removePin(i);
+            actSet.delete(i); _renderPins(); return;
+          }
+          if (actSet.has(i)) actSet.delete(i); else actSet.add(i);
           _renderPins();
         };
         pinList.appendChild(chip);
@@ -4953,18 +5025,32 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     });
     const _getActivePinArr = () => {
       if (typeof GeminiAI === 'undefined') return [];
-      const pins = GeminiAI.getPins();
-      return [..._activePins].filter(i => i < pins.length).map(i => pins[i]);
+      const bookId = _curBookId();
+      const bPins  = GeminiAI.getBookPins(bookId);
+      const gPins  = GeminiAI.getPins();
+      const bArr   = [..._activeMap.book  ].filter(i => i < bPins.length).map(i => bPins[i]);
+      const gArr   = [..._activeMap.global].filter(i => i < gPins.length).map(i => gPins[i]);
+      return [...bArr, ...gArr.filter(p => !bArr.includes(p))];
     };
 
     _updateDna(); _renderPins();
+    // 탭 전환
+    if (tabBook && tabGlobal) {
+      tabBook.onclick   = () => { _pinTab='book';   tabBook.classList.add('on'); tabGlobal.classList.remove('on'); _renderPins(); pinInp.placeholder='예) 발음이 좋아졌어요… (이 교재 전용)'; };
+      tabGlobal.onclick = () => { _pinTab='global'; tabGlobal.classList.add('on'); tabBook.classList.remove('on'); _renderPins(); pinInp.placeholder='예) 수업 태도가 좋아요… (모든 교재 공유)'; };
+    }
     bookDone.onchange = () => { nextWrap.style.display = bookDone.checked ? 'block' : 'none'; };
     ta.addEventListener('input', () => { charEl.textContent = ta.value.length + '자'; });
 
     const _addPin = () => {
       if (typeof GeminiAI === 'undefined') return;
       const v = pinInp.value.trim(); if (!v) return;
-      if (GeminiAI.addPin(v)) { const idx = GeminiAI.getPins().length - 1; _activePins.add(idx); }
+      const bookId = _curBookId();
+      if (_pinTab === 'book') {
+        if (GeminiAI.addBookPin(bookId, v)) { _activeMap.book.add(GeminiAI.getBookPins(bookId).length - 1); }
+      } else {
+        if (GeminiAI.addPin(v))             { _activeMap.global.add(GeminiAI.getPins().length - 1); }
+      }
       pinInp.value = ''; _renderPins();
     };
     overlay.querySelector('#gcm-pin-add-btn').onclick = _addPin;
@@ -5101,7 +5187,10 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     if (!ta) return;
     _cpSt(status, 'cp-loading', '✦ AI 생성 중...');
     try {
-      ta.value = await GeminiAI.generateComment({ name: stu ? stu.name : sid, word: d.word, reading: d.reading });
+      const _bk   = (typeof BookLibDB!=='undefined'&&_st.bookId) ? BookLibDB.getBookById(_st.bookId) : null;
+      const _bkSt = { currentBook: _bk?.name||'', bookId: _st.bookId||'' };
+      const _aPins= (typeof GeminiAI!=='undefined') ? GeminiAI.getMergedPins(_st.bookId||'') : [];
+      ta.value = await GeminiAI.generateComment({ name: stu ? stu.name : sid, word: d.word, reading: d.reading }, _bkSt, { activePins: _aPins });
       _cardComment(ta.value, sid);
       _cpSt(status, 'cp-ok', '✓ 완료');
       setTimeout(function(){ if(status) status.textContent=''; }, 3000);
@@ -5158,11 +5247,6 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     let _selected = new Set(students.map(s => s.id));
     stuData.forEach(s => { _results[s.id] = { comment: s.existingComment, status: s.existingComment ? 'has' : 'wait' }; });
 
-    const pins = GeminiAI.getPins();
-    const pinHtml = pins.length
-      ? pins.map(p => '<span class="gbk-pin-chip">' + _e(p) + '</span>').join('')
-      : '<span style="font-size:11px;color:var(--tx3)">등록된 PIN 없음</span>';
-
     const overlay = document.createElement('div');
     overlay.className = 'gbk-overlay'; overlay.id = 'gbk-overlay';
     overlay.onclick = ev => { if (ev.target === overlay && !_running) _closeBulkPop(); };
@@ -5190,9 +5274,10 @@ thead th[data-col-key]{position:relative;overflow:visible;}
           <span class="gbk-sw-lbl">이번 교재 이수 완료 포함</span>
         </div>
         <input class="gbk-inp-sm" id="gbk-next-book" placeholder="다음 교재명 (선택)" style="display:none">
-        <div style="margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-          <span style="font-size:10px;color:var(--tx3);font-weight:700">PIN:</span>
-          <div class="gbk-pin-preview">${pinHtml}</div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+          <button id="gbk-pin-toggle" style="padding:5px 12px;border-radius:8px;border:1.5px solid var(--bdr2);background:var(--surf2);color:var(--tx2);font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:var(--font)">
+            📌 고정 멘트 관리 <span id="gbk-pin-cnt" style="background:var(--a);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px">${GeminiAI.getMergedPins(_st.bookId||'').length}</span>
+          </button>
         </div>
         <!-- ★ 공통 앞말 섹션 -->
         <div class="gbk-prefix-wrap">
@@ -5205,6 +5290,26 @@ thead th[data-col-key]{position:relative;overflow:visible;}
           <div class="gbk-prefix-hint">
             💡 여기에 입력한 내용은 AI가 생성한 코멘트 <strong>맨 앞에 자동으로 추가</strong>됩니다.
             배부 날짜, 교재 안내, 특별 공지 등 모든 학생에게 공통으로 전달할 내용을 입력하세요.
+          </div>
+        </div>
+      </div>
+      <!-- ★ 고정 멘트 관리 패널 (접힘) -->
+      <div class="gbk-pin-mgr" id="gbk-pin-mgr" style="display:none">
+        <div class="gbk-pin-mgr-title">📌 고정 멘트 관리</div>
+        <div class="gpm-wrap">
+          <div class="gpm-tabs">
+            <button class="gpm-tab on" id="gbk-tab-book">📚 이 교재 전용</button>
+            <button class="gpm-tab" id="gbk-tab-global">🌐 공용 (모든 교재)</button>
+          </div>
+          <div class="gpm-chip-wrap" id="gbk-pin-list"></div>
+          <div class="gpm-add">
+            <input class="gpm-inp" id="gbk-pin-inp" placeholder="예) 발음이 좋아졌어요… (이 교재 전용)" maxlength="40">
+            <button class="gpm-addbtn" id="gbk-pin-addbtn">＋</button>
+          </div>
+          <div class="gpm-legend">
+            <span><span class="dot-b"></span>이 교재 전용</span>
+            <span><span class="dot-g"></span>공용 (모든 교재 공유)</span>
+            <span style="margin-left:auto;font-size:10px;color:var(--tx3)">클릭: 활성/비활성 · ✕: 삭제</span>
           </div>
         </div>
       </div>
@@ -5229,10 +5334,26 @@ thead th[data-col-key]{position:relative;overflow:visible;}
           <div class="gbk-progress-track"><div class="gbk-progress-fill" id="gbk-prog-fill" style="width:0%"></div></div>
         </div>
       </div>
+      <!-- ★ Style DNA 분석 결과 패널 (접힘 상태) -->
+      <div class="gbk-dna-panel" id="gbk-dna-panel">
+        <div class="gbk-dna-panel-title">🧬 선생님 Style DNA 분석 결과</div>
+        <div class="gbk-dna-grid">
+          <div class="gbk-dna-card">
+            <div class="gbk-dna-card-lbl">📊 분석된 문체 특징</div>
+            <div id="gbk-dna-result" class="gbk-dna-empty">분석 버튼을 눌러주세요</div>
+          </div>
+          <div class="gbk-dna-card">
+            <div class="gbk-dna-card-lbl">📝 학습된 샘플 코멘트</div>
+            <div id="gbk-dna-samples" class="gbk-dna-empty">샘플이 없습니다</div>
+          </div>
+        </div>
+      </div>
       <div class="gbk-footer">
         <div class="gbk-footer-left">
-          <button class="gbk-btn gbk-btn-start" id="gbk-btn-start">✨ 일괄 생성 시작</button>
+          <button class="gbk-btn gbk-btn-start" id="gbk-btn-start">✨ 일괄 생성</button>
           <button class="gbk-btn gbk-btn-stop" id="gbk-btn-stop" style="display:none">⏹ 중단</button>
+          <button class="gbk-btn gbk-btn-style" id="gbk-btn-style" title="기존에 선생님이 입력한 코멘트 패턴을 AI가 분석하고, 그 스타일로 빈 항목을 일괄 생성합니다">🧬 스타일 학습 후 생성</button>
+          <button class="gbk-btn gbk-btn-proof" id="gbk-btn-proof" disabled title="완료된 코멘트들을 일괄 교정합니다">🔍 일괄 교정</button>
           <span class="gbk-sel-info" id="gbk-sel-info">${students.length}명 선택됨</span>
         </div>
         <div class="gbk-footer-right">
@@ -5259,11 +5380,118 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     const progPct    = overlay.querySelector('#gbk-prog-pct');
     const progFill   = overlay.querySelector('#gbk-prog-fill');
     const selInfo    = overlay.querySelector('#gbk-sel-info');
+    const btnProof   = overlay.querySelector('#gbk-btn-proof');
+    const btnStyle   = overlay.querySelector('#gbk-btn-style');
+    const dnaPanel   = overlay.querySelector('#gbk-dna-panel');
+    const dnaResult  = overlay.querySelector('#gbk-dna-result');
+    const dnaSamples = overlay.querySelector('#gbk-dna-samples');
 
     bookDoneCk.onchange = () => { nextBookIn.style.display = bookDoneCk.checked ? '' : 'none'; };
 
+    // ── 고정 멘트 패널 ─────────────────────────────────────────
+    const pinMgr     = overlay.querySelector('#gbk-pin-mgr');
+    const pinToggle  = overlay.querySelector('#gbk-pin-toggle');
+    const pinCnt     = overlay.querySelector('#gbk-pin-cnt');
+    const gbkPinList = overlay.querySelector('#gbk-pin-list');
+    const gbkPinInp  = overlay.querySelector('#gbk-pin-inp');
+    const gbkTabBook = overlay.querySelector('#gbk-tab-book');
+    const gbkTabGlo  = overlay.querySelector('#gbk-tab-global');
+    let _gbkPinTab   = 'book';
+    const _gbkBookId = () => _st.bookId || '';
+
+    // 활성 상태 맵 (일괄화면용)
+    const _gbkActMap = { book: new Set(), global: new Set() };
+
+    const _gbkRenderPins = () => {
+      if (typeof GeminiAI === 'undefined') return;
+      const bid   = _gbkBookId();
+      const isBook= _gbkPinTab === 'book';
+      const pins  = isBook ? GeminiAI.getBookPins(bid) : GeminiAI.getPins();
+      const actSet= isBook ? _gbkActMap.book : _gbkActMap.global;
+      if (actSet.size === 0) pins.forEach((_,i) => actSet.add(i));
+      gbkPinList.innerHTML = '';
+      if (!pins.length) {
+        const em = document.createElement('span'); em.className = 'gpm-empty';
+        em.textContent = isBook ? '이 교재 전용 멘트 없음' : '공용 멘트 없음';
+        gbkPinList.appendChild(em);
+      } else {
+        pins.forEach((p, i) => {
+          const chip = document.createElement('span');
+          chip.className = 'gpm-chip' + (actSet.has(i) ? (isBook?' book-active':' active') : '');
+          chip.innerHTML = _e(p) + ' <span class="gpm-del" title="삭제">✕</span>';
+          chip.onclick = ev => {
+            if (ev.target.classList.contains('gpm-del')) {
+              if (isBook) GeminiAI.removeBookPin(bid, i); else GeminiAI.removePin(i);
+              actSet.delete(i); _gbkRenderPins(); _gbkUpdateCnt(); return;
+            }
+            if (actSet.has(i)) actSet.delete(i); else actSet.add(i);
+            _gbkRenderPins();
+          };
+          gbkPinList.appendChild(chip);
+        });
+      }
+    };
+    const _gbkUpdateCnt = () => {
+      if (pinCnt) pinCnt.textContent = GeminiAI.getMergedPins(_gbkBookId()).length;
+    };
+    const _gbkGetActive = () => {
+      if (typeof GeminiAI === 'undefined') return [];
+      const bid  = _gbkBookId();
+      const bP   = GeminiAI.getBookPins(bid);
+      const gP   = GeminiAI.getPins();
+      const bArr = [..._gbkActMap.book  ].filter(i=>i<bP.length).map(i=>bP[i]);
+      const gArr = [..._gbkActMap.global].filter(i=>i<gP.length).map(i=>gP[i]);
+      return [...bArr, ...gArr.filter(p=>!bArr.includes(p))];
+    };
+
+    // 토글 버튼
+    if (pinToggle) pinToggle.onclick = () => {
+      const show = pinMgr.style.display === 'none' || !pinMgr.style.display;
+      pinMgr.style.display = show ? '' : 'none';
+      if (show) _gbkRenderPins();
+    };
+    // 탭 전환
+    if (gbkTabBook) gbkTabBook.onclick = () => {
+      _gbkPinTab='book'; gbkTabBook.classList.add('on'); gbkTabGlo.classList.remove('on');
+      gbkPinInp.placeholder='예) 발음이 좋아졌어요… (이 교재 전용)'; _gbkRenderPins();
+    };
+    if (gbkTabGlo) gbkTabGlo.onclick = () => {
+      _gbkPinTab='global'; gbkTabGlo.classList.add('on'); gbkTabBook.classList.remove('on');
+      gbkPinInp.placeholder='예) 수업 태도가 좋아요… (모든 교재 공유)'; _gbkRenderPins();
+    };
+    // 추가
+    const _gbkAddPin = () => {
+      if (typeof GeminiAI === 'undefined') return;
+      const v = gbkPinInp.value.trim(); if (!v) return;
+      const bid = _gbkBookId();
+      if (_gbkPinTab === 'book') {
+        if (GeminiAI.addBookPin(bid, v)) _gbkActMap.book.add(GeminiAI.getBookPins(bid).length-1);
+      } else {
+        if (GeminiAI.addPin(v))          _gbkActMap.global.add(GeminiAI.getPins().length-1);
+      }
+      gbkPinInp.value=''; _gbkRenderPins(); _gbkUpdateCnt();
+    };
+    if (overlay.querySelector('#gbk-pin-addbtn')) overlay.querySelector('#gbk-pin-addbtn').onclick = _gbkAddPin;
+    if (gbkPinInp) gbkPinInp.onkeydown = ev => { if(ev.key==='Enter'){ev.preventDefault();_gbkAddPin();} };
+
+    // ── Style DNA 패널: 기존 샘플 표시 ──
+    const _refreshDnaPanel = () => {
+      const samples = (typeof GeminiAI !== 'undefined') ? GeminiAI.getStyleSamples() : [];
+      if (samples.length) {
+        dnaSamples.className = '';
+        dnaSamples.innerHTML = samples.slice(-3).map((s,i) =>
+          '<div style="margin-bottom:6px;padding:6px 8px;background:var(--surf2);border-radius:6px;font-size:11px;line-height:1.5;color:var(--tx2)">' +
+          '<span style="font-size:9px;color:var(--tx3);font-weight:700">샘플' + (i+1) + '</span><br>' + _e(s.slice(0,80)) + (s.length>80?'…':'') + '</div>'
+        ).join('');
+      } else {
+        dnaSamples.className = 'gbk-dna-empty';
+        dnaSamples.textContent = '저장된 샘플 없음 — 개별 코멘트 화면에서 "스타일로 저장" 후 사용하세요';
+      }
+    };
+
     const _badge = r => {
-      if (r.status === 'doing') return '<span class="gbk-status-badge doing">⟳ 생성 중</span>';
+      if (r.status === 'doing')    return '<span class="gbk-status-badge doing">⟳ 생성 중</span>';
+      if (r.status === 'proofing') return '<span class="gbk-status-badge proofing">🔍 교정 중</span>';
       if (r.status === 'done')  return '<span class="gbk-status-badge done">✓ 완료</span>';
       if (r.status === 'err')   return '<span class="gbk-status-badge err" title="' + _e(r.err||'') + '">⚠ 오류</span>';
       if (r.status === 'has')   return '<span class="gbk-status-badge has">📝 기존</span>';
@@ -5345,7 +5573,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
       const doSkip     = skipExist.checked;
       const isCompl    = bookDoneCk.checked;
       const nextBook   = nextBookIn.value.trim();
-      const activePins = GeminiAI.getPins();
+      const activePins = _gbkGetActive();
       const targets    = stuData.filter(sd => {
         if (!_selected.has(sd.id)) return false;
         if (doSkip && _results[sd.id].comment && _results[sd.id].status === 'has') return false;
@@ -5387,10 +5615,147 @@ thead th[data-col-key]{position:relative;overflow:visible;}
       progTxt.textContent = _stopFlag
         ? '⏹ 중단됨 — ' + ok + '명 완료'
         : '✓ 완료 — ' + ok + '명 성공' + (err ? ' / ' + err + '명 오류' : '');
-      if (ok > 0) { btnSave.disabled = false; _refreshDirtyUI(); }
+      if (ok > 0) { btnSave.disabled = false; btnProof.disabled = false; _refreshDirtyUI(); }
     };
 
     btnStop.onclick = () => { _stopFlag = true; };
+
+    // ── 🔍 일괄 교정 ─────────────────────────────────────────────
+    btnProof.onclick = async () => {
+      if (_running) return;
+      const targets = stuData.filter(sd => _selected.has(sd.id) && _results[sd.id].comment && ['done','has'].includes(_results[sd.id].status));
+      if (!targets.length) { _toast('⚠ 교정할 코멘트(완료/기존)가 없습니다'); return; }
+      _running = true; _stopFlag = false;
+      btnStart.disabled = true; btnProof.disabled = true; btnStyle.disabled = true;
+      btnStop.style.display = ''; btnSave.disabled = true;
+      overlay.querySelector('#gbk-close').disabled = true;
+      progWrap.style.display = '';
+      let done = 0;
+      for (const sd of targets) {
+        if (_stopFlag) break;
+        const prev = _results[sd.id].status;
+        _results[sd.id].status = 'proofing'; _updateRowStatus(sd.id);
+        document.getElementById('gbk-tr-' + sd.id)?.scrollIntoView({ block:'nearest', behavior:'smooth' });
+        try {
+          const corrected = await GeminiAI.proofreadComment(_results[sd.id].comment);
+          _results[sd.id].comment = corrected;
+          _results[sd.id].status  = 'done';
+          _ensureData(sd.id); _st.data[sd.id].comment = corrected; _st.dirty.add(sd.id);
+        } catch(err) {
+          _results[sd.id].status = prev;
+          console.warn('[BulkProof]', sd.id, err.message);
+        }
+        _updateRowStatus(sd.id);
+        done++; _updateProgress(done, targets.length);
+        if (done < targets.length && !_stopFlag) await new Promise(r => setTimeout(r, 700));
+      }
+      _running = false;
+      btnStart.disabled = false; btnStyle.disabled = false;
+      btnStop.style.display = 'none';
+      overlay.querySelector('#gbk-close').disabled = false;
+      btnProof.disabled = false; btnSave.disabled = false;
+      progTxt.textContent = '🔍 교정 완료 — ' + done + '명';
+      _refreshDirtyUI();
+    };
+
+    // ── 🧬 스타일 학습 후 생성 ────────────────────────────────────
+    btnStyle.onclick = async () => {
+      if (_running) return;
+      if (!_selected.size) { _toast('⚠ 학생을 선택하세요'); return; }
+      if (typeof GeminiAI === 'undefined') return;
+
+      // 1. 기존 선생님 코멘트 수집 (현재 교재 전체 학생 + DB 기록)
+      const existingComments = [];
+      stuData.forEach(sd => {
+        // 현재 입력된 것
+        if (_results[sd.id].comment) existingComments.push(_results[sd.id].comment);
+        // DB 과거 기록
+        sd.prevComments.forEach(c => { if (c) existingComments.push(c); });
+      });
+      // localStorage 샘플도 포함
+      GeminiAI.getStyleSamples().forEach(s => existingComments.push(s));
+      const unique = [...new Set(existingComments)].filter(c => c.length > 10);
+
+      if (unique.length < 1) {
+        _toast('⚠ 분석할 기존 코멘트가 없습니다. 먼저 일부 학생 코멘트를 직접 입력하거나, 개별 화면에서 스타일 샘플을 저장해 주세요.');
+        return;
+      }
+
+      // 2. Style DNA 패널 열고 분석 중 표시
+      dnaPanel.classList.add('show');
+      _refreshDnaPanel();
+      dnaResult.className = 'gbk-dna-empty';
+      dnaResult.textContent = '⟳ AI가 선생님 문체를 분석 중입니다…';
+
+      // 3. AI에 스타일 분석 요청
+      let styleAnalysis = '';
+      try {
+        // 샘플을 GeminiAI에 저장 (중복 제거)
+        unique.slice(0, 8).forEach(c => GeminiAI.addStyleSample(c));
+        styleAnalysis = await GeminiAI.analyzeStyle();
+        dnaResult.className = 'gbk-dna-result';
+        dnaResult.textContent = styleAnalysis;
+        _refreshDnaPanel();
+      } catch(err) {
+        dnaResult.className = 'gbk-dna-empty';
+        dnaResult.textContent = '⚠ 분석 실패: ' + err.message.slice(0, 60);
+        // 분석 실패해도 샘플은 등록됐으므로 계속 진행
+      }
+
+      // 4. 분석된 스타일을 반영해서 빈 학생만 생성 (기존 있는 건 건너뜀)
+      const prefix     = (prefixEl.value || '').trim();
+      const isCompl    = bookDoneCk.checked;
+      const nextBook   = nextBookIn.value.trim();
+      const activePins = _gbkGetActive();
+      const targets    = stuData.filter(sd => {
+        if (!_selected.has(sd.id)) return false;
+        if (_results[sd.id].comment && _results[sd.id].status === 'has') return false; // 기존 있으면 건너뜀
+        return true;
+      });
+      if (!targets.length) {
+        progTxt.textContent = '🧬 스타일 분석 완료 — 생성할 빈 항목 없음 (기존 있는 학생은 건너뜀)';
+        return;
+      }
+
+      _running = true; _stopFlag = false;
+      btnStart.disabled = true; btnProof.disabled = true; btnStyle.disabled = true;
+      btnStop.style.display = ''; btnSave.disabled = true;
+      overlay.querySelector('#gbk-close').disabled = true;
+      progWrap.style.display = '';
+      let done = 0;
+      _updateProgress(0, targets.length);
+
+      for (const sd of targets) {
+        if (_stopFlag) break;
+        _results[sd.id].status = 'doing'; _updateRowStatus(sd.id);
+        document.getElementById('gbk-tr-' + sd.id)?.scrollIntoView({ block:'nearest', behavior:'smooth' });
+        try {
+          const info     = { name: sd.name, word: sd.word, reading: sd.reading };
+          const bkStatus = { currentBook: bookName, isCompleted: isCompl, nextBook };
+          // ★ 분석된 스타일을 teacherMemo에 힌트로 추가 전달
+          if (styleAnalysis) bkStatus.teacherMemo = '[스타일 가이드] ' + styleAnalysis.slice(0, 200);
+          let comment = await GeminiAI.generateComment(info, bkStatus, { prevComments: sd.prevComments, activePins });
+          if (prefix) comment = prefix + '
+' + comment;
+          _results[sd.id].comment = comment; _results[sd.id].status = 'done';
+          _ensureData(sd.id); _st.data[sd.id].comment = comment; _st.dirty.add(sd.id);
+        } catch(err) {
+          _results[sd.id].status = 'err';
+          _results[sd.id].err    = (err.message || '').slice(0, 80);
+        }
+        _updateRowStatus(sd.id);
+        done++; _updateProgress(done, targets.length);
+        if (done < targets.length && !_stopFlag) await new Promise(r => setTimeout(r, 700));
+      }
+      _running = false;
+      btnStart.disabled = false; btnProof.disabled = false; btnStyle.disabled = false;
+      btnStop.style.display = 'none';
+      overlay.querySelector('#gbk-close').disabled = false;
+      const ok  = Object.values(_results).filter(r => r.status === 'done').length;
+      const err = Object.values(_results).filter(r => r.status === 'err').length;
+      progTxt.textContent = '🧬 스타일 학습 생성 완료 — ' + ok + '명 성공' + (err ? ' / ' + err + '명 오류' : '');
+      if (ok > 0) { btnSave.disabled = false; _refreshDirtyUI(); }
+    };
 
     btnSave.onclick = async () => {
       if (_running) return;
