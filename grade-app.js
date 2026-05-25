@@ -5013,9 +5013,9 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     // 공용 멘트 DB 로드
     if(typeof GeminiAI!=='undefined'&&GeminiAI.loadPinsFromDB)GeminiAI.loadPinsFromDB().then(()=>{_updateGCnt();if(_pinTab==='global')_renderPins();});
     // 공용멘트 체크 (기본: 미체크)
-    if(gcmGU){gcmGU.checked=false;if(typeof GeminiAI!=='undefined')GeminiAI.setUseGlobalPins(false);}
+    if(gcmGU){gcmGU.checked=false;if(typeof GeminiAI!=='undefined'&&GeminiAI.setUseGlobalPins)GeminiAI.setUseGlobalPins(false);}
     _updateGCnt();
-    if(gcmGU)gcmGU.onchange=()=>{const on=gcmGU.checked;if(typeof GeminiAI!=='undefined')GeminiAI.setUseGlobalPins(on);if(gcmGC)gcmGC.classList.toggle('checked',on);};
+    if(gcmGU)gcmGU.onchange=()=>{const on=gcmGU.checked;if(typeof GeminiAI!=='undefined'&&GeminiAI.setUseGlobalPins)GeminiAI.setUseGlobalPins(on);if(gcmGC)gcmGC.classList.toggle('checked',on);};
     // 탭 전환
     if(tabBook)tabBook.onclick=()=>{_pinTab='book';tabBook.classList.add('on');tabGlobal.classList.remove('on');_renderPins();pinInp.placeholder='🏫 예) 발음이 좋아졌어요…';};
     if(tabGlobal)tabGlobal.onclick=()=>{_pinTab='global';tabGlobal.classList.add('on');tabBook.classList.remove('on');_renderPins();pinInp.placeholder='🌐 예) 수업 태도가 좋아요…';_updateGCnt();};
@@ -5293,24 +5293,29 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     if(dnaViewBtn&&dnaPopup){
       dnaViewBtn.onclick=(e)=>{
         e.stopPropagation();
-        const show=dnaPopup.style.display==='none'||!dnaPopup.style.display;
-        dnaPopup.style.display=show?'':'none';
-        if(show){
-          const cached=(typeof GeminiAI!=='undefined')?GeminiAI.getAnalysisCache():null;
-          if(cached){dnaPopup.textContent=cached;}
-          else{dnaPopup.textContent='아직 분석 결과가 없습니다. [🧬 스타일 학습 후 생성] 버튼을 누르면 자동 분석됩니다.';}
+        const isShown=dnaPopup.classList.contains('show');
+        if(isShown){dnaPopup.classList.remove('show');return;}
+        // 분석 캐시 읽기 (localStorage 직접 — gemini-ai 버전 무관)
+        let cached=null;
+        try{const raw=localStorage.getItem('ht_style_analysis');if(raw)cached=JSON.parse(raw);}catch(ex){}
+        if(!cached&&typeof GeminiAI!=='undefined'&&typeof GeminiAI.getAnalysisCache==='function')cached=GeminiAI.getAnalysisCache();
+        const resultEl=document.getElementById('gbk-dna-result');
+        if(resultEl){
+          if(cached){resultEl.className='gbk-dna-popup-body';resultEl.textContent=cached;}
+          else{resultEl.className='gbk-dna-popup-empty';resultEl.textContent='아직 분석 결과가 없습니다. 🧬 스타일 학습 후 생성 버튼을 눌러주세요.';}
         }
+        dnaPopup.classList.add('show');
       };
+      if(dnaPopupClose)dnaPopupClose.onclick=(e)=>{e.stopPropagation();dnaPopup.classList.remove('show');};
       // 바깥 클릭 시 닫기
-      document.addEventListener('click',function _dnaClose(e){
-        if(dnaPopupWrap&&!dnaPopupWrap.contains(e.target)){dnaPopup.style.display='none';}
-      });
+      overlay.addEventListener('click',(ev)=>{if(!dnaPopup.contains(ev.target)&&ev.target!==dnaViewBtn)dnaPopup.classList.remove('show');});
     }
-    // 핀 패널
+
+    // ── 핀 패널 로직 ─────────────────────────────────────
     let _gbkPinTab='book';
     const _gbkBookId=()=>_st.bookId||'';
     const _gbkActMap={book:new Set(),global:new Set()};
-    const _gbkUpdateCnt=()=>{if(pinCnt)pinCnt.textContent=GeminiAI.getMergedPins(_gbkBookId()).length;};
+    const _gbkUpdateCnt=()=>{if(typeof GeminiAI!=='undefined'&&pinCnt)pinCnt.textContent=GeminiAI.getMergedPins(_gbkBookId()).length;};
     const _gbkUpdateGCnt=()=>{if(typeof GeminiAI==='undefined')return;const n=GeminiAI.getPins().length;if(gbkGN)gbkGN.textContent=n+'개';if(gbkGC)gbkGC.style.opacity=n?'1':'.5';};
     const _gbkRenderPins=()=>{
       if(typeof GeminiAI==='undefined')return;
@@ -5320,7 +5325,16 @@ thead th[data-col-key]{position:relative;overflow:visible;}
       if(actSet.size===0)pins.forEach((_,i)=>actSet.add(i));
       gbkPinList.innerHTML='';
       if(!pins.length){const em=document.createElement('span');em.className='gpm-empty';em.textContent=isBook?'이 교재 전용 멘트 없음':'공용 멘트 없음';gbkPinList.appendChild(em);}
-      else pins.forEach((p,i)=>{const chip=document.createElement('span');chip.className='gpm-chip'+(actSet.has(i)?(isBook?' book-active':' active'):'');chip.innerHTML=_e(p)+' <span class="gpm-del" title="삭제">✕</span>';chip.onclick=ev=>{if(ev.target.classList.contains('gpm-del')){if(isBook)GeminiAI.removeBookPin(bid,i);else GeminiAI.removePin(i);actSet.delete(i);_gbkRenderPins();_gbkUpdateCnt();_gbkUpdateGCnt();return;}if(actSet.has(i))actSet.delete(i);else actSet.add(i);_gbkRenderPins();};gbkPinList.appendChild(chip);});
+      else pins.forEach((p,i)=>{
+        const chip=document.createElement('span');
+        chip.className='gpm-chip'+(actSet.has(i)?(isBook?' book-active':' active'):'');
+        chip.innerHTML=_e(p)+' <span class="gpm-del" title="삭제">✕</span>';
+        chip.onclick=ev=>{
+          if(ev.target.classList.contains('gpm-del')){if(isBook)GeminiAI.removeBookPin(bid,i);else GeminiAI.removePin(i);actSet.delete(i);_gbkRenderPins();_gbkUpdateCnt();_gbkUpdateGCnt();return;}
+          if(actSet.has(i))actSet.delete(i);else actSet.add(i);_gbkRenderPins();
+        };
+        gbkPinList.appendChild(chip);
+      });
     };
     const _gbkGetActive=()=>(typeof GeminiAI!=='undefined')?GeminiAI.getMergedPins(_gbkBookId()):[];
     // 공용멘트 DB 로드
@@ -5330,63 +5344,46 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     _gbkUpdateGCnt();
     if(gbkGU)gbkGU.onchange=()=>{const on=gbkGU.checked;if(typeof GeminiAI!=='undefined')GeminiAI.setUseGlobalPins(on);if(gbkGC)gbkGC.classList.toggle('checked',on);if(gbkGH)gbkGH.classList.toggle('show',on);_gbkUpdateCnt();};
     // 탭
-    if(gbkTabBook)gbkTabBook.onclick=()=>{_gbkPinTab='book';gbkTabBook.classList.add('on');gbkTabGlo.classList.remove('on');gbkPinInp.placeholder='🏫 예) 발음이 좋아졌어요…';_gbkRenderPins();};
-    if(gbkTabGlo)gbkTabGlo.onclick=()=>{_gbkPinTab='global';gbkTabGlo.classList.add('on');gbkTabBook.classList.remove('on');gbkPinInp.placeholder='🌐 예) 수업 태도가 좋아요…';_gbkRenderPins();_gbkUpdateGCnt();};
+    if(gbkTabBook)gbkTabBook.onclick=()=>{_gbkPinTab='book';gbkTabBook.classList.add('on');gbkTabGlo.classList.remove('on');if(gbkPinInp)gbkPinInp.placeholder='🏫 예) 발음이 좋아졌어요…';_gbkRenderPins();};
+    if(gbkTabGlo)gbkTabGlo.onclick=()=>{_gbkPinTab='global';gbkTabGlo.classList.add('on');gbkTabBook.classList.remove('on');if(gbkPinInp)gbkPinInp.placeholder='🌐 예) 수업 태도가 좋아요…';_gbkRenderPins();_gbkUpdateGCnt();};
+    // 토글 버튼
+    const dnaPopupClose2=overlay.querySelector('#gbk-dna-popup-close');
     if(pinToggle)pinToggle.onclick=()=>{const show=pinMgr.style.display==='none'||!pinMgr.style.display;pinMgr.style.display=show?'':'none';if(show){_gbkRenderPins();_gbkUpdateGCnt();}};
-    // DNA 팝업 버튼
+    // 핀 추가
     const _gbkAddPin=()=>{if(typeof GeminiAI==='undefined')return;const v=gbkPinInp.value.trim();if(!v)return;const bid=_gbkBookId();if(_gbkPinTab==='book'){if(GeminiAI.addBookPin(bid,v))_gbkActMap.book.add(GeminiAI.getBookPins(bid).length-1);}else{if(GeminiAI.addPin(v)){_gbkActMap.global.add(GeminiAI.getPins().length-1);_gbkUpdateGCnt();}}gbkPinInp.value='';_gbkRenderPins();_gbkUpdateCnt();};
-    if(overlay.querySelector('#gbk-pin-addbtn'))overlay.querySelector('#gbk-pin-addbtn').onclick=_gbkAddPin;
+    const gbkAddBtn=overlay.querySelector('#gbk-pin-addbtn');
+    if(gbkAddBtn)gbkAddBtn.onclick=_gbkAddPin;
     if(gbkPinInp)gbkPinInp.onkeydown=ev=>{if(ev.key==='Enter'){ev.preventDefault();_gbkAddPin();}};
-    // DNA 패널
-    const _refreshDnaPanel=()=>{const samples=(typeof GeminiAI!=='undefined')?GeminiAI.getStyleSamples():[];if(samples.length){dnaSamples.className='';dnaSamples.innerHTML=samples.slice(-3).map((s,i)=>'<div style="margin-bottom:6px;padding:6px 8px;background:var(--surf2);border-radius:6px;font-size:11px;line-height:1.5;color:var(--tx2)"><span style="font-size:9px;color:var(--tx3);font-weight:700">샘플'+(i+1)+'</span><br>'+_e(s.slice(0,80))+(s.length>80?'…':'')+'</div>').join('');}else{dnaSamples.className='gbk-dna-empty';dnaSamples.textContent='저장된 샘플 없음';}};
-    // 뱃지/알약 헬퍼
+
+    // ── 테이블/진행/저장 ─────────────────────────────────
+    const _updateProgress=(done,total)=>{const pct=total?Math.round(done/total*100):0;progTxt.textContent=done+' / '+total+'명 처리 중…';progPct.textContent=pct+'%';progFill.style.width=pct+'%';};
     const _badge=r=>{if(r.status==='doing')return'<span class="gbk-status-badge doing">⟳ 생성 중</span>';if(r.status==='proofing')return'<span class="gbk-status-badge proofing">🔍 교정 중</span>';if(r.status==='done')return'<span class="gbk-status-badge done">✓ 완료</span>';if(r.status==='err')return'<span class="gbk-status-badge err" title="'+_e(r.err||'')+'">⚠ 오류</span>';if(r.status==='has')return'<span class="gbk-status-badge has">📝 기존</span>';return'<span class="gbk-status-badge wait">대기</span>';};
     const _pill=(pct,lbl)=>{if(pct==null)return'<span class="gbk-score-pill na">—</span>';const cls=pct>=80?'hi':pct>=60?'mid':'lo';return'<span class="gbk-score-pill '+cls+'">'+lbl+': '+pct+'%</span>';};
-    // 테이블 렌더
-    const _updateRowStatus=sid=>{
-      const st=document.getElementById('gbk-st-'+sid);if(!st)return;
-      st.innerHTML=_badge(_results[sid]);
-      const cmtCell=document.getElementById('gbk-cmt-'+sid);
-      if(cmtCell&&overlay._editingSid!==sid){
-        const v=_results[sid].comment;
-        cmtCell.innerHTML=v
-          ?'<div class="gbk-cmt-preview" onclick="GradeApp._bulkEditCell(\''+sid+'\')">'+_e(v)+'</div>'
-          :'<div class="gbk-cmt-preview empty" onclick="GradeApp._bulkEditCell(\''+sid+'\')">(클릭하여 직접 입력…)</div>';
-      }
-    };
+    const _updateRowStatus=sid=>{const st=document.getElementById('gbk-st-'+sid);if(!st)return;st.innerHTML=_badge(_results[sid]);const cmtCell=document.getElementById('gbk-cmt-'+sid);if(cmtCell&&overlay._editingSid!==sid){const v=_results[sid].comment;cmtCell.innerHTML=v?'<div class="gbk-cmt-preview" onclick="GradeApp._bulkEditCell(\''+sid+'\')">'+_e(v)+'</div>':'<div class="gbk-cmt-preview empty" onclick="GradeApp._bulkEditCell(\''+sid+'\')"> (클릭하여 직접 입력…)</div>';}};
     const _renderTable=()=>{
       tbody.innerHTML='';
       stuData.forEach(sd=>{
         const res=_results[sd.id];
         const tr=document.createElement('tr');
-        tr.className='gbk-tr-simple'; tr.id='gbk-tr-'+sd.id;
+        tr.className='gbk-tr-simple';tr.id='gbk-tr-'+sd.id;
         tr.innerHTML=
-          '<td class="gbk-td" style="padding:10px 14px;vertical-align:middle">'+
-            '<div class="gbk-stu-name">'+_e(sd.name)+'</div>'+
-            (sd.nickname?'<div class="gbk-stu-nick">('+_e(sd.nickname)+')</div>':'')+
-          '</td>'+
+          '<td class="gbk-td" style="min-width:90px;vertical-align:middle"><div class="gbk-stu-name">'+_e(sd.name)+'</div>'+(sd.nickname?'<div class="gbk-stu-nick">('+_e(sd.nickname)+')</div>':'')+' </td>'+
           '<td class="gbk-td gbk-td-score">'+_pill(sd.wPct,'단어')+'<br>'+_pill(sd.rPct,'리딩')+'</td>'+
           '<td class="gbk-td gbk-td-status" id="gbk-st-'+sd.id+'">'+_badge(res)+'</td>'+
-          '<td class="gbk-td gbk-td-cmt" id="gbk-cmt-'+sd.id+'">'+
-            (res.comment
+          '<td class="gbk-td gbk-td-cmt" id="gbk-cmt-'+sd.id+'">'+(
+            res.comment
               ?'<div class="gbk-cmt-preview" onclick="GradeApp._bulkEditCell(\''+sd.id+'\')">'+_e(res.comment)+'</div>'
-              :'<div class="gbk-cmt-preview empty" onclick="GradeApp._bulkEditCell(\''+sd.id+'\')">(클릭하여 직접 입력…)</div>')+
-          '</td>';
+              :'<div class="gbk-cmt-preview empty" onclick="GradeApp._bulkEditCell(\''+sd.id+'\')"> (클릭하여 직접 입력…)</div>'
+          )+'</td>';
         tbody.appendChild(tr);
       });
     };
-    const _updateSelInfo=()=>{
-      const tot=stuData.length;
-      if(selInfo)selInfo.textContent='총 '+tot+'명';
-    };
-    const _updateProgress=(done,total)=>{const pct=total?Math.round(done/total*100):0;progTxt.textContent=done+' / '+total+'명 처리 중…';progPct.textContent=pct+'%';progFill.style.width=pct+'%';};
-    // 체크박스 제거 — 모든 학생 대상으로 일괄 적용
     _renderTable();
-    if(selInfo)selInfo.textContent='총 '+stuData.length+'명';
-    // ── 공통 생성 헬퍼 ─────────────────────────────────────
+
+    // ── 공통 생성 헬퍼 ───────────────────────────────────
     const _runBulk=async(targets,extraMemo)=>{
-      if(!targets.length){progTxt.textContent='생성할 대상이 없습니다.';_running=false;btnStart.style.display='';btnStart.disabled=false;btnStop.style.display='none';btnProof.disabled=false;btnStyle.disabled=false;overlay.querySelector('#gbk-close').disabled=false;return;}
-      const prefix=(prefixEl.value||'').trim(),isCompl=bookDoneCk.checked,nextBook=nextBookIn.value.trim(),aPins=_gbkGetActive();
+      if(!targets.length){progTxt.textContent='생성할 대상이 없습니다.';_running=false;btnStart.style.display='';btnStop.style.display='none';btnStart.disabled=false;btnProof.disabled=false;btnStyle.disabled=false;overlay.querySelector('#gbk-close').disabled=false;return;}
+      const prefix=(prefixEl.value||'').trim(),isCompl=bookDoneCk.checked,nextBook=nextBookIn?nextBookIn.value.trim():'',aPins=_gbkGetActive();
       let done=0;_updateProgress(0,targets.length);
       for(const sd of targets){
         if(_stopFlag)break;
@@ -5404,12 +5401,13 @@ thead th[data-col-key]{position:relative;overflow:visible;}
         if(done<targets.length&&!_stopFlag)await new Promise(r=>setTimeout(r,750));
       }
     };
-    // ── 일괄 생성 ──────────────────────────────────────────
+
+    // ── 일괄 생성 ─────────────────────────────────────────
     btnStart.onclick=async()=>{
-      if(_running)return;if(!_selected.size){_toast('⚠ 생성할 학생을 선택하세요');return;}
+      if(_running)return;
       _running=true;_stopFlag=false;btnStart.style.display='none';btnStop.style.display='';
       btnStart.disabled=true;btnProof.disabled=true;btnStyle.disabled=true;btnSave.disabled=true;overlay.querySelector('#gbk-close').disabled=true;progWrap.style.display='';
-      const doSkip=skipExist.checked;
+      const doSkip=skipExist?skipExist.checked:false;
       const targets=stuData.filter(sd=>{if(doSkip&&_results[sd.id].comment&&_results[sd.id].status==='has')return false;return true;});
       await _runBulk(targets,'');
       _running=false;btnStart.style.display='';btnStop.style.display='none';btnStart.textContent='🔄 다시 생성';
@@ -5419,18 +5417,27 @@ thead th[data-col-key]{position:relative;overflow:visible;}
       if(ok>0){btnSave.disabled=false;btnProof.disabled=false;_refreshDirtyUI();}
     };
     btnStop.onclick=()=>{_stopFlag=true;};
-    // ── 일괄 교정 ──────────────────────────────────────────
+
+    // ── 일괄 교정 ─────────────────────────────────────────
     btnProof.onclick=async()=>{
       if(_running)return;const targets=stuData.filter(sd=>_results[sd.id].comment&&['done','has'].includes(_results[sd.id].status));
       if(!targets.length){_toast('⚠ 교정할 코멘트가 없습니다');return;}
       _running=true;_stopFlag=false;btnStart.disabled=true;btnProof.disabled=true;btnStyle.disabled=true;btnStop.style.display='';btnSave.disabled=true;overlay.querySelector('#gbk-close').disabled=true;progWrap.style.display='';
-      let done=0;for(const sd of targets){if(_stopFlag)break;const prev=_results[sd.id].status;_results[sd.id].status='proofing';_updateRowStatus(sd.id);document.getElementById('gbk-tr-'+sd.id)?.scrollIntoView({block:'nearest',behavior:'smooth'});try{const corrected=await GeminiAI.proofreadComment(_results[sd.id].comment);_results[sd.id].comment=corrected;_results[sd.id].status='done';}catch(err){_results[sd.id].status=prev;console.warn('[BulkProof]',sd.id,err.message);}_updateRowStatus(sd.id);done++;_updateProgress(done,targets.length);if(done<targets.length&&!_stopFlag)await new Promise(r=>setTimeout(r,750));}
+      let done=0;
+      for(const sd of targets){
+        if(_stopFlag)break;const prev=_results[sd.id].status;_results[sd.id].status='proofing';_updateRowStatus(sd.id);
+        document.getElementById('gbk-tr-'+sd.id)?.scrollIntoView({block:'nearest',behavior:'smooth'});
+        try{const corrected=await GeminiAI.proofreadComment(_results[sd.id].comment);_results[sd.id].comment=corrected;_results[sd.id].status='done';}
+        catch(err){_results[sd.id].status=prev;console.warn('[BulkProof]',sd.id,err.message);}
+        _updateRowStatus(sd.id);done++;_updateProgress(done,targets.length);
+        if(done<targets.length&&!_stopFlag)await new Promise(r=>setTimeout(r,750));
+      }
       _running=false;btnStart.disabled=false;btnStyle.disabled=false;btnStop.style.display='none';overlay.querySelector('#gbk-close').disabled=false;btnProof.disabled=false;btnSave.disabled=false;progTxt.textContent='🔍 교정 완료 — '+done+'명';_refreshDirtyUI();
     };
-    // ── 스타일 학습 후 생성 ────────────────────────────────
+
+    // ── 스타일 학습 후 생성 ───────────────────────────────
     btnStyle.onclick=async()=>{
-      if(_running)return;if(!_selected.size){_toast('⚠ 학생을 선택하세요');return;}if(typeof GeminiAI==='undefined')return;
-      // DB 전체 코멘트 수집 (모든 반·교재)
+      if(_running)return;if(typeof GeminiAI==='undefined')return;
       const existingComments=[];
       if(typeof GradeDB!=='undefined'&&GradeDB.getAllTeacherComments)GradeDB.getAllTeacherComments(60).forEach(c=>existingComments.push(c));
       else stuData.forEach(sd=>{if(sd.existingComment)existingComments.push(sd.existingComment);(sd.prevComments||[]).forEach(c=>{if(c)existingComments.push(c);});});
@@ -5440,10 +5447,10 @@ thead th[data-col-key]{position:relative;overflow:visible;}
       if(dnaPopup){dnaPopup.style.display='block';dnaPopup.textContent='⟳ 선생님 문체를 분석 중입니다…';}
       unique.slice(0,10).forEach(c=>GeminiAI.addStyleSample(c));
       let analysisText='';
-      try{analysisText=await GeminiAI.analyzeStyle();if(dnaPopup){dnaPopup.textContent=analysisText;if(dnaViewBtn)dnaViewBtn.style.background='rgba(139,92,246,.2)';}}
-      catch(err){if(dnaPopup)dnaPopup.textContent='⚠ 분석 실패 (기본 스타일로 생성): '+String(err&&err.message?err.message:err).slice(0,60);}
-      const targets=stuData.slice(); // 전체 학생
-      if(!targets.length){progTxt.textContent='스타일 분석 완료 — 선택된 학생 없음';return;}
+      try{analysisText=await GeminiAI.analyzeStyle();if(dnaPopup){dnaPopup.classList.add('show');const resultEl=document.getElementById('gbk-dna-result');if(resultEl){resultEl.className='gbk-dna-popup-body';resultEl.textContent=analysisText;}if(dnaViewBtn)dnaViewBtn.style.background='rgba(139,92,246,.2)';}/* dna panel removed */}
+      catch(err){if(dnaPopup){const resultEl=document.getElementById('gbk-dna-result');if(resultEl){resultEl.className='gbk-dna-popup-empty';resultEl.textContent='⚠ 분석 실패: '+String(err&&err.message?err.message:err).slice(0,60);}}}
+      const targets=stuData.slice();
+      if(!targets.length){progTxt.textContent='스타일 분석 완료 — 학생 없음';return;}
       _running=true;_stopFlag=false;btnStart.disabled=true;btnProof.disabled=true;btnStyle.disabled=true;btnStop.style.display='';btnSave.disabled=true;overlay.querySelector('#gbk-close').disabled=true;progWrap.style.display='';
       const memo=analysisText?'[스타일 가이드] '+analysisText.slice(0,200):'';
       await _runBulk(targets,memo);
@@ -5452,19 +5459,20 @@ thead th[data-col-key]{position:relative;overflow:visible;}
       progTxt.textContent='🧬 스타일 학습 생성 완료 — '+ok+'명 성공'+(er?' / '+er+'명 오류':'');
       if(ok>0){btnSave.disabled=false;_refreshDirtyUI();}
     };
-    // ── 전체 저장 ──────────────────────────────────────────
+
+    // ── 전체 저장 ─────────────────────────────────────────
     btnSave.onclick=async()=>{
       if(_running)return;btnSave.disabled=true;btnSave.textContent='저장 중…';let ok=0,fail=0;
       for(const sd of stuData){const res=_results[sd.id];if(!['done','has'].includes(res.status)||!res.comment)continue;
         try{_ensureData(sd.id);_st.data[sd.id].comment=res.comment;_st.dirty.add(sd.id);await saveOne(sd.id);ok++;
           const inlineTa=document.getElementById('gr-cmta-'+sd.id);if(inlineTa)inlineTa.value=res.comment;
           const icon=document.getElementById('gr-cmtbtn-'+sd.id);if(icon)icon.className='gs-cm-icon has-cmt';
-          sd.origComment=res.comment;sd.existingComment=res.comment;
         }catch(e){fail++;console.error('[BulkSave]',sd.id,e);}
       }
       const msg=ok+'명 저장 완료'+(fail?' / '+fail+'명 실패':'');btnSave.textContent='✅ '+msg;_toast('✅ '+msg,'success');_renderStudents();setTimeout(()=>{btnSave.textContent='💾 전체 저장';btnSave.disabled=false;},3000);
     };
-    const _closeBulkPop=()=>{if(_running)return;const el=document.getElementById('gbk-overlay');if(el){if(el._keyH)document.removeEventListener('keydown',el._keyH);el.remove();}_renderStudents();};
+
+    function _closeBulkPop(){if(_running)return;const el=document.getElementById('gbk-overlay');if(el){if(el._keyH)document.removeEventListener('keydown',el._keyH);el.remove();}_renderStudents();}
     btnCancel.onclick=_closeBulkPop;overlay.querySelector('#gbk-close').onclick=_closeBulkPop;
     overlay._keyH=ev=>{if(ev.key==='Escape'&&!_running)_closeBulkPop();};
     document.addEventListener('keydown',overlay._keyH);
