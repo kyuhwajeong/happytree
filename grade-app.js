@@ -1058,7 +1058,18 @@ to{opacity:1;transform:none}}
   /* ── 셀렉트 ── */
   function _fillClass() {
     const sel = document.getElementById('gr-csel'); if (!sel) return;
-    const cls = typeof DB !== 'undefined' ? DB.getActiveClasses() : [];
+    let cls = typeof DB !== 'undefined' ? DB.getActiveClasses() : [];
+    // ★ 강사 계정: 담당 반만 표시 (allowedMenus로 접근됐더라도 지정 반만 접근 가능)
+    if (typeof DB !== 'undefined' && DB.getRole() === 'teacher') {
+      const tcIds = DB.getTeacherClasses();
+      if (tcIds.length) {
+        const allCls = DB.getActiveClasses();
+        const tcNames = tcIds.map(id => { const c = allCls.find(cl => cl.id === id); return c ? c.name : id; });
+        cls = cls.filter(c => tcIds.includes(c.id) || tcNames.includes(c.name));
+      } else {
+        cls = []; // 담당 반 미지정 → 빈 목록
+      }
+    }
     sel.innerHTML = `<option value="">— 반 선택 —</option>` +
       cls.map(c => `<option value="${c.id}" ${_st.classId===c.id?'selected':''}>${_e(c.name)}</option>`).join('');
   }
