@@ -871,7 +871,6 @@ thead th[data-col-key]{position:relative;overflow:visible;}
 .gbk-opt-card.on{border-color:var(--a);background:var(--a10);}
 .gbk-opt-card.on .gbk-opt-card-title{color:var(--a);}
 /* ── DNA 팝업 버튼 ───────────────────────────────────── */
-.gbk-dna-popup-wrap{position:relative;display:inline-flex;}
 .gbk-dna-view-btn{
   padding:5px 12px;border-radius:8px;
   border:1.5px solid rgba(139,92,246,.3);
@@ -881,20 +880,9 @@ thead th[data-col-key]{position:relative;overflow:visible;}
   font-family:var(--font);white-space:nowrap;transition:background .15s;
 }
 .gbk-dna-view-btn:hover{background:rgba(139,92,246,.15);}
-.gbk-dna-popup{
-  position:absolute;bottom:calc(100% + 8px);left:0;z-index:300;
-  background:var(--card);border:1.5px solid var(--bdr);border-radius:14px;
-  box-shadow:0 8px 32px rgba(0,0,0,.18);padding:14px 16px;
-  width:340px;max-height:280px;overflow-y:auto;
-  display:none;
-}
 .gbk-dna-popup.show{display:block;animation:gbkDnaFade .15s ease;}
-@keyframes gbkDnaFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-.gbk-dna-popup-title{font-size:10px;font-weight:800;letter-spacing:.6px;color:var(--tx3);text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;}
-.gbk-dna-popup-close{font-size:14px;cursor:pointer;color:var(--tx3);line-height:1;padding:0 2px;}
-.gbk-dna-popup-body{font-size:12px;color:var(--tx2);line-height:1.7;white-space:pre-wrap;}
-.gbk-dna-popup-empty{font-size:11px;color:var(--tx3);font-style:italic;}
-
+@keyframes gbkDnaFade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+to{opacity:1;transform:none}}
 /* 옵션 카드 */
 .gbk-opt-grid{display:flex;flex-wrap:wrap;gap:8px;width:100%;padding-top:6px;}
 .gbk-opt-card{display:flex;align-items:flex-start;gap:9px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--bdr2);background:var(--surf2);cursor:pointer;transition:all .15s;flex:1;min-width:150px;}
@@ -906,17 +894,6 @@ thead th[data-col-key]{position:relative;overflow:visible;}
 .gbk-opt-card.on .gbk-opt-card-title{color:var(--a);}
 .gbk-opt-card-desc{font-size:10px;color:var(--tx3);margin-top:2px;line-height:1.4;}
 /* DNA 결과 팝업 */
-.gbk-dna-popup{
-  position:absolute;top:100%;left:0;right:0;z-index:100;
-  background:var(--card);border:1.5px solid var(--a40);border-radius:12px;
-  padding:14px 16px;box-shadow:0 8px 32px rgba(0,0,0,.18);
-  font-size:12px;line-height:1.7;color:var(--tx);white-space:pre-wrap;
-  max-height:260px;overflow-y:auto;margin-top:4px;
-  animation:gbkFadeIn .15s ease;
-}
-.gbk-dna-popup::-webkit-scrollbar{width:3px;}
-.gbk-dna-popup::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:2px;}
-.gbk-dna-popup-wrap{position:relative;display:inline-block;}
 .gbk-dna-view-btn{
   padding:5px 12px;border-radius:8px;border:1.5px solid rgba(139,92,246,.35);
   background:rgba(139,92,246,.08);color:#7c3aed;font-size:11px;font-weight:700;
@@ -936,7 +913,17 @@ thead th[data-col-key]{position:relative;overflow:visible;}
 .gbk-dna-card-lbl{font-size:9px;font-weight:800;letter-spacing:.5px;color:var(--tx3);text-transform:uppercase;margin-bottom:4px;}
 .gbk-dna-result{font-size:12px;color:var(--tx);line-height:1.7;white-space:pre-wrap;margin-top:6px;padding:8px 10px;background:var(--a10);border-radius:8px;border:1px solid var(--a40);}
 .gbk-dna-empty{font-size:11px;color:var(--tx3);font-style:italic;}
-`;
+
+.gbk-dna-popup-wrap{display:inline-flex;position:relative;}
+.gbk-dna-popup{position:fixed;z-index:9999;background:var(--card);border:1.5px solid var(--a40);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.22);padding:14px 16px;width:360px;max-height:300px;overflow-y:auto;display:none;}
+.gbk-dna-popup.show{display:block;animation:gbkDnaFade .15s ease;}
+.gbk-dna-popup::-webkit-scrollbar{width:3px;}
+.gbk-dna-popup::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:2px;}
+.gbk-dna-popup-title{font-size:10px;font-weight:800;letter-spacing:.6px;color:var(--tx3);text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;}
+.gbk-dna-popup-close{font-size:15px;cursor:pointer;color:var(--tx3);padding:0 3px;line-height:1;}
+.gbk-dna-popup-close:hover{color:var(--tx);}
+.gbk-dna-popup-body{font-size:12px;color:var(--tx2);line-height:1.8;white-space:pre-wrap;}
+.gbk-dna-popup-empty{font-size:11px;color:var(--tx3);font-style:italic;}`;
     document.head.appendChild(s);
   }
 
@@ -5348,6 +5335,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
         e.stopPropagation();
         const showing = dnaPopup.classList.contains('show');
         if (showing) { dnaPopup.classList.remove('show'); return; }
+        // 캐시 읽기
         let cached = null;
         try { const raw = localStorage.getItem('ht_style_analysis'); if (raw) cached = JSON.parse(raw); } catch(ex) {}
         if (!cached && typeof GeminiAI !== 'undefined' && typeof GeminiAI.getAnalysisCache === 'function') cached = GeminiAI.getAnalysisCache();
@@ -5355,6 +5343,17 @@ thead th[data-col-key]{position:relative;overflow:visible;}
           if (cached) { dnaResult.className = 'gbk-dna-popup-body'; dnaResult.textContent = cached; }
           else { dnaResult.className = 'gbk-dna-popup-empty'; dnaResult.textContent = '아직 분석 결과가 없습니다. 🧬 스타일 학습 후 생성을 눌러주세요.'; }
         }
+        // position:fixed 좌표 계산 (overflow:hidden 부모 무관)
+        const rect = dnaViewBtn.getBoundingClientRect();
+        dnaPopup.style.top  = (rect.bottom + 6) + 'px';
+        dnaPopup.style.left = rect.left + 'px';
+        // 화면 오른쪽 넘침 방지
+        dnaPopup.style.display = 'block';
+        const popRect = dnaPopup.getBoundingClientRect();
+        if (popRect.right > window.innerWidth - 12) {
+          dnaPopup.style.left = Math.max(8, window.innerWidth - popRect.width - 12) + 'px';
+        }
+        dnaPopup.style.display = '';
         dnaPopup.classList.add('show');
       };
       if (dnaClose) dnaClose.onclick = e => { e.stopPropagation(); dnaPopup.classList.remove('show'); };
