@@ -240,11 +240,47 @@ const GradeDB = (() => {
     }
   }
 
+  /**
+   * DB에 저장된 모든 선생님 코멘트 수집
+   * 스타일 학습에 활용 (모든 반·모든 교재 대상)
+   * @param {number} limit  최대 반환 개수 (기본 50)
+   * @returns {string[]}    코멘트 텍스트 배열 (중복 제거, 최신순)
+   */
+  function getAllTeacherComments(limit) {
+    limit = limit || 50;
+    const all = [];
+    for (const cid of Object.keys(_grades)) {
+      for (const sid of Object.keys(_grades[cid] || {})) {
+        for (const bid of Object.keys(_grades[cid][sid] || {})) {
+          const recs = _grades[cid][sid][bid] || [];
+          for (const r of recs) {
+            if (r.comment && r.comment.trim().length > 10) {
+              all.push({ comment: r.comment.trim(), ts: r.updatedAt || r.createdAt || '' });
+            }
+          }
+        }
+      }
+    }
+    // 최신순 정렬 → 중복 제거 → 최대 limit개
+    all.sort((a, b) => (b.ts > a.ts ? 1 : -1));
+    const seen = new Set();
+    const result = [];
+    for (const item of all) {
+      if (!seen.has(item.comment)) {
+        seen.add(item.comment);
+        result.push(item.comment);
+        if (result.length >= limit) break;
+      }
+    }
+    return result;
+  }
+
   return {
     init, on,
     defaultConfig, getReportConfig, saveReportConfig, getActiveReviews,
     getRecords, getLatest, saveRecord, deleteRecord,
     deleteAllForBook,
     calcScore, calcAchievement, getClassSummary,
+    getAllTeacherComments,
   };
 })();
