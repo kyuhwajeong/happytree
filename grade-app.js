@@ -783,6 +783,17 @@ thead th[data-col-key]{position:relative;overflow:visible;}
 .gcm-cancel{padding:11px 20px;border-radius:11px;border:1.5px solid var(--bdr2);background:none;color:var(--tx2);font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);}
 .gcm-save{flex:1;padding:11px 20px;border-radius:11px;border:none;background:var(--a);color:#fff;font-size:14px;font-weight:900;cursor:pointer;font-family:var(--font);box-shadow:0 3px 12px var(--a40);}
 .gcm-save:disabled{opacity:.4;cursor:not-allowed;}
+/* 문체 분석 결과 패널 */
+/* 분석 패널 — 왼쪽 ctrl 내부에 표시 (오른쪽과 겹침 없음) */
+.gcm-analyze-panel{display:none;border-top:1.5px solid var(--bdr);margin-top:4px;}
+.gcm-analyze-panel.show{display:block;}
+.gcm-analyze-hdr{display:flex;align-items:center;justify-content:space-between;padding:8px 0 4px;}
+.gcm-analyze-title{font-size:9px;font-weight:800;letter-spacing:.7px;color:#7c3aed;text-transform:uppercase;}
+.gcm-analyze-close{font-size:13px;cursor:pointer;color:var(--tx3);padding:2px 4px;line-height:1;border:none;background:none;font-family:var(--font);}
+.gcm-analyze-close:hover{color:var(--tx);}
+.gcm-analyze-body{padding:0 0 6px;font-size:11px;line-height:1.7;color:var(--tx2);white-space:pre-wrap;max-height:180px;overflow-y:auto;background:rgba(139,92,246,.06);border-radius:8px;padding:8px 10px;}
+.gcm-analyze-body::-webkit-scrollbar{width:3px;}
+.gcm-analyze-body::-webkit-scrollbar-thumb{background:rgba(139,92,246,.3);border-radius:2px;}
 /* ══ BULK COMMENT MODAL ══════════════════════════════════ */
 .gbk-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);z-index:2100;display:flex;align-items:center;justify-content:center;padding:12px;}
 .gbk-modal{background:var(--card);border-radius:22px;width:100%;max-width:900px;max-height:94vh;box-shadow:0 20px 60px rgba(0,0,0,.28);display:flex;flex-direction:column;overflow:hidden;}
@@ -4931,6 +4942,14 @@ to{opacity:1;transform:none}}
               <button class="gcm-btn gcm-btn-proof" id="gcm-btn-proof">🔍 문법 교정</button>
             </div>
           </div>
+          <!-- 문체 분석 결과 — 왼쪽 패널 하단 (오른쪽 variants와 겹침 없음) -->
+          <div class="gcm-analyze-panel" id="gcm-analyze-panel">
+            <div class="gcm-analyze-hdr">
+              <span class="gcm-analyze-title">🔍 내 문체 분석 결과</span>
+              <button class="gcm-analyze-close" id="gcm-analyze-close" type="button">✕</button>
+            </div>
+            <div class="gcm-analyze-body" id="gcm-analyze-body"></div>
+          </div>
         </div>
         <div class="gcm-edit">
           <div class="gcm-edit-top">
@@ -5013,7 +5032,22 @@ to{opacity:1;transform:none}}
     pinInp.onkeydown=ev=>{if(ev.key==='Enter'){ev.preventDefault();_addPin();}};
     overlay.querySelector('#gcm-dna-save').onclick=()=>{if(typeof GeminiAI==='undefined'||!ta.value.trim())return;GeminiAI.addStyleSample(ta.value.trim());_updateDna();_setStatus('ok','✓ 스타일 샘플로 저장됨');setTimeout(()=>_setStatus('idle','AI 대기 중'),2500);};
     overlay.querySelector('#gcm-save-sample').onclick=()=>{if(typeof GeminiAI==='undefined'||!ta.value.trim())return;GeminiAI.addStyleSample(ta.value.trim());_updateDna();_setStatus('ok','✓ 스타일 샘플 저장 완료');setTimeout(()=>_setStatus('idle','AI 대기 중'),2500);};
-    overlay.querySelector('#gcm-dna-analyze').onclick=async()=>{if(typeof GeminiAI==='undefined')return;_lock(true);_setStatus('loading','문체 분석 중…');try{const r=await GeminiAI.analyzeStyle();_setStatus('ok','✓ 분석 완료');const tip=document.createElement('div');tip.style.cssText='margin:8px 0;padding:10px 12px;background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.25);border-radius:10px;font-size:12px;line-height:1.8;color:var(--tx2);white-space:pre-wrap;';tip.textContent=r;overlay.querySelector('.gcm-ta-meta').after(tip);}catch(err){_setStatus('err','⚠ '+_cpMsg(err));}finally{_lock(false);}};
+    // 분석 패널 참조
+    const analyzePanel = overlay.querySelector('#gcm-analyze-panel');
+    const analyzeBody  = overlay.querySelector('#gcm-analyze-body');
+    const analyzeClose = overlay.querySelector('#gcm-analyze-close');
+    if (analyzeClose) analyzeClose.onclick = () => { if(analyzePanel) analyzePanel.classList.remove('show'); };
+    overlay.querySelector('#gcm-dna-analyze').onclick=async()=>{
+      if(typeof GeminiAI==='undefined')return;
+      _lock(true);_setStatus('loading','문체 분석 중…');
+      try{
+        const r=await GeminiAI.analyzeStyle();
+        _setStatus('ok','✓ 분석 완료 — 아래 결과를 확인하세요');
+        if(analyzeBody) analyzeBody.textContent=r;
+        if(analyzePanel){ analyzePanel.classList.add('show'); const ctrl=overlay.querySelector('.gcm-ctrl'); if(ctrl)ctrl.scrollTop=ctrl.scrollHeight; }
+      }catch(err){_setStatus('err','⚠ '+_cpMsg(err));}
+      finally{_lock(false);}
+    };
     overlay.querySelector('#gcm-btn-gen').onclick=async()=>{
       if(typeof GeminiAI==='undefined'){_setStatus('err','⚠ GeminiAI 미로드');return;}
       _lock(true);varPanel.classList.remove('show');_setStatus('loading','AI 코멘트 생성 중…');
