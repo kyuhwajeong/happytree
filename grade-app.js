@@ -686,63 +686,71 @@ thead th[data-col-key]{position:relative;overflow:visible;}
   .gr-pm-desk-only{display:none!important;}
 }
 
-/* ══ AI COMMENT MODAL v7 ══════════════════════════════════ */
+/* ══ AI COMMENT MODAL ═══════════════════════════════════ */
 .gcm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);z-index:2000;display:flex;align-items:center;justify-content:center;padding:12px;animation:gcmFadeIn .18s ease;}
 @keyframes gcmFadeIn{from{opacity:0}to{opacity:1}}
 .gcm-modal{background:var(--card);border-radius:22px;width:100%;max-width:780px;max-height:92vh;box-shadow:0 20px 60px rgba(0,0,0,.28);display:flex;flex-direction:column;overflow:hidden;animation:gcmSlideUp .2s cubic-bezier(.34,1.56,.64,1);}
 @keyframes gcmSlideUp{from{opacity:0;transform:translateY(18px) scale(.97)}to{opacity:1;transform:none}}
 .gcm-hdr{display:flex;align-items:center;gap:12px;padding:16px 20px 12px;border-bottom:1.5px solid var(--bdr);flex-shrink:0;background:linear-gradient(135deg,var(--a10),transparent);}
-.gcm-hdr-icon{font-size:22px;line-height:1;}
-.gcm-hdr-info{flex:1;min-width:0;}
-.gcm-hdr-title{font-size:16px;font-weight:900;color:var(--tx);letter-spacing:-.2px;}
+.gcm-hdr-info{flex:1;min-width:0;}.gcm-hdr-title{font-size:16px;font-weight:900;color:var(--tx);}
 .gcm-hdr-sub{font-size:12px;color:var(--tx3);margin-top:2px;}
-.gcm-hdr-close{width:34px;height:34px;border-radius:50%;border:none;background:var(--surf2);cursor:pointer;font-size:16px;color:var(--tx2);display:flex;align-items:center;justify-content:center;transition:background .12s,transform .12s;flex-shrink:0;}
-.gcm-hdr-close:hover{background:var(--bdr);transform:scale(1.08);}
+.gcm-hdr-close{width:34px;height:34px;border-radius:50%;border:none;background:var(--surf2);cursor:pointer;font-size:16px;color:var(--tx2);display:flex;align-items:center;justify-content:center;transition:background .12s;}
+.gcm-hdr-close:hover{background:var(--bdr);}
 .gcm-body{display:flex;flex:1;min-height:0;overflow:hidden;}
 @media(max-width:640px){.gcm-body{flex-direction:column;overflow-y:auto;}}
 .gcm-ctrl{width:260px;flex-shrink:0;border-right:1.5px solid var(--bdr);overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:14px;background:var(--surf);}
-.gcm-ctrl::-webkit-scrollbar{width:3px;}
-.gcm-ctrl::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:2px;}
+.gcm-ctrl::-webkit-scrollbar{width:3px;}.gcm-ctrl::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:2px;}
 @media(max-width:640px){.gcm-ctrl{width:100%;border-right:none;border-bottom:1.5px solid var(--bdr);max-height:260px;}}
-.gcm-sec{}
 .gcm-sec-title{font-size:9px;font-weight:900;letter-spacing:1px;color:var(--tx3);margin-bottom:7px;display:flex;align-items:center;gap:5px;text-transform:uppercase;}
 .gcm-sec-title::after{content:'';flex:1;height:1px;background:var(--bdr);}
-.gcm-dna-info{font-size:11px;color:var(--tx3);line-height:1.5;margin-bottom:8px;}
 .gcm-dna-count{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;background:var(--a10);color:var(--a);border:1px solid var(--a40);margin-bottom:8px;}
-.gcm-dna-btn{width:100%;padding:8px;border-radius:9px;border:1.5px dashed var(--bdr2);background:none;color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);transition:all .15s;display:flex;align-items:center;justify-content:center;gap:5px;}
+.gcm-dna-btn{width:100%;padding:8px;border-radius:9px;border:1.5px dashed var(--bdr2);background:none;color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);transition:all .15s;display:flex;align-items:center;justify-content:center;gap:5px;margin-bottom:4px;}
 .gcm-dna-btn:hover{border-color:var(--a);color:var(--a);background:var(--a10);}
-.gcm-dna-analyze{width:100%;padding:7px;border-radius:8px;border:none;background:rgba(139,92,246,.1);color:#7c3aed;font-size:11px;font-weight:700;cursor:pointer;font-family:var(--font);transition:background .15s;margin-top:5px;}
+.gcm-dna-analyze{width:100%;padding:7px;border-radius:8px;border:none;background:rgba(139,92,246,.1);color:#7c3aed;font-size:11px;font-weight:700;cursor:pointer;font-family:var(--font);transition:background .15s;}
 .gcm-dna-analyze:hover{background:rgba(139,92,246,.2);}
-.gcm-pin-list{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;min-height:24px;}
-.gcm-pin-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--bdr2);background:var(--surf2);color:var(--tx2);transition:all .15s;user-select:none;max-width:100%;}
-.gcm-pin-chip.active{background:linear-gradient(135deg,#fef3c7,#fde68a);border-color:#f59e0b;color:#92400e;}
-.gcm-pin-chip .gcm-pin-del{opacity:0;font-size:12px;line-height:1;transition:opacity .12s;margin-left:2px;}
-.gcm-pin-chip:hover .gcm-pin-del{opacity:.7;}
-.gcm-pin-add{display:flex;gap:5px;margin-top:4px;}
-.gcm-pin-inp{flex:1;padding:6px 9px;border-radius:8px;border:1.5px solid var(--bdr);background:var(--surf2);font-size:12px;color:var(--tx);font-family:var(--font);outline:none;min-width:0;transition:border-color .15s;}
-.gcm-pin-inp:focus{border-color:var(--a);}
-.gcm-pin-inp::placeholder{color:var(--tx3);}
-.gcm-pin-addbtn{padding:6px 10px;border-radius:8px;border:none;background:var(--a);color:#fff;font-size:14px;font-weight:900;cursor:pointer;flex-shrink:0;transition:opacity .15s;}
-.gcm-pin-addbtn:hover{opacity:.85;}
-.gcm-book-row{display:flex;align-items:center;gap:7px;margin-bottom:6px;}
+/* 고정 멘트 탭 */
+.gpm-tabs{display:flex;border-radius:9px;overflow:hidden;border:1.5px solid var(--bdr2);flex-shrink:0;margin-bottom:6px;}
+.gpm-tab{flex:1;padding:5px 6px;font-size:10px;font-weight:800;cursor:pointer;background:var(--surf2);color:var(--tx3);border:none;font-family:var(--font);transition:all .15s;text-align:center;}
+.gpm-tab.on{background:var(--a);color:#fff;}
+.gpm-chip-wrap{display:flex;flex-wrap:wrap;gap:5px;min-height:22px;}
+.gpm-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--bdr2);background:var(--surf2);color:var(--tx2);transition:all .15s;user-select:none;}
+.gpm-chip.active{background:linear-gradient(135deg,#fef3c7,#fde68a);border-color:#f59e0b;color:#92400e;}
+.gpm-chip.book-active{background:linear-gradient(135deg,#dbeafe,#bfdbfe);border-color:#3b82f6;color:#1d4ed8;}
+.gpm-chip .gpm-del{opacity:0;font-size:11px;transition:opacity .12s;}
+.gpm-chip:hover .gpm-del{opacity:.7;}
+.gpm-add{display:flex;gap:5px;margin-top:4px;}
+.gpm-inp{flex:1;padding:6px 9px;border-radius:8px;border:1.5px solid var(--bdr);background:var(--surf2);font-size:12px;color:var(--tx);font-family:var(--font);outline:none;min-width:0;transition:border-color .15s;}
+.gpm-inp:focus{border-color:var(--a);}.gpm-inp::placeholder{color:var(--tx3);}
+.gpm-addbtn{padding:6px 10px;border-radius:8px;border:none;background:var(--a);color:#fff;font-size:14px;cursor:pointer;flex-shrink:0;}
+.gpm-empty{font-size:11px;color:var(--tx3);font-style:italic;}
+.gpm-legend{display:flex;gap:8px;font-size:10px;color:var(--tx3);flex-wrap:wrap;margin-top:3px;}
+.gpm-legend .dot-b{width:8px;height:8px;border-radius:50%;background:#3b82f6;display:inline-block;margin-right:2px;}
+.gpm-legend .dot-g{width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block;margin-right:2px;}
+/* 공용멘트 체크박스 */
+.gpm-global-check{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:9px;border:1.5px solid var(--bdr2);background:var(--surf2);cursor:pointer;transition:all .18s;user-select:none;margin-top:5px;}
+.gpm-global-check:hover{border-color:var(--a);background:var(--a10);}
+.gpm-global-check.checked{border-color:#f59e0b;background:linear-gradient(135deg,rgba(254,243,199,.6),rgba(253,230,138,.3));}
+.gpm-global-check input[type=checkbox]{width:16px;height:16px;accent-color:var(--a);cursor:pointer;flex-shrink:0;}
+.gpm-global-check-lbl{flex:1;font-size:12px;font-weight:600;color:var(--tx2);}
+.gpm-global-check.checked .gpm-global-check-lbl{color:#92400e;}
+.gpm-global-cnt{font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;background:var(--a);color:#fff;flex-shrink:0;}
+.gpm-global-check.checked .gpm-global-cnt{background:#f59e0b;}
+.gpm-global-hint{font-size:10px;color:var(--tx3);line-height:1.4;padding:4px 10px;border-radius:0 0 8px 8px;border:1px solid var(--bdr);border-top:none;background:var(--surf2);margin-top:-2px;display:none;}
+.gpm-global-hint.show{display:block;}
 .gcm-book-toggle{position:relative;width:36px;height:20px;flex-shrink:0;}
 .gcm-book-toggle input{opacity:0;width:0;height:0;}
 .gcm-book-slider{position:absolute;cursor:pointer;inset:0;background:var(--bdr2);border-radius:20px;transition:background .2s;}
 .gcm-book-slider::before{content:'';position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:transform .2s;}
 .gcm-book-toggle input:checked+.gcm-book-slider{background:var(--a);}
 .gcm-book-toggle input:checked+.gcm-book-slider::before{transform:translateX(16px);}
-.gcm-book-lbl{font-size:12px;color:var(--tx2);font-weight:600;}
 .gcm-inp-sm{width:100%;padding:7px 9px;border-radius:8px;border:1.5px solid var(--bdr);background:var(--surf2);font-size:12px;color:var(--tx);font-family:var(--font);outline:none;transition:border-color .15s;box-sizing:border-box;}
-.gcm-inp-sm:focus{border-color:var(--a);}
-.gcm-inp-sm::placeholder{color:var(--tx3);}
+.gcm-inp-sm:focus{border-color:var(--a);}.gcm-inp-sm::placeholder{color:var(--tx3);}
 .gcm-memo{width:100%;padding:7px 9px;border-radius:8px;border:1.5px solid var(--bdr);background:var(--surf2);font-size:12px;color:var(--tx);font-family:var(--font);outline:none;resize:none;line-height:1.5;box-sizing:border-box;transition:border-color .15s;}
-.gcm-memo:focus{border-color:var(--a);}
-.gcm-memo::placeholder{color:var(--tx3);}
-.gcm-actions{display:flex;flex-direction:column;gap:7px;}
+.gcm-memo:focus{border-color:var(--a);}.gcm-memo::placeholder{color:var(--tx3);}
 .gcm-btn{width:100%;padding:11px 10px;border-radius:12px;border:none;font-size:13px;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:7px;transition:all .15s;}
 .gcm-btn-gen{background:linear-gradient(135deg,var(--a),#4f46e5);color:#fff;box-shadow:0 3px 12px var(--a40);}
 .gcm-btn-gen:hover{filter:brightness(1.08);}
-.gcm-btn-variants{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;box-shadow:0 3px 12px rgba(245,158,11,.35);}
+.gcm-btn-variants{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;}
 .gcm-btn-variants:hover{filter:brightness(1.08);}
 .gcm-btn-proof{background:rgba(139,92,246,.12);color:#7c3aed;border:1.5px solid rgba(139,92,246,.3);}
 .gcm-btn-proof:hover{background:rgba(139,92,246,.2);}
@@ -750,54 +758,39 @@ thead th[data-col-key]{position:relative;overflow:visible;}
 .gcm-edit{flex:1;display:flex;flex-direction:column;min-width:0;}
 .gcm-edit-top{flex:1;display:flex;flex-direction:column;padding:14px 18px;min-height:0;}
 .gcm-ta{flex:1;width:100%;box-sizing:border-box;min-height:200px;padding:14px 16px;border:2px solid var(--bdr);border-radius:14px;background:var(--surf2);font-size:15px;line-height:1.8;color:var(--tx);font-family:var(--font);resize:none;outline:none;transition:border-color .15s;}
-.gcm-ta:focus{border-color:var(--a);background:var(--a10);}
-.gcm-ta::placeholder{color:var(--tx3);}
+.gcm-ta:focus{border-color:var(--a);background:var(--a10);}.gcm-ta::placeholder{color:var(--tx3);}
 .gcm-ta-meta{display:flex;align-items:center;justify-content:space-between;margin-top:7px;}
 .gcm-char{font-size:11px;color:var(--tx3);}
 .gcm-save-sample{font-size:11px;padding:4px 10px;border-radius:7px;border:1px solid var(--bdr2);background:none;color:var(--tx3);cursor:pointer;font-family:var(--font);transition:all .15s;}
 .gcm-save-sample:hover{border-color:var(--a);color:var(--a);background:var(--a10);}
 .gcm-status{padding:8px 18px;font-size:12px;font-weight:600;min-height:36px;display:flex;align-items:center;gap:7px;flex-shrink:0;transition:background .2s;}
-.gcm-status.idle{color:var(--tx3);}
-.gcm-status.loading{background:var(--a10);color:var(--a);}
+.gcm-status.idle{color:var(--tx3);}.gcm-status.loading{background:var(--a10);color:var(--a);}
 .gcm-status.loading::before{content:'';width:14px;height:14px;border:2px solid var(--a);border-top-color:transparent;border-radius:50%;animation:gcmSpin .7s linear infinite;flex-shrink:0;}
 @keyframes gcmSpin{to{transform:rotate(360deg)}}
 .gcm-status.ok{background:rgba(22,163,74,.08);color:#16a34a;}
 .gcm-status.err{background:rgba(239,68,68,.08);color:#ef4444;}
 .gcm-variants{padding:12px 18px;border-top:1.5px solid var(--bdr);flex-shrink:0;display:none;}
 .gcm-variants.show{display:block;}
-.gcm-variants-title{font-size:11px;font-weight:800;color:var(--tx3);letter-spacing:.7px;margin-bottom:8px;text-transform:uppercase;}
 .gcm-vlist{display:flex;flex-direction:column;gap:7px;max-height:200px;overflow-y:auto;}
-.gcm-vlist::-webkit-scrollbar{width:3px;}
-.gcm-vlist::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:2px;}
 .gcm-vcard{padding:11px 14px;border:2px solid var(--bdr);border-radius:11px;font-size:13px;line-height:1.7;color:var(--tx);cursor:pointer;background:var(--surf2);transition:all .15s;position:relative;}
 .gcm-vcard:hover{border-color:var(--a);background:var(--a10);}
 .gcm-vcard.selected{border-color:var(--a);background:var(--a10);}
 .gcm-vcard-badge{position:absolute;top:7px;right:9px;font-size:9px;font-weight:800;padding:2px 7px;border-radius:12px;background:var(--a);color:#fff;display:none;}
 .gcm-vcard.selected .gcm-vcard-badge{display:inline;}
-.gcm-vapply{margin-top:8px;width:100%;padding:9px;border-radius:10px;border:none;background:var(--a);color:#fff;font-size:13px;font-weight:800;cursor:pointer;font-family:var(--font);transition:opacity .15s;}
-.gcm-vapply:hover{opacity:.88;}
+.gcm-vapply{margin-top:8px;width:100%;padding:9px;border-radius:10px;border:none;background:var(--a);color:#fff;font-size:13px;font-weight:800;cursor:pointer;font-family:var(--font);}
 .gcm-vapply:disabled{opacity:.35;cursor:not-allowed;}
 .gcm-footer{padding:12px 18px 16px;border-top:1.5px solid var(--bdr);display:flex;gap:9px;flex-shrink:0;}
-.gcm-cancel{padding:11px 20px;border-radius:11px;border:1.5px solid var(--bdr2);background:none;color:var(--tx2);font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);transition:all .15s;}
-.gcm-cancel:hover{background:var(--surf2);}
-.gcm-save{flex:1;padding:11px 20px;border-radius:11px;border:none;background:var(--a);color:#fff;font-size:14px;font-weight:900;cursor:pointer;font-family:var(--font);box-shadow:0 3px 12px var(--a40);transition:all .15s;}
-.gcm-save:hover{filter:brightness(1.07);}
+.gcm-cancel{padding:11px 20px;border-radius:11px;border:1.5px solid var(--bdr2);background:none;color:var(--tx2);font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);}
+.gcm-save{flex:1;padding:11px 20px;border-radius:11px;border:none;background:var(--a);color:#fff;font-size:14px;font-weight:900;cursor:pointer;font-family:var(--font);box-shadow:0 3px 12px var(--a40);}
 .gcm-save:disabled{opacity:.4;cursor:not-allowed;}
-
-/* ══ BULK COMMENT MODAL ══════════════════════════════════════ */
-.gbk-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);z-index:2100;display:flex;align-items:center;justify-content:center;padding:12px;animation:gbkFadeIn .18s ease;}
-@keyframes gbkFadeIn{from{opacity:0}to{opacity:1}}
-.gbk-modal{background:var(--card);border-radius:22px;width:100%;max-width:900px;max-height:94vh;box-shadow:0 20px 60px rgba(0,0,0,.28);display:flex;flex-direction:column;overflow:hidden;animation:gbkUp .2s cubic-bezier(.34,1.56,.64,1);}
-@keyframes gbkUp{from{opacity:0;transform:translateY(20px) scale(.97)}to{opacity:1;transform:none}}
+/* ══ BULK COMMENT MODAL ══════════════════════════════════ */
+.gbk-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);z-index:2100;display:flex;align-items:center;justify-content:center;padding:12px;}
+.gbk-modal{background:var(--card);border-radius:22px;width:100%;max-width:900px;max-height:94vh;box-shadow:0 20px 60px rgba(0,0,0,.28);display:flex;flex-direction:column;overflow:hidden;}
 .gbk-hdr{display:flex;align-items:center;gap:12px;padding:16px 20px 12px;border-bottom:1.5px solid var(--bdr);flex-shrink:0;background:linear-gradient(135deg,var(--a10),transparent);}
-.gbk-hdr-texts{flex:1;min-width:0;}
-.gbk-hdr-title{font-size:16px;font-weight:900;color:var(--tx);}
+.gbk-hdr-texts{flex:1;min-width:0;}.gbk-hdr-title{font-size:16px;font-weight:900;color:var(--tx);}
 .gbk-hdr-sub{font-size:12px;color:var(--tx3);margin-top:2px;}
-.gbk-hdr-close{width:32px;height:32px;border-radius:50%;border:none;background:var(--surf2);cursor:pointer;font-size:15px;color:var(--tx2);display:flex;align-items:center;justify-content:center;transition:background .12s;}
-.gbk-hdr-close:hover{background:var(--bdr);}
-.gbk-cfg{padding:12px 20px;border-bottom:1.5px solid var(--bdr);flex-shrink:0;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;background:var(--surf);}
-.gbk-cfg-lbl{font-size:11px;font-weight:800;color:var(--tx3);letter-spacing:.5px;white-space:nowrap;margin-top:2px;}
-.gbk-toggle-row{display:flex;align-items:center;gap:7px;}
+.gbk-hdr-close{width:32px;height:32px;border-radius:50%;border:none;background:var(--surf2);cursor:pointer;font-size:15px;color:var(--tx2);display:flex;align-items:center;justify-content:center;}
+.gbk-cfg{padding:10px 20px;border-bottom:1.5px solid var(--bdr);flex-shrink:0;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;background:var(--surf);}
 .gbk-sw{position:relative;width:34px;height:18px;flex-shrink:0;}
 .gbk-sw input{opacity:0;width:0;height:0;}
 .gbk-sw-track{position:absolute;cursor:pointer;inset:0;background:var(--bdr2);border-radius:18px;transition:.18s;}
@@ -805,38 +798,25 @@ thead th[data-col-key]{position:relative;overflow:visible;}
 .gbk-sw input:checked~.gbk-sw-track{background:var(--a);}
 .gbk-sw input:checked~.gbk-sw-track::before{transform:translateX(16px);}
 .gbk-sw-lbl{font-size:12px;color:var(--tx2);}
-.gbk-inp-sm{padding:6px 10px;border-radius:8px;border:1.5px solid var(--bdr);background:var(--surf2);font-size:12px;color:var(--tx);font-family:var(--font);outline:none;min-width:160px;transition:border-color .15s;}
-.gbk-inp-sm:focus{border-color:var(--a);}
-.gbk-inp-sm::placeholder{color:var(--tx3);}
-/* 공통 앞말 */
+.gbk-inp-sm{padding:6px 10px;border-radius:8px;border:1.5px solid var(--bdr);background:var(--surf2);font-size:12px;color:var(--tx);font-family:var(--font);outline:none;min-width:160px;}
 .gbk-prefix-wrap{width:100%;display:flex;flex-direction:column;gap:5px;padding-top:8px;border-top:1px solid var(--bdr);}
-.gbk-prefix-lbl{font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:.5px;text-transform:uppercase;display:flex;align-items:center;gap:6px;}
+.gbk-prefix-lbl{font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:.5px;text-transform:uppercase;}
 .gbk-prefix-lbl span{background:#fef3c7;color:#92400e;padding:1px 7px;border-radius:10px;font-size:9px;font-weight:700;}
-.gbk-prefix-ta{width:100%;box-sizing:border-box;padding:9px 12px;border-radius:9px;border:1.5px solid var(--bdr);background:var(--surf2);font-size:12px;line-height:1.6;color:var(--tx);font-family:var(--font);resize:none;outline:none;transition:border-color .15s;}
-.gbk-prefix-ta:focus{border-color:var(--a);}
+.gbk-prefix-ta{width:100%;box-sizing:border-box;padding:9px 12px;border-radius:9px;border:1.5px solid var(--bdr);background:var(--surf2);font-size:12px;line-height:1.6;color:var(--tx);font-family:var(--font);resize:none;outline:none;}
 .gbk-prefix-ta::placeholder{color:var(--tx3);}
 .gbk-prefix-hint{font-size:10px;color:var(--tx3);line-height:1.5;}
-.gbk-pin-preview{display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
-.gbk-pin-chip{padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;display:inline-flex;align-items:center;gap:3px;}
+.gbk-pin-mgr{padding:8px 20px 10px;border-bottom:1.5px solid var(--bdr);background:var(--surf);flex-shrink:0;}
+.gbk-pin-mgr-title{font-size:10px;font-weight:800;letter-spacing:.6px;color:var(--tx3);text-transform:uppercase;margin-bottom:7px;display:flex;align-items:center;gap:6px;}
+.gbk-pin-mgr-title::after{content:'';flex:1;height:1px;background:var(--bdr);}
 .gbk-body{flex:1;overflow:hidden;display:flex;flex-direction:column;}
 .gbk-table-wrap{flex:1;overflow-y:auto;overflow-x:hidden;}
-.gbk-table-wrap::-webkit-scrollbar{width:4px;}
-.gbk-table-wrap::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:2px;}
 .gbk-table{width:100%;border-collapse:collapse;font-size:13px;}
-.gbk-table thead th{position:sticky;top:0;z-index:3;background:var(--surf2);border-bottom:1.5px solid var(--bdr);padding:9px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--tx3);letter-spacing:.4px;white-space:nowrap;}
+.gbk-table thead th{position:sticky;top:0;z-index:3;background:var(--surf2);border-bottom:1.5px solid var(--bdr);padding:9px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--tx3);}
 .gbk-table th:first-child{width:32px;text-align:center;padding:9px 8px;}
-.gbk-table th.gbk-th-name{min-width:90px;}
-.gbk-table th.gbk-th-score{width:90px;text-align:center;}
-.gbk-table th.gbk-th-status{width:80px;text-align:center;}
-.gbk-table th.gbk-th-cmt{min-width:200px;}
-.gbk-tr{border-bottom:1px solid var(--bdr);}
-.gbk-tr:hover{background:var(--a10);}
-.gbk-tr.selected{background:rgba(99,102,241,.04);}
-.gbk-tr.skip{opacity:.4;}
-.gbk-td{padding:10px 14px;vertical-align:top;}
-.gbk-td-chk{width:32px;text-align:center;padding:10px 8px;vertical-align:middle;}
+.gbk-tr{border-bottom:1px solid var(--bdr);}.gbk-tr:hover{background:var(--a10);}.gbk-tr-simple{border-bottom:1px solid var(--bdr);}.gbk-tr-simple:hover{background:var(--a10);cursor:default;}
+.gbk-tr.selected{background:rgba(99,102,241,.04);}.gbk-tr.skip{opacity:.4;}
+.gbk-td{padding:10px 14px;vertical-align:top;}.gbk-td-chk{width:32px;text-align:center;padding:10px 8px;vertical-align:middle;}
 .gbk-td input[type=checkbox]{width:15px;height:15px;accent-color:var(--a);cursor:pointer;}
-.gbk-td-name{vertical-align:middle;}
 .gbk-stu-name{font-size:13px;font-weight:700;color:var(--tx);}
 .gbk-stu-nick{font-size:10px;color:var(--tx3);margin-top:1px;}
 .gbk-td-score{text-align:center;vertical-align:middle;}
@@ -846,37 +826,116 @@ thead th[data-col-key]{position:relative;overflow:visible;}
 .gbk-score-pill.lo{background:rgba(239,68,68,.1);color:#ef4444;}
 .gbk-score-pill.na{background:var(--surf2);color:var(--tx3);}
 .gbk-td-status{text-align:center;vertical-align:middle;}
-.gbk-status-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;white-space:nowrap;}
+.gbk-status-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;}
 .gbk-status-badge.wait{background:var(--surf2);color:var(--tx3);border:1px solid var(--bdr2);}
 .gbk-status-badge.doing{background:var(--a10);color:var(--a);}
 .gbk-status-badge.done{background:rgba(22,163,74,.1);color:#16a34a;}
 .gbk-status-badge.has{background:rgba(5,150,105,.08);color:#059669;border:1px solid rgba(5,150,105,.2);}
 .gbk-status-badge.err{background:rgba(239,68,68,.1);color:#ef4444;}
+.gbk-status-badge.proofing{background:rgba(139,92,246,.1);color:#7c3aed;}
 .gbk-td-cmt{vertical-align:top;}
-.gbk-cmt-preview{font-size:12px;line-height:1.7;color:var(--tx2);padding:8px 10px;border-radius:8px;background:var(--surf2);border:1px solid var(--bdr);cursor:pointer;transition:border-color .15s;min-height:36px;word-break:break-word;}
-.gbk-cmt-preview:hover{border-color:var(--a);}
-.gbk-cmt-preview.empty{color:var(--tx3);font-style:italic;}
+.gbk-cmt-preview{font-size:12px;line-height:1.7;color:var(--tx2);padding:8px 10px;border-radius:8px;background:var(--surf2);border:1px solid var(--bdr);cursor:pointer;min-height:36px;word-break:break-word;}
+.gbk-cmt-preview:hover{border-color:var(--a);}.gbk-cmt-preview.empty{color:var(--tx3);font-style:italic;}
 .gbk-cmt-ta{width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:2px solid var(--a);background:var(--surf2);font-size:12px;line-height:1.7;color:var(--tx);font-family:var(--font);resize:vertical;outline:none;min-height:72px;}
 .gbk-progress-bar-wrap{padding:10px 20px;border-top:1.5px solid var(--bdr);flex-shrink:0;background:var(--surf);}
-.gbk-progress-info{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
 .gbk-progress-txt{font-size:12px;font-weight:700;color:var(--tx2);}
 .gbk-progress-pct{font-size:12px;font-weight:800;color:var(--a);}
-.gbk-progress-track{height:6px;border-radius:6px;background:var(--bdr);overflow:hidden;}
+.gbk-progress-track{height:6px;border-radius:6px;background:var(--bdr);overflow:hidden;margin-top:5px;}
 .gbk-progress-fill{height:100%;background:linear-gradient(90deg,var(--a),#4f46e5);border-radius:6px;transition:width .4s ease;}
 .gbk-footer{padding:12px 20px 16px;border-top:1.5px solid var(--bdr);display:flex;gap:9px;align-items:center;flex-shrink:0;flex-wrap:wrap;}
-.gbk-footer-left{display:flex;gap:7px;flex:1;flex-wrap:wrap;}
-.gbk-footer-right{display:flex;gap:7px;flex-shrink:0;}
+.gbk-footer-left{display:flex;gap:7px;flex:1;flex-wrap:wrap;}.gbk-footer-right{display:flex;gap:7px;flex-shrink:0;}
 .gbk-btn{padding:10px 16px;border-radius:11px;border:none;font-size:13px;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:6px;transition:all .15s;white-space:nowrap;}
 .gbk-btn:disabled{opacity:.4;cursor:not-allowed;}
 .gbk-btn-start{background:linear-gradient(135deg,var(--a),#4f46e5);color:#fff;box-shadow:0 3px 12px var(--a40);}
 .gbk-btn-start:not(:disabled):hover{filter:brightness(1.08);}
 .gbk-btn-stop{background:rgba(239,68,68,.12);color:#ef4444;border:1.5px solid rgba(239,68,68,.3);}
-.gbk-btn-stop:not(:disabled):hover{background:rgba(239,68,68,.2);}
+.gbk-btn-proof{background:rgba(139,92,246,.12);color:#7c3aed;border:1.5px solid rgba(139,92,246,.3);}
+.gbk-btn-style{background:linear-gradient(135deg,rgba(245,158,11,.15),rgba(239,68,68,.1));color:#d97706;border:1.5px solid rgba(245,158,11,.4);}
 .gbk-btn-save{background:rgba(22,163,74,.12);color:#16a34a;border:1.5px solid rgba(22,163,74,.3);}
-.gbk-btn-save:not(:disabled):hover{background:rgba(22,163,74,.2);}
 .gbk-btn-cancel{background:var(--surf2);color:var(--tx2);border:1.5px solid var(--bdr2);}
-.gbk-btn-cancel:not(:disabled):hover{background:var(--bdr);}
 .gbk-sel-info{font-size:12px;color:var(--tx3);align-self:center;padding:0 4px;}
+/* ── 일괄 옵션 카드 ──────────────────────────────────── */
+.gbk-opt-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;}
+@media(max-width:560px){.gbk-opt-grid{grid-template-columns:1fr;}}
+.gbk-opt-card{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:10px 12px;border-radius:11px;
+  border:1.5px solid var(--bdr2);background:var(--surf2);
+  cursor:pointer;transition:all .15s;user-select:none;
+}
+.gbk-opt-card:hover{border-color:var(--a);background:var(--a10);}
+.gbk-opt-card input[type=checkbox]{width:15px;height:15px;accent-color:var(--a);cursor:pointer;flex-shrink:0;margin-top:2px;}
+.gbk-opt-card-texts{flex:1;min-width:0;}
+.gbk-opt-card-title{font-size:12px;font-weight:700;color:var(--tx);margin-bottom:3px;}
+.gbk-opt-card-desc{font-size:10px;color:var(--tx3);line-height:1.5;}
+.gbk-opt-card.on{border-color:var(--a);background:var(--a10);}
+.gbk-opt-card.on .gbk-opt-card-title{color:var(--a);}
+/* ── DNA 팝업 버튼 ───────────────────────────────────── */
+.gbk-dna-popup-wrap{position:relative;display:inline-flex;}
+.gbk-dna-view-btn{
+  padding:5px 12px;border-radius:8px;
+  border:1.5px solid rgba(139,92,246,.3);
+  background:rgba(139,92,246,.08);color:#7c3aed;
+  font-size:11px;font-weight:700;cursor:pointer;
+  display:inline-flex;align-items:center;gap:5px;
+  font-family:var(--font);white-space:nowrap;transition:background .15s;
+}
+.gbk-dna-view-btn:hover{background:rgba(139,92,246,.15);}
+.gbk-dna-popup{
+  position:absolute;bottom:calc(100% + 8px);left:0;z-index:300;
+  background:var(--card);border:1.5px solid var(--bdr);border-radius:14px;
+  box-shadow:0 8px 32px rgba(0,0,0,.18);padding:14px 16px;
+  width:340px;max-height:280px;overflow-y:auto;
+  display:none;
+}
+.gbk-dna-popup.show{display:block;animation:gbkDnaFade .15s ease;}
+@keyframes gbkDnaFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.gbk-dna-popup-title{font-size:10px;font-weight:800;letter-spacing:.6px;color:var(--tx3);text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;}
+.gbk-dna-popup-close{font-size:14px;cursor:pointer;color:var(--tx3);line-height:1;padding:0 2px;}
+.gbk-dna-popup-body{font-size:12px;color:var(--tx2);line-height:1.7;white-space:pre-wrap;}
+.gbk-dna-popup-empty{font-size:11px;color:var(--tx3);font-style:italic;}
+
+/* 옵션 카드 */
+.gbk-opt-grid{display:flex;flex-wrap:wrap;gap:8px;width:100%;padding-top:6px;}
+.gbk-opt-card{display:flex;align-items:flex-start;gap:9px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--bdr2);background:var(--surf2);cursor:pointer;transition:all .15s;flex:1;min-width:150px;}
+.gbk-opt-card:hover{border-color:var(--a);background:var(--a10);}
+.gbk-opt-card.on{border-color:var(--a);background:var(--a10);}
+.gbk-opt-card input[type=checkbox]{width:16px;height:16px;accent-color:var(--a);cursor:pointer;flex-shrink:0;margin-top:2px;}
+.gbk-opt-card-texts{flex:1;min-width:0;}
+.gbk-opt-card-title{font-size:12px;font-weight:700;color:var(--tx);line-height:1.3;}
+.gbk-opt-card.on .gbk-opt-card-title{color:var(--a);}
+.gbk-opt-card-desc{font-size:10px;color:var(--tx3);margin-top:2px;line-height:1.4;}
+/* DNA 결과 팝업 */
+.gbk-dna-popup{
+  position:absolute;top:100%;left:0;right:0;z-index:100;
+  background:var(--card);border:1.5px solid var(--a40);border-radius:12px;
+  padding:14px 16px;box-shadow:0 8px 32px rgba(0,0,0,.18);
+  font-size:12px;line-height:1.7;color:var(--tx);white-space:pre-wrap;
+  max-height:260px;overflow-y:auto;margin-top:4px;
+  animation:gbkFadeIn .15s ease;
+}
+.gbk-dna-popup::-webkit-scrollbar{width:3px;}
+.gbk-dna-popup::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:2px;}
+.gbk-dna-popup-wrap{position:relative;display:inline-block;}
+.gbk-dna-view-btn{
+  padding:5px 12px;border-radius:8px;border:1.5px solid rgba(139,92,246,.35);
+  background:rgba(139,92,246,.08);color:#7c3aed;font-size:11px;font-weight:700;
+  cursor:pointer;font-family:var(--font);transition:all .15s;white-space:nowrap;
+  display:inline-flex;align-items:center;gap:5px;
+}
+.gbk-dna-view-btn:hover{background:rgba(139,92,246,.16);}
+/* 학생 행 — 체크박스 없는 심플 버전 */
+.gbk-tr-simple{border-bottom:1px solid var(--bdr);transition:background .1s;}
+.gbk-tr-simple:hover{background:var(--a10);}
+.gbk-dna-panel{padding:10px 20px;border-bottom:1.5px solid var(--bdr);background:var(--surf);flex-shrink:0;display:none;}
+.gbk-dna-panel.show{display:block;}
+.gbk-dna-panel-title{font-size:10px;font-weight:800;letter-spacing:.7px;color:var(--tx3);text-transform:uppercase;margin-bottom:8px;}
+.gbk-dna-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+@media(max-width:600px){.gbk-dna-grid{grid-template-columns:1fr;}}
+.gbk-dna-card{padding:10px 12px;border-radius:10px;border:1.5px solid var(--bdr);background:var(--surf2);font-size:11px;line-height:1.6;color:var(--tx2);}
+.gbk-dna-card-lbl{font-size:9px;font-weight:800;letter-spacing:.5px;color:var(--tx3);text-transform:uppercase;margin-bottom:4px;}
+.gbk-dna-result{font-size:12px;color:var(--tx);line-height:1.7;white-space:pre-wrap;margin-top:6px;padding:8px 10px;background:var(--a10);border-radius:8px;border:1px solid var(--a40);}
+.gbk-dna-empty{font-size:11px;color:var(--tx3);font-style:italic;}
 `;
     document.head.appendChild(s);
   }
@@ -884,6 +943,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
   /* ══ INIT ══ */
   async function init() {
     _css();
+    if(typeof GeminiAI!=='undefined'){if(GeminiAI.loadPinsFromDB)GeminiAI.loadPinsFromDB();if(GeminiAI.listenPinsFromDB)GeminiAI.listenPinsFromDB();}
     if (typeof GradeDB === 'undefined') { console.warn('[GradeApp] GradeDB not loaded'); return; }
     await GradeDB.init();
     window.addEventListener('beforeunload', e => { if (_st.dirty.size > 0) { e.preventDefault(); e.returnValue = ''; } });
@@ -950,7 +1010,7 @@ thead th[data-col-key]{position:relative;overflow:visible;}
             onclick="const p=document.getElementById('gr-hdr-cfg');p&&(p.style.display=p.style.display==='none'?'block':'none')"
             title="헤더 글자 크기 설정"
             style="display:none;font-size:11px;padding:3px 8px;border-radius:7px;border:1px solid var(--bdr2);background:var(--surf2);color:var(--tx3);cursor:pointer;font-weight:700">Aa</button>
-          <button id="gr-bulk-cmt-btn" onclick="GradeApp._openBulkComment()" title="AI 일괄 코멘트 생성" style="display:none;padding:6px 14px;border-radius:8px;background:rgba(99,102,241,.1);border:1.5px solid rgba(99,102,241,.3);color:var(--a);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:var(--font)">✨ AI 일괄 코멘트</button>
+          <button id="gr-bulk-cmt-btn" onclick="GradeApp._openBulkComment()" style="display:none;padding:6px 14px;border-radius:8px;background:rgba(99,102,241,.1);border:1.5px solid rgba(99,102,241,.3);color:var(--a);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:var(--font)">✨ AI 일괄 코멘트</button>
           <button id="gr-save-btn" class="gr-save-all-btn" onclick="GradeApp.saveAll()" style="display:none">
             💾 저장<span class="gr-dirty-count" id="gr-dirty-cnt"></span>
           </button>
@@ -4804,7 +4864,9 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     if (icon) icon.className = 'gs-cm-icon' + (val.trim() ? ' has-cmt' : '');
   }
 
-  /* ✏️ 버튼 → v7 AI 팝업 (2-패널 레이아웃) */
+  /* ✏️ 버튼 → 대형 AI 팝업 */
+
+  /* ✏️ AI 코멘트 팝업 v7 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
   function _openCommentPop(e, sid) {
     if (e) e.stopPropagation();
     _closeCommentPop();
@@ -4812,21 +4874,18 @@ thead th[data-col-key]{position:relative;overflow:visible;}
     const stu     = _getStudents().find(s => s.id === sid);
     const d       = _st.data[sid] || {};
     const stuName = stu ? (stu.name + (stu.nickname ? ' (' + stu.nickname + ')' : '')) : sid;
-    const prevRecs = (typeof GradeDB !== 'undefined' && _st.classId && _st.bookId)
-      ? (GradeDB.getRecords(_st.classId, sid, _st.bookId) || []).map(r => r.comment).filter(Boolean).slice(0, 3)
-      : [];
-    const bkName = (typeof BookLibDB !== 'undefined' && _st.bookId)
+    const bkName  = (typeof BookLibDB !== 'undefined' && _st.bookId)
       ? (BookLibDB.getBookById(_st.bookId)?.name || '') : '';
-
+    const prevRecs = (typeof GradeDB !== 'undefined' && _st.classId && _st.bookId)
+      ? (GradeDB.getRecords(_st.classId, sid, _st.bookId) || []).map(r => r.comment).filter(Boolean).slice(0, 5)
+      : [];
     const overlay = document.createElement('div');
-    overlay.className = 'gcm-overlay';
-    overlay.id = 'gcm-overlay';
+    overlay.className = 'gcm-overlay'; overlay.id = 'gcm-overlay';
     overlay.onclick = ev => { if (ev.target === overlay) _closeCommentPop(); };
-
     overlay.innerHTML = `
     <div class="gcm-modal">
       <div class="gcm-hdr">
-        <div class="gcm-hdr-icon">✏️</div>
+        <div style="font-size:22px;flex-shrink:0">✏️</div>
         <div class="gcm-hdr-info">
           <div class="gcm-hdr-title">Teacher's Comment</div>
           <div class="gcm-hdr-sub">${_e(stuName)}${bkName ? ' · ' + _e(bkName) : ''}</div>
@@ -4835,38 +4894,51 @@ thead th[data-col-key]{position:relative;overflow:visible;}
       </div>
       <div class="gcm-body">
         <div class="gcm-ctrl">
-          <div class="gcm-sec">
+          <div>
             <div class="gcm-sec-title">🧬 Style DNA</div>
-            <div class="gcm-dna-info">직접 쓴 코멘트를 저장해 두면 AI가 같은 문체로 생성합니다.</div>
+            <div style="font-size:11px;color:var(--tx3);margin-bottom:8px">직접 쓴 코멘트를 저장하면 AI가 같은 문체로 생성합니다.</div>
             <div class="gcm-dna-count" id="gcm-dna-count">샘플 0개 학습됨</div>
             <button class="gcm-dna-btn" id="gcm-dna-save">📌 현재 코멘트를 스타일로 저장</button>
             <button class="gcm-dna-analyze" id="gcm-dna-analyze">🔍 내 문체 분석하기</button>
           </div>
-          <div class="gcm-sec">
-            <div class="gcm-sec-title">📌 필수 포함 문구 PIN</div>
-            <div class="gcm-pin-list" id="gcm-pin-list"></div>
-            <div class="gcm-pin-add">
-              <input class="gcm-pin-inp" id="gcm-pin-inp" placeholder="꼭 넣고 싶은 문구…" maxlength="40">
-              <button class="gcm-pin-addbtn" id="gcm-pin-add-btn">＋</button>
+          <div>
+            <div class="gcm-sec-title">📌 꼭 넣을 말 (고정 멘트)</div>
+            <div class="gpm-tabs">
+              <button class="gpm-tab on" id="gcm-tab-book">🏫 이 교재 전용</button>
+              <button class="gpm-tab" id="gcm-tab-global">🌐 공용</button>
+            </div>
+            <label class="gpm-global-check" id="gcm-global-check">
+              <input type="checkbox" id="gcm-global-use">
+              <span class="gpm-global-check-lbl">🌐 공용 멘트도 AI에 포함</span>
+              <span class="gpm-global-cnt" id="gcm-global-cnt">0개</span>
+            </label>
+            <div class="gpm-chip-wrap" id="gcm-pin-list"></div>
+            <div class="gpm-add">
+              <input class="gpm-inp" id="gcm-pin-inp" placeholder="🏫 예) 발음이 좋아졌어요…" maxlength="40">
+              <button class="gpm-addbtn" id="gcm-pin-add-btn">＋</button>
+            </div>
+            <div class="gpm-legend">
+              <span><span class="dot-b"></span>🏫 이 교재 전용</span>
+              <span><span class="dot-g"></span>🌐 공용</span>
             </div>
           </div>
-          <div class="gcm-sec">
+          <div>
             <div class="gcm-sec-title">📚 교재 상태</div>
-            <div class="gcm-book-row">
+            <div style="display:flex;align-items:center;gap:7px;margin-bottom:6px">
               <label class="gcm-book-toggle"><input type="checkbox" id="gcm-book-done"><span class="gcm-book-slider"></span></label>
-              <span class="gcm-book-lbl">이번 교재 이수 완료</span>
+              <span style="font-size:12px;color:var(--tx2);font-weight:600">이번 교재 이수 완료</span>
             </div>
             <div id="gcm-next-wrap" style="display:none;margin-top:6px">
               <input class="gcm-inp-sm" id="gcm-next-book" placeholder="다음 교재명 (선택)">
             </div>
           </div>
-          <div class="gcm-sec">
-            <div class="gcm-sec-title">💬 선생님 특이사항 메모</div>
-            <textarea class="gcm-memo" id="gcm-memo" rows="3" placeholder="특별히 언급하고 싶은 내용을 자유롭게 입력…"></textarea>
+          <div>
+            <div class="gcm-sec-title">💬 선생님 메모</div>
+            <textarea class="gcm-memo" id="gcm-memo" rows="3" placeholder="특별히 언급할 내용…"></textarea>
           </div>
-          <div class="gcm-sec">
+          <div>
             <div class="gcm-sec-title">✨ AI 생성</div>
-            <div class="gcm-actions">
+            <div style="display:flex;flex-direction:column;gap:7px">
               <button class="gcm-btn gcm-btn-gen" id="gcm-btn-gen">✨ AI 코멘트 생성</button>
               <button class="gcm-btn gcm-btn-variants" id="gcm-btn-variants">🎲 3가지 버전으로 생성</button>
               <button class="gcm-btn gcm-btn-proof" id="gcm-btn-proof">🔍 문법 교정</button>
@@ -4875,15 +4947,15 @@ thead th[data-col-key]{position:relative;overflow:visible;}
         </div>
         <div class="gcm-edit">
           <div class="gcm-edit-top">
-            <textarea class="gcm-ta" id="gcm-ta" placeholder="코멘트를 직접 입력하거나, 왼쪽 버튼으로 AI 생성을 시작하세요…"></textarea>
+            <textarea class="gcm-ta" id="gcm-ta" placeholder="코멘트를 직접 입력하거나 AI 생성을 시작하세요…"></textarea>
             <div class="gcm-ta-meta">
               <span class="gcm-char" id="gcm-char">0자</span>
               <button class="gcm-save-sample" id="gcm-save-sample">📎 스타일 샘플로 저장</button>
             </div>
           </div>
-          <div class="gcm-status idle" id="gcm-status">AI가 대기 중입니다</div>
+          <div class="gcm-status idle" id="gcm-status">AI 대기 중</div>
           <div class="gcm-variants" id="gcm-variants">
-            <div class="gcm-variants-title">✦ 버전을 선택하세요</div>
+            <div style="font-size:11px;font-weight:800;color:var(--tx3);letter-spacing:.7px;margin-bottom:8px;text-transform:uppercase">✦ 버전을 선택하세요</div>
             <div class="gcm-vlist" id="gcm-vlist"></div>
             <button class="gcm-vapply" id="gcm-vapply" disabled>선택한 버전 적용</button>
           </div>
@@ -4894,192 +4966,116 @@ thead th[data-col-key]{position:relative;overflow:visible;}
         </div>
       </div>
     </div>`;
-
     document.body.appendChild(overlay);
-
-    const ta        = overlay.querySelector('#gcm-ta');
-    const charEl    = overlay.querySelector('#gcm-char');
-    const statusEl  = overlay.querySelector('#gcm-status');
-    const pinList   = overlay.querySelector('#gcm-pin-list');
-    const pinInp    = overlay.querySelector('#gcm-pin-inp');
-    const dnaCount  = overlay.querySelector('#gcm-dna-count');
-    const varPanel  = overlay.querySelector('#gcm-variants');
-    const vList     = overlay.querySelector('#gcm-vlist');
-    const vApply    = overlay.querySelector('#gcm-vapply');
-    const bookDone  = overlay.querySelector('#gcm-book-done');
-    const nextWrap  = overlay.querySelector('#gcm-next-wrap');
-    const nextBook  = overlay.querySelector('#gcm-next-book');
-    const memoEl    = overlay.querySelector('#gcm-memo');
-
-    ta.value = d.comment || '';
-    charEl.textContent = ta.value.length + '자';
-
-    const _setStatus = (cls, msg) => { statusEl.className = 'gcm-status ' + cls; statusEl.textContent = msg; };
-    let _busy = false;
-    const _lock = on => {
-      _busy = on;
-      ['gcm-btn-gen','gcm-btn-variants','gcm-btn-proof','gcm-save','gcm-dna-analyze'].forEach(id => {
-        const b = overlay.querySelector('#' + id); if (b) b.disabled = on;
-      });
-    };
-    const _updateDna = () => {
-      const c = (typeof GeminiAI !== 'undefined') ? GeminiAI.getStyleSamples().length : 0;
-      dnaCount.textContent = '샘플 ' + c + '개 학습됨';
-    };
-    let _activePins = new Set();
-    const _renderPins = () => {
-      if (typeof GeminiAI === 'undefined') return;
-      const pins = GeminiAI.getPins();
-      pinList.innerHTML = '';
-      if (!pins.length) { pinList.innerHTML = '<span style="font-size:11px;color:var(--tx3)">등록된 핀이 없습니다</span>'; return; }
-      if (_activePins.size === 0) pins.forEach((_, i) => _activePins.add(i));
-      pins.forEach((p, i) => {
-        const chip = document.createElement('span');
-        chip.className = 'gcm-pin-chip' + (_activePins.has(i) ? ' active' : '');
-        chip.innerHTML = _e(p) + ' <span class="gcm-pin-del" title="삭제">✕</span>';
-        chip.onclick = ev => {
-          if (ev.target.classList.contains('gcm-pin-del')) { GeminiAI.removePin(i); _activePins.delete(i); _renderPins(); return; }
-          if (_activePins.has(i)) _activePins.delete(i); else _activePins.add(i);
-          _renderPins();
+    const ta=overlay.querySelector('#gcm-ta'), charEl=overlay.querySelector('#gcm-char');
+    const statusEl=overlay.querySelector('#gcm-status'), pinList=overlay.querySelector('#gcm-pin-list');
+    const pinInp=overlay.querySelector('#gcm-pin-inp'), dnaCount=overlay.querySelector('#gcm-dna-count');
+    const varPanel=overlay.querySelector('#gcm-variants'), vList=overlay.querySelector('#gcm-vlist');
+    const vApply=overlay.querySelector('#gcm-vapply'), bookDone=overlay.querySelector('#gcm-book-done');
+    const nextWrap=overlay.querySelector('#gcm-next-wrap'), nextBook=overlay.querySelector('#gcm-next-book');
+    const memoEl=overlay.querySelector('#gcm-memo');
+    const tabBook=overlay.querySelector('#gcm-tab-book'), tabGlobal=overlay.querySelector('#gcm-tab-global');
+    const gcmGU=overlay.querySelector('#gcm-global-use'), gcmGC=overlay.querySelector('#gcm-global-check');
+    const gcmGN=overlay.querySelector('#gcm-global-cnt');
+    ta.value = d.comment || ''; charEl.textContent = ta.value.length + '자';
+    const _setStatus=(cls,msg)=>{statusEl.className='gcm-status '+cls;statusEl.textContent=msg;};
+    let _busy=false;
+    const _lock=on=>{_busy=on;['gcm-btn-gen','gcm-btn-variants','gcm-btn-proof','gcm-save','gcm-dna-analyze'].forEach(id=>{const b=overlay.querySelector('#'+id);if(b)b.disabled=on;});};
+    const _curBookId=()=>_st.bookId||'';
+    const _updateDna=()=>{const c=(typeof GeminiAI!=='undefined')?GeminiAI.getStyleSamples().length:0;dnaCount.textContent='샘플 '+c+'개 학습됨';};
+    const _updateGCnt=()=>{const n=(typeof GeminiAI!=='undefined')?GeminiAI.getPins().length:0;if(gcmGN)gcmGN.textContent=n+'개';};
+    let _pinTab='book'; const _activeMap={book:new Set(),global:new Set()};
+    const _renderPins=()=>{
+      if(typeof GeminiAI==='undefined')return;
+      const bid=_curBookId(), isBook=_pinTab==='book';
+      const pins=isBook?GeminiAI.getBookPins(bid):GeminiAI.getPins();
+      const actSet=isBook?_activeMap.book:_activeMap.global;
+      pinList.innerHTML='';
+      if(!pins.length){const em=document.createElement('span');em.className='gpm-empty';em.textContent=isBook?'이 교재 전용 멘트 없음':'공용 멘트 없음';pinList.appendChild(em);return;}
+      if(actSet.size===0)pins.forEach((_,i)=>actSet.add(i));
+      pins.forEach((p,i)=>{
+        const chip=document.createElement('span');
+        chip.className='gpm-chip'+(actSet.has(i)?(isBook?' book-active':' active'):'');
+        chip.innerHTML=_e(p)+' <span class="gpm-del" title="삭제">✕</span>';
+        chip.onclick=ev=>{
+          if(ev.target.classList.contains('gpm-del')){if(isBook)GeminiAI.removeBookPin(bid,i);else GeminiAI.removePin(i);actSet.delete(i);_renderPins();_updateGCnt();return;}
+          if(actSet.has(i))actSet.delete(i);else actSet.add(i);_renderPins();
         };
         pinList.appendChild(chip);
       });
     };
-    const _getBookStatus = () => ({
-      currentBook: bkName,
-      isCompleted: bookDone.checked,
-      nextBook: nextBook.value.trim(),
-      teacherMemo: memoEl.value.trim(),
-    });
-    const _getActivePinArr = () => {
-      if (typeof GeminiAI === 'undefined') return [];
-      const pins = GeminiAI.getPins();
-      return [..._activePins].filter(i => i < pins.length).map(i => pins[i]);
+    const _getActivePins=()=>{
+      if(typeof GeminiAI==='undefined')return[];
+      return GeminiAI.getMergedPins(_curBookId());
     };
-
+    const _getBookStatus=()=>({currentBook:bkName,bookId:_curBookId(),isCompleted:bookDone.checked,nextBook:nextBook.value.trim(),teacherMemo:memoEl.value.trim()});
     _updateDna(); _renderPins();
-    bookDone.onchange = () => { nextWrap.style.display = bookDone.checked ? 'block' : 'none'; };
-    ta.addEventListener('input', () => { charEl.textContent = ta.value.length + '자'; });
-
-    const _addPin = () => {
-      if (typeof GeminiAI === 'undefined') return;
-      const v = pinInp.value.trim(); if (!v) return;
-      if (GeminiAI.addPin(v)) { const idx = GeminiAI.getPins().length - 1; _activePins.add(idx); }
-      pinInp.value = ''; _renderPins();
+    // 공용 멘트 DB 로드
+    if(typeof GeminiAI!=='undefined'&&GeminiAI.loadPinsFromDB)GeminiAI.loadPinsFromDB().then(()=>{_updateGCnt();if(_pinTab==='global')_renderPins();});
+    // 공용멘트 체크 (기본: 미체크)
+    if(gcmGU){gcmGU.checked=false;if(typeof GeminiAI!=='undefined')GeminiAI.setUseGlobalPins(false);}
+    _updateGCnt();
+    if(gcmGU)gcmGU.onchange=()=>{const on=gcmGU.checked;if(typeof GeminiAI!=='undefined')GeminiAI.setUseGlobalPins(on);if(gcmGC)gcmGC.classList.toggle('checked',on);};
+    // 탭 전환
+    if(tabBook)tabBook.onclick=()=>{_pinTab='book';tabBook.classList.add('on');tabGlobal.classList.remove('on');_renderPins();pinInp.placeholder='🏫 예) 발음이 좋아졌어요…';};
+    if(tabGlobal)tabGlobal.onclick=()=>{_pinTab='global';tabGlobal.classList.add('on');tabBook.classList.remove('on');_renderPins();pinInp.placeholder='🌐 예) 수업 태도가 좋아요…';_updateGCnt();};
+    bookDone.onchange=()=>{nextWrap.style.display=bookDone.checked?'block':'none';};
+    ta.addEventListener('input',()=>{charEl.textContent=ta.value.length+'자';});
+    const _addPin=()=>{if(typeof GeminiAI==='undefined')return;const v=pinInp.value.trim();if(!v)return;const bid=_curBookId();if(_pinTab==='book'){if(GeminiAI.addBookPin(bid,v))_activeMap.book.add(GeminiAI.getBookPins(bid).length-1);}else{if(GeminiAI.addPin(v)){_activeMap.global.add(GeminiAI.getPins().length-1);_updateGCnt();}}pinInp.value='';_renderPins();};
+    overlay.querySelector('#gcm-pin-add-btn').onclick=_addPin;
+    pinInp.onkeydown=ev=>{if(ev.key==='Enter'){ev.preventDefault();_addPin();}};
+    overlay.querySelector('#gcm-dna-save').onclick=()=>{if(typeof GeminiAI==='undefined'||!ta.value.trim())return;GeminiAI.addStyleSample(ta.value.trim());_updateDna();_setStatus('ok','✓ 스타일 샘플로 저장됨');setTimeout(()=>_setStatus('idle','AI 대기 중'),2500);};
+    overlay.querySelector('#gcm-save-sample').onclick=()=>{if(typeof GeminiAI==='undefined'||!ta.value.trim())return;GeminiAI.addStyleSample(ta.value.trim());_updateDna();_setStatus('ok','✓ 스타일 샘플 저장 완료');setTimeout(()=>_setStatus('idle','AI 대기 중'),2500);};
+    overlay.querySelector('#gcm-dna-analyze').onclick=async()=>{if(typeof GeminiAI==='undefined')return;_lock(true);_setStatus('loading','문체 분석 중…');try{const r=await GeminiAI.analyzeStyle();_setStatus('ok','✓ 분석 완료');const tip=document.createElement('div');tip.style.cssText='margin:8px 0;padding:10px 12px;background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.25);border-radius:10px;font-size:12px;line-height:1.8;color:var(--tx2);white-space:pre-wrap;';tip.textContent=r;overlay.querySelector('.gcm-ta-meta').after(tip);}catch(err){_setStatus('err','⚠ '+_cpMsg(err));}finally{_lock(false);}};
+    overlay.querySelector('#gcm-btn-gen').onclick=async()=>{
+      if(typeof GeminiAI==='undefined'){_setStatus('err','⚠ GeminiAI 미로드');return;}
+      _lock(true);varPanel.classList.remove('show');_setStatus('loading','AI 코멘트 생성 중…');
+      try{const info={name:stu?stu.name:sid,word:d.word,reading:d.reading};ta.value=await GeminiAI.generateComment(info,_getBookStatus(),{prevComments:prevRecs,activePins:_getActivePins()});charEl.textContent=ta.value.length+'자';_setStatus('ok','✓ 생성 완료');}
+      catch(err){_setStatus('err','⚠ '+_cpMsg(err));}finally{_lock(false);}
     };
-    overlay.querySelector('#gcm-pin-add-btn').onclick = _addPin;
-    pinInp.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); _addPin(); } };
-
-    overlay.querySelector('#gcm-dna-save').onclick = () => {
-      if (typeof GeminiAI === 'undefined' || !ta.value.trim()) return;
-      GeminiAI.addStyleSample(ta.value.trim()); _updateDna();
-      _setStatus('ok', '✓ 스타일 샘플로 저장되었습니다.');
-      setTimeout(() => _setStatus('idle', 'AI가 대기 중입니다'), 2500);
-    };
-    overlay.querySelector('#gcm-save-sample').onclick = () => {
-      if (typeof GeminiAI === 'undefined' || !ta.value.trim()) return;
-      GeminiAI.addStyleSample(ta.value.trim()); _updateDna();
-      _setStatus('ok', '✓ 스타일 샘플 저장 완료');
-      setTimeout(() => _setStatus('idle', 'AI가 대기 중입니다'), 2500);
-    };
-    overlay.querySelector('#gcm-dna-analyze').onclick = async () => {
-      if (typeof GeminiAI === 'undefined') return;
-      _lock(true); _setStatus('loading', '문체 분석 중…');
-      try {
-        const r = await GeminiAI.analyzeStyle();
-        _setStatus('ok', '✓ 분석 완료');
-        const tip = document.createElement('div');
-        tip.style.cssText = 'margin:8px 0;padding:10px 12px;background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.25);border-radius:10px;font-size:12px;line-height:1.8;color:var(--tx2);white-space:pre-wrap;';
-        tip.textContent = r;
-        overlay.querySelector('.gcm-ta-meta').after(tip);
-      } catch(err) { _setStatus('err', '⚠ ' + _cpMsg(err)); }
-      finally { _lock(false); }
-    };
-    overlay.querySelector('#gcm-btn-gen').onclick = async () => {
-      if (typeof GeminiAI === 'undefined') { _setStatus('err','⚠ GeminiAI 미로드'); return; }
-      _lock(true); varPanel.classList.remove('show');
-      _setStatus('loading', 'AI 코멘트 생성 중… 잠시 기다려 주세요');
-      try {
-        const info = { name: stu ? stu.name : sid, word: d.word, reading: d.reading };
-        ta.value = await GeminiAI.generateComment(info, _getBookStatus(), { prevComments: prevRecs, activePins: _getActivePinArr() });
-        charEl.textContent = ta.value.length + '자';
-        _setStatus('ok', '✓ 생성 완료 — 내용을 확인하고 저장하세요');
-      } catch(err) { _setStatus('err', '⚠ ' + _cpMsg(err)); }
-      finally { _lock(false); }
-    };
-    overlay.querySelector('#gcm-btn-variants').onclick = async () => {
-      if (typeof GeminiAI === 'undefined') { _setStatus('err','⚠ GeminiAI 미로드'); return; }
-      _lock(true); _setStatus('loading', 'AI 3가지 버전 생성 중…');
-      vList.innerHTML = ''; varPanel.classList.remove('show'); vApply.disabled = true;
-      try {
-        const info = { name: stu ? stu.name : sid, word: d.word, reading: d.reading };
-        const vars = await GeminiAI.generateVariants(info, _getBookStatus(), { prevComments: prevRecs, activePins: _getActivePinArr() }, 3);
-        let selectedIdx = -1;
-        vars.forEach((v, i) => {
-          const card = document.createElement('div');
-          card.className = 'gcm-vcard';
-          card.innerHTML = '<span class="gcm-vcard-badge">선택됨</span>' + _e(v);
-          card.onclick = () => {
-            vList.querySelectorAll('.gcm-vcard').forEach(c => c.classList.remove('selected'));
-            card.classList.add('selected'); selectedIdx = i; vApply.disabled = false;
-          };
-          vList.appendChild(card);
-        });
+    overlay.querySelector('#gcm-btn-variants').onclick=async()=>{
+      if(typeof GeminiAI==='undefined'){_setStatus('err','⚠ GeminiAI 미로드');return;}
+      _lock(true);_setStatus('loading','3가지 버전 생성 중…');vList.innerHTML='';varPanel.classList.remove('show');vApply.disabled=true;
+      try{
+        const info={name:stu?stu.name:sid,word:d.word,reading:d.reading};
+        const vars=await GeminiAI.generateVariants(info,_getBookStatus(),{prevComments:prevRecs,activePins:_getActivePins()},3);
+        let selIdx=-1;
+        vars.forEach((v,i)=>{const card=document.createElement('div');card.className='gcm-vcard';card.innerHTML='<span class="gcm-vcard-badge">선택됨</span>'+_e(v);card.onclick=()=>{vList.querySelectorAll('.gcm-vcard').forEach(c=>c.classList.remove('selected'));card.classList.add('selected');selIdx=i;vApply.disabled=false;};vList.appendChild(card);});
         varPanel.classList.add('show');
-        vApply.onclick = () => {
-          if (selectedIdx < 0) return;
-          ta.value = vars[selectedIdx]; charEl.textContent = ta.value.length + '자';
-          varPanel.classList.remove('show');
-          _setStatus('ok', '✓ 선택한 버전이 적용되었습니다');
-        };
-        _setStatus('ok', '✓ 3가지 버전 생성 완료 — 선택하세요');
-      } catch(err) { _setStatus('err', '⚠ ' + _cpMsg(err)); }
-      finally { _lock(false); }
+        vApply.onclick=()=>{if(selIdx<0)return;ta.value=vars[selIdx];charEl.textContent=ta.value.length+'자';varPanel.classList.remove('show');_setStatus('ok','✓ 선택 버전 적용됨');};
+        _setStatus('ok','✓ 3가지 버전 생성 완료 — 선택하세요');
+      }catch(err){_setStatus('err','⚠ '+_cpMsg(err));}finally{_lock(false);}
     };
-    overlay.querySelector('#gcm-btn-proof').onclick = async () => {
-      if (!ta.value.trim()) { _setStatus('err','교정할 텍스트를 먼저 입력하세요'); return; }
-      if (typeof GeminiAI === 'undefined') { _setStatus('err','⚠ GeminiAI 미로드'); return; }
-      _lock(true); _setStatus('loading', '교정 중…');
-      try {
-        ta.value = await GeminiAI.proofreadComment(ta.value);
-        charEl.textContent = ta.value.length + '자'; _setStatus('ok', '✓ 교정 완료');
-      } catch(err) { _setStatus('err', '⚠ ' + _cpMsg(err)); }
-      finally { _lock(false); }
+    overlay.querySelector('#gcm-btn-proof').onclick=async()=>{
+      if(!ta.value.trim()){_setStatus('err','교정할 텍스트를 먼저 입력하세요');return;}
+      if(typeof GeminiAI==='undefined'){_setStatus('err','⚠ GeminiAI 미로드');return;}
+      _lock(true);_setStatus('loading','교정 중…');
+      try{ta.value=await GeminiAI.proofreadComment(ta.value);charEl.textContent=ta.value.length+'자';_setStatus('ok','✓ 교정 완료');}
+      catch(err){_setStatus('err','⚠ '+_cpMsg(err));}finally{_lock(false);}
     };
-    overlay.querySelector('#gcm-close-btn').onclick = _closeCommentPop;
-    overlay.querySelector('#gcm-cancel').onclick     = _closeCommentPop;
-    overlay.querySelector('#gcm-save').onclick = async () => {
-      if (_busy) return; _lock(true);
-      const val = ta.value.trim();
-      _st.data[sid].comment = val; _st.dirty.add(sid); _refreshDirtyUI();
-      const inlineTa = document.getElementById('gr-cmta-' + sid);
-      if (inlineTa) inlineTa.value = val;
-      const icon = document.getElementById('gr-cmtbtn-' + sid);
-      if (icon) icon.className = 'gs-cm-icon' + (val ? ' has-cmt' : '');
-      try { await saveOne(sid); _closeCommentPop(); }
-      catch(err) { _setStatus('err', '⚠ 저장 실패: ' + _cpMsg(err)); _lock(false); }
+    overlay.querySelector('#gcm-close-btn').onclick=_closeCommentPop;
+    overlay.querySelector('#gcm-cancel').onclick=_closeCommentPop;
+    overlay.querySelector('#gcm-save').onclick=async()=>{
+      if(_busy)return;_lock(true);
+      const val=ta.value.trim();_st.data[sid].comment=val;_st.dirty.add(sid);_refreshDirtyUI();
+      const inlineTa=document.getElementById('gr-cmta-'+sid);if(inlineTa)inlineTa.value=val;
+      const icon=document.getElementById('gr-cmtbtn-'+sid);if(icon)icon.className='gs-cm-icon'+(val?' has-cmt':'');
+      try{await saveOne(sid);_closeCommentPop();}
+      catch(err){_setStatus('err','⚠ 저장 실패: '+_cpMsg(err));_lock(false);}
     };
-    overlay._keyH = ev => { if (ev.key === 'Escape') _closeCommentPop(); };
-    document.addEventListener('keydown', overlay._keyH);
-    _activeCmtPop = overlay;
-    ta.focus();
+    overlay._keyH=ev=>{if(ev.key==='Escape')_closeCommentPop();};
+    document.addEventListener('keydown',overlay._keyH);
+    _activeCmtPop=overlay; ta.focus();
   }
 
   function _closeCommentPop() {
-    const el = document.getElementById('gcm-overlay');
-    if (el) { if (el._keyH) document.removeEventListener('keydown', el._keyH); el.remove(); }
-    const old = document.getElementById('gr-cmt-modal');
-    if (old) old.remove();
-    if (_activeCmtPop && _activeCmtPop !== el) {
-      if (_activeCmtPop._keyH)   document.removeEventListener('keydown', _activeCmtPop._keyH);
-      if (_activeCmtPop._clickH) document.removeEventListener('click',   _activeCmtPop._clickH);
-      _activeCmtPop.remove();
-    }
-    _activeCmtPop = null;
+    const el=document.getElementById('gcm-overlay');
+    if(el){if(el._keyH)document.removeEventListener('keydown',el._keyH);el.remove();}
+    const old=document.getElementById('gr-cmt-modal');if(old)old.remove();
+    if(_activeCmtPop&&_activeCmtPop!==el){if(_activeCmtPop._keyH)document.removeEventListener('keydown',_activeCmtPop._keyH);if(_activeCmtPop._clickH)document.removeEventListener('click',_activeCmtPop._clickH);_activeCmtPop.remove();}
+    _activeCmtPop=null;
   }
 
-
-  function _cpSt(el, cls, msg) { el.className = 'gr-cp-status-line ' + cls; el.textContent = msg; }
   function _cpLd(pop, on)      { pop.querySelectorAll('[data-cpa]').forEach(function(b){ b.disabled = on; }); }
   function _cpMsg(err) {
     var m = err && err.message ? err.message : String(err);
@@ -5124,52 +5120,33 @@ thead th[data-col-key]{position:relative;overflow:visible;}
 
 
   // ════════════════════════════════════════════════════════
-  // AI 일괄 코멘트 생성 (_openBulkComment)
+  // AI 일괄 코멘트 생성
   // ════════════════════════════════════════════════════════
   function _openBulkComment() {
-    if (!_st.bookId) { _toast('⚠ 교재를 먼저 선택하세요', 'error'); return; }
-    if (typeof GeminiAI === 'undefined') { _toast('⚠ GeminiAI 모듈이 로드되지 않았습니다'); return; }
-    const students = _getSorted();
-    if (!students.length) { _toast('⚠ 학생이 없습니다'); return; }
-
-    const bookName = (typeof BookLibDB !== 'undefined' ? BookLibDB.getBookById(_st.bookId)?.name : '') || '교재';
-    const actRevs  = GradeDB.getActiveReviews(_st.bookId);
-
-    const stuData = students.map(s => {
-      _ensureData(s.id);
-      const d   = _st.data[s.id] || {};
-      const rec = GradeDB.getLatest(_st.classId || '__noclass__', s.id, _st.bookId);
-      const wd  = d.word    || rec?.word    || {};
-      const rd  = d.reading || rec?.reading || {};
-      const wPct = wd.totalQ > 0 ? Math.round((wd.pass / wd.totalQ) * 100) : null;
-      const rVals = actRevs.length ? actRevs.map((_,i) => rd['R'+i]?.score).filter(v => v != null && v !== '') : [];
-      const rPct  = rVals.length ? Math.round(rVals.reduce((a,b)=>a+b,0)/rVals.length) : null;
-      return {
-        id: s.id, name: s.name, nickname: s.nickname || '',
-        word: wd, reading: rd, wPct, rPct,
-        existingComment: d.comment || rec?.comment || '',
-        prevComments: (GradeDB.getRecords(_st.classId || '__noclass__', s.id, _st.bookId) || [])
-          .map(r => r.comment).filter(Boolean).slice(0, 3),
-      };
+    if(!_st.bookId){_toast('⚠ 교재를 먼저 선택하세요','error');return;}
+    if(typeof GeminiAI==='undefined'){_toast('⚠ GeminiAI 모듈이 로드되지 않았습니다');return;}
+    const students=_getSorted();
+    if(!students.length){_toast('⚠ 학생이 없습니다');return;}
+    const bookName=(typeof BookLibDB!=='undefined'?BookLibDB.getBookById(_st.bookId)?.name:'')||'교재';
+    const actRevs=GradeDB.getActiveReviews(_st.bookId);
+    const stuData=students.map(s=>{
+      const rec=GradeDB.getLatest(_st.classId||'__noclass__',s.id,_st.bookId);
+      const allRecs=(GradeDB.getRecords(_st.classId||'__noclass__',s.id,_st.bookId)||[]);
+      const wd=rec?.word||{},rd=rec?.reading||{};
+      const wPct=wd.totalQ>0?Math.round((wd.pass/wd.totalQ)*100):null;
+      const rVals=actRevs.length?actRevs.map((_,i)=>rd['R'+i]?.score).filter(v=>v!=null&&v!==''):[];
+      const rPct=rVals.length?Math.round(rVals.reduce((a,b)=>a+b,0)/rVals.length):null;
+      return{id:s.id,name:s.name,nickname:s.nickname||'',word:wd,reading:rd,wPct,rPct,
+        existingComment:rec?.comment||'',origComment:rec?.comment||'',
+        prevComments:allRecs.map(r=>r.comment).filter(Boolean).slice(0,5)};
     });
-
-    let _running = false, _stopFlag = false;
-    let _results = {};
-    let _selected = new Set(students.map(s => s.id));
-    stuData.forEach(s => { _results[s.id] = { comment: s.existingComment, status: s.existingComment ? 'has' : 'wait' }; });
-
-    const pins = GeminiAI.getPins();
-    const pinHtml = pins.length
-      ? pins.map(p => '<span class="gbk-pin-chip">' + _e(p) + '</span>').join('')
-      : '<span style="font-size:11px;color:var(--tx3)">등록된 PIN 없음</span>';
-
-    const overlay = document.createElement('div');
-    overlay.className = 'gbk-overlay'; overlay.id = 'gbk-overlay';
-    overlay.onclick = ev => { if (ev.target === overlay && !_running) _closeBulkPop(); };
-    overlay._results = _results;
-    overlay._editingSid = null;
-
-    overlay.innerHTML = `
+    let _running=false,_stopFlag=false,_results={},_selected=new Set(students.map(s=>s.id));
+    stuData.forEach(s=>{_results[s.id]={comment:s.existingComment,status:s.existingComment?'has':'wait'};});
+    const overlay=document.createElement('div');
+    overlay.className='gbk-overlay';overlay.id='gbk-overlay';
+    overlay.onclick=ev=>{if(ev.target===overlay&&!_running)_closeBulkPop();};
+    overlay._results=_results;overlay._editingSid=null;
+    overlay.innerHTML=`
     <div class="gbk-modal">
       <div class="gbk-hdr">
         <div style="font-size:22px;flex-shrink:0">✨</div>
@@ -5180,49 +5157,87 @@ thead th[data-col-key]{position:relative;overflow:visible;}
         <button class="gbk-hdr-close" id="gbk-close">✕</button>
       </div>
       <div class="gbk-cfg">
-        <span class="gbk-cfg-lbl">생성 옵션</span>
-        <div class="gbk-toggle-row">
-          <label class="gbk-sw"><input type="checkbox" id="gbk-skip-existing" checked><span class="gbk-sw-track"></span></label>
-          <span class="gbk-sw-lbl">기존 코멘트 있는 학생 건너뛰기</span>
+        <!-- 옵션 카드 -->
+        <div class="gbk-opt-grid">
+          <label class="gbk-opt-card on" id="gbk-opt-skip-lbl">
+            <input type="checkbox" id="gbk-skip-existing" checked>
+            <div class="gbk-opt-card-texts">
+              <div class="gbk-opt-card-title">✍️ 이미 작성된 코멘트 유지</div>
+              <div class="gbk-opt-card-desc">코멘트가 이미 있는 학생은 건너뛰고<br>빈 학생만 새로 생성합니다.</div>
+            </div>
+          </label>
+          <label class="gbk-opt-card" id="gbk-opt-done-lbl">
+            <input type="checkbox" id="gbk-book-done">
+            <div class="gbk-opt-card-texts">
+              <div class="gbk-opt-card-title">🎓 이번 교재 이수 완료 포함</div>
+              <div class="gbk-opt-card-desc">교재 이수 완료 내용을 코멘트에<br>자연스럽게 녹여 넣습니다.</div>
+            </div>
+          </label>
         </div>
-        <div class="gbk-toggle-row">
-          <label class="gbk-sw"><input type="checkbox" id="gbk-book-done"><span class="gbk-sw-track"></span></label>
-          <span class="gbk-sw-lbl">이번 교재 이수 완료 포함</span>
+        <!-- 다음 교재명 -->
+        <div id="gbk-next-wrap" style="display:none;width:100%;margin-top:4px">
+          <input class="gbk-inp-sm" id="gbk-next-book" placeholder="📚 다음 교재명 입력 (예: Smart Phonics 4)" style="width:100%;box-sizing:border-box">
         </div>
-        <input class="gbk-inp-sm" id="gbk-next-book" placeholder="다음 교재명 (선택)" style="display:none">
-        <div style="margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-          <span style="font-size:10px;color:var(--tx3);font-weight:700">PIN:</span>
-          <div class="gbk-pin-preview">${pinHtml}</div>
-        </div>
-        <!-- ★ 공통 앞말 섹션 -->
-        <div class="gbk-prefix-wrap">
-          <div class="gbk-prefix-lbl">
-            📝 공통 앞말 (모든 코멘트 맨 앞에 동일하게 삽입)
-            <span>예: 4월 16일 배부된 교재입니다.</span>
+        <!-- 공통 앞말 -->
+        <div style="width:100%;display:flex;flex-direction:column;gap:5px;padding-top:8px;border-top:1px solid var(--bdr)">
+          <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+            <span style="font-size:11px;font-weight:700;color:var(--tx2)">📝 공통 앞말</span>
+            <span style="font-size:10px;color:var(--tx3)">모든 학생 코멘트 맨 앞에 동일하게 추가됩니다. 비워두면 AI가 바로 작성합니다.</span>
           </div>
-          <textarea class="gbk-prefix-ta" id="gbk-prefix" rows="2"
-            placeholder="예) 4월 16일 배부된 교재입니다.&#10;이번 달에는 집중적으로 파닉스 과정을 진행하였습니다."></textarea>
-          <div class="gbk-prefix-hint">
-            💡 여기에 입력한 내용은 AI가 생성한 코멘트 <strong>맨 앞에 자동으로 추가</strong>됩니다.
-            배부 날짜, 교재 안내, 특별 공지 등 모든 학생에게 공통으로 전달할 내용을 입력하세요.
+          <textarea class="gbk-prefix-ta" id="gbk-prefix" rows="2" placeholder="예) 4월 16일 배부된 교재입니다. (비워두면 이 부분 없이 생성됩니다)"></textarea>
+        </div>
+        <!-- 부가 버튼 줄 -->
+        <div style="width:100%;display:flex;gap:7px;padding-top:6px;border-top:1px solid var(--bdr);flex-wrap:wrap;align-items:center">
+          <button id="gbk-pin-toggle" style="padding:5px 12px;border-radius:8px;border:1.5px solid var(--bdr2);background:var(--surf2);color:var(--tx2);font-size:11px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-family:var(--font);white-space:nowrap">
+            📌 고정 멘트 설정 <span id="gbk-pin-cnt" style="background:var(--a);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px">0</span>
+          </button>
+          <!-- DNA 결과: 작은 팝업 버튼 -->
+          <div class="gbk-dna-popup-wrap" id="gbk-dna-popup-wrap">
+            <button class="gbk-dna-view-btn" id="gbk-dna-view-btn">🧬 스타일 분석 결과 보기</button>
+            <div class="gbk-dna-popup" id="gbk-dna-popup" style="display:none">
+              <div class="gbk-dna-popup-title">🧬 선생님 Style DNA <span class="gbk-dna-popup-close" id="gbk-dna-popup-close">✕</span></div>
+              <div id="gbk-dna-result" class="gbk-dna-popup-empty">아직 분석 전입니다. 🧬 스타일 학습 후 생성 버튼을 눌러주세요.</div>
+            </div>
           </div>
+        </div>
+      </div>
+      <!-- 고정 멘트 패널 -->
+      <div class="gbk-pin-mgr" id="gbk-pin-mgr" style="display:none">
+        <div class="gbk-pin-mgr-title">📌 고정 멘트 관리</div>
+        <div class="gpm-tabs">
+          <button class="gpm-tab on" id="gbk-tab-book">🏫 이 교재 전용</button>
+          <button class="gpm-tab" id="gbk-tab-global">🌐 공용</button>
+        </div>
+        <label class="gpm-global-check" id="gbk-global-check">
+          <input type="checkbox" id="gbk-global-use">
+          <span class="gpm-global-check-lbl">🌐 공용 멘트도 AI 생성에 포함</span>
+          <span class="gpm-global-cnt" id="gbk-global-cnt">0개</span>
+        </label>
+        <div class="gpm-global-hint" id="gbk-global-hint">체크하면 공용 멘트가 모든 학생 코멘트에 반영됩니다.</div>
+        <div class="gpm-chip-wrap" id="gbk-pin-list"></div>
+        <div class="gpm-add">
+          <input class="gpm-inp" id="gbk-pin-inp" placeholder="🏫 예) 발음이 좋아졌어요… (이 교재 전용)" maxlength="40">
+          <button class="gpm-addbtn" id="gbk-pin-addbtn">＋</button>
+        </div>
+        <div class="gpm-legend">
+          <span><span class="dot-b"></span>🏫 이 교재 전용</span>
+          <span><span class="dot-g"></span>🌐 공용</span>
         </div>
       </div>
       <div class="gbk-body">
         <div class="gbk-table-wrap">
           <table class="gbk-table">
             <thead><tr>
-              <th><input type="checkbox" id="gbk-chk-all" checked style="width:15px;height:15px;accent-color:var(--a);cursor:pointer"></th>
-              <th class="gbk-th-name">학생</th>
-              <th class="gbk-th-score">단어 / 리딩</th>
-              <th class="gbk-th-status">상태</th>
-              <th class="gbk-th-cmt">코멘트 (클릭하여 직접 수정)</th>
+              <th style="min-width:100px;padding:9px 14px">학생</th>
+              <th style="width:100px;text-align:center">단어 / 리딩</th>
+              <th style="width:70px;text-align:center">상태</th>
+              <th>코멘트 <span style="font-size:9px;font-weight:400;color:var(--tx3)">(클릭하여 수정)</span></th>
             </tr></thead>
             <tbody id="gbk-tbody"></tbody>
           </table>
         </div>
         <div class="gbk-progress-bar-wrap" id="gbk-prog-wrap" style="display:none">
-          <div class="gbk-progress-info">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
             <span class="gbk-progress-txt" id="gbk-prog-txt">대기 중…</span>
             <span class="gbk-progress-pct" id="gbk-prog-pct">0%</span>
           </div>
@@ -5231,9 +5246,10 @@ thead th[data-col-key]{position:relative;overflow:visible;}
       </div>
       <div class="gbk-footer">
         <div class="gbk-footer-left">
-          <button class="gbk-btn gbk-btn-start" id="gbk-btn-start">✨ 일괄 생성 시작</button>
+          <button class="gbk-btn gbk-btn-start" id="gbk-btn-start">✨ 일괄 생성</button>
           <button class="gbk-btn gbk-btn-stop" id="gbk-btn-stop" style="display:none">⏹ 중단</button>
-          <span class="gbk-sel-info" id="gbk-sel-info">${students.length}명 선택됨</span>
+          <button class="gbk-btn gbk-btn-style" id="gbk-btn-style">🧬 스타일 학습 후 생성</button>
+          <button class="gbk-btn gbk-btn-proof" id="gbk-btn-proof" disabled>🔍 일괄 교정</button>
         </div>
         <div class="gbk-footer-right">
           <button class="gbk-btn gbk-btn-save" id="gbk-btn-save" disabled>💾 전체 저장</button>
@@ -5241,223 +5257,227 @@ thead th[data-col-key]{position:relative;overflow:visible;}
         </div>
       </div>
     </div>`;
+        document.body.appendChild(overlay);
+    // 요소 참조
+    const tbody=overlay.querySelector('#gbk-tbody');
+    const skipExist=overlay.querySelector('#gbk-skip-existing');
+    const bookDoneCk=overlay.querySelector('#gbk-book-done');
+    const nextBookIn=overlay.querySelector('#gbk-next-book');
+    const nextWrap=overlay.querySelector('#gbk-next-wrap');
+    const prefixEl=overlay.querySelector('#gbk-prefix');
+    const btnStart=overlay.querySelector('#gbk-btn-start'),btnStop=overlay.querySelector('#gbk-btn-stop');
+    const btnSave=overlay.querySelector('#gbk-btn-save'),btnCancel=overlay.querySelector('#gbk-btn-cancel');
+    const btnProof=overlay.querySelector('#gbk-btn-proof'),btnStyle=overlay.querySelector('#gbk-btn-style');
+    const progWrap=overlay.querySelector('#gbk-prog-wrap'),progTxt=overlay.querySelector('#gbk-prog-txt');
+    const progPct=overlay.querySelector('#gbk-prog-pct'),progFill=overlay.querySelector('#gbk-prog-fill');
+    // gbk-sel-info removed
+    const _unusedSelInfo=null;pinMgr=overlay.querySelector('#gbk-pin-mgr');
+    const pinToggle=overlay.querySelector('#gbk-pin-toggle'),pinCnt=overlay.querySelector('#gbk-pin-cnt');
+    const gbkPinList=overlay.querySelector('#gbk-pin-list'),gbkPinInp=overlay.querySelector('#gbk-pin-inp');
+    const gbkTabBook=overlay.querySelector('#gbk-tab-book'),gbkTabGlo=overlay.querySelector('#gbk-tab-global');
+    const gbkGU=overlay.querySelector('#gbk-global-use'),gbkGC=overlay.querySelector('#gbk-global-check');
+    const gbkGN=overlay.querySelector('#gbk-global-cnt'),gbkGH=overlay.querySelector('#gbk-global-hint');
+    const dnaPopupWrap=overlay.querySelector('#gbk-dna-popup-wrap');
+    const dnaPopup=overlay.querySelector('#gbk-dna-popup');
+    const dnaViewBtn=overlay.querySelector('#gbk-dna-view-btn');
 
-    document.body.appendChild(overlay);
-
-    const tbody      = overlay.querySelector('#gbk-tbody');
-    const chkAll     = overlay.querySelector('#gbk-chk-all');
-    const skipExist  = overlay.querySelector('#gbk-skip-existing');
-    const bookDoneCk = overlay.querySelector('#gbk-book-done');
-    const nextBookIn = overlay.querySelector('#gbk-next-book');
-    const prefixEl   = overlay.querySelector('#gbk-prefix');
-    const btnStart   = overlay.querySelector('#gbk-btn-start');
-    const btnStop    = overlay.querySelector('#gbk-btn-stop');
-    const btnSave    = overlay.querySelector('#gbk-btn-save');
-    const btnCancel  = overlay.querySelector('#gbk-btn-cancel');
-    const progWrap   = overlay.querySelector('#gbk-prog-wrap');
-    const progTxt    = overlay.querySelector('#gbk-prog-txt');
-    const progPct    = overlay.querySelector('#gbk-prog-pct');
-    const progFill   = overlay.querySelector('#gbk-prog-fill');
-    const selInfo    = overlay.querySelector('#gbk-sel-info');
-
-    bookDoneCk.onchange = () => { nextBookIn.style.display = bookDoneCk.checked ? '' : 'none'; };
-
-    const _badge = r => {
-      if (r.status === 'doing') return '<span class="gbk-status-badge doing">⟳ 생성 중</span>';
-      if (r.status === 'done')  return '<span class="gbk-status-badge done">✓ 완료</span>';
-      if (r.status === 'err')   return '<span class="gbk-status-badge err" title="' + _e(r.err||'') + '">⚠ 오류</span>';
-      if (r.status === 'has')   return '<span class="gbk-status-badge has">📝 기존</span>';
-      return '<span class="gbk-status-badge wait">대기</span>';
-    };
-    const _pill = (pct, lbl) => {
-      if (pct == null) return '<span class="gbk-score-pill na">—</span>';
-      const cls = pct >= 80 ? 'hi' : pct >= 60 ? 'mid' : 'lo';
-      return '<span class="gbk-score-pill ' + cls + '">' + lbl + ': ' + pct + '%</span>';
+    // 옵션 카드 토글 스타일
+    const _optCard=(lbl,chk)=>{if(!lbl)return;lbl.classList.toggle('on',chk.checked);};
+    if(skipExist)skipExist.onchange=()=>_optCard(overlay.querySelector('#gbk-opt-skip-lbl'),skipExist);
+    if(bookDoneCk)bookDoneCk.onchange=()=>{
+      _optCard(overlay.querySelector('#gbk-opt-done-lbl'),bookDoneCk);
+      if(nextWrap)nextWrap.style.display=bookDoneCk.checked?'':'none';
     };
 
-    const _renderTable = () => {
-      tbody.innerHTML = '';
-      stuData.forEach(sd => {
-        const res   = _results[sd.id];
-        const isSel = _selected.has(sd.id);
-        const tr    = document.createElement('tr');
-        tr.className = 'gbk-tr' + (isSel ? ' selected' : ' skip');
-        tr.id = 'gbk-tr-' + sd.id;
-        tr.innerHTML =
-          '<td class="gbk-td gbk-td-chk"><input type="checkbox" data-sid="' + sd.id + '" ' + (isSel?'checked':'') + ' style="width:15px;height:15px;accent-color:var(--a);cursor:pointer"></td>' +
-          '<td class="gbk-td gbk-td-name"><div class="gbk-stu-name">' + _e(sd.name) + '</div>' + (sd.nickname ? '<div class="gbk-stu-nick">(' + _e(sd.nickname) + ')</div>' : '') + '</td>' +
-          '<td class="gbk-td gbk-td-score">' + _pill(sd.wPct,'단어') + '<br style="line-height:6px">' + _pill(sd.rPct,'리딩') + '</td>' +
-          '<td class="gbk-td gbk-td-status" id="gbk-st-' + sd.id + '">' + _badge(res) + '</td>' +
-          '<td class="gbk-td gbk-td-cmt" id="gbk-cmt-' + sd.id + '">' +
+    // DNA 결과 팝업 토글
+    if(dnaViewBtn&&dnaPopup){
+      dnaViewBtn.onclick=(e)=>{
+        e.stopPropagation();
+        const show=dnaPopup.style.display==='none'||!dnaPopup.style.display;
+        dnaPopup.style.display=show?'':'none';
+        if(show){
+          const cached=(typeof GeminiAI!=='undefined')?GeminiAI.getAnalysisCache():null;
+          if(cached){dnaPopup.textContent=cached;}
+          else{dnaPopup.textContent='아직 분석 결과가 없습니다. [🧬 스타일 학습 후 생성] 버튼을 누르면 자동 분석됩니다.';}
+        }
+      };
+      // 바깥 클릭 시 닫기
+      document.addEventListener('click',function _dnaClose(e){
+        if(dnaPopupWrap&&!dnaPopupWrap.contains(e.target)){dnaPopup.style.display='none';}
+      });
+    }
+    // 핀 패널
+    let _gbkPinTab='book';
+    const _gbkBookId=()=>_st.bookId||'';
+    const _gbkActMap={book:new Set(),global:new Set()};
+    const _gbkUpdateCnt=()=>{if(pinCnt)pinCnt.textContent=GeminiAI.getMergedPins(_gbkBookId()).length;};
+    const _gbkUpdateGCnt=()=>{if(typeof GeminiAI==='undefined')return;const n=GeminiAI.getPins().length;if(gbkGN)gbkGN.textContent=n+'개';if(gbkGC)gbkGC.style.opacity=n?'1':'.5';};
+    const _gbkRenderPins=()=>{
+      if(typeof GeminiAI==='undefined')return;
+      const bid=_gbkBookId(),isBook=_gbkPinTab==='book';
+      const pins=isBook?GeminiAI.getBookPins(bid):GeminiAI.getPins();
+      const actSet=isBook?_gbkActMap.book:_gbkActMap.global;
+      if(actSet.size===0)pins.forEach((_,i)=>actSet.add(i));
+      gbkPinList.innerHTML='';
+      if(!pins.length){const em=document.createElement('span');em.className='gpm-empty';em.textContent=isBook?'이 교재 전용 멘트 없음':'공용 멘트 없음';gbkPinList.appendChild(em);}
+      else pins.forEach((p,i)=>{const chip=document.createElement('span');chip.className='gpm-chip'+(actSet.has(i)?(isBook?' book-active':' active'):'');chip.innerHTML=_e(p)+' <span class="gpm-del" title="삭제">✕</span>';chip.onclick=ev=>{if(ev.target.classList.contains('gpm-del')){if(isBook)GeminiAI.removeBookPin(bid,i);else GeminiAI.removePin(i);actSet.delete(i);_gbkRenderPins();_gbkUpdateCnt();_gbkUpdateGCnt();return;}if(actSet.has(i))actSet.delete(i);else actSet.add(i);_gbkRenderPins();};gbkPinList.appendChild(chip);});
+    };
+    const _gbkGetActive=()=>(typeof GeminiAI!=='undefined')?GeminiAI.getMergedPins(_gbkBookId()):[];
+    // 공용멘트 DB 로드
+    if(typeof GeminiAI!=='undefined'&&GeminiAI.loadPinsFromDB)GeminiAI.loadPinsFromDB().then(()=>{_gbkUpdateGCnt();_gbkUpdateCnt();});
+    // 공용멘트 체크 (기본: 미체크)
+    if(gbkGU){gbkGU.checked=false;if(typeof GeminiAI!=='undefined')GeminiAI.setUseGlobalPins(false);}
+    _gbkUpdateGCnt();
+    if(gbkGU)gbkGU.onchange=()=>{const on=gbkGU.checked;if(typeof GeminiAI!=='undefined')GeminiAI.setUseGlobalPins(on);if(gbkGC)gbkGC.classList.toggle('checked',on);if(gbkGH)gbkGH.classList.toggle('show',on);_gbkUpdateCnt();};
+    // 탭
+    if(gbkTabBook)gbkTabBook.onclick=()=>{_gbkPinTab='book';gbkTabBook.classList.add('on');gbkTabGlo.classList.remove('on');gbkPinInp.placeholder='🏫 예) 발음이 좋아졌어요…';_gbkRenderPins();};
+    if(gbkTabGlo)gbkTabGlo.onclick=()=>{_gbkPinTab='global';gbkTabGlo.classList.add('on');gbkTabBook.classList.remove('on');gbkPinInp.placeholder='🌐 예) 수업 태도가 좋아요…';_gbkRenderPins();_gbkUpdateGCnt();};
+    if(pinToggle)pinToggle.onclick=()=>{const show=pinMgr.style.display==='none'||!pinMgr.style.display;pinMgr.style.display=show?'':'none';if(show){_gbkRenderPins();_gbkUpdateGCnt();}};
+    // DNA 팝업 버튼
+    const _gbkAddPin=()=>{if(typeof GeminiAI==='undefined')return;const v=gbkPinInp.value.trim();if(!v)return;const bid=_gbkBookId();if(_gbkPinTab==='book'){if(GeminiAI.addBookPin(bid,v))_gbkActMap.book.add(GeminiAI.getBookPins(bid).length-1);}else{if(GeminiAI.addPin(v)){_gbkActMap.global.add(GeminiAI.getPins().length-1);_gbkUpdateGCnt();}}gbkPinInp.value='';_gbkRenderPins();_gbkUpdateCnt();};
+    if(overlay.querySelector('#gbk-pin-addbtn'))overlay.querySelector('#gbk-pin-addbtn').onclick=_gbkAddPin;
+    if(gbkPinInp)gbkPinInp.onkeydown=ev=>{if(ev.key==='Enter'){ev.preventDefault();_gbkAddPin();}};
+    // DNA 패널
+    const _refreshDnaPanel=()=>{const samples=(typeof GeminiAI!=='undefined')?GeminiAI.getStyleSamples():[];if(samples.length){dnaSamples.className='';dnaSamples.innerHTML=samples.slice(-3).map((s,i)=>'<div style="margin-bottom:6px;padding:6px 8px;background:var(--surf2);border-radius:6px;font-size:11px;line-height:1.5;color:var(--tx2)"><span style="font-size:9px;color:var(--tx3);font-weight:700">샘플'+(i+1)+'</span><br>'+_e(s.slice(0,80))+(s.length>80?'…':'')+'</div>').join('');}else{dnaSamples.className='gbk-dna-empty';dnaSamples.textContent='저장된 샘플 없음';}};
+    // 뱃지/알약 헬퍼
+    const _badge=r=>{if(r.status==='doing')return'<span class="gbk-status-badge doing">⟳ 생성 중</span>';if(r.status==='proofing')return'<span class="gbk-status-badge proofing">🔍 교정 중</span>';if(r.status==='done')return'<span class="gbk-status-badge done">✓ 완료</span>';if(r.status==='err')return'<span class="gbk-status-badge err" title="'+_e(r.err||'')+'">⚠ 오류</span>';if(r.status==='has')return'<span class="gbk-status-badge has">📝 기존</span>';return'<span class="gbk-status-badge wait">대기</span>';};
+    const _pill=(pct,lbl)=>{if(pct==null)return'<span class="gbk-score-pill na">—</span>';const cls=pct>=80?'hi':pct>=60?'mid':'lo';return'<span class="gbk-score-pill '+cls+'">'+lbl+': '+pct+'%</span>';};
+    // 테이블 렌더
+    const _updateRowStatus=sid=>{
+      const st=document.getElementById('gbk-st-'+sid);if(!st)return;
+      st.innerHTML=_badge(_results[sid]);
+      const cmtCell=document.getElementById('gbk-cmt-'+sid);
+      if(cmtCell&&overlay._editingSid!==sid){
+        const v=_results[sid].comment;
+        cmtCell.innerHTML=v
+          ?'<div class="gbk-cmt-preview" onclick="GradeApp._bulkEditCell(\''+sid+'\')">'+_e(v)+'</div>'
+          :'<div class="gbk-cmt-preview empty" onclick="GradeApp._bulkEditCell(\''+sid+'\')">(클릭하여 직접 입력…)</div>';
+      }
+    };
+    const _renderTable=()=>{
+      tbody.innerHTML='';
+      stuData.forEach(sd=>{
+        const res=_results[sd.id];
+        const tr=document.createElement('tr');
+        tr.className='gbk-tr-simple'; tr.id='gbk-tr-'+sd.id;
+        tr.innerHTML=
+          '<td class="gbk-td" style="padding:10px 14px;vertical-align:middle">'+
+            '<div class="gbk-stu-name">'+_e(sd.name)+'</div>'+
+            (sd.nickname?'<div class="gbk-stu-nick">('+_e(sd.nickname)+')</div>':'')+
+          '</td>'+
+          '<td class="gbk-td gbk-td-score">'+_pill(sd.wPct,'단어')+'<br>'+_pill(sd.rPct,'리딩')+'</td>'+
+          '<td class="gbk-td gbk-td-status" id="gbk-st-'+sd.id+'">'+_badge(res)+'</td>'+
+          '<td class="gbk-td gbk-td-cmt" id="gbk-cmt-'+sd.id+'">'+
             (res.comment
-              ? '<div class="gbk-cmt-preview" onclick="GradeApp._bulkEditCell(\'' + sd.id + '\')">' + _e(res.comment) + '</div>'
-              : '<div class="gbk-cmt-preview empty" onclick="GradeApp._bulkEditCell(\'' + sd.id + '\')">(클릭하여 직접 입력…)</div>') +
+              ?'<div class="gbk-cmt-preview" onclick="GradeApp._bulkEditCell(\''+sd.id+'\')">'+_e(res.comment)+'</div>'
+              :'<div class="gbk-cmt-preview empty" onclick="GradeApp._bulkEditCell(\''+sd.id+'\')">(클릭하여 직접 입력…)</div>')+
           '</td>';
-        const ck = tr.querySelector('input[type=checkbox]');
-        ck.onchange = () => {
-          if (ck.checked) _selected.add(sd.id); else _selected.delete(sd.id);
-          tr.className = 'gbk-tr' + (ck.checked?' selected':' skip');
-          _updateSelInfo();
-        };
         tbody.appendChild(tr);
       });
     };
-    const _updateRowStatus = sid => {
-      const st = document.getElementById('gbk-st-' + sid); if (!st) return;
-      st.innerHTML = _badge(_results[sid]);
-      const cmtCell = document.getElementById('gbk-cmt-' + sid);
-      if (cmtCell && overlay._editingSid !== sid) {
-        const v = _results[sid].comment;
-        cmtCell.innerHTML = v
-          ? '<div class="gbk-cmt-preview" onclick="GradeApp._bulkEditCell(\'' + sid + '\')">' + _e(v) + '</div>'
-          : '<div class="gbk-cmt-preview empty" onclick="GradeApp._bulkEditCell(\'' + sid + '\')">(클릭하여 직접 입력…)</div>';
+    const _updateSelInfo=()=>{
+      const tot=stuData.length;
+      if(selInfo)selInfo.textContent='총 '+tot+'명';
+    };
+    const _updateProgress=(done,total)=>{const pct=total?Math.round(done/total*100):0;progTxt.textContent=done+' / '+total+'명 처리 중…';progPct.textContent=pct+'%';progFill.style.width=pct+'%';};
+    // 체크박스 제거 — 모든 학생 대상으로 일괄 적용
+    _renderTable();
+    if(selInfo)selInfo.textContent='총 '+stuData.length+'명';
+    // ── 공통 생성 헬퍼 ─────────────────────────────────────
+    const _runBulk=async(targets,extraMemo)=>{
+      if(!targets.length){progTxt.textContent='생성할 대상이 없습니다.';_running=false;btnStart.style.display='';btnStart.disabled=false;btnStop.style.display='none';btnProof.disabled=false;btnStyle.disabled=false;overlay.querySelector('#gbk-close').disabled=false;return;}
+      const prefix=(prefixEl.value||'').trim(),isCompl=bookDoneCk.checked,nextBook=nextBookIn.value.trim(),aPins=_gbkGetActive();
+      let done=0;_updateProgress(0,targets.length);
+      for(const sd of targets){
+        if(_stopFlag)break;
+        _results[sd.id].status='doing';_updateRowStatus(sd.id);
+        document.getElementById('gbk-tr-'+sd.id)?.scrollIntoView({block:'nearest',behavior:'smooth'});
+        try{
+          const info={name:sd.name,word:sd.word,reading:sd.reading};
+          const bkStatus={currentBook:bookName,bookId:_st.bookId||'',isCompleted:isCompl,nextBook};
+          if(extraMemo)bkStatus.teacherMemo=extraMemo;
+          let comment=await GeminiAI.generateComment(info,bkStatus,{prevComments:sd.prevComments,activePins:aPins});
+          if(prefix)comment=prefix+'\n'+comment;
+          _results[sd.id].comment=comment;_results[sd.id].status='done';
+        }catch(err){_results[sd.id].status='err';_results[sd.id].err=String(err&&err.message?err.message:err).slice(0,120);console.error('[BulkGen]',sd.name,_results[sd.id].err);}
+        _updateRowStatus(sd.id);done++;_updateProgress(done,targets.length);
+        if(done<targets.length&&!_stopFlag)await new Promise(r=>setTimeout(r,750));
       }
     };
-    const _updateSelInfo = () => {
-      selInfo.textContent = _selected.size + '명 선택됨';
-      chkAll.checked = _selected.size === students.length;
-      chkAll.indeterminate = _selected.size > 0 && _selected.size < students.length;
+    // ── 일괄 생성 ──────────────────────────────────────────
+    btnStart.onclick=async()=>{
+      if(_running)return;if(!_selected.size){_toast('⚠ 생성할 학생을 선택하세요');return;}
+      _running=true;_stopFlag=false;btnStart.style.display='none';btnStop.style.display='';
+      btnStart.disabled=true;btnProof.disabled=true;btnStyle.disabled=true;btnSave.disabled=true;overlay.querySelector('#gbk-close').disabled=true;progWrap.style.display='';
+      const doSkip=skipExist.checked;
+      const targets=stuData.filter(sd=>{if(doSkip&&_results[sd.id].comment&&_results[sd.id].status==='has')return false;return true;});
+      await _runBulk(targets,'');
+      _running=false;btnStart.style.display='';btnStop.style.display='none';btnStart.textContent='🔄 다시 생성';
+      btnStart.disabled=false;btnProof.disabled=false;btnStyle.disabled=false;overlay.querySelector('#gbk-close').disabled=false;
+      const ok=Object.values(_results).filter(r=>r.status==='done').length,er=Object.values(_results).filter(r=>r.status==='err').length;
+      progTxt.textContent=_stopFlag?'⏹ 중단됨 — '+ok+'명 완료':'✓ 완료 — '+ok+'명 성공'+(er?' / '+er+'명 오류':'');
+      if(ok>0){btnSave.disabled=false;btnProof.disabled=false;_refreshDirtyUI();}
     };
-    const _updateProgress = (done, total) => {
-      const pct = total ? Math.round(done/total*100) : 0;
-      progTxt.textContent = done + ' / ' + total + '명 처리 중…';
-      progPct.textContent = pct + '%';
-      progFill.style.width = pct + '%';
+    btnStop.onclick=()=>{_stopFlag=true;};
+    // ── 일괄 교정 ──────────────────────────────────────────
+    btnProof.onclick=async()=>{
+      if(_running)return;const targets=stuData.filter(sd=>_results[sd.id].comment&&['done','has'].includes(_results[sd.id].status));
+      if(!targets.length){_toast('⚠ 교정할 코멘트가 없습니다');return;}
+      _running=true;_stopFlag=false;btnStart.disabled=true;btnProof.disabled=true;btnStyle.disabled=true;btnStop.style.display='';btnSave.disabled=true;overlay.querySelector('#gbk-close').disabled=true;progWrap.style.display='';
+      let done=0;for(const sd of targets){if(_stopFlag)break;const prev=_results[sd.id].status;_results[sd.id].status='proofing';_updateRowStatus(sd.id);document.getElementById('gbk-tr-'+sd.id)?.scrollIntoView({block:'nearest',behavior:'smooth'});try{const corrected=await GeminiAI.proofreadComment(_results[sd.id].comment);_results[sd.id].comment=corrected;_results[sd.id].status='done';}catch(err){_results[sd.id].status=prev;console.warn('[BulkProof]',sd.id,err.message);}_updateRowStatus(sd.id);done++;_updateProgress(done,targets.length);if(done<targets.length&&!_stopFlag)await new Promise(r=>setTimeout(r,750));}
+      _running=false;btnStart.disabled=false;btnStyle.disabled=false;btnStop.style.display='none';overlay.querySelector('#gbk-close').disabled=false;btnProof.disabled=false;btnSave.disabled=false;progTxt.textContent='🔍 교정 완료 — '+done+'명';_refreshDirtyUI();
     };
-
-    chkAll.onchange = () => {
-      if (chkAll.checked) stuData.forEach(s => _selected.add(s.id));
-      else _selected.clear();
-      _renderTable(); _updateSelInfo();
+    // ── 스타일 학습 후 생성 ────────────────────────────────
+    btnStyle.onclick=async()=>{
+      if(_running)return;if(!_selected.size){_toast('⚠ 학생을 선택하세요');return;}if(typeof GeminiAI==='undefined')return;
+      // DB 전체 코멘트 수집 (모든 반·교재)
+      const existingComments=[];
+      if(typeof GradeDB!=='undefined'&&GradeDB.getAllTeacherComments)GradeDB.getAllTeacherComments(60).forEach(c=>existingComments.push(c));
+      else stuData.forEach(sd=>{if(sd.existingComment)existingComments.push(sd.existingComment);(sd.prevComments||[]).forEach(c=>{if(c)existingComments.push(c);});});
+      GeminiAI.getStyleSamples().forEach(s=>existingComments.push(s));
+      const unique=[...new Set(existingComments)].filter(c=>c&&c.length>10);
+      if(unique.length<1){_toast('⚠ 분석할 코멘트가 없습니다. 먼저 일부 학생 코멘트를 입력하거나 스타일 샘플을 저장해 주세요.');return;}
+      if(dnaPopup){dnaPopup.style.display='block';dnaPopup.textContent='⟳ 선생님 문체를 분석 중입니다…';}
+      unique.slice(0,10).forEach(c=>GeminiAI.addStyleSample(c));
+      let analysisText='';
+      try{analysisText=await GeminiAI.analyzeStyle();if(dnaPopup){dnaPopup.textContent=analysisText;if(dnaViewBtn)dnaViewBtn.style.background='rgba(139,92,246,.2)';}}
+      catch(err){if(dnaPopup)dnaPopup.textContent='⚠ 분석 실패 (기본 스타일로 생성): '+String(err&&err.message?err.message:err).slice(0,60);}
+      const targets=stuData.slice(); // 전체 학생
+      if(!targets.length){progTxt.textContent='스타일 분석 완료 — 선택된 학생 없음';return;}
+      _running=true;_stopFlag=false;btnStart.disabled=true;btnProof.disabled=true;btnStyle.disabled=true;btnStop.style.display='';btnSave.disabled=true;overlay.querySelector('#gbk-close').disabled=true;progWrap.style.display='';
+      const memo=analysisText?'[스타일 가이드] '+analysisText.slice(0,200):'';
+      await _runBulk(targets,memo);
+      _running=false;btnStart.disabled=false;btnProof.disabled=false;btnStyle.disabled=false;btnStop.style.display='none';overlay.querySelector('#gbk-close').disabled=false;
+      const ok=Object.values(_results).filter(r=>r.status==='done').length,er=Object.values(_results).filter(r=>r.status==='err').length;
+      progTxt.textContent='🧬 스타일 학습 생성 완료 — '+ok+'명 성공'+(er?' / '+er+'명 오류':'');
+      if(ok>0){btnSave.disabled=false;_refreshDirtyUI();}
     };
-    _renderTable(); _updateSelInfo();
-
-    btnStart.onclick = async () => {
-      if (_running) return;
-      if (!_selected.size) { _toast('⚠ 생성할 학생을 선택하세요'); return; }
-      _running = true; _stopFlag = false;
-      btnStart.style.display = 'none'; btnStop.style.display = '';
-      btnSave.disabled = true;
-      overlay.querySelector('#gbk-close').disabled = true;
-      progWrap.style.display = '';
-
-      const prefix     = (prefixEl.value || '').trim();
-      const doSkip     = skipExist.checked;
-      const isCompl    = bookDoneCk.checked;
-      const nextBook   = nextBookIn.value.trim();
-      const activePins = GeminiAI.getPins();
-      const targets    = stuData.filter(sd => {
-        if (!_selected.has(sd.id)) return false;
-        if (doSkip && _results[sd.id].comment && _results[sd.id].status === 'has') return false;
-        return true;
-      });
-
-      let done = 0;
-      _updateProgress(0, targets.length);
-      for (const sd of targets) {
-        if (_stopFlag) break;
-        _results[sd.id].status = 'doing'; _updateRowStatus(sd.id);
-        document.getElementById('gbk-tr-' + sd.id)?.scrollIntoView({ block:'nearest', behavior:'smooth' });
-        try {
-          const info     = { name: sd.name, word: sd.word, reading: sd.reading };
-          const bkStatus = { currentBook: bookName, isCompleted: isCompl, nextBook };
-          let comment = await GeminiAI.generateComment(info, bkStatus, { prevComments: sd.prevComments, activePins });
-          // ★ 공통 앞말 삽입
-          if (prefix) comment = prefix + '\n' + comment;
-          _results[sd.id].comment = comment;
-          _results[sd.id].status  = 'done';
-          _ensureData(sd.id);
-          _st.data[sd.id].comment = comment;
-          _st.dirty.add(sd.id);
-        } catch(err) {
-          _results[sd.id].status = 'err';
-          _results[sd.id].err    = (err.message || '').slice(0, 80);
-        }
-        _updateRowStatus(sd.id);
-        done++; _updateProgress(done, targets.length);
-        if (done < targets.length && !_stopFlag) await new Promise(r => setTimeout(r, 700));
+    // ── 전체 저장 ──────────────────────────────────────────
+    btnSave.onclick=async()=>{
+      if(_running)return;btnSave.disabled=true;btnSave.textContent='저장 중…';let ok=0,fail=0;
+      for(const sd of stuData){const res=_results[sd.id];if(!['done','has'].includes(res.status)||!res.comment)continue;
+        try{_ensureData(sd.id);_st.data[sd.id].comment=res.comment;_st.dirty.add(sd.id);await saveOne(sd.id);ok++;
+          const inlineTa=document.getElementById('gr-cmta-'+sd.id);if(inlineTa)inlineTa.value=res.comment;
+          const icon=document.getElementById('gr-cmtbtn-'+sd.id);if(icon)icon.className='gs-cm-icon has-cmt';
+          sd.origComment=res.comment;sd.existingComment=res.comment;
+        }catch(e){fail++;console.error('[BulkSave]',sd.id,e);}
       }
-
-      _running = false;
-      btnStart.style.display = ''; btnStop.style.display = 'none';
-      btnStart.textContent = '🔄 다시 생성';
-      overlay.querySelector('#gbk-close').disabled = false;
-      const ok  = Object.values(_results).filter(r => r.status === 'done').length;
-      const err = Object.values(_results).filter(r => r.status === 'err').length;
-      progTxt.textContent = _stopFlag
-        ? '⏹ 중단됨 — ' + ok + '명 완료'
-        : '✓ 완료 — ' + ok + '명 성공' + (err ? ' / ' + err + '명 오류' : '');
-      if (ok > 0) { btnSave.disabled = false; _refreshDirtyUI(); }
+      const msg=ok+'명 저장 완료'+(fail?' / '+fail+'명 실패':'');btnSave.textContent='✅ '+msg;_toast('✅ '+msg,'success');_renderStudents();setTimeout(()=>{btnSave.textContent='💾 전체 저장';btnSave.disabled=false;},3000);
     };
-
-    btnStop.onclick = () => { _stopFlag = true; };
-
-    btnSave.onclick = async () => {
-      if (_running) return;
-      btnSave.disabled = true; btnSave.textContent = '저장 중…';
-      let ok = 0;
-      for (const sd of stuData) {
-        if (!['done','has'].includes(_results[sd.id].status) || !_results[sd.id].comment) continue;
-        try {
-          _ensureData(sd.id);
-          _st.data[sd.id].comment = _results[sd.id].comment;
-          _st.dirty.add(sd.id);
-          await saveOne(sd.id); ok++;
-          const inlineTa = document.getElementById('gr-cmta-' + sd.id);
-          if (inlineTa) inlineTa.value = _results[sd.id].comment;
-          const icon = document.getElementById('gr-cmtbtn-' + sd.id);
-          if (icon) icon.className = 'gs-cm-icon has-cmt';
-        } catch(e) { console.error('[BulkSave]', sd.id, e); }
-      }
-      btnSave.textContent = '✅ ' + ok + '명 저장 완료';
-      _toast('✅ ' + ok + '명 코멘트 저장 완료', 'success');
-      _renderStudents();
-      setTimeout(() => { btnSave.textContent = '💾 전체 저장'; }, 3000);
-    };
-
-    const _closeBulkPop = () => {
-      if (_running) return;
-      const el = document.getElementById('gbk-overlay');
-      if (el) { if (el._keyH) document.removeEventListener('keydown', el._keyH); el.remove(); }
-      _renderStudents();
-    };
-    btnCancel.onclick = _closeBulkPop;
-    overlay.querySelector('#gbk-close').onclick = _closeBulkPop;
-    overlay._keyH = ev => { if (ev.key === 'Escape' && !_running) _closeBulkPop(); };
-    document.addEventListener('keydown', overlay._keyH);
+    const _closeBulkPop=()=>{if(_running)return;const el=document.getElementById('gbk-overlay');if(el){if(el._keyH)document.removeEventListener('keydown',el._keyH);el.remove();}_renderStudents();};
+    btnCancel.onclick=_closeBulkPop;overlay.querySelector('#gbk-close').onclick=_closeBulkPop;
+    overlay._keyH=ev=>{if(ev.key==='Escape'&&!_running)_closeBulkPop();};
+    document.addEventListener('keydown',overlay._keyH);
   }
 
   function _bulkEditCell(sid) {
-    const overlay = document.getElementById('gbk-overlay'); if (!overlay) return;
-    const prevSid = overlay._editingSid;
-    if (prevSid && prevSid !== sid) {
-      const prevTa = document.getElementById('gbk-ta-' + prevSid);
-      if (prevTa) {
-        const v = prevTa.value.trim();
-        overlay._results[prevSid].comment = v;
-        overlay._results[prevSid].status  = v ? 'done' : 'wait';
-        const cell = document.getElementById('gbk-cmt-' + prevSid);
-        if (cell) cell.innerHTML = v
-          ? '<div class="gbk-cmt-preview" onclick="GradeApp._bulkEditCell(\'' + prevSid + '\')">' + _e(v) + '</div>'
-          : '<div class="gbk-cmt-preview empty" onclick="GradeApp._bulkEditCell(\'' + prevSid + '\')">(클릭하여 직접 입력…)</div>';
-      }
-    }
-    overlay._editingSid = sid;
-    const res     = overlay._results?.[sid] || {};
-    const cmtCell = document.getElementById('gbk-cmt-' + sid); if (!cmtCell) return;
-    cmtCell.innerHTML = '<textarea class="gbk-cmt-ta" id="gbk-ta-' + sid + '" rows="3">' + _e(res.comment || '') + '</textarea>';
-    const ta = document.getElementById('gbk-ta-' + sid);
-    if (ta) {
-      ta.focus();
-      ta.onblur = () => {
-        const v = ta.value.trim();
-        if (overlay._results) { overlay._results[sid].comment = v; overlay._results[sid].status = v ? 'done' : 'wait'; }
-        cmtCell.innerHTML = v
-          ? '<div class="gbk-cmt-preview" onclick="GradeApp._bulkEditCell(\'' + sid + '\')">' + _e(v) + '</div>'
-          : '<div class="gbk-cmt-preview empty" onclick="GradeApp._bulkEditCell(\'' + sid + '\')">(클릭하여 직접 입력…)</div>';
-        overlay._editingSid = null;
-      };
-    }
+    const overlay=document.getElementById('gbk-overlay');if(!overlay)return;
+    const prevSid=overlay._editingSid;
+    if(prevSid&&prevSid!==sid){const prevTa=document.getElementById('gbk-ta-'+prevSid);if(prevTa){const v=prevTa.value.trim();if(overlay._results){overlay._results[prevSid].comment=v;overlay._results[prevSid].status=v?'done':'wait';}const cell=document.getElementById('gbk-cmt-'+prevSid);if(cell)cell.innerHTML=v?'<div class="gbk-cmt-preview" onclick="GradeApp._bulkEditCell(\''+prevSid+'\')">'+_e(v)+'</div>':'<div class="gbk-cmt-preview empty" onclick="GradeApp._bulkEditCell(\''+prevSid+'\')"> (클릭하여 직접 입력…)</div>';}}
+    overlay._editingSid=sid;const res=overlay._results?.[sid]||{},cmtCell=document.getElementById('gbk-cmt-'+sid);if(!cmtCell)return;
+    cmtCell.innerHTML='<textarea class="gbk-cmt-ta" id="gbk-ta-'+sid+'" rows="3">'+_e(res.comment||'')+'</textarea>';
+    const ta=document.getElementById('gbk-ta-'+sid);
+    if(ta){ta.focus();ta.onblur=()=>{const v=ta.value.trim();if(overlay._results){overlay._results[sid].comment=v;overlay._results[sid].status=v?'done':'wait';}cmtCell.innerHTML=v?'<div class="gbk-cmt-preview" onclick="GradeApp._bulkEditCell(\''+sid+'\')">'+_e(v)+'</div>':'<div class="gbk-cmt-preview empty" onclick="GradeApp._bulkEditCell(\''+sid+'\')"> (클릭하여 직접 입력…)</div>';overlay._editingSid=null;};}
   }
 
 
