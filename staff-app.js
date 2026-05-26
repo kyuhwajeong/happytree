@@ -303,9 +303,9 @@ const StaffApp = (() => {
 /* ── PDF 인쇄 ── */
 #sf-pf{display:none}
 @media print{
-  body>*:not(#sf-pf){display:none!important}
-  #sf-pf{display:block!important;position:fixed;inset:0;z-index:9999;background:#fff;padding:28px 36px;overflow:auto;font-family:'Noto Sans KR',sans-serif;font-size:12px;color:#111}
-  #sf-pf *{box-sizing:border-box}
+  body>*{display:none!important}
+  #sf-pf,#qc-pf{display:block!important;position:fixed;inset:0;z-index:9999;background:#fff;padding:28px 36px;overflow:auto;font-family:'Noto Sans KR',sans-serif;font-size:12px;color:#111;box-sizing:border-box}
+  #sf-pf *,#qc-pf *{box-sizing:border-box}
 }
 .sfp-hdr{display:flex;align-items:center;gap:16px;margin-bottom:12px}
 .sfp-logo{width:48px;height:48px;object-fit:contain}
@@ -449,9 +449,6 @@ const StaffApp = (() => {
 
 /* 인쇄 */
 #qc-pf{display:none}
-@media print{
-  #qc-pf{display:block!important;position:fixed;inset:0;z-index:99999;background:#fff;padding:24px 32px;overflow:auto;font-family:'Noto Sans KR',sans-serif;font-size:12px;color:#111}
-}
 `;
     document.head.appendChild(s);
   }
@@ -1855,8 +1852,14 @@ const StaffApp = (() => {
         <div class="sfp-sign-box"><div>원&nbsp;&nbsp;장</div><div class="sfp-sign-line"></div><div>${_e(acad.name)}</div></div>
       </div>
       <div class="sfp-footer">본 명세서는 ${_e(acad.name)}에서 발행되었습니다.</div>`;
-    window.print();
-    setTimeout(() => frame.remove(), 1500);
+    document.body.classList.add('sf-printing');
+    const _afterPdf = () => {
+      document.body.classList.remove('sf-printing');
+      setTimeout(() => { try { frame.remove(); } catch {} }, 100);
+      window.removeEventListener('afterprint', _afterPdf);
+    };
+    window.addEventListener('afterprint', _afterPdf);
+    setTimeout(() => window.print(), 80);
   }
 
 
@@ -2422,8 +2425,14 @@ const StaffApp = (() => {
         <div class="sfp-sign-box"><div>원&nbsp;&nbsp;장</div><div class="sfp-sign-line"></div><div>${_e(acad.name)}</div></div>
       </div>
       <div class="sfp-footer">본 정산서는 ${_e(acad.name)}에서 발행되었습니다.</div>`;
-    window.print();
-    setTimeout(() => frame.remove(), 1500);
+    document.body.classList.add('sf-printing');
+    const _afterQp = () => {
+      document.body.classList.remove('sf-printing');
+      setTimeout(() => { try { frame.remove(); } catch {} }, 100);
+      window.removeEventListener('afterprint', _afterQp);
+    };
+    window.addEventListener('afterprint', _afterQp);
+    setTimeout(() => window.print(), 80);
   }
 
   /* ── 직원으로 저장 ── */
