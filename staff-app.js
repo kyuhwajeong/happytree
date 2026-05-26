@@ -1932,17 +1932,27 @@ const StaffApp = (() => {
     @media print{@page{margin:15mm}}
   `;
 
-  /* ── 새 창으로 인쇄 (공통 유틸) ── */
+  /* ── 숨김 iframe으로 인쇄 (새 창/탭 없음) ── */
   function _printInNewWindow(bodyHTML) {
-    const w = window.open('', '_blank', 'width=800,height=700');
-    if (!w) { _toast('⚠️ 팝업 차단을 해제해 주세요'); return; }
-    w.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>인쇄</title><style>${_PRINT_CSS}</style></head><body>${bodyHTML}</body></html>`);
-    w.document.close();
-    w.focus();
-    // 이미지/폰트 로드 대기 후 인쇄
-    w.onload = () => { w.print(); w.close(); };
-    // onload가 이미 완료된 경우 fallback
-    setTimeout(() => { try { if (!w.closed) { w.print(); w.close(); } } catch {} }, 600);
+    // 기존 iframe 재사용 또는 신규 생성
+    let iframe = document.getElementById('sf-print-iframe');
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'sf-print-iframe';
+      iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:none;opacity:0;pointer-events:none;z-index:-1';
+      document.body.appendChild(iframe);
+    }
+
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open();
+    doc.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>인쇄</title><style>${_PRINT_CSS}</style></head><body>${bodyHTML}</body></html>`);
+    doc.close();
+
+    // 렌더링 완료 후 해당 iframe 만 인쇄
+    setTimeout(() => {
+      try { iframe.contentWindow.focus(); iframe.contentWindow.print(); }
+      catch(e) { console.warn('print error', e); }
+    }, 250);
   }
 
   /* ── 분 → 시간분 표시 ── */
