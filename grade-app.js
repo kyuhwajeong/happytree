@@ -945,20 +945,22 @@ to{opacity:1;transform:none}}
 .gr-stu-group-cnt{font-size:9px;font-weight:700;background:var(--a20);color:var(--a);border-radius:8px;padding:1px 5px;}
 
 /* ── 트렌드 뷰 ── */
-.gr-trend-wrap{display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:18px 20px;}
-.gr-trend-header{margin-bottom:14px;}
-.gr-trend-stu-info{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
+.gr-trend-wrap{display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 18px;}
+.gr-trend-header{margin-bottom:14px;flex-shrink:0;}
+.gr-trend-stu-info{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;}
 .gr-trend-stu-name{font-size:20px;font-weight:800;color:var(--tx);}
 .gr-trend-stu-nick{font-size:13px;color:var(--tx3);}
 .gr-trend-stu-cls{font-size:11px;padding:2px 10px;border-radius:12px;background:var(--a20);color:var(--a);font-weight:700;}
-.gr-trend-tabs{display:flex;flex-wrap:wrap;gap:6px;}
-.gr-trend-tab{padding:5px 13px;border-radius:20px;font-size:12px;font-weight:600;border:1.5px solid var(--bdr2);background:var(--surf2);color:var(--tx2);cursor:pointer;font-family:var(--font);transition:all .15s;}
-.gr-trend-tab.on{background:var(--a);color:#fff;border-color:transparent;}
-.gr-trend-chart-area{flex:1;min-height:220px;max-height:360px;position:relative;margin-top:10px;}
-#gr-trend-canvas{width:100%;height:100%;display:block;}
-.gr-trend-legend{display:flex;gap:16px;padding:8px 4px 0;}
-.gr-trend-leg{font-size:12px;font-weight:500;display:flex;align-items:center;gap:4px;}
-.gr-trend-no-data{text-align:center;padding:40px 20px;color:var(--tx3);font-size:13px;}`;
+.gr-trend-badge{font-size:11px;padding:2px 9px;border-radius:12px;background:rgba(16,185,129,.12);color:#059669;font-weight:600;}
+.gr-trend-subtitle{font-size:11px;color:var(--tx3);margin-top:2px;}
+.gr-trend-chart-outer{overflow-x:auto;overflow-y:hidden;padding-bottom:6px;flex-shrink:0;border-radius:12px;border:1px solid var(--bdr);background:var(--surf);}
+.gr-trend-chart-area{height:320px;position:relative;}
+#gr-trend-canvas{display:block;}
+.gr-trend-legend{display:flex;flex-wrap:wrap;gap:10px 18px;padding:10px 4px 2px;flex-shrink:0;}
+.gr-trend-leg{font-size:11px;font-weight:500;color:var(--tx2);display:flex;align-items:center;gap:5px;}
+.gr-trend-leg-line{display:inline-block;width:22px;height:3px;border-radius:2px;vertical-align:middle;}
+.gr-trend-leg-dash{display:inline-block;width:22px;border-top:2px dashed currentColor;vertical-align:middle;}
+.gr-trend-no-data{text-align:center;padding:60px 20px;color:var(--tx3);font-size:13px;}`;
     document.head.appendChild(s);
   }
 
@@ -1246,6 +1248,11 @@ to{opacity:1;transform:none}}
   /* ════════════════════════════════════
    * 월별 성적 트렌드 차트 (반/교재 미선택 + 학생 선택 상태)
    * ════════════════════════════════════ */
+  /* ════════════════════════════════════
+   * 성장 트렌드 차트 — 전 교재 타임라인
+   * X축: 교재별 평가일 (날짜순)
+   * 계열: 단어성취율(실선), 리딩성취율(실선), 반평균단어(점선), 반평균리딩(점선)
+   * ════════════════════════════════════ */
   function _renderTrend(cnt, studentId) {
     const stu = typeof StudentDB !== 'undefined'
       ? StudentDB.getAll().find(s => s.id === studentId) : null;
@@ -1253,198 +1260,270 @@ to{opacity:1;transform:none}}
       cnt.innerHTML = '<div class="gr-empty"><div class="gr-empty-ico">❓</div>학생 정보 없음</div>';
       return;
     }
+    const trend    = typeof GradeDB !== 'undefined' ? GradeDB.getStudentTrend(studentId) : [];
+    const clsName  = stu.classCode || '';
+    const pts      = _buildTrendPoints(trend);
+    const hasAvg   = pts.some(p => p.avgWord != null || p.avgRd != null);
+    const hasWord  = pts.some(p => p.wordAch != null);
+    const hasRd    = pts.some(p => p.rdAch   != null);
 
-    const trend = typeof GradeDB !== 'undefined' ? GradeDB.getStudentTrend(studentId) : [];
-    const clsName = stu.classCode || '';
+    const stuHdr = `
+      <div class="gr-trend-stu-info">
+        <span class="gr-trend-stu-name">${_e(stu.name)}</span>
+        ${stu.nickname ? `<span class="gr-trend-stu-nick">(${_e(stu.nickname)})</span>` : ''}
+        ${clsName ? `<span class="gr-trend-stu-cls">${_e(clsName)}</span>` : ''}
+        ${pts.length ? `<span class="gr-trend-badge">📚 ${pts.length}개 교재</span>` : ''}
+      </div>
+      ${pts.length ? `<div class="gr-trend-subtitle">교재 평가일 순 · 클릭하여 학생 전체 성장 흐름을 확인하세요</div>` : ''}`;
 
-    if (!trend.length) {
-      cnt.innerHTML = `
-        <div class="gr-trend-wrap">
-          <div class="gr-trend-header">
-            <div class="gr-trend-stu-info">
-              <span class="gr-trend-stu-name">${_e(stu.name)}</span>
-              ${stu.nickname ? `<span class="gr-trend-stu-nick">(${_e(stu.nickname)})</span>` : ''}
-              ${clsName ? `<span class="gr-trend-stu-cls">${_e(clsName)}</span>` : ''}
-            </div>
-          </div>
-          <div class="gr-trend-no-data">📊 성적 데이터가 없습니다</div>
-        </div>`;
+    if (!pts.length) {
+      cnt.innerHTML = `<div class="gr-trend-wrap"><div class="gr-trend-header">${stuHdr}</div>
+        <div class="gr-trend-no-data">📊 성적 데이터가 없습니다</div></div>`;
       return;
     }
 
-    // 교재 목록 (이름 순)
-    const bookIds = [...new Set(trend.map(t => t.bookId))];
-    if (!_st._trendBookId || !bookIds.includes(_st._trendBookId)) {
-      _st._trendBookId = bookIds[0];
-    }
-    const selBid = _st._trendBookId;
-
-    // 선택 교재 레코드 병합 (동일 교재가 여러 classId에 있을 수 있음)
-    const selRecs = trend
-      .filter(t => t.bookId === selBid)
-      .flatMap(t => t.records)
-      .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
-
-    const config  = GradeDB.getReportConfig(selBid);
-    const actRevs = GradeDB.getActiveReviews(selBid);
-    const hasWord = (config?.word?.totalQ || 0) > 0;
-    const hasRd   = config?.reading?.enabled && actRevs.length > 0;
-
-    // 포인트 생성 (날짜, 단어 성취율, 리딩 성취율)
-    const pts = selRecs.map(r => {
-      const date    = (r.createdAt || '').slice(0, 10);
-      const wordAch = hasWord && (r.word?.totalQ || 0) > 0
-        ? Math.round(r.word.pass / r.word.totalQ * 100) : null;
-      const rdAch   = hasRd ? _calcRdN(r.reading || {}, actRevs) : null;
-      return { date, wordAch, rdAch };
-    }).filter(p => p.date && (p.wordAch != null || p.rdAch != null));
-
-    // 탭 이름 조회
-    const bookName = b => typeof BookLibDB !== 'undefined'
-      ? (BookLibDB.getBookById(b)?.name || b) : b;
+    const legendHtml = `
+      <div class="gr-trend-legend">
+        ${hasWord ? `<span class="gr-trend-leg">
+          <span class="gr-trend-leg-line" style="background:#3b82f6"></span>단어 성취율</span>` : ''}
+        ${hasRd   ? `<span class="gr-trend-leg">
+          <span class="gr-trend-leg-line" style="background:#8b5cf6"></span>리딩 성취율</span>` : ''}
+        ${hasAvg && hasWord ? `<span class="gr-trend-leg" style="color:#93c5fd">
+          <span class="gr-trend-leg-dash"></span>반 평균(단어)</span>` : ''}
+        ${hasAvg && hasRd   ? `<span class="gr-trend-leg" style="color:#c4b5fd">
+          <span class="gr-trend-leg-dash"></span>반 평균(리딩)</span>` : ''}
+      </div>`;
 
     cnt.innerHTML = `
       <div class="gr-trend-wrap">
-        <div class="gr-trend-header">
-          <div class="gr-trend-stu-info">
-            <span class="gr-trend-stu-name">${_e(stu.name)}</span>
-            ${stu.nickname ? `<span class="gr-trend-stu-nick">(${_e(stu.nickname)})</span>` : ''}
-            ${clsName ? `<span class="gr-trend-stu-cls">${_e(clsName)}</span>` : ''}
-          </div>
-          <div class="gr-trend-tabs">
-            ${bookIds.map(bid =>
-              `<button class="gr-trend-tab ${bid===selBid?'on':''}"
-                onclick="GradeApp._onTrendBook('${bid}')">${_e(bookName(bid))}</button>`
-            ).join('')}
+        <div class="gr-trend-header">${stuHdr}</div>
+        <div class="gr-trend-chart-outer">
+          <div class="gr-trend-chart-area" id="gr-trend-scroll">
+            <canvas id="gr-trend-canvas"></canvas>
           </div>
         </div>
-        ${pts.length === 0
-          ? `<div class="gr-trend-no-data">📊 <strong>${_e(bookName(selBid))}</strong> 성적 데이터가 없습니다</div>`
-          : `<div class="gr-trend-chart-area">
-               <canvas id="gr-trend-canvas"></canvas>
-             </div>
-             <div class="gr-trend-legend">
-               ${hasWord ? '<span class="gr-trend-leg"><span style="color:#3b82f6;font-size:14px">●</span> 단어 성취율</span>' : ''}
-               ${hasRd   ? '<span class="gr-trend-leg"><span style="color:#8b5cf6;font-size:14px">●</span> 리딩 성취율</span>' : ''}
-             </div>`
-        }
+        ${legendHtml}
       </div>`;
 
-    if (pts.length > 0) {
-      requestAnimationFrame(() => {
-        const canvas = document.getElementById('gr-trend-canvas');
-        if (canvas) _drawTrendCanvas(canvas, pts, hasWord, hasRd);
+    requestAnimationFrame(() => {
+      const wrap   = document.getElementById('gr-trend-scroll');
+      const canvas = document.getElementById('gr-trend-canvas');
+      if (canvas && wrap) _drawTrendCanvas(canvas, wrap, pts);
+    });
+  }
+
+  /* 평가 포인트 빌드 — 교재당 최신 1건, 날짜순 정렬 */
+  function _buildTrendPoints(trend) {
+    const pts = [];
+    for (const { classId, bookId, records } of trend) {
+      if (!records.length) continue;
+      const config  = GradeDB.getReportConfig(bookId);
+      const actRevs = GradeDB.getActiveReviews(bookId);
+      const hasWord = (config?.word?.totalQ || 0) > 0;
+      const hasRd   = config?.reading?.enabled && actRevs.length > 0;
+      const bookObj = typeof BookLibDB !== 'undefined' ? BookLibDB.getBookById(bookId) : null;
+      const bookName = bookObj?.name || bookId;
+
+      // 교재당 평가는 1회 — 마지막 레코드 사용
+      const rec     = records[records.length - 1];
+      const wordAch = hasWord && (rec.word?.totalQ || 0) > 0
+        ? Math.round(rec.word.pass / rec.word.totalQ * 100) : null;
+      const rdAch   = hasRd ? _calcRdN(rec.reading || {}, actRevs) : null;
+      if (wordAch == null && rdAch == null) continue;
+
+      // 반 평균 (반 미지정 교재는 null)
+      let avgWord = null, avgRd = null;
+      if (classId && classId !== '__noclass__') {
+        const clsRecs = GradeDB.getClassSummary(classId, bookId);
+        if (hasWord && clsRecs.length) {
+          const ws = clsRecs
+            .map(r => (r.word?.totalQ || 0) > 0
+              ? Math.round(r.word.pass / r.word.totalQ * 100) : null)
+            .filter(v => v != null);
+          if (ws.length) avgWord = Math.round(ws.reduce((a, b) => a + b, 0) / ws.length);
+        }
+        if (hasRd && clsRecs.length) {
+          const rs = clsRecs
+            .map(r => _calcRdN(r.reading || {}, actRevs))
+            .filter(v => v != null);
+          if (rs.length) avgRd = Math.round(rs.reduce((a, b) => a + b, 0) / rs.length);
+        }
+      }
+
+      pts.push({
+        date: (rec.createdAt || '').slice(0, 10),
+        month: (rec.createdAt || '').slice(0, 7),
+        bookName, bookId, classId,
+        wordAch, rdAch, avgWord, avgRd,
       });
     }
+    return pts.sort((a, b) => a.date.localeCompare(b.date));
   }
 
-  function _onTrendBook(bookId) {
-    _st._trendBookId = bookId;
-    const cnt = document.getElementById('gr-content');
-    if (cnt && _st.studentId) _renderTrend(cnt, _st.studentId);
-  }
-
-  function _drawTrendCanvas(canvas, pts, hasWord, hasRd) {
-    const dpr = window.devicePixelRatio || 1;
-    const W   = canvas.offsetWidth  || 520;
-    const H   = canvas.offsetHeight || 260;
+  /* Canvas 꺾은선 차트 — 4계열 (학생2 + 반평균2) */
+  function _drawTrendCanvas(canvas, wrap, pts) {
+    const dpr    = window.devicePixelRatio || 1;
+    const H      = 320;
+    const PT_W   = 96;               // 포인트당 최소 너비
+    const W      = Math.max(wrap.clientWidth || 520, pts.length * PT_W + 80);
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
     canvas.width  = W * dpr;
     canvas.height = H * dpr;
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
 
-    const PAD = { top: 28, right: 24, bottom: 44, left: 46 };
-    const cW  = W - PAD.left - PAD.right;
-    const cH  = H - PAD.top  - PAD.bottom;
-    const n   = pts.length;
+    /* 레이아웃 */
+    const PAD  = { top: 34, right: 28, bottom: 90, left: 50 };
+    const cW   = W - PAD.left - PAD.right;
+    const cH   = H - PAD.top  - PAD.bottom;
+    const n    = pts.length;
+    const xOf  = i => PAD.left + (n < 2 ? cW / 2 : i * cW / (n - 1));
+    const yOf  = v => PAD.top  + cH - (v / 100) * cH;
 
-    // 테마 색상
-    const isDark   = document.documentElement.getAttribute('data-theme') === 'dark'
-                  || window.matchMedia?.('(prefers-color-scheme:dark)').matches;
-    const clrGrid  = isDark ? 'rgba(255,255,255,.07)' : 'rgba(0,0,0,.07)';
-    const clrLabel = isDark ? '#94a3b8' : '#64748b';
-    const FONT     = `10px 'Noto Sans KR', sans-serif`;
+    /* 색상 */
+    const WORD_C   = '#3b82f6';
+    const RD_C     = '#8b5cf6';
+    const WORD_AVG = '#93c5fd';
+    const RD_AVG   = '#c4b5fd';
+    const GRID_C   = 'rgba(148,163,184,.18)';
+    const LABEL_C  = '#94a3b8';
+    const MONTH_C  = 'rgba(99,102,241,.06)';
+    const FONT_SM  = `10px sans-serif`;
+    const FONT_B   = `bold 11px sans-serif`;
 
-    const xOf = i => PAD.left + (n < 2 ? cW / 2 : i * cW / (n - 1));
-    const yOf = v => PAD.top  + cH - (v / 100) * cH;
+    /* ── 월별 배경 줄무늬 ── */
+    let curMonth = null, fill = false;
+    pts.forEach((p, i) => {
+      if (p.month !== curMonth) { fill = !fill; curMonth = p.month; }
+      if (!fill) return;
+      const x0 = i === 0   ? PAD.left
+        : (xOf(i - 1) + xOf(i)) / 2;
+      const x1 = i === n-1 ? PAD.left + cW
+        : (xOf(i) + xOf(i + 1)) / 2;
+      ctx.fillStyle = MONTH_C;
+      ctx.fillRect(x0, PAD.top, x1 - x0, cH);
+    });
 
-    // 그리드 + Y축
-    ctx.font = FONT;
+    /* ── 월 레이블 & 구분선 (상단) ── */
+    curMonth = null;
+    pts.forEach((p, i) => {
+      if (p.month === curMonth) return;
+      curMonth = p.month;
+      const x = xOf(i);
+      // 구분선 (첫 번째 제외)
+      if (i > 0) {
+        const xDiv = (xOf(i - 1) + x) / 2;
+        ctx.strokeStyle = 'rgba(99,102,241,.25)';
+        ctx.lineWidth   = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath(); ctx.moveTo(xDiv, PAD.top); ctx.lineTo(xDiv, PAD.top + cH + 4); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      const [yr, mo] = p.month.split('-');
+      ctx.fillStyle   = '#6366f1';
+      ctx.font        = `bold 9px sans-serif`;
+      ctx.textAlign   = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(`${yr}.${mo}`, x - (i > 0 ? 4 : 0), 4);
+    });
+
+    /* ── 그리드 + Y축 레이블 ── */
     [0, 25, 50, 75, 100].forEach(v => {
       const y = yOf(v);
-      ctx.strokeStyle = clrGrid;
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = GRID_C;
+      ctx.lineWidth   = 1;
+      ctx.setLineDash(v === 0 ? [] : [3, 3]);
       ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(W - PAD.right, y); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = clrLabel;
-      ctx.textAlign = 'right';
+      ctx.fillStyle    = LABEL_C;
+      ctx.font         = FONT_SM;
+      ctx.textAlign    = 'right';
       ctx.textBaseline = 'middle';
-      ctx.fillText(v + '%', PAD.left - 6, y);
+      ctx.fillText(v + '%', PAD.left - 7, y);
     });
 
-    // X축 날짜 레이블 (최대 8개)
-    const step = Math.max(1, Math.ceil(n / 8));
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    pts.forEach((p, i) => {
-      if (i % step !== 0 && i !== n - 1) return;
-      ctx.fillStyle = clrLabel;
-      ctx.fillText(p.date.slice(5), xOf(i), H - PAD.bottom + 6); // MM-DD
-    });
-
-    // 라인+점 그리기 헬퍼
-    function drawLine(getter, color) {
+    /* ── 라인 그리기 헬퍼 ── */
+    function drawLine(getter, color, dashed) {
       const vpts = pts.map((p, i) => ({ i, v: getter(p) })).filter(p => p.v != null);
       if (!vpts.length) return;
 
-      // 영역 채우기 (반투명)
-      ctx.beginPath();
-      vpts.forEach(({ i, v }, pi) => {
-        pi === 0 ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v));
-      });
-      ctx.lineTo(xOf(vpts[vpts.length-1].i), PAD.top + cH);
-      ctx.lineTo(xOf(vpts[0].i), PAD.top + cH);
-      ctx.closePath();
-      const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + cH);
-      grad.addColorStop(0, color + '28');
-      grad.addColorStop(1, color + '04');
-      ctx.fillStyle = grad;
-      ctx.fill();
+      // 영역 채우기 (실선만)
+      if (!dashed && vpts.length > 1) {
+        ctx.beginPath();
+        vpts.forEach(({ i, v }, pi) =>
+          pi === 0 ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v))
+        );
+        ctx.lineTo(xOf(vpts[vpts.length - 1].i), PAD.top + cH);
+        ctx.lineTo(xOf(vpts[0].i), PAD.top + cH);
+        ctx.closePath();
+        const g = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + cH);
+        g.addColorStop(0, color + '30');
+        g.addColorStop(1, color + '04');
+        ctx.fillStyle = g;
+        ctx.fill();
+      }
 
       // 라인
       ctx.strokeStyle = color;
-      ctx.lineWidth   = 2.5;
+      ctx.lineWidth   = dashed ? 1.8 : 2.8;
       ctx.lineJoin    = 'round';
       ctx.lineCap     = 'round';
-      ctx.setLineDash([]);
+      ctx.setLineDash(dashed ? [6, 4] : []);
       ctx.beginPath();
-      vpts.forEach(({ i, v }, pi) => {
-        pi === 0 ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v));
-      });
+      vpts.forEach(({ i, v }, pi) =>
+        pi === 0 ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v))
+      );
       ctx.stroke();
+      ctx.setLineDash([]);
 
-      // 점 + 값 레이블
-      vpts.forEach(({ i, v }) => {
-        const x = xOf(i), y = yOf(v);
-        ctx.beginPath();
-        ctx.arc(x, y, 4.5, 0, Math.PI * 2);
-        ctx.fillStyle = '#fff';
-        ctx.fill();
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        ctx.fillStyle  = color;
-        ctx.font       = `bold 10px 'Noto Sans KR', sans-serif`;
-        ctx.textAlign  = 'center';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText(v + '%', x, y - 8);
-      });
+      if (!dashed) {
+        // 원형 점 + 값 레이블
+        vpts.forEach(({ i, v }) => {
+          const x = xOf(i), y = yOf(v);
+          ctx.beginPath(); ctx.arc(x, y, 5.5, 0, Math.PI * 2);
+          ctx.fillStyle = '#fff'; ctx.fill();
+          ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.stroke();
+          ctx.fillStyle    = color;
+          ctx.font         = FONT_B;
+          ctx.textAlign    = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(v + '%', x, y - 9);
+        });
+      } else {
+        // 마름모 점 (평균)
+        vpts.forEach(({ i, v }) => {
+          const x = xOf(i), y = yOf(v), s = 4;
+          ctx.beginPath();
+          ctx.moveTo(x, y - s); ctx.lineTo(x + s, y);
+          ctx.lineTo(x, y + s); ctx.lineTo(x - s, y);
+          ctx.closePath();
+          ctx.fillStyle = color; ctx.fill();
+        });
+      }
     }
 
-    if (hasWord) drawLine(p => p.wordAch, '#3b82f6');
-    if (hasRd)   drawLine(p => p.rdAch,   '#8b5cf6');
+    /* ── 그리기 순서: 평균(뒤) → 학생(앞) ── */
+    drawLine(p => p.avgWord, WORD_AVG, true);
+    drawLine(p => p.avgRd,   RD_AVG,   true);
+    drawLine(p => p.wordAch, WORD_C,   false);
+    drawLine(p => p.rdAch,   RD_C,     false);
+
+    /* ── X축 교재명 (45° 회전) ── */
+    ctx.fillStyle    = '#64748b';
+    ctx.font         = `11px sans-serif`;
+    pts.forEach((p, i) => {
+      const x = xOf(i);
+      const y = PAD.top + cH + 10;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(-Math.PI / 4);
+      ctx.textAlign    = 'right';
+      ctx.textBaseline = 'middle';
+      const nm = p.bookName.length > 12 ? p.bookName.slice(0, 11) + '…' : p.bookName;
+      ctx.fillText(nm, 0, 0);
+      ctx.restore();
+    });
   }
 
   function _toggleSort(col) {
@@ -5989,7 +6068,7 @@ to{opacity:1;transform:none}}
   return {
     init, render,
     _onCls, _onBk, _openEvalFromGrade, _showEvalPopup, _openEvalPopupDirect, _grAddReview, _saveEvalCfg, _refreshAfterEvalUpdate, _onStu, _setView, _toggleSort,
-    _onTrendBook, _onStuSearch,
+    _onStuSearch,
     _openCommentPop, _closeCommentPop, _cardAiGen, _cardAiProof,
     _openBulkComment, _bulkEditCell,
     _excelWordInput, _excelRdInput, _excelComment, _onKey,
