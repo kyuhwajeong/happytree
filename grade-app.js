@@ -945,21 +945,62 @@ to{opacity:1;transform:none}}
 .gr-stu-group-cnt{font-size:9px;font-weight:700;background:var(--a20);color:var(--a);border-radius:8px;padding:1px 5px;}
 
 /* ── 트렌드 뷰 ── */
-.gr-trend-wrap{display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 18px;}
-.gr-trend-header{margin-bottom:14px;flex-shrink:0;}
+.gr-trend-wrap{display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 18px 0;}
+.gr-trend-header{margin-bottom:12px;flex-shrink:0;}
 .gr-trend-stu-info{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;}
 .gr-trend-stu-name{font-size:20px;font-weight:800;color:var(--tx);}
 .gr-trend-stu-nick{font-size:13px;color:var(--tx3);}
 .gr-trend-stu-cls{font-size:11px;padding:2px 10px;border-radius:12px;background:var(--a20);color:var(--a);font-weight:700;}
 .gr-trend-badge{font-size:11px;padding:2px 9px;border-radius:12px;background:rgba(16,185,129,.12);color:#059669;font-weight:600;}
+.gr-trend-growth{font-size:11px;padding:2px 9px;border-radius:12px;font-weight:700;}
+.gr-trend-growth.up{background:rgba(34,197,94,.12);color:#16a34a;}
+.gr-trend-growth.dn{background:rgba(239,68,68,.12);color:#dc2626;}
+.gr-trend-growth.eq{background:rgba(148,163,184,.12);color:#64748b;}
 .gr-trend-subtitle{font-size:11px;color:var(--tx3);margin-top:2px;}
-.gr-trend-chart-outer{overflow-x:auto;overflow-y:hidden;padding-bottom:6px;flex-shrink:0;border-radius:12px;border:1px solid var(--bdr);background:var(--surf);}
-.gr-trend-chart-area{height:320px;position:relative;}
+/* 2컬럼 바디 */
+.gr-trend-body{display:flex;gap:14px;flex:1;min-height:0;overflow:hidden;}
+.gr-trend-left{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px;overflow-y:auto;padding-bottom:16px;}
+.gr-trend-right{width:256px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;overflow-y:auto;padding-bottom:16px;}
+/* 차트 */
+.gr-trend-chart-outer{overflow-x:auto;overflow-y:hidden;border-radius:10px;border:1px solid var(--bdr);background:var(--surf);flex-shrink:0;}
+.gr-trend-chart-area{height:280px;position:relative;}
 #gr-trend-canvas{display:block;}
-.gr-trend-legend{display:flex;flex-wrap:wrap;gap:10px 18px;padding:10px 4px 2px;flex-shrink:0;}
+.gr-trend-legend{display:flex;flex-wrap:wrap;gap:8px 16px;flex-shrink:0;}
 .gr-trend-leg{font-size:11px;font-weight:500;color:var(--tx2);display:flex;align-items:center;gap:5px;}
-.gr-trend-leg-line{display:inline-block;width:22px;height:3px;border-radius:2px;vertical-align:middle;}
-.gr-trend-leg-dash{display:inline-block;width:22px;border-top:2px dashed currentColor;vertical-align:middle;}
+.gr-trend-leg-line{display:inline-block;width:20px;height:3px;border-radius:2px;vertical-align:middle;}
+.gr-trend-leg-dash{display:inline-block;width:20px;border-top:2px dashed currentColor;vertical-align:middle;}
+/* 교재 카드 그리드 */
+.gr-tcard-section-title{font-size:11px;font-weight:700;color:var(--tx3);letter-spacing:.4px;text-transform:uppercase;flex-shrink:0;}
+.gr-tcard-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(154px,1fr));gap:8px;flex-shrink:0;}
+.gr-tcard{background:var(--surf);border:1.5px solid var(--bdr);border-radius:10px;padding:10px 12px;cursor:pointer;transition:border-color .15s,box-shadow .15s;}
+.gr-tcard:hover{border-color:var(--a);box-shadow:0 0 0 2px var(--a20);}
+.gr-tcard.sel{border-color:var(--a);box-shadow:0 0 0 3px var(--a20);background:var(--a10,var(--a20));}
+.gr-tcard-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;gap:4px;}
+.gr-tcard-name{font-size:12px;font-weight:700;color:var(--tx);line-height:1.3;flex:1;}
+.gr-tcard-date{font-size:10px;color:var(--tx3);flex-shrink:0;white-space:nowrap;}
+.gr-tcard-row{display:flex;align-items:center;gap:5px;margin-top:5px;}
+.gr-tcard-lbl{font-size:10px;color:var(--tx3);width:26px;flex-shrink:0;}
+.gr-tcard-bar-wrap{flex:1;height:5px;background:var(--surf2);border-radius:4px;overflow:hidden;}
+.gr-tcard-bar{height:100%;border-radius:4px;transition:width .4s;}
+.gr-tcard-pct{font-size:11px;font-weight:700;min-width:32px;text-align:right;flex-shrink:0;}
+.gr-tcard-diff{font-size:10px;font-weight:700;min-width:30px;text-align:right;flex-shrink:0;}
+.gr-tcard-diff.pos{color:#16a34a;}
+.gr-tcard-diff.neg{color:#dc2626;}
+.gr-tcard-no-avg{font-size:10px;color:var(--tx3);text-align:right;min-width:30px;}
+/* AI 패널 */
+.gr-trend-ai-box{background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;}
+.gr-trend-ai-hdr{font-size:11px;font-weight:800;color:var(--tx3);letter-spacing:.4px;display:flex;align-items:center;justify-content:space-between;}
+.gr-trend-ai-refresh{background:none;border:none;cursor:pointer;font-size:14px;color:var(--tx3);padding:0;line-height:1;transition:transform .3s;}
+.gr-trend-ai-refresh:hover{transform:rotate(180deg);}
+.gr-trend-ai-loading{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 0;color:var(--tx3);font-size:12px;}
+@keyframes gr-spin{to{transform:rotate(360deg)}}
+.gr-trend-ai-spinner{width:22px;height:22px;border:2.5px solid var(--bdr);border-top-color:var(--a);border-radius:50%;animation:gr-spin .8s linear infinite;}
+.gr-trend-ai-summary{font-size:12px;line-height:1.7;color:var(--tx2);border-left:3px solid var(--a);padding-left:10px;}
+.gr-trend-ai-section{margin-top:4px;}
+.gr-trend-ai-sec-title{font-size:10px;font-weight:800;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;}
+.gr-trend-ai-item{font-size:11px;color:var(--tx2);line-height:1.6;display:flex;gap:5px;align-items:flex-start;}
+.gr-trend-ai-direction{margin-top:6px;font-size:11px;font-weight:600;color:var(--a);line-height:1.5;background:var(--a20);border-radius:7px;padding:7px 10px;}
+.gr-trend-ai-error{font-size:11px;color:var(--tx3);text-align:center;padding:16px 0;}
 .gr-trend-no-data{text-align:center;padding:60px 20px;color:var(--tx3);font-size:13px;}`;
     document.head.appendChild(s);
   }
@@ -1126,7 +1167,10 @@ to{opacity:1;transform:none}}
   }
 
   /* ── 학생 패널 ── */
-  let _stuSearch = ''; // 검색어 (반/교재 미선택 모드 전용)
+  let _stuSearch   = ''; // 검색어 (반/교재 미선택 모드 전용)
+  let _trendSelIdx = null;           // 선택된 교재 카드 인덱스
+  let _lastTrendPts = [];            // 마지막 계산된 트렌드 포인트
+  const _trendAiCache = {};          // { studentId: analysisObj }
 
   function _renderStudents() {
     const panel = document.getElementById('gr-stu-panel'); if (!panel) return;
@@ -1246,12 +1290,7 @@ to{opacity:1;transform:none}}
   }
 
   /* ════════════════════════════════════
-   * 월별 성적 트렌드 차트 (반/교재 미선택 + 학생 선택 상태)
-   * ════════════════════════════════════ */
-  /* ════════════════════════════════════
    * 성장 트렌드 차트 — 전 교재 타임라인
-   * X축: 교재별 평가일 (날짜순)
-   * 계열: 단어성취율(실선), 리딩성취율(실선), 반평균단어(점선), 반평균리딩(점선)
    * ════════════════════════════════════ */
   function _renderTrend(cnt, studentId) {
     const stu = typeof StudentDB !== 'undefined'
@@ -1260,12 +1299,25 @@ to{opacity:1;transform:none}}
       cnt.innerHTML = '<div class="gr-empty"><div class="gr-empty-ico">❓</div>학생 정보 없음</div>';
       return;
     }
-    const trend    = typeof GradeDB !== 'undefined' ? GradeDB.getStudentTrend(studentId) : [];
+
+    const trend = typeof GradeDB !== 'undefined' ? GradeDB.getStudentTrend(studentId) : [];
+    const pts   = _buildTrendPoints(trend);
+    _lastTrendPts = pts;
+
+    /* 성장률 배지 계산 (첫 교재 → 마지막 교재) */
     const clsName  = stu.classCode || '';
-    const pts      = _buildTrendPoints(trend);
-    const hasAvg   = pts.some(p => p.avgWord != null || p.avgRd != null);
-    const hasWord  = pts.some(p => p.wordAch != null);
-    const hasRd    = pts.some(p => p.rdAch   != null);
+    let growthBadge = '';
+    if (pts.length >= 2) {
+      const first = pts[0], last = pts[pts.length - 1];
+      const fv = first.wordAch ?? first.rdAch;
+      const lv = last.wordAch  ?? last.rdAch;
+      if (fv != null && lv != null) {
+        const delta = lv - fv;
+        const sign  = delta > 0 ? 'up' : delta < 0 ? 'dn' : 'eq';
+        const icon  = delta > 0 ? '↑' : delta < 0 ? '↓' : '→';
+        growthBadge = `<span class="gr-trend-growth ${sign}">${icon} ${delta > 0 ? '+' : ''}${delta}%</span>`;
+      }
+    }
 
     const stuHdr = `
       <div class="gr-trend-stu-info">
@@ -1273,46 +1325,188 @@ to{opacity:1;transform:none}}
         ${stu.nickname ? `<span class="gr-trend-stu-nick">(${_e(stu.nickname)})</span>` : ''}
         ${clsName ? `<span class="gr-trend-stu-cls">${_e(clsName)}</span>` : ''}
         ${pts.length ? `<span class="gr-trend-badge">📚 ${pts.length}개 교재</span>` : ''}
+        ${growthBadge}
       </div>
-      ${pts.length ? `<div class="gr-trend-subtitle">교재 평가일 순 · 클릭하여 학생 전체 성장 흐름을 확인하세요</div>` : ''}`;
+      ${pts.length ? `<div class="gr-trend-subtitle">교재 평가일 순 · 카드 선택 시 차트 포인트 강조</div>` : ''}`;
 
     if (!pts.length) {
-      cnt.innerHTML = `<div class="gr-trend-wrap"><div class="gr-trend-header">${stuHdr}</div>
+      cnt.innerHTML = `<div class="gr-trend-wrap">
+        <div class="gr-trend-header">${stuHdr}</div>
         <div class="gr-trend-no-data">📊 성적 데이터가 없습니다</div></div>`;
       return;
     }
 
+    const hasWord = pts.some(p => p.wordAch != null);
+    const hasRd   = pts.some(p => p.rdAch   != null);
+    const hasAvg  = pts.some(p => p.avgWord  != null || p.avgRd != null);
+
     const legendHtml = `
       <div class="gr-trend-legend">
-        ${hasWord ? `<span class="gr-trend-leg">
-          <span class="gr-trend-leg-line" style="background:#3b82f6"></span>단어 성취율</span>` : ''}
-        ${hasRd   ? `<span class="gr-trend-leg">
-          <span class="gr-trend-leg-line" style="background:#8b5cf6"></span>리딩 성취율</span>` : ''}
-        ${hasAvg && hasWord ? `<span class="gr-trend-leg" style="color:#93c5fd">
-          <span class="gr-trend-leg-dash"></span>반 평균(단어)</span>` : ''}
-        ${hasAvg && hasRd   ? `<span class="gr-trend-leg" style="color:#c4b5fd">
-          <span class="gr-trend-leg-dash"></span>반 평균(리딩)</span>` : ''}
+        ${hasWord ? `<span class="gr-trend-leg"><span class="gr-trend-leg-line" style="background:#3b82f6"></span>단어 성취율</span>` : ''}
+        ${hasRd   ? `<span class="gr-trend-leg"><span class="gr-trend-leg-line" style="background:#8b5cf6"></span>리딩 성취율</span>` : ''}
+        ${hasAvg && hasWord ? `<span class="gr-trend-leg" style="color:#93c5fd"><span class="gr-trend-leg-dash"></span>반 평균(단어)</span>` : ''}
+        ${hasAvg && hasRd   ? `<span class="gr-trend-leg" style="color:#c4b5fd"><span class="gr-trend-leg-dash"></span>반 평균(리딩)</span>` : ''}
       </div>`;
 
     cnt.innerHTML = `
       <div class="gr-trend-wrap">
         <div class="gr-trend-header">${stuHdr}</div>
-        <div class="gr-trend-chart-outer">
-          <div class="gr-trend-chart-area" id="gr-trend-scroll">
-            <canvas id="gr-trend-canvas"></canvas>
+        <div class="gr-trend-body">
+          <div class="gr-trend-left">
+            <div class="gr-trend-chart-outer">
+              <div class="gr-trend-chart-area" id="gr-trend-scroll">
+                <canvas id="gr-trend-canvas"></canvas>
+              </div>
+            </div>
+            ${legendHtml}
+            <div class="gr-tcard-section-title">📋 교재별 평가 상세</div>
+            <div class="gr-tcard-grid" id="gr-tcard-grid">
+              ${_buildTrendCardsHtml(pts, _trendSelIdx)}
+            </div>
+          </div>
+          <div class="gr-trend-right">
+            <div class="gr-trend-ai-box" id="gr-trend-ai">
+              <div class="gr-trend-ai-hdr">
+                ✨ AI 성장 분석
+                <button class="gr-trend-ai-refresh" onclick="GradeApp._refreshTrendAi('${studentId}')" title="재분석">↻</button>
+              </div>
+              <div class="gr-trend-ai-loading">
+                <div class="gr-trend-ai-spinner"></div>
+                <div>분석 중…</div>
+              </div>
+            </div>
           </div>
         </div>
-        ${legendHtml}
       </div>`;
 
     requestAnimationFrame(() => {
       const wrap   = document.getElementById('gr-trend-scroll');
       const canvas = document.getElementById('gr-trend-canvas');
-      if (canvas && wrap) _drawTrendCanvas(canvas, wrap, pts);
+      if (canvas && wrap) _drawTrendCanvas(canvas, wrap, pts, _trendSelIdx);
     });
+
+    _loadTrendAi(studentId, pts);
   }
 
-  /* 평가 포인트 빌드 — 교재당 최신 1건, 날짜순 정렬 */
+  /* ── 교재별 평가 카드 HTML ── */
+  function _buildTrendCardsHtml(pts, selIdx) {
+    return pts.map((p, i) => {
+      const isSel  = i === selIdx;
+      const wDiff  = p.wordAch != null && p.avgWord != null ? p.wordAch - p.avgWord : null;
+      const rDiff  = p.rdAch   != null && p.avgRd   != null ? p.rdAch   - p.avgRd   : null;
+      const diffHtml = d => {
+        if (d == null) return `<span class="gr-tcard-no-avg">-</span>`;
+        const cls = d >= 0 ? 'pos' : 'neg';
+        return `<span class="gr-tcard-diff ${cls}">${d >= 0 ? '+' : ''}${d}%</span>`;
+      };
+      return `<div class="gr-tcard${isSel ? ' sel' : ''}" onclick="GradeApp._onTrendCard(${i})">
+        <div class="gr-tcard-top">
+          <span class="gr-tcard-name">${_e(p.bookName)}</span>
+          <span class="gr-tcard-date">${p.date.slice(5)}</span>
+        </div>
+        ${p.wordAch != null ? `<div class="gr-tcard-row">
+          <span class="gr-tcard-lbl">단어</span>
+          <div class="gr-tcard-bar-wrap"><div class="gr-tcard-bar" style="width:${p.wordAch}%;background:#3b82f6"></div></div>
+          <span class="gr-tcard-pct" style="color:#3b82f6">${p.wordAch}%</span>
+          ${diffHtml(wDiff)}
+        </div>` : ''}
+        ${p.rdAch != null ? `<div class="gr-tcard-row">
+          <span class="gr-tcard-lbl">리딩</span>
+          <div class="gr-tcard-bar-wrap"><div class="gr-tcard-bar" style="width:${p.rdAch}%;background:#8b5cf6"></div></div>
+          <span class="gr-tcard-pct" style="color:#8b5cf6">${p.rdAch}%</span>
+          ${diffHtml(rDiff)}
+        </div>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  /* ── 카드 선택 → 차트 하이라이트 연동 ── */
+  function _onTrendCard(idx) {
+    _trendSelIdx = (_trendSelIdx === idx) ? null : idx;  // 토글
+    // 카드 업데이트
+    const grid = document.getElementById('gr-tcard-grid');
+    if (grid) grid.innerHTML = _buildTrendCardsHtml(_lastTrendPts, _trendSelIdx);
+    // 차트 재드로우
+    const wrap   = document.getElementById('gr-trend-scroll');
+    const canvas = document.getElementById('gr-trend-canvas');
+    if (canvas && wrap) _drawTrendCanvas(canvas, wrap, _lastTrendPts, _trendSelIdx);
+    // 선택 카드 스크롤
+    if (_trendSelIdx != null && grid) {
+      const cards = grid.querySelectorAll('.gr-tcard');
+      cards[_trendSelIdx]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    }
+  }
+
+  /* ── AI 분석 로드 ── */
+  async function _loadTrendAi(studentId, pts) {
+    const el = document.getElementById('gr-trend-ai');
+    if (!el) return;
+
+    // 캐시 확인
+    if (_trendAiCache[studentId]) {
+      _renderAiPanel(el, _trendAiCache[studentId], studentId); return;
+    }
+    if (typeof GeminiAI === 'undefined' || !pts.length) {
+      el.innerHTML = `<div class="gr-trend-ai-hdr">✨ AI 성장 분석</div>
+        <div class="gr-trend-ai-error">AI 연결 안 됨</div>`;
+      return;
+    }
+    try {
+      const stu  = StudentDB.getAll().find(s => s.id === studentId);
+      const data = {
+        studentName: stu?.name || '',
+        classCode:   stu?.classCode || '',
+        books: pts.map(p => ({
+          book: p.bookName, date: p.date,
+          wordAch: p.wordAch, rdAch: p.rdAch,
+          avgWord: p.avgWord, avgRd: p.avgRd,
+        })),
+      };
+      const result = await GeminiAI.analyzeStudentTrend(data);
+      _trendAiCache[studentId] = result;
+      _renderAiPanel(el, result, studentId);
+    } catch(e) {
+      if (el.isConnected) {
+        el.innerHTML = `<div class="gr-trend-ai-hdr">✨ AI 성장 분석
+          <button class="gr-trend-ai-refresh" onclick="GradeApp._refreshTrendAi('${studentId}')" title="재시도">↻</button>
+        </div>
+        <div class="gr-trend-ai-error">분석 실패 — ↻ 버튼으로 재시도</div>`;
+      }
+    }
+  }
+
+  function _refreshTrendAi(studentId) {
+    delete _trendAiCache[studentId];
+    _loadTrendAi(studentId, _lastTrendPts);
+    const el = document.getElementById('gr-trend-ai');
+    if (el) el.innerHTML = `<div class="gr-trend-ai-hdr">✨ AI 성장 분석
+        <button class="gr-trend-ai-refresh" onclick="GradeApp._refreshTrendAi('${studentId}')" title="재분석">↻</button>
+      </div>
+      <div class="gr-trend-ai-loading"><div class="gr-trend-ai-spinner"></div><div>재분석 중…</div></div>`;
+  }
+
+  function _renderAiPanel(el, result, studentId) {
+    if (!el?.isConnected) return;
+    const trendIcon = result.trend === 'improving' ? '📈' : result.trend === 'declining' ? '📉' : '📊';
+    el.innerHTML = `
+      <div class="gr-trend-ai-hdr">${trendIcon} AI 성장 분석
+        <button class="gr-trend-ai-refresh" onclick="GradeApp._refreshTrendAi('${studentId}')" title="재분석">↻</button>
+      </div>
+      <div class="gr-trend-ai-summary">${_e(result.summary || '')}</div>
+      ${result.strengths?.length ? `
+        <div class="gr-trend-ai-section">
+          <div class="gr-trend-ai-sec-title">💪 강점</div>
+          ${result.strengths.map(s => `<div class="gr-trend-ai-item"><span>✓</span><span>${_e(s)}</span></div>`).join('')}
+        </div>` : ''}
+      ${result.improvements?.length ? `
+        <div class="gr-trend-ai-section">
+          <div class="gr-trend-ai-sec-title">🔧 개선 포인트</div>
+          ${result.improvements.map(s => `<div class="gr-trend-ai-item"><span>→</span><span>${_e(s)}</span></div>`).join('')}
+        </div>` : ''}
+      ${result.direction ? `<div class="gr-trend-ai-direction">🎯 ${_e(result.direction)}</div>` : ''}`;
+  }
+
+  /* ── 평가 포인트 빌드 ── */
   function _buildTrendPoints(trend) {
     const pts = [];
     for (const { classId, bookId, records } of trend) {
@@ -1324,48 +1518,41 @@ to{opacity:1;transform:none}}
       const bookObj = typeof BookLibDB !== 'undefined' ? BookLibDB.getBookById(bookId) : null;
       const bookName = bookObj?.name || bookId;
 
-      // 교재당 평가는 1회 — 마지막 레코드 사용
       const rec     = records[records.length - 1];
       const wordAch = hasWord && (rec.word?.totalQ || 0) > 0
         ? Math.round(rec.word.pass / rec.word.totalQ * 100) : null;
       const rdAch   = hasRd ? _calcRdN(rec.reading || {}, actRevs) : null;
       if (wordAch == null && rdAch == null) continue;
 
-      // 반 평균 (반 미지정 교재는 null)
       let avgWord = null, avgRd = null;
       if (classId && classId !== '__noclass__') {
         const clsRecs = GradeDB.getClassSummary(classId, bookId);
         if (hasWord && clsRecs.length) {
-          const ws = clsRecs
-            .map(r => (r.word?.totalQ || 0) > 0
-              ? Math.round(r.word.pass / r.word.totalQ * 100) : null)
-            .filter(v => v != null);
-          if (ws.length) avgWord = Math.round(ws.reduce((a, b) => a + b, 0) / ws.length);
+          const ws = clsRecs.map(r => (r.word?.totalQ||0)>0
+            ? Math.round(r.word.pass/r.word.totalQ*100) : null).filter(v=>v!=null);
+          if (ws.length) avgWord = Math.round(ws.reduce((a,b)=>a+b,0)/ws.length);
         }
         if (hasRd && clsRecs.length) {
-          const rs = clsRecs
-            .map(r => _calcRdN(r.reading || {}, actRevs))
-            .filter(v => v != null);
-          if (rs.length) avgRd = Math.round(rs.reduce((a, b) => a + b, 0) / rs.length);
+          const rs = clsRecs.map(r => _calcRdN(r.reading||{}, actRevs)).filter(v=>v!=null);
+          if (rs.length) avgRd = Math.round(rs.reduce((a,b)=>a+b,0)/rs.length);
         }
       }
-
       pts.push({
-        date: (rec.createdAt || '').slice(0, 10),
-        month: (rec.createdAt || '').slice(0, 7),
+        date: (rec.createdAt||'').slice(0,10),
+        month: (rec.createdAt||'').slice(0,7),
         bookName, bookId, classId,
         wordAch, rdAch, avgWord, avgRd,
       });
     }
-    return pts.sort((a, b) => a.date.localeCompare(b.date));
+    return pts.sort((a,b)=>a.date.localeCompare(b.date));
   }
 
-  /* Canvas 꺾은선 차트 — 4계열 (학생2 + 반평균2) */
-  function _drawTrendCanvas(canvas, wrap, pts) {
-    const dpr    = window.devicePixelRatio || 1;
-    const H      = 320;
-    const PT_W   = 96;               // 포인트당 최소 너비
-    const W      = Math.max(wrap.clientWidth || 520, pts.length * PT_W + 80);
+  /* ── Canvas 꺾은선 차트 (선택 포인트 하이라이트 지원) ── */
+  function _drawTrendCanvas(canvas, wrap, pts, selIdx) {
+    const dpr   = window.devicePixelRatio || 1;
+    const H     = 280;
+    const PT_W  = 92;
+    const W     = Math.max(wrap.clientWidth || 520, pts.length * PT_W + 80);
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     canvas.width  = W * dpr;
@@ -1373,154 +1560,151 @@ to{opacity:1;transform:none}}
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
 
-    /* 레이아웃 */
-    const PAD  = { top: 34, right: 28, bottom: 90, left: 50 };
+    const PAD  = { top: 32, right: 26, bottom: 86, left: 48 };
     const cW   = W - PAD.left - PAD.right;
     const cH   = H - PAD.top  - PAD.bottom;
     const n    = pts.length;
     const xOf  = i => PAD.left + (n < 2 ? cW / 2 : i * cW / (n - 1));
     const yOf  = v => PAD.top  + cH - (v / 100) * cH;
 
-    /* 색상 */
     const WORD_C   = '#3b82f6';
     const RD_C     = '#8b5cf6';
     const WORD_AVG = '#93c5fd';
     const RD_AVG   = '#c4b5fd';
     const GRID_C   = 'rgba(148,163,184,.18)';
     const LABEL_C  = '#94a3b8';
-    const MONTH_C  = 'rgba(99,102,241,.06)';
-    const FONT_SM  = `10px sans-serif`;
-    const FONT_B   = `bold 11px sans-serif`;
+    const MONTH_C  = 'rgba(99,102,241,.05)';
 
-    /* ── 월별 배경 줄무늬 ── */
+    /* 월별 배경 줄무늬 */
     let curMonth = null, fill = false;
     pts.forEach((p, i) => {
       if (p.month !== curMonth) { fill = !fill; curMonth = p.month; }
       if (!fill) return;
-      const x0 = i === 0   ? PAD.left
-        : (xOf(i - 1) + xOf(i)) / 2;
-      const x1 = i === n-1 ? PAD.left + cW
-        : (xOf(i) + xOf(i + 1)) / 2;
+      const x0 = i === 0   ? PAD.left : (xOf(i-1)+xOf(i))/2;
+      const x1 = i === n-1 ? PAD.left+cW : (xOf(i)+xOf(i+1))/2;
       ctx.fillStyle = MONTH_C;
-      ctx.fillRect(x0, PAD.top, x1 - x0, cH);
+      ctx.fillRect(x0, PAD.top, x1-x0, cH);
     });
 
-    /* ── 월 레이블 & 구분선 (상단) ── */
+    /* 선택 포인트 수직 강조선 */
+    if (selIdx != null && selIdx < n) {
+      const x = xOf(selIdx);
+      ctx.fillStyle = 'rgba(99,102,241,.08)';
+      ctx.fillRect(x - 24, PAD.top, 48, cH);
+      ctx.strokeStyle = 'rgba(99,102,241,.35)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.moveTo(x, PAD.top); ctx.lineTo(x, PAD.top + cH); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    /* 월 레이블 + 구분선 */
     curMonth = null;
     pts.forEach((p, i) => {
       if (p.month === curMonth) return;
       curMonth = p.month;
       const x = xOf(i);
-      // 구분선 (첫 번째 제외)
       if (i > 0) {
-        const xDiv = (xOf(i - 1) + x) / 2;
-        ctx.strokeStyle = 'rgba(99,102,241,.25)';
-        ctx.lineWidth   = 1;
-        ctx.setLineDash([3, 3]);
-        ctx.beginPath(); ctx.moveTo(xDiv, PAD.top); ctx.lineTo(xDiv, PAD.top + cH + 4); ctx.stroke();
+        const xDiv = (xOf(i-1)+x)/2;
+        ctx.strokeStyle = 'rgba(99,102,241,.2)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3,3]);
+        ctx.beginPath(); ctx.moveTo(xDiv, PAD.top); ctx.lineTo(xDiv, PAD.top+cH+4); ctx.stroke();
         ctx.setLineDash([]);
       }
       const [yr, mo] = p.month.split('-');
-      ctx.fillStyle   = '#6366f1';
-      ctx.font        = `bold 9px sans-serif`;
-      ctx.textAlign   = 'left';
+      ctx.fillStyle = '#6366f1';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillText(`${yr}.${mo}`, x - (i > 0 ? 4 : 0), 4);
     });
 
-    /* ── 그리드 + Y축 레이블 ── */
+    /* 그리드 + Y축 */
     [0, 25, 50, 75, 100].forEach(v => {
       const y = yOf(v);
       ctx.strokeStyle = GRID_C;
-      ctx.lineWidth   = 1;
-      ctx.setLineDash(v === 0 ? [] : [3, 3]);
-      ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(W - PAD.right, y); ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.setLineDash(v === 0 ? [] : [3,3]);
+      ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(W-PAD.right, y); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle    = LABEL_C;
-      ctx.font         = FONT_SM;
-      ctx.textAlign    = 'right';
+      ctx.fillStyle = LABEL_C;
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
-      ctx.fillText(v + '%', PAD.left - 7, y);
+      ctx.fillText(v+'%', PAD.left-7, y);
     });
 
-    /* ── 라인 그리기 헬퍼 ── */
+    /* 라인 그리기 헬퍼 */
     function drawLine(getter, color, dashed) {
-      const vpts = pts.map((p, i) => ({ i, v: getter(p) })).filter(p => p.v != null);
+      const vpts = pts.map((p,i) => ({i, v: getter(p)})).filter(p=>p.v!=null);
       if (!vpts.length) return;
-
-      // 영역 채우기 (실선만)
       if (!dashed && vpts.length > 1) {
         ctx.beginPath();
-        vpts.forEach(({ i, v }, pi) =>
-          pi === 0 ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v))
-        );
-        ctx.lineTo(xOf(vpts[vpts.length - 1].i), PAD.top + cH);
-        ctx.lineTo(xOf(vpts[0].i), PAD.top + cH);
+        vpts.forEach(({i,v},pi) => pi===0 ? ctx.moveTo(xOf(i),yOf(v)) : ctx.lineTo(xOf(i),yOf(v)));
+        ctx.lineTo(xOf(vpts[vpts.length-1].i), PAD.top+cH);
+        ctx.lineTo(xOf(vpts[0].i), PAD.top+cH);
         ctx.closePath();
-        const g = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + cH);
-        g.addColorStop(0, color + '30');
-        g.addColorStop(1, color + '04');
-        ctx.fillStyle = g;
-        ctx.fill();
+        const g = ctx.createLinearGradient(0,PAD.top,0,PAD.top+cH);
+        g.addColorStop(0, color+'28'); g.addColorStop(1, color+'04');
+        ctx.fillStyle = g; ctx.fill();
       }
-
-      // 라인
       ctx.strokeStyle = color;
       ctx.lineWidth   = dashed ? 1.8 : 2.8;
-      ctx.lineJoin    = 'round';
-      ctx.lineCap     = 'round';
-      ctx.setLineDash(dashed ? [6, 4] : []);
+      ctx.lineJoin    = 'round'; ctx.lineCap = 'round';
+      ctx.setLineDash(dashed ? [6,4] : []);
       ctx.beginPath();
-      vpts.forEach(({ i, v }, pi) =>
-        pi === 0 ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v))
-      );
-      ctx.stroke();
-      ctx.setLineDash([]);
+      vpts.forEach(({i,v},pi) => pi===0 ? ctx.moveTo(xOf(i),yOf(v)) : ctx.lineTo(xOf(i),yOf(v)));
+      ctx.stroke(); ctx.setLineDash([]);
 
       if (!dashed) {
-        // 원형 점 + 값 레이블
-        vpts.forEach(({ i, v }) => {
+        vpts.forEach(({i,v}) => {
           const x = xOf(i), y = yOf(v);
-          ctx.beginPath(); ctx.arc(x, y, 5.5, 0, Math.PI * 2);
+          const isSel = i === selIdx;
+          const r = isSel ? 7.5 : 5;
+          /* 선택 시 글로우 링 */
+          if (isSel) {
+            ctx.beginPath(); ctx.arc(x, y, 12, 0, Math.PI*2);
+            ctx.fillStyle = color+'22'; ctx.fill();
+            ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI*2);
+            ctx.strokeStyle = color+'55'; ctx.lineWidth = 1.5; ctx.stroke();
+          }
+          ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2);
           ctx.fillStyle = '#fff'; ctx.fill();
-          ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.stroke();
-          ctx.fillStyle    = color;
-          ctx.font         = FONT_B;
-          ctx.textAlign    = 'center';
-          ctx.textBaseline = 'bottom';
-          ctx.fillText(v + '%', x, y - 9);
+          ctx.strokeStyle = color; ctx.lineWidth = isSel ? 3 : 2.5; ctx.stroke();
+          ctx.fillStyle  = color;
+          ctx.font       = isSel ? 'bold 12px sans-serif' : 'bold 10px sans-serif';
+          ctx.textAlign  = 'center'; ctx.textBaseline = 'bottom';
+          ctx.fillText(v+'%', x, y - r - 4);
         });
       } else {
-        // 마름모 점 (평균)
-        vpts.forEach(({ i, v }) => {
+        vpts.forEach(({i,v}) => {
           const x = xOf(i), y = yOf(v), s = 4;
           ctx.beginPath();
-          ctx.moveTo(x, y - s); ctx.lineTo(x + s, y);
-          ctx.lineTo(x, y + s); ctx.lineTo(x - s, y);
-          ctx.closePath();
-          ctx.fillStyle = color; ctx.fill();
+          ctx.moveTo(x,y-s); ctx.lineTo(x+s,y); ctx.lineTo(x,y+s); ctx.lineTo(x-s,y);
+          ctx.closePath(); ctx.fillStyle = color; ctx.fill();
         });
       }
     }
 
-    /* ── 그리기 순서: 평균(뒤) → 학생(앞) ── */
-    drawLine(p => p.avgWord, WORD_AVG, true);
-    drawLine(p => p.avgRd,   RD_AVG,   true);
-    drawLine(p => p.wordAch, WORD_C,   false);
-    drawLine(p => p.rdAch,   RD_C,     false);
+    drawLine(p=>p.avgWord, WORD_AVG, true);
+    drawLine(p=>p.avgRd,   RD_AVG,   true);
+    drawLine(p=>p.wordAch, WORD_C,   false);
+    drawLine(p=>p.rdAch,   RD_C,     false);
 
-    /* ── X축 교재명 (45° 회전) ── */
-    ctx.fillStyle    = '#64748b';
-    ctx.font         = `11px sans-serif`;
-    pts.forEach((p, i) => {
-      const x = xOf(i);
-      const y = PAD.top + cH + 10;
+    /* X축 교재명 45° */
+    ctx.fillStyle = '#64748b';
+    ctx.font = `11px sans-serif`;
+    pts.forEach((p,i) => {
+      const x = xOf(i), y = PAD.top+cH+10;
+      const isSel = i === selIdx;
+      if (isSel) { ctx.fillStyle = '#6366f1'; ctx.font = 'bold 11px sans-serif'; }
+      else        { ctx.fillStyle = '#64748b'; ctx.font = '11px sans-serif'; }
       ctx.save();
       ctx.translate(x, y);
-      ctx.rotate(-Math.PI / 4);
-      ctx.textAlign    = 'right';
-      ctx.textBaseline = 'middle';
-      const nm = p.bookName.length > 12 ? p.bookName.slice(0, 11) + '…' : p.bookName;
+      ctx.rotate(-Math.PI/4);
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      const nm = p.bookName.length > 12 ? p.bookName.slice(0,11)+'…' : p.bookName;
       ctx.fillText(nm, 0, 0);
       ctx.restore();
     });
@@ -6068,7 +6252,7 @@ to{opacity:1;transform:none}}
   return {
     init, render,
     _onCls, _onBk, _openEvalFromGrade, _showEvalPopup, _openEvalPopupDirect, _grAddReview, _saveEvalCfg, _refreshAfterEvalUpdate, _onStu, _setView, _toggleSort,
-    _onStuSearch,
+    _onStuSearch, _onTrendCard, _refreshTrendAi,
     _openCommentPop, _closeCommentPop, _cardAiGen, _cardAiProof,
     _openBulkComment, _bulkEditCell,
     _excelWordInput, _excelRdInput, _excelComment, _onKey,

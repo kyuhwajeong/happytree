@@ -311,7 +311,42 @@ const GeminiAI = (() => {
     return result;
   }
 
-  /* ══ 5. 연결 테스트 ════════════════════════════════════════ */
+  /* ══ 5. 학생 성장 트렌드 분석 ════════════════════════════════ */
+  async function analyzeStudentTrend(trendData) {
+    var system =
+      '당신은 영어학원 학습 분석 전문가입니다.\n' +
+      '학생의 교재별 평가 데이터를 분석하여 성장 리포트를 작성합니다.\n' +
+      '아래 JSON 형식으로만 응답하세요 (Markdown 코드블럭 없이 순수 JSON):\n' +
+      '{"summary":"2~3문장 성장 요약(한국어)","strengths":["강점1","강점2"],"improvements":["개선포인트1","개선포인트2"],"direction":"다음 단계 방향 1문장","trend":"improving|stable|declining"}\n\n' +
+      '규칙:\n' +
+      '1. 단어/리딩 성취율 변화 추이를 구체적으로 언급\n' +
+      '2. 반 평균 대비 분석 포함 (avgWord/avgRd 데이터 있을 때)\n' +
+      '3. 따뜻하고 격려하는 어조 (학부모/학생이 볼 수 있음)\n' +
+      '4. trend는 전체 흐름을 improving/stable/declining 중 하나로 판단';
+
+    var prompt =
+      '[학생 정보]\n' +
+      '이름: ' + (trendData.studentName || '학생') + '\n' +
+      '반: '   + (trendData.classCode   || '미지정') + '\n\n' +
+      '[교재별 평가 데이터 (날짜순)]\n' +
+      trendData.books.map(function(b, i) {
+        var line = (i+1) + '. ' + b.book + ' (' + b.date + ')';
+        if (b.wordAch != null) line += ' | 단어 ' + b.wordAch + '%' + (b.avgWord != null ? ' (반평균 ' + b.avgWord + '%)' : '');
+        if (b.rdAch   != null) line += ' | 리딩 ' + b.rdAch   + '%' + (b.avgRd   != null ? ' (반평균 ' + b.avgRd   + '%)' : '');
+        return line;
+      }).join('\n') +
+      '\n\n위 데이터를 분석하여 JSON 형식으로 성장 리포트를 작성하세요.';
+
+    var raw = await _call(prompt, system);
+    try {
+      var cleaned = raw.replace(/```json|```/gi, '').trim();
+      return JSON.parse(cleaned);
+    } catch(e) {
+      return { summary: raw, strengths: [], improvements: [], direction: '', trend: 'stable' };
+    }
+  }
+
+  /* ══ 6. 연결 테스트 ════════════════════════════════════════ */
   async function testConnection() {
     try {
       var r = await _call('"OK"라고만 답해주세요.');
@@ -328,7 +363,7 @@ const GeminiAI = (() => {
 
   return {
     generateComment, generateVariants,
-    proofreadComment, analyzeStyle,
+    proofreadComment, analyzeStyle, analyzeStudentTrend,
     getStyleSamples, addStyleSample, removeStyleSample, clearStyleSamples,
     getPins, addPin, removePin, clearPins,
     setUseGlobalPins, getUseGlobalPins,
