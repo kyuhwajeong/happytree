@@ -2256,7 +2256,7 @@ const StaffApp = (() => {
     _copy, _pdf, _share,
     /* ⚡ 즉시 계산기 */
     _renderQuickCalc,
-    _qAddSlot, _qDelSlot, _qUpdate, _qToggleNight,
+    _qAddSlot, _qDelSlot, _qUpdate, _qToggleType, _qRefreshSlot,
     _qBaseUpdate, _qReset,
     _qCopy, _qShare, _qPrint,
     _qOpenSave, _closeQSave, _doQSave,
