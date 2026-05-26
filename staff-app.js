@@ -534,6 +534,9 @@ const StaffApp = (() => {
       </div>
       <div id="sf-qsave-ov" class="ov hidden" onclick="if(event.target.id==='sf-qsave-ov')StaffApp._closeQSave()">
         <div class="sh" id="sf-qsave-sh" onclick="event.stopPropagation()" style="max-height:70vh;display:flex;flex-direction:column;"></div>
+      </div>
+      <div id="sf-hometab-ov" class="ov hidden" onclick="if(event.target.id==='sf-hometab-ov')StaffApp._closeHomeTabSetting()">
+        <div class="sh" id="sf-hometab-sh" onclick="event.stopPropagation()" style="max-height:60vh;display:flex;flex-direction:column;"></div>
       </div>`;
   }
 
