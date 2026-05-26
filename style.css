@@ -272,6 +272,21 @@ body.dark .bk-inp.filled{color:#4ade80}
 .role-badge.admin{background:rgba(220,38,38,.12);color:var(--red)}
 .role-badge.operator{background:rgba(79,70,229,.12);color:var(--a)}
 .acc-acts{display:flex;gap:5px}
+/* Accounts — 일괄 삭제 */
+.acc-bulk-bar{display:none;align-items:center;gap:8px;padding:8px 12px;background:var(--surf2);border:1px solid var(--bdr);border-radius:var(--rs);margin-bottom:8px;flex-wrap:wrap}
+.acc-bulk-bar.on{display:flex}
+.acc-bulk-cnt{font-size:12px;font-weight:700;color:var(--tx2);flex:1;min-width:80px}
+.acc-bulk-del{padding:7px 16px;border-radius:8px;background:rgba(220,38,38,.1);border:1.5px solid rgba(220,38,38,.3);color:var(--red);font-size:12px;font-weight:800;cursor:pointer;font-family:var(--font);transition:all .15s;white-space:nowrap}
+.acc-bulk-del:active{background:rgba(220,38,38,.22)}
+.acc-bulk-del:disabled{opacity:.45;pointer-events:none}
+.acc-bulk-cancel{padding:7px 14px;border-radius:8px;background:var(--surf2);border:1.5px solid var(--bdr2);color:var(--tx3);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);transition:all .15s;white-space:nowrap}
+.acc-bulk-cancel:active{background:var(--card3)}
+.acc-sel-btn{padding:7px 14px;border-radius:8px;background:var(--card2);border:1.5px solid var(--bdr2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);transition:all .15s;white-space:nowrap}
+.acc-sel-btn.on{background:rgba(220,38,38,.08);border-color:rgba(220,38,38,.3);color:var(--red)}
+.acc-sel-btn:active{transform:scale(.95)}
+.acc-row-ck{display:none;width:17px;height:17px;accent-color:var(--red);cursor:pointer;flex-shrink:0;margin-right:4px}
+.acc-row-ck.on{display:block}
+.acc-row.selected{background:rgba(220,38,38,.04);border-left:3px solid var(--red)}
 
 /* Theme */
 .th-card{background:var(--card);border:1px solid var(--bdr);border-radius:var(--r);overflow:hidden;box-shadow:var(--sh)}

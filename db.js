@@ -167,10 +167,15 @@ const DB = (() => {
     if(FireDB.ready()) await FireDB.set(`${FireDB.P.accounts}/${acc.id}`,acc);
     return acc;
   }
-  async function addAccount(username,pw,role='operator',teacherClasses=[]) {
+  async function addAccount(username,pw,role='operator',teacherClasses=[],allowedMenus=[]) {
     if (C.accounts.find(a=>a.username===username)) return null;
-    const acc=_addAcc(username,pw,role);
-    if(acc&&teacherClasses.length){acc.teacherClasses=teacherClasses;ls(LS.accounts,C.accounts);}
+    const acc = await _addAcc(username,pw,role);
+    if(acc && (teacherClasses.length || allowedMenus.length)){
+      if(teacherClasses.length) acc.teacherClasses = teacherClasses;
+      if(allowedMenus.length)   acc.allowedMenus   = allowedMenus;
+      ls(LS.accounts, C.accounts);
+      if(FireDB.ready()) await FireDB.set(`${FireDB.P.accounts}/${acc.id}`, acc);
+    }
     return acc;
   }
   async function updateAccount(id,data) {

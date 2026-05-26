@@ -1812,7 +1812,18 @@ const BooklibApp = (() => {
   /* ══ MATRIX TAB ══ */
   function _renderMatrixTab(){
     const cnt=document.getElementById('bl-cnt');if(!cnt)return;
-    const allCls=typeof DB!=='undefined'?DB.getActiveClasses():[];
+    let allCls=typeof DB!=='undefined'?DB.getActiveClasses():[];
+    // ★ 강사 계정: 담당 반만 표시 (allowedMenus로 접근됐더라도 지정 반만 접근 가능)
+    if(typeof DB!=='undefined'&&DB.getRole()==='teacher'){
+      const tcIds=DB.getTeacherClasses();
+      if(tcIds.length){
+        const allActive=DB.getActiveClasses();
+        const tcNames=tcIds.map(id=>{const c=allActive.find(cl=>cl.id===id);return c?c.name:id;});
+        allCls=allCls.filter(c=>tcIds.includes(c.id)||tcNames.includes(c.name));
+      } else {
+        allCls=[]; // 담당 반 미지정 → 빈 목록
+      }
+    }
     // ★ 반 미선택 시: 반 미배정이거나 학생만 배정된 교재만 표시 (전체 교재 표시 버그 수정)
     let clsBks;
     if(_st.matrixClassId){
