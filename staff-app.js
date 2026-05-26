@@ -135,6 +135,15 @@ const StaffApp = (() => {
 .sf-templ-add-btn{font-size:10px;padding:4px 8px;border-radius:7px;background:var(--a10);border:1px solid var(--a40);color:var(--a);cursor:pointer;font-family:var(--font);font-weight:700;white-space:nowrap;flex-shrink:0;transition:all .12s}
 .sf-templ-add-btn:active{transform:scale(.93)}
 
+/* ── 달력 하단 액션 버튼 ── */
+.sf-cal-act-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:8px 4px;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;border:1.5px solid var(--bdr);background:var(--card);color:var(--tx2);font-family:var(--font);transition:all .15s;line-height:1}
+.sf-cal-act-btn span{font-size:10px;font-weight:700;letter-spacing:-.2px}
+.sf-cal-act-btn.primary{background:var(--a);color:#fff;border-color:var(--a);box-shadow:0 3px 10px var(--a40)}
+.sf-cal-act-btn.sub{background:var(--surf2);border-color:var(--bdr2);color:var(--tx2)}
+.sf-cal-act-btn.danger{background:#fee2e2;border-color:#ef4444;color:#ef4444}
+.sf-cal-act-btn.close{background:var(--card2);border-color:var(--bdr2);color:var(--tx3)}
+.sf-cal-act-btn:active{transform:scale(.93)}
+
 /* ── 달력 ── */
 .sf-cal-nav{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:var(--surf2);border-bottom:1px solid var(--bdr);flex-shrink:0}
 .sf-cal-arr{width:34px;height:34px;border-radius:9px;border:1px solid var(--bdr2);background:var(--card);color:var(--tx2);font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .12s}
@@ -457,7 +466,7 @@ const StaffApp = (() => {
       <div class="sf-stabs">
         <button class="sf-stab ${_st.subTab==='list'?'on':''}"      onclick="StaffApp.switchTab('list')">👥 직원</button>
         <button class="sf-stab ${_st.subTab==='salary'?'on':''}"    onclick="StaffApp.switchTab('salary')">💰 급여</button>
-        <button class="sf-stab ${_st.subTab==='all'?'on':''}"       onclick="StaffApp.switchTab('all')">📊 전원</button>
+        <button class="sf-stab ${_st.subTab==='all'?'on':''}"       onclick="StaffApp.switchTab('all')">📊 일괄정산</button>
         <button class="sf-stab ${_st.subTab==='quickcalc'?'on':''}" onclick="StaffApp.switchTab('quickcalc')" style="color:${_st.subTab==='quickcalc'?'var(--a)':'#d97706'}">⚡ 즉시계산</button>
       </div>
       <div id="sf-cnt" style="flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;"></div>
@@ -528,7 +537,7 @@ const StaffApp = (() => {
       ? `시급 ${_fmt(s.baseHourlyRate || mw)}원`
       : (s.monthlySalary > 0 ? `월 ${_fmt(s.monthlySalary)}원` : `수업 ${_fmt(s.classRate)}원/h`);
 
-    return `<div class="sf-card">
+    return `<div class="sf-card" onclick="StaffApp.openEdit('${s.id}')" style="cursor:pointer">
       <div class="sf-av ${off ? 'off' : (isPt ? 'pt' : '')}">${_e((s.name || '?')[0])}</div>
       <div class="sf-ci">
         <div class="sf-cn">${_e(s.name)}</div>
@@ -541,9 +550,8 @@ const StaffApp = (() => {
           <span class="sf-bdg">${rateLabel}</span>
         </div>
       </div>
-      <div class="sf-cacts">
+      <div class="sf-cacts" onclick="event.stopPropagation()">
         <button class="ibtn" title="근무 달력"  onclick="StaffApp.openCal('${s.id}')">📅</button>
-        <button class="ibtn" title="편집"       onclick="StaffApp.openEdit('${s.id}')">✏️</button>
         <button class="ibtn red" title="삭제"   onclick="StaffApp.deleteStaff('${s.id}')">🗑</button>
       </div>
     </div>`;
@@ -840,13 +848,18 @@ const StaffApp = (() => {
           }).join('')}
         </div>
       </div>
-      <div style="padding:10px 14px;border-top:1px solid var(--bdr);flex-shrink:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <button class="btn-ok" style="flex:2" onclick="StaffApp.openBatch()">📦 일괄 등록</button>
-        ${hasTempl ? `<button class="btn-ok" style="flex:1;background:var(--surf2);color:var(--a);border:1px solid var(--a40)" onclick="StaffApp._applyTemplModal()">📋 템플릿</button>` : ''}
-        <button class="btn-ok" style="flex:1;background:var(--surf2);color:var(--tx2);border:1px solid var(--bdr2)" onclick="StaffApp._toggleSelectMode()">☑️ 선택삭제</button>
-        <button class="btn-ok" style="flex:1" onclick="StaffApp._calToSalary()">💰 급여</button>
-        <button class="btn-x"  onclick="StaffApp.closeCal()">닫기</button>
-      </div>`;
+      <div style="padding:10px 14px;border-top:1px solid var(--bdr);flex-shrink:0;display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+        <button class="sf-cal-act-btn primary" onclick="StaffApp.openBatch()">📦<br><span>일괄등록</span></button>
+        ${hasTempl
+          ? `<button class="sf-cal-act-btn sub" onclick="StaffApp._applyTemplModal()">📋<br><span>템플릿</span></button>`
+          : `<button class="sf-cal-act-btn sub" onclick="StaffApp._calToSalary()">💰<br><span>급여확인</span></button>`}
+        <button class="sf-cal-act-btn ${_st.selectMode?'danger':'sub'}" onclick="StaffApp._toggleSelectMode()">☑️<br><span>${_st.selectMode?'선택중':'선택삭제'}</span></button>
+        <button class="sf-cal-act-btn close" onclick="StaffApp.closeCal()">✕<br><span>닫기</span></button>
+      </div>
+      ${hasTempl ? `<div style="padding:0 14px 10px;flex-shrink:0;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <button class="sf-cal-act-btn sub" onclick="StaffApp._calToSalary()">💰<br><span>급여확인</span></button>
+        <div></div>
+      </div>` : ''}`;
 
     _bindLongPress();
   }
@@ -1424,103 +1437,291 @@ const StaffApp = (() => {
   }
 
   /* ══════════════════════════════════════════
-   * 전원 급여 일괄 정산 탭
+  /* ══════════════════════════════════════════
+   * 일괄정산 탭
    * ══════════════════════════════════════════ */
+
+  /* ─── 일괄정산 탭 렌더 ─────────────────────────────────────────
+   *  월 선택 → 해당 월 전직원 급여
+   *  월 미선택(0) → 연간 전체 집계 (세무자료용)
+   * ────────────────────────────────────────────────────────────── */
   function _renderAll() {
-    const cnt   = document.getElementById('sf-cnt'); if (!cnt) return;
-    const staff = StaffDB.getActive();
-    const now   = new Date();
+    const cnt = document.getElementById('sf-cnt'); if (!cnt) return;
+    const now = new Date();
     const y = _st.payYear, m = _st.payMonth;
 
     cnt.innerHTML = `
-      <div class="sf-pay-bar">
-        <div class="sf-pay-item"><span class="sf-pay-lbl">📅 연도</span>
-          <select id="sf-all-y" onchange="StaffApp._calcAll()">
-            ${[now.getFullYear()-1,now.getFullYear(),now.getFullYear()+1].map(yr=>`<option value="${yr}" ${y===yr?'selected':''}>${yr}년</option>`).join('')}
+      <div class="sf-pay-bar" style="flex-wrap:wrap;gap:6px">
+        <div class="sf-pay-item" style="min-width:80px"><span class="sf-pay-lbl">📅 연도</span>
+          <select id="sf-all-y" onchange="StaffApp._onAllSel()">
+            ${[now.getFullYear()-1,now.getFullYear(),now.getFullYear()+1]
+              .map(yr=>`<option value="${yr}" ${y===yr?'selected':''}>${yr}년</option>`).join('')}
           </select>
         </div>
-        <div class="sf-pay-item"><span class="sf-pay-lbl">📅 월</span>
-          <select id="sf-all-m" onchange="StaffApp._calcAll()">
-            ${Array.from({length:12},(_,i)=>i+1).map(mo=>`<option value="${mo}" ${m===mo?'selected':''}>${mo}월</option>`).join('')}
+        <div class="sf-pay-item" style="min-width:100px"><span class="sf-pay-lbl">📅 월 (미선택=연간)</span>
+          <select id="sf-all-m" onchange="StaffApp._onAllSel()">
+            <option value="0" ${m===0?'selected':''}>— 연간 전체 —</option>
+            ${Array.from({length:12},(_,i)=>i+1)
+              .map(mo=>`<option value="${mo}" ${m===mo?'selected':''}>${mo}월</option>`).join('')}
           </select>
         </div>
-        <button class="sf-calc-btn" onclick="StaffApp._calcAll()">계산</button>
-        <button class="sf-ab xls" style="flex:none;padding:9px 14px;font-size:12px" onclick="StaffApp._downloadExcel()">📥 엑셀</button>
+        <button class="sf-calc-btn" onclick="StaffApp._calcAll()">📊 집계</button>
+        <button class="sf-ab xls" style="flex:none;padding:9px 14px;font-size:12px"
+          onclick="StaffApp._downloadExcel()">📥 엑셀</button>
       </div>
       <div id="sf-all-body" class="sf-scroll">
-        <div class="sf-empty" style="padding:40px 20px"><div style="font-size:40px;margin-bottom:8px">📊</div>계산 버튼을 눌러 전원 급여를 정산하세요</div>
+        <div class="sf-empty" style="padding:40px 20px">
+          <div style="font-size:40px;margin-bottom:8px">📊</div>
+          연도·월을 선택 후 [집계] 버튼을 누르세요<br>
+          <small style="font-size:12px;opacity:.7">월 미선택 시 <strong>연간 전체 세무자료</strong>로 출력됩니다</small>
+        </div>
       </div>`;
   }
 
-  function _calcAll() {
+  function _onAllSel() {
     _st.payYear  = Number(document.getElementById('sf-all-y')?.value) || new Date().getFullYear();
-    _st.payMonth = Number(document.getElementById('sf-all-m')?.value) || new Date().getMonth() + 1;
-    const staff  = StaffDB.getActive();
-    const body   = document.getElementById('sf-all-body'); if (!body) return;
+    _st.payMonth = Number(document.getElementById('sf-all-m')?.value) || 0;
+  }
 
+  function _calcAll() {
+    _onAllSel();
+    const staff = StaffDB.getActive();
+    const body  = document.getElementById('sf-all-body'); if (!body) return;
     if (!staff.length) { body.innerHTML = '<div class="sf-empty">등록된 직원이 없습니다</div>'; return; }
+    if (_st.payMonth === 0) _renderAnnual(staff, body);
+    else                    _renderMonthly(staff, body);
+  }
 
-    const results = staff.map(s => StaffDB.calcPay(s.id, _st.payYear, _st.payMonth)).filter(Boolean);
+  /* ─── 월별 집계 ─────────────────────────────────────────────── */
+  function _renderMonthly(staff, body) {
+    const y = _st.payYear, m = _st.payMonth;
+    const results    = staff.map(s => StaffDB.calcPay(s.id, y, m)).filter(Boolean);
     const grandTotal = results.reduce((sum, r) => sum + r.totalPay, 0);
+    const acad       = StaffDB.getAcad();
 
     body.innerHTML = `
-      <div style="overflow-x:auto;margin-bottom:12px">
+      <div style="padding:10px 0 4px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
+        <div style="font-size:13px;font-weight:800;color:var(--tx)">${y}년 ${m}월 급여 내역</div>
+        <div style="font-size:11px;color:var(--tx3)">${_e(acad.name)} · 재직 ${staff.length}명</div>
+      </div>
+      <div style="overflow-x:auto;margin-bottom:10px">
         <table class="sf-all-tbl">
           <thead><tr>
-            <th>직원</th><th>형태</th><th>근무일</th><th>총시간</th>
-            <th>기본급</th><th>야간수당</th><th>주휴수당</th><th>세전합계</th><th>비고</th>
+            <th>직원</th><th>형태</th><th>근무일</th><th>수업(h)</th><th>일반(h)</th>
+            <th>기본급</th><th>주휴수당</th><th style="min-width:90px">세전합계</th>
           </tr></thead>
           <tbody>
             ${results.map(r => {
-              const s   = r.staff;
-              const isPt = r.type === 'parttime';
+              const s = r.staff, isPt = r.type === 'parttime';
               const days = Object.keys(r.byDay).length;
-              const totalHrs = r.classHrs + r.generalHrs;
-              const nightPay  = isPt ? (r.nightPay || 0) : 0;
-              const holPay    = isPt ? (r.totalHolidayPay || 0) : 0;
-              const holWks    = isPt ? r.weeklyStats?.filter(w=>w.qualified).length : 0;
-
+              const holPay = isPt ? (r.totalHolidayPay||0) : 0;
+              const holWks = isPt ? (r.weeklyStats?.filter(w=>w.qualified).length||0) : 0;
               return `<tr>
                 <td style="font-weight:700">${_e(s.name)}</td>
                 <td><span class="sf-bdg ${isPt?'pt':'ft'}">${isPt?'알바':'정직원'}</span></td>
-                <td style="text-align:center">${days}일</td>
-                <td style="text-align:center">${_fmtHrs(totalHrs)}h</td>
+                <td style="text-align:center">${days}</td>
+                <td style="text-align:center">${_fmtHrs(r.classHrs)}h</td>
+                <td style="text-align:center">${_fmtHrs(r.generalHrs)}h</td>
                 <td style="text-align:right">${_fmt(isPt?(r.basePay||0):r.totalPay)}원</td>
-                <td style="text-align:right">${nightPay > 0 ? `<span class="sf-night-tag">+${_fmt(nightPay)}원</span>` : '-'}</td>
-                <td style="text-align:right">${holPay > 0 ? `<span class="sf-holiday-tag">+${_fmt(holPay)}원 (${holWks}주)</span>` : '-'}</td>
-                <td style="text-align:right;font-weight:700;color:var(--a)">${_fmt(r.totalPay)}원</td>
-                <td style="font-size:11px;color:var(--tx3)">${isPt?`시급${_fmt(r.hourlyRate)}원`:(s.monthlySalary>0?'고정월급':'시급합산')}</td>
+                <td style="text-align:right">${holPay>0?`<span class="sf-holiday-tag">+${_fmt(holPay)}원 (${holWks}주)</span>`:'-'}</td>
+                <td style="text-align:right;font-weight:800;color:var(--a)">${_fmt(r.totalPay)}원</td>
               </tr>`;
             }).join('')}
           </tbody>
           <tfoot><tr class="sf-all-tot">
-            <td colspan="7" style="text-align:right">🏫 ${_st.payYear}년 ${_st.payMonth}월 전체 급여 합계</td>
+            <td colspan="7" style="text-align:right">🏫 ${y}년 ${m}월 총 지급액</td>
             <td style="text-align:right">${_fmt(grandTotal)}원</td>
-            <td></td>
           </tr></tfoot>
         </table>
       </div>
-      <div style="font-size:11px;color:var(--tx3);text-align:center;padding:8px">
-        * 세전 기준입니다. 4대보험·세금 공제 전 금액입니다.
+      <div style="font-size:11px;color:var(--tx3);text-align:center;padding:4px 0 10px">
+        ※ 세전 기준 · 4대보험·소득세 공제 전
       </div>`;
   }
 
-  /* ── Excel 다운로드 ── */
+  /* ─── 연간 집계 (세무자료용) ─────────────────────────────────── */
+  function _renderAnnual(staff, body) {
+    const y    = _st.payYear;
+    const acad = StaffDB.getAcad();
+    const MONTHS = Array.from({length:12}, (_, i) => i + 1);
+
+    // 직원별 × 월별 급여 계산
+    const matrix = staff.map(s => {
+      const byMonth = MONTHS.map(m => { const r = StaffDB.calcPay(s.id, y, m); return r ? r.totalPay : 0; });
+      return { s, byMonth, annual: byMonth.reduce((a, b) => a + b, 0) };
+    });
+    const monthTotals = MONTHS.map((_, i) => matrix.reduce((sum, row) => sum + row.byMonth[i], 0));
+    const grandTotal  = matrix.reduce((sum, row) => sum + row.annual, 0);
+
+    const ftStaff  = matrix.filter(r => r.s.employType !== 'parttime');
+    const ptStaff  = matrix.filter(r => r.s.employType === 'parttime');
+    const ftAnnual = ftStaff.reduce((s, r) => s + r.annual, 0);
+    const ptAnnual = ptStaff.reduce((s, r) => s + r.annual, 0);
+
+    // 세액 추정 함수
+    const _estIT = a => a<=14000000?Math.round(a*.006):a<=30000000?Math.round(84000+(a-14000000)*.015):a<=45000000?Math.round(324000+(a-30000000)*.024):Math.round(684000+(a-45000000)*.035);
+    const _est33 = a => Math.round(a * 0.033);
+
+    body.innerHTML = `
+      <!-- 연간 요약 카드 2개 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <div style="background:linear-gradient(135deg,var(--a10),rgba(37,99,235,.04));border:1.5px solid var(--a40);border-radius:12px;padding:12px">
+          <div style="font-size:10px;font-weight:800;color:var(--a);letter-spacing:.8px;margin-bottom:6px">📊 ${y}년 연간 총 급여</div>
+          <div style="font-size:20px;font-weight:900;color:var(--a);line-height:1.1">${_fmt(grandTotal)}<small style="font-size:11px">원</small></div>
+          <div style="font-size:10px;color:var(--tx3);margin-top:4px">전 직원 세전 합계</div>
+        </div>
+        <div style="background:linear-gradient(135deg,rgba(5,150,105,.08),rgba(5,150,105,.02));border:1.5px solid rgba(5,150,105,.3);border-radius:12px;padding:12px">
+          <div style="font-size:10px;font-weight:800;color:var(--green);letter-spacing:.8px;margin-bottom:6px">👥 인원 구성</div>
+          <div style="font-size:12px;font-weight:800;color:var(--tx)">정직원 ${ftStaff.length}명 · 알바 ${ptStaff.length}명</div>
+          <div style="font-size:10px;color:var(--tx3);margin-top:4px">🏢 ${_fmt(ftAnnual)}원</div>
+          <div style="font-size:10px;color:var(--tx3)">⏱ ${_fmt(ptAnnual)}원</div>
+        </div>
+      </div>
+
+      <!-- 세무 참고 카드 -->
+      <div style="background:var(--card);border:1px solid var(--bdr);border-radius:12px;padding:12px;margin-bottom:12px;box-shadow:var(--sh)">
+        <div style="font-size:10px;font-weight:800;color:#d97706;letter-spacing:.8px;margin-bottom:10px">
+          🧾 세무 참고 추정 <small style="font-size:9px;font-weight:400;color:var(--tx3)">실제 신고는 세무사 확인 필수</small>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div style="padding:8px;background:var(--surf2);border-radius:8px">
+            <div style="font-size:10px;font-weight:700;color:var(--tx3);margin-bottom:6px">🏢 정직원 근로소득세 (추정)</div>
+            ${ftStaff.length > 0
+              ? ftStaff.map(r=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid var(--bdr)">
+                  <span style="font-weight:700">${_e(r.s.name)}</span>
+                  <span style="color:#d97706">~${_fmt(_estIT(r.annual))}원</span>
+                </div>`).join('')
+              : '<div style="font-size:11px;color:var(--tx3)">해당 없음</div>'}
+          </div>
+          <div style="padding:8px;background:var(--surf2);border-radius:8px">
+            <div style="font-size:10px;font-weight:700;color:var(--tx3);margin-bottom:6px">⏱ 알바 3.3% 원천세 (추정)</div>
+            ${ptStaff.length > 0
+              ? ptStaff.map(r=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid var(--bdr)">
+                  <span style="font-weight:700">${_e(r.s.name)}</span>
+                  <span style="color:#7c3aed">~${_fmt(_est33(r.annual))}원</span>
+                </div>`).join('')
+              : '<div style="font-size:11px;color:var(--tx3)">해당 없음</div>'}
+          </div>
+        </div>
+        <div style="padding:8px 10px;background:rgba(245,158,11,.07);border-radius:8px;border:1px solid rgba(245,158,11,.25);font-size:10px;color:#92400e;line-height:1.8">
+          💡 <strong>세무 제출 체크리스트</strong><br>
+          ✅ 정직원 — 근로소득 지급명세서 (익년 3월 10일 제출)<br>
+          ✅ 알바 — 일용/사업소득 지급명세서 (지급월 다음달 말일)<br>
+          ✅ 월 60만원 이하 일용직 — 비과세 해당 여부 검토<br>
+          ✅ 주 15시간 이상 알바 — 4대보험 가입 의무
+        </div>
+      </div>
+
+      <!-- 월별 바 차트 -->
+      <div style="font-size:11px;font-weight:800;color:var(--tx3);letter-spacing:.8px;margin-bottom:6px">📈 ${y}년 월별 총 지급액 추이</div>
+      <div style="background:var(--card);border:1px solid var(--bdr);border-radius:12px;padding:12px;margin-bottom:12px">
+        ${_annualBarChart(monthTotals)}
+      </div>
+
+      <!-- 직원별 월별 매트릭스 -->
+      <div style="font-size:11px;font-weight:800;color:var(--tx3);letter-spacing:.8px;margin-bottom:6px">${y}년 직원별 월별 급여 현황 (단위: 원)</div>
+      <div style="overflow-x:auto;margin-bottom:10px">
+        <table class="sf-all-tbl" style="min-width:660px">
+          <thead><tr>
+            <th>직원</th><th>형태</th>
+            ${MONTHS.map(m=>`<th style="text-align:right">${m}월</th>`).join('')}
+            <th style="text-align:right">연간합계</th>
+          </tr></thead>
+          <tbody>
+            ${matrix.map(({s,byMonth,annual})=>`<tr>
+              <td style="font-weight:700">${_e(s.name)}</td>
+              <td><span class="sf-bdg ${s.employType==='parttime'?'pt':'ft'}">${s.employType==='parttime'?'알바':'정직원'}</span></td>
+              ${byMonth.map(p=>`<td style="text-align:right;font-size:11px">${p>0?_fmt(p):'-'}</td>`).join('')}
+              <td style="text-align:right;font-weight:800;color:var(--a)">${_fmt(annual)}</td>
+            </tr>`).join('')}
+          </tbody>
+          <tfoot><tr class="sf-all-tot">
+            <td colspan="2" style="text-align:right">월 합계</td>
+            ${monthTotals.map(t=>`<td style="text-align:right">${t>0?_fmt(t):'-'}</td>`).join('')}
+            <td style="text-align:right">${_fmt(grandTotal)}</td>
+          </tr></tfoot>
+        </table>
+      </div>
+      <div style="font-size:11px;color:var(--tx3);text-align:center;padding:4px 0 16px">
+        ※ 세전 기준 · 추정 세액은 단순 계산이며 실제 신고는 세무사 확인 필수
+      </div>`;
+  }
+
+  /* SVG 바 차트 */
+  function _annualBarChart(monthTotals) {
+    const max    = Math.max(...monthTotals, 1);
+    const LABELS = ['1','2','3','4','5','6','7','8','9','10','11','12'];
+    const COLORS = ['#3b82f6','#06b6d4','#10b981','#84cc16','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1','#22c55e'];
+    const bW = 16, gap = 5, padL = 4, cH = 72;
+    const tW = (bW + gap) * 12 - gap + padL * 2;
+    const bars = monthTotals.map((v, i) => {
+      const bh = v > 0 ? Math.max(4, Math.round(v / max * cH)) : 0;
+      const x  = padL + i * (bW + gap), y = cH - bh;
+      return `<g>
+        <rect x="${x}" y="${y}" width="${bW}" height="${bh}" rx="3" fill="${COLORS[i]}" opacity=".85"/>
+        ${v>0?`<text x="${x+bW/2}" y="${y-3}" text-anchor="middle" font-size="7" fill="var(--tx3)">${Math.round(v/10000)}만</text>`:''}
+        <text x="${x+bW/2}" y="${cH+11}" text-anchor="middle" font-size="8" fill="var(--tx3)">${LABELS[i]}</text>
+      </g>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${tW} ${cH+16}" style="width:100%;height:auto;display:block">
+      <line x1="${padL}" y1="0" x2="${padL}" y2="${cH}" stroke="var(--bdr2)" stroke-width="1"/>
+      <line x1="${padL}" y1="${cH}" x2="${tW-padL}" y2="${cH}" stroke="var(--bdr2)" stroke-width="1"/>
+      ${bars}
+    </svg>`;
+  }
+
+  /* ── Excel 다운로드 (월별/연간 분기) ── */
   function _downloadExcel() {
-    if (typeof XLSX === 'undefined') {
-      _toast('⚠️ SheetJS 라이브러리 로드 실패'); return;
+    if (typeof XLSX === 'undefined') { _toast('⚠️ SheetJS 라이브러리 로드 실패'); return; }
+    _onAllSel();
+    const acad = StaffDB.getAcad();
+    const wb   = XLSX.utils.book_new();
+
+    if (_st.payMonth === 0) {
+      /* 연간 엑셀 — 시트1: 월별 매트릭스, 시트2: 세무 참고 */
+      const staff  = StaffDB.getActive();
+      const MONTHS = Array.from({length:12}, (_, i) => i + 1);
+      const header = ['직원명','고용형태', ...MONTHS.map(m=>m+'월'), '연간합계'];
+      const rows   = [header];
+      const monthSums = new Array(12).fill(0);
+      let grandTotal = 0;
+
+      staff.forEach(s => {
+        const byMonth = MONTHS.map(m => { const r=StaffDB.calcPay(s.id,_st.payYear,m); return r?r.totalPay:0; });
+        const annual  = byMonth.reduce((a,b)=>a+b,0);
+        byMonth.forEach((v,i) => monthSums[i]+=v);
+        grandTotal += annual;
+        rows.push([s.name, s.employType==='parttime'?'알바':'정직원', ...byMonth, annual]);
+      });
+      rows.push(['합계', '', ...monthSums, grandTotal]);
+
+      const ws1 = XLSX.utils.aoa_to_sheet(rows);
+      ws1['!cols'] = [12,8,...new Array(12).fill(10),12].map(w=>({wpx:w*6}));
+      XLSX.utils.book_append_sheet(wb, ws1, `${_st.payYear}년 월별현황`);
+
+      /* 시트2: 세무 참고 */
+      const taxRows = [
+        ['직원명','고용형태','연간총급여(원)','추정세액(원)','비고'],
+        ...staff.map((s,idx) => {
+          const annual = rows[idx+1]?.[rows[idx+1].length-1] || 0;
+          const isPt   = s.employType==='parttime';
+          const tax    = isPt ? Math.round(annual*0.033)
+            : (annual<=14000000?Math.round(annual*.006):Math.round(84000+(annual-14000000)*.015));
+          return [s.name, isPt?'알바':'정직원', annual, tax, isPt?'3.3% 원천세(추정)':'근로소득간이세액(추정)'];
+        }),
+      ];
+      const ws2 = XLSX.utils.aoa_to_sheet(taxRows);
+      ws2['!cols'] = [12,8,14,12,20].map(w=>({wpx:w*6}));
+      XLSX.utils.book_append_sheet(wb, ws2, `${_st.payYear}년 세무참고`);
+      XLSX.writeFile(wb, `${acad.name}_${_st.payYear}년_연간급여현황.xlsx`);
+
+    } else {
+      const rows = StaffDB.buildExcelData(_st.payYear, _st.payMonth);
+      const ws   = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [16,8,8,8,8,8,8,12,10,10,12,24,14].map(w=>({wpx:w*6}));
+      XLSX.utils.book_append_sheet(wb, ws, `${_st.payYear}년${_st.payMonth}월 급여`);
+      XLSX.writeFile(wb, `${acad.name}_${_st.payYear}년${_st.payMonth}월_급여명세.xlsx`);
     }
-    _st.payYear  = Number(document.getElementById('sf-all-y')?.value) || _st.payYear;
-    _st.payMonth = Number(document.getElementById('sf-all-m')?.value) || _st.payMonth;
-
-    const rows  = StaffDB.buildExcelData(_st.payYear, _st.payMonth);
-    const ws    = XLSX.utils.aoa_to_sheet(rows);
-    const wb    = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `${_st.payYear}년${_st.payMonth}월 급여`);
-
-    // 열 너비
-    ws['!cols'] = [16,8,8,8,8,8,8,12,10,10,12,24,14].map(w => ({ wpx: w * 6 }));
-    XLSX.writeFile(wb, `${StaffDB.getAcad().name}_${_st.payYear}년${_st.payMonth}월_급여명세.xlsx`);
     _toast('📥 엑셀 다운로드 완료', 'success');
   }
 
@@ -2252,7 +2453,7 @@ const StaffApp = (() => {
     openWork, closeWork, _wtype, _chrs, _manualHrs, _addEntry, _delEntry,
     openTemplAdd, closeTemplAdd, _taWtype, _taHrs, _addTemplEntry, _templDel,
     _onSel, _calcAndRender, _saveAcad,
-    _calcAll, _downloadExcel,
+    _onAllSel, _calcAll, _renderMonthly, _renderAnnual, _annualBarChart, _downloadExcel,
     _copy, _pdf, _share,
     /* ⚡ 즉시 계산기 */
     _renderQuickCalc,
