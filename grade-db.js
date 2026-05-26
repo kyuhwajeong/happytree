@@ -275,6 +275,34 @@ const GradeDB = (() => {
     return result;
   }
 
+  /**
+   * 특정 학생의 전체 성적 이력 조회 (모든 반·교재 조합)
+   * 트렌드 차트용 — 반/교재 미선택 상태에서 학생 선택 시 사용
+   * @param {string} studentId  StudentDB의 내부 id
+   * @returns {{ classId:string, bookId:string, records:object[] }[]}
+   */
+  function getStudentTrend(studentId) {
+    const result = [];
+    for (const cid of Object.keys(_grades)) {
+      const stuData = _grades[cid]?.[studentId];
+      if (!stuData) continue;
+      for (const bid of Object.keys(stuData)) {
+        const recs = stuData[bid] || [];
+        if (recs.length > 0) {
+          // 날짜 오름차순 정렬 후 반환
+          result.push({
+            classId: cid,
+            bookId:  bid,
+            records: [...recs].sort((a, b) =>
+              (a.createdAt || '').localeCompare(b.createdAt || '')
+            ),
+          });
+        }
+      }
+    }
+    return result;
+  }
+
   return {
     init, on,
     defaultConfig, getReportConfig, saveReportConfig, getActiveReviews,
@@ -282,5 +310,6 @@ const GradeDB = (() => {
     deleteAllForBook,
     calcScore, calcAchievement, getClassSummary,
     getAllTeacherComments,
+    getStudentTrend,
   };
 })();

@@ -934,7 +934,31 @@ to{opacity:1;transform:none}}
 .gbk-dna-popup-close{font-size:15px;cursor:pointer;color:var(--tx3);padding:0 3px;line-height:1;}
 .gbk-dna-popup-close:hover{color:var(--tx);}
 .gbk-dna-popup-body{font-size:12px;color:var(--tx2);line-height:1.8;white-space:pre-wrap;}
-.gbk-dna-popup-empty{font-size:11px;color:var(--tx3);font-style:italic;}`;
+.gbk-dna-popup-empty{font-size:11px;color:var(--tx3);font-style:italic;}
+
+/* ── 학생 검색 패널 (반/교재 미선택 모드) ── */
+.gr-stu-panel.wide{width:162px!important;}
+.gr-stu-search-wrap{padding:7px 6px 6px;border-bottom:1px solid var(--bdr);position:sticky;top:0;background:var(--surf);z-index:2;}
+.gr-stu-search{width:100%;padding:5px 8px;border-radius:8px;background:var(--surf2);border:1.5px solid var(--bdr);font-size:12px;color:var(--tx);outline:none;font-family:var(--font);box-sizing:border-box;}
+.gr-stu-search:focus{border-color:var(--a);}
+.gr-stu-group{padding:4px 8px 3px;font-size:10px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--tx3);background:var(--surf2);border-bottom:1px solid var(--bdr);display:flex;justify-content:space-between;align-items:center;}
+.gr-stu-group-cnt{font-size:9px;font-weight:700;background:var(--a20);color:var(--a);border-radius:8px;padding:1px 5px;}
+
+/* ── 트렌드 뷰 ── */
+.gr-trend-wrap{display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:18px 20px;}
+.gr-trend-header{margin-bottom:14px;}
+.gr-trend-stu-info{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
+.gr-trend-stu-name{font-size:20px;font-weight:800;color:var(--tx);}
+.gr-trend-stu-nick{font-size:13px;color:var(--tx3);}
+.gr-trend-stu-cls{font-size:11px;padding:2px 10px;border-radius:12px;background:var(--a20);color:var(--a);font-weight:700;}
+.gr-trend-tabs{display:flex;flex-wrap:wrap;gap:6px;}
+.gr-trend-tab{padding:5px 13px;border-radius:20px;font-size:12px;font-weight:600;border:1.5px solid var(--bdr2);background:var(--surf2);color:var(--tx2);cursor:pointer;font-family:var(--font);transition:all .15s;}
+.gr-trend-tab.on{background:var(--a);color:#fff;border-color:transparent;}
+.gr-trend-chart-area{flex:1;min-height:220px;max-height:360px;position:relative;margin-top:10px;}
+#gr-trend-canvas{width:100%;height:100%;display:block;}
+.gr-trend-legend{display:flex;gap:16px;padding:8px 4px 0;}
+.gr-trend-leg{font-size:12px;font-weight:500;display:flex;align-items:center;gap:4px;}
+.gr-trend-no-data{text-align:center;padding:40px 20px;color:var(--tx3);font-size:13px;}`;
     document.head.appendChild(s);
   }
 
@@ -1100,8 +1124,19 @@ to{opacity:1;transform:none}}
   }
 
   /* ── 학생 패널 ── */
+  let _stuSearch = ''; // 검색어 (반/교재 미선택 모드 전용)
+
   function _renderStudents() {
     const panel = document.getElementById('gr-stu-panel'); if (!panel) return;
+
+    // ★ 반/교재 모두 미선택: 전체 학생 검색+그룹핑 모드
+    if (!_st.classId && !_st.bookId) {
+      panel.classList.add('wide');
+      _renderStudentSearch(panel);
+      return;
+    }
+
+    panel.classList.remove('wide');
     const students = _getSorted();
     if (!students.length) { panel.innerHTML = ''; return; }
     panel.innerHTML = students.map((s, i) => {
@@ -1121,6 +1156,60 @@ to{opacity:1;transform:none}}
         <div class="gr-stu-dot" style="background:${dotClr};opacity:${achW!=null?1:.28}"></div>
       </div>`;
     }).join('');
+  }
+
+  /* ── 전체 학생 검색+그룹핑 패널 (반/교재 미선택 전용) ── */
+  function _renderStudentSearch(panel) {
+    const allStudents = typeof StudentDB !== 'undefined'
+      ? StudentDB.getFiltered({ status: '재원' }) : [];
+    const classes = typeof DB !== 'undefined' ? DB.getActiveClasses() : [];
+
+    const q = _stuSearch.trim().toLowerCase();
+    const filtered = q
+      ? allStudents.filter(s =>
+          (s.name     || '').toLowerCase().includes(q) ||
+          (s.nickname || '').toLowerCase().includes(q)
+        )
+      : allStudents;
+
+    // 반별 그룹핑 (반 순서 유지)
+    const rows = [];
+    for (const cls of classes) {
+      const inCls = filtered.filter(s => s.classCode === cls.name);
+      if (!inCls.length) continue;
+      rows.push(`<div class="gr-stu-group">${_e(cls.name)}<span class="gr-stu-group-cnt">${inCls.length}</span></div>`);
+      for (const s of inCls) {
+        rows.push(`<div class="gr-stu-item ${_st.studentId===s.id?'on':''}"
+          onclick="GradeApp._onStu('${s.id}',0)">
+          <div class="gr-stu-emoji">${_emoji(s, null)}</div>
+          <div class="gr-stu-name">${_e(s.name)}</div>
+          ${s.nickname ? `<div class="gr-stu-nick">(${_e(s.nickname)})</div>` : ''}
+        </div>`);
+      }
+    }
+
+    const prevScroll = panel.scrollTop;
+    panel.innerHTML = `
+      <div class="gr-stu-search-wrap">
+        <input class="gr-stu-search" placeholder="🔍 이름/닉네임" value="${_e(_stuSearch)}"
+          oninput="GradeApp._onStuSearch(this.value)" />
+      </div>
+      ${rows.join('') || '<div style="padding:12px 8px;font-size:11px;color:var(--tx3);text-align:center">검색 결과 없음</div>'}`;
+
+    // 검색 중이면 포커스·스크롤 위치 복원
+    if (_stuSearch) {
+      const inp = panel.querySelector('.gr-stu-search');
+      if (inp && document.activeElement !== inp) {
+        inp.focus();
+        inp.setSelectionRange(inp.value.length, inp.value.length);
+      }
+      panel.scrollTop = prevScroll;
+    }
+  }
+
+  function _onStuSearch(val) {
+    _stuSearch = val;
+    _renderStudentSearch(document.getElementById('gr-stu-panel'));
   }
 
   function _emoji(s, achW) {
@@ -1154,6 +1243,210 @@ to{opacity:1;transform:none}}
     });
   }
 
+  /* ════════════════════════════════════
+   * 월별 성적 트렌드 차트 (반/교재 미선택 + 학생 선택 상태)
+   * ════════════════════════════════════ */
+  function _renderTrend(cnt, studentId) {
+    const stu = typeof StudentDB !== 'undefined'
+      ? StudentDB.getAll().find(s => s.id === studentId) : null;
+    if (!stu) {
+      cnt.innerHTML = '<div class="gr-empty"><div class="gr-empty-ico">❓</div>학생 정보 없음</div>';
+      return;
+    }
+
+    const trend = typeof GradeDB !== 'undefined' ? GradeDB.getStudentTrend(studentId) : [];
+    const clsName = stu.classCode || '';
+
+    if (!trend.length) {
+      cnt.innerHTML = `
+        <div class="gr-trend-wrap">
+          <div class="gr-trend-header">
+            <div class="gr-trend-stu-info">
+              <span class="gr-trend-stu-name">${_e(stu.name)}</span>
+              ${stu.nickname ? `<span class="gr-trend-stu-nick">(${_e(stu.nickname)})</span>` : ''}
+              ${clsName ? `<span class="gr-trend-stu-cls">${_e(clsName)}</span>` : ''}
+            </div>
+          </div>
+          <div class="gr-trend-no-data">📊 성적 데이터가 없습니다</div>
+        </div>`;
+      return;
+    }
+
+    // 교재 목록 (이름 순)
+    const bookIds = [...new Set(trend.map(t => t.bookId))];
+    if (!_st._trendBookId || !bookIds.includes(_st._trendBookId)) {
+      _st._trendBookId = bookIds[0];
+    }
+    const selBid = _st._trendBookId;
+
+    // 선택 교재 레코드 병합 (동일 교재가 여러 classId에 있을 수 있음)
+    const selRecs = trend
+      .filter(t => t.bookId === selBid)
+      .flatMap(t => t.records)
+      .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+
+    const config  = GradeDB.getReportConfig(selBid);
+    const actRevs = GradeDB.getActiveReviews(selBid);
+    const hasWord = (config?.word?.totalQ || 0) > 0;
+    const hasRd   = config?.reading?.enabled && actRevs.length > 0;
+
+    // 포인트 생성 (날짜, 단어 성취율, 리딩 성취율)
+    const pts = selRecs.map(r => {
+      const date    = (r.createdAt || '').slice(0, 10);
+      const wordAch = hasWord && (r.word?.totalQ || 0) > 0
+        ? Math.round(r.word.pass / r.word.totalQ * 100) : null;
+      const rdAch   = hasRd ? _calcRdN(r.reading || {}, actRevs) : null;
+      return { date, wordAch, rdAch };
+    }).filter(p => p.date && (p.wordAch != null || p.rdAch != null));
+
+    // 탭 이름 조회
+    const bookName = b => typeof BookLibDB !== 'undefined'
+      ? (BookLibDB.getBookById(b)?.name || b) : b;
+
+    cnt.innerHTML = `
+      <div class="gr-trend-wrap">
+        <div class="gr-trend-header">
+          <div class="gr-trend-stu-info">
+            <span class="gr-trend-stu-name">${_e(stu.name)}</span>
+            ${stu.nickname ? `<span class="gr-trend-stu-nick">(${_e(stu.nickname)})</span>` : ''}
+            ${clsName ? `<span class="gr-trend-stu-cls">${_e(clsName)}</span>` : ''}
+          </div>
+          <div class="gr-trend-tabs">
+            ${bookIds.map(bid =>
+              `<button class="gr-trend-tab ${bid===selBid?'on':''}"
+                onclick="GradeApp._onTrendBook('${bid}')">${_e(bookName(bid))}</button>`
+            ).join('')}
+          </div>
+        </div>
+        ${pts.length === 0
+          ? `<div class="gr-trend-no-data">📊 <strong>${_e(bookName(selBid))}</strong> 성적 데이터가 없습니다</div>`
+          : `<div class="gr-trend-chart-area">
+               <canvas id="gr-trend-canvas"></canvas>
+             </div>
+             <div class="gr-trend-legend">
+               ${hasWord ? '<span class="gr-trend-leg"><span style="color:#3b82f6;font-size:14px">●</span> 단어 성취율</span>' : ''}
+               ${hasRd   ? '<span class="gr-trend-leg"><span style="color:#8b5cf6;font-size:14px">●</span> 리딩 성취율</span>' : ''}
+             </div>`
+        }
+      </div>`;
+
+    if (pts.length > 0) {
+      requestAnimationFrame(() => {
+        const canvas = document.getElementById('gr-trend-canvas');
+        if (canvas) _drawTrendCanvas(canvas, pts, hasWord, hasRd);
+      });
+    }
+  }
+
+  function _onTrendBook(bookId) {
+    _st._trendBookId = bookId;
+    const cnt = document.getElementById('gr-content');
+    if (cnt && _st.studentId) _renderTrend(cnt, _st.studentId);
+  }
+
+  function _drawTrendCanvas(canvas, pts, hasWord, hasRd) {
+    const dpr = window.devicePixelRatio || 1;
+    const W   = canvas.offsetWidth  || 520;
+    const H   = canvas.offsetHeight || 260;
+    canvas.width  = W * dpr;
+    canvas.height = H * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    const PAD = { top: 28, right: 24, bottom: 44, left: 46 };
+    const cW  = W - PAD.left - PAD.right;
+    const cH  = H - PAD.top  - PAD.bottom;
+    const n   = pts.length;
+
+    // 테마 색상
+    const isDark   = document.documentElement.getAttribute('data-theme') === 'dark'
+                  || window.matchMedia?.('(prefers-color-scheme:dark)').matches;
+    const clrGrid  = isDark ? 'rgba(255,255,255,.07)' : 'rgba(0,0,0,.07)';
+    const clrLabel = isDark ? '#94a3b8' : '#64748b';
+    const FONT     = `10px 'Noto Sans KR', sans-serif`;
+
+    const xOf = i => PAD.left + (n < 2 ? cW / 2 : i * cW / (n - 1));
+    const yOf = v => PAD.top  + cH - (v / 100) * cH;
+
+    // 그리드 + Y축
+    ctx.font = FONT;
+    [0, 25, 50, 75, 100].forEach(v => {
+      const y = yOf(v);
+      ctx.strokeStyle = clrGrid;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(W - PAD.right, y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = clrLabel;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(v + '%', PAD.left - 6, y);
+    });
+
+    // X축 날짜 레이블 (최대 8개)
+    const step = Math.max(1, Math.ceil(n / 8));
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    pts.forEach((p, i) => {
+      if (i % step !== 0 && i !== n - 1) return;
+      ctx.fillStyle = clrLabel;
+      ctx.fillText(p.date.slice(5), xOf(i), H - PAD.bottom + 6); // MM-DD
+    });
+
+    // 라인+점 그리기 헬퍼
+    function drawLine(getter, color) {
+      const vpts = pts.map((p, i) => ({ i, v: getter(p) })).filter(p => p.v != null);
+      if (!vpts.length) return;
+
+      // 영역 채우기 (반투명)
+      ctx.beginPath();
+      vpts.forEach(({ i, v }, pi) => {
+        pi === 0 ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v));
+      });
+      ctx.lineTo(xOf(vpts[vpts.length-1].i), PAD.top + cH);
+      ctx.lineTo(xOf(vpts[0].i), PAD.top + cH);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + cH);
+      grad.addColorStop(0, color + '28');
+      grad.addColorStop(1, color + '04');
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // 라인
+      ctx.strokeStyle = color;
+      ctx.lineWidth   = 2.5;
+      ctx.lineJoin    = 'round';
+      ctx.lineCap     = 'round';
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      vpts.forEach(({ i, v }, pi) => {
+        pi === 0 ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v));
+      });
+      ctx.stroke();
+
+      // 점 + 값 레이블
+      vpts.forEach(({ i, v }) => {
+        const x = xOf(i), y = yOf(v);
+        ctx.beginPath();
+        ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.fillStyle  = color;
+        ctx.font       = `bold 10px 'Noto Sans KR', sans-serif`;
+        ctx.textAlign  = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(v + '%', x, y - 8);
+      });
+    }
+
+    if (hasWord) drawLine(p => p.wordAch, '#3b82f6');
+    if (hasRd)   drawLine(p => p.rdAch,   '#8b5cf6');
+  }
+
   function _toggleSort(col) {
     if (_st.sortCol === col) _st.sortDesc = !_st.sortDesc;
     else { _st.sortCol = col; _st.sortDesc = true; }
@@ -1170,7 +1463,13 @@ to{opacity:1;transform:none}}
       return;
     }
     if (!_st.bookId) {
-      cnt.innerHTML = `<div class="gr-empty"><div class="gr-empty-ico">📝</div>반과 교재를 선택하세요</div>`; return;
+      // ★ 반/교재 미선택 상태
+      if (_st.studentId) {
+        _renderTrend(cnt, _st.studentId);
+      } else {
+        cnt.innerHTML = `<div class="gr-empty"><div class="gr-empty-ico">👈</div><div style="font-size:13px;color:var(--tx3);margin-top:6px">좌측에서 학생을 선택하세요</div></div>`;
+      }
+      return;
     }
     const sts = _getSorted();
     if (!sts.length) { cnt.innerHTML = `<div class="gr-empty"><div class="gr-empty-ico">👨‍🎓</div>재원 학생이 없습니다</div>`; return; }
@@ -3947,6 +4246,7 @@ to{opacity:1;transform:none}}
     }
     _st.classId=clsId||null; _st.bookId=null; _st.studentId=null;
     _st.data={}; _st.dirty.clear(); _st.sortCol=null;
+    _stuSearch = ''; // ★ 반 선택 시 검색어 초기화
     _fillBooks();
     _renderStudents(); _renderContent(); _updateRptBtn(); _updateSub();
     _refreshToolbar();
@@ -3974,6 +4274,13 @@ to{opacity:1;transform:none}}
   function _onStu(sid, idx) {
     _st.studentId=sid||null; _st.slideIdx=idx??0;
     _renderStudents();
+
+    // ★ 반/교재 미선택 상태: 트렌드 모드로 처리
+    if (!_st.classId && !_st.bookId) {
+      _renderContent();
+      return;
+    }
+
     if (_st.viewMode==='excel') {
       document.querySelectorAll('.gr-sheet tbody tr').forEach(tr=>tr.classList.toggle('sel-row',tr.id===`gr-row-${sid}`));
       document.querySelectorAll('.gs-fix').forEach(td=>{const m=td.getAttribute('onclick')?.match(/'([^']+)'/);td.classList.toggle('sel',m?.[1]===sid);});
@@ -5110,13 +5417,13 @@ to{opacity:1;transform:none}}
   }
 
   function _cpLd(pop, on)      { pop.querySelectorAll('[data-cpa]').forEach(function(b){ b.disabled = on; }); }
-
+  
   function _cpSt(el, cls, msg) {
     if (!el) return;
     el.className = 'gr-cp-status-line ' + cls;
     el.textContent = msg;
   }
-
+  
   function _cpMsg(err) {
     var m = err && err.message ? err.message : String(err);
     if (m.indexOf('403') >= 0) return 'API 키 오류 또는 할당량 초과';
@@ -5682,6 +5989,7 @@ to{opacity:1;transform:none}}
   return {
     init, render,
     _onCls, _onBk, _openEvalFromGrade, _showEvalPopup, _openEvalPopupDirect, _grAddReview, _saveEvalCfg, _refreshAfterEvalUpdate, _onStu, _setView, _toggleSort,
+    _onTrendBook, _onStuSearch,
     _openCommentPop, _closeCommentPop, _cardAiGen, _cardAiProof,
     _openBulkComment, _bulkEditCell,
     _excelWordInput, _excelRdInput, _excelComment, _onKey,
