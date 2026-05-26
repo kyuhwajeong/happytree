@@ -301,12 +301,7 @@ const StaffApp = (() => {
 .sf-night-tag{display:inline-flex;align-items:center;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;background:rgba(124,58,237,.1);color:#7c3aed;border:1px solid rgba(124,58,237,.25)}
 
 /* ── PDF 인쇄 ── */
-#sf-pf{display:none}
-@media print{
-  body>*:not(#sf-pf){display:none!important}
-  #sf-pf{display:block!important;position:fixed;inset:0;z-index:9999;background:#fff;padding:28px 36px;overflow:auto;font-family:'Noto Sans KR',sans-serif;font-size:12px;color:#111}
-  #sf-pf *{box-sizing:border-box}
-}
+/* 인쇄: _printInNewWindow() 로 새 창 처리 — @media print CSS 불필요 */
 .sfp-hdr{display:flex;align-items:center;gap:16px;margin-bottom:12px}
 .sfp-logo{width:48px;height:48px;object-fit:contain}
 .sfp-org-name{font-size:18px;font-weight:900;color:#111}
@@ -448,10 +443,7 @@ const StaffApp = (() => {
 .qc-sb:active{transform:scale(.95)}
 
 /* 인쇄 */
-#qc-pf{display:none}
-@media print{
-  #qc-pf{display:block!important;position:fixed;inset:0;z-index:99999;background:#fff;padding:24px 32px;overflow:auto;font-family:'Noto Sans KR',sans-serif;font-size:12px;color:#111}
-}
+
 `;
     document.head.appendChild(s);
   }
@@ -500,6 +492,7 @@ const StaffApp = (() => {
             <span id="sf-pin-dot" style="position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:50%;background:var(--a);display:${_loadHomeTab()==='list'?'none':'block'}"></span>
           </button>
           <button class="ibtn" onclick="StaffApp.openAdd()" title="직원 추가">➕</button>
+          <button id="sf-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>
         </div>
       </div>
       <div class="sf-stabs">
@@ -1807,56 +1800,61 @@ const StaffApp = (() => {
   function _pdf() {
     const r = _st.payResult; if (!r) return;
     const s = r.staff, acad = StaffDB.getAcad();
-    const pd = Number(s.payDay || 0);
+    const pd    = Number(s.payDay || 0);
     const pdStr = pd === 0 ? `${r.year}년 ${r.month}월 말일` : `${r.year}년 ${r.month}월 ${pd}일`;
     const today = new Date().toLocaleDateString('ko-KR');
-    const logoSrc = (typeof LOGO !== 'undefined' && LOGO.small) ? LOGO.small : '';
-    const isPt = r.type === 'parttime';
+    const isPt  = r.type === 'parttime';
 
     const dayRows = Object.keys(r.byDay).sort().map(date => {
       const d = r.byDay[date], dow = DOW[new Date(date).getDay()];
       const amt = isPt
-        ? Math.round(d.entries.reduce((s, e) => s + Number(e.baseHours||e.hours||0)*Number(e.appliedRate||r.hourlyRate) + Number(e.nightHours||0)*Number(e.appliedNightRate||r.nightHourlyRate), 0))
+        ? Math.round(d.entries.reduce((s, e) => s + Number(e.baseHours||e.hours||0)*Number(e.appliedRate||r.hourlyRate), 0))
         : Math.round(d.classHrs * s.classRate + d.generalHrs * s.generalRate);
-      return `<tr><td>${date} (${dow})</td><td style="text-align:center">${d.classHrs?_fmtHrs(d.classHrs):'-'}</td><td style="text-align:center">${d.generalHrs?_fmtHrs(d.generalHrs):'-'}</td><td style="text-align:center">${(d.nightHrs||0)>0?_fmtHrs(d.nightHrs):'-'}</td><td style="text-align:right">${_fmt(amt)}원</td></tr>`;
+      return `<tr>
+        <td>${date} (${dow})</td>
+        <td style="text-align:center">${d.classHrs?_fmtHrs(d.classHrs)+'h':'-'}</td>
+        <td style="text-align:center">${d.generalHrs?_fmtHrs(d.generalHrs)+'h':'-'}</td>
+        <td style="text-align:right">${_fmt(amt)}원</td>
+      </tr>`;
     }).join('');
 
-    let frame = document.getElementById('sf-pf');
-    if (!frame) { frame = document.createElement('div'); frame.id = 'sf-pf'; document.body.appendChild(frame); }
-    frame.innerHTML = `
-      <div class="sfp-hdr">${logoSrc ? `<img class="sfp-logo" src="${logoSrc}" alt="logo">` : ''}
-        <div><div class="sfp-org-name">${_e(acad.name)}</div><div class="sfp-title">급 여 명 세 서</div></div>
+    const html = `
+      <div class="sfp-hdr">
+        <div>
+          <div class="sfp-org-name">${_e(acad.name)}</div>
+          <div class="sfp-title">급 여 명 세 서</div>
+        </div>
         <div class="sfp-date">발행일: ${today}</div>
       </div>
       <hr class="sfp-div">
-      <table class="sfp-tbl" style="margin-bottom:10px">
+      <table style="margin-bottom:10px">
         <tr><th>성&nbsp;&nbsp;명</th><td>${_e(s.name)}</td><th>급여 기간</th><td>${r.from} ~ ${r.to}</td></tr>
         <tr><th>지 급 일</th><td>${pdStr}</td><th>연락처</th><td>${_e(s.phone||'-')}</td></tr>
-        <tr><th>고용 형태</th><td>${isPt?'알바(시급제)':'정직원'} / ${s.contractType==='contract'?'계약직':'정규직'}</td><th>${isPt?'기본 시급':'수업/일반 시급'}</th><td>${isPt?`${_fmt(r.hourlyRate)}원`:`${_fmt(s.classRate)}원 / ${_fmt(s.generalRate)}원`}</td></tr>
+        <tr><th>고용 형태</th><td>${isPt?'알바(시급제)':'정직원'} / ${s.contractType==='contract'?'계약직':'정규직'}</td>
+            <th>${isPt?'기본 시급':'수업/일반 시급'}</th>
+            <td>${isPt?`${_fmt(r.hourlyRate)}원`:`${_fmt(s.classRate)}원 / ${_fmt(s.generalRate)}원`}</td></tr>
       </table>
-      <table class="sfp-tbl">
+      <table>
         <thead><tr><th>항&nbsp;&nbsp;목</th><th style="text-align:center">내&nbsp;&nbsp;역</th><th style="text-align:right">지급금액</th></tr></thead>
         <tbody>
           ${isPt ? `
-            <tr><td>💰 기본 근무</td><td style="text-align:center">${_fmtHrs(r.classHrs+r.generalHrs)}h × ${_fmt(r.hourlyRate)}원</td><td style="text-align:right">${_fmt(r.basePay)}원</td></tr>
-            ${r.nightPay>0?`<tr><td>🌙 야간 수당</td><td style="text-align:center">22:00 이후 1.5배</td><td style="text-align:right">${_fmt(r.nightPay)}원</td></tr>`:''}
-            ${r.totalHolidayPay>0?`<tr><td>✅ 주휴수당</td><td style="text-align:center">주 15h 이상 ${r.weeklyStats.filter(w=>w.qualified).length}주</td><td style="text-align:right">${_fmt(r.totalHolidayPay)}원</td></tr>`:''}
+            <tr><td>기본 근무</td><td style="text-align:center">${_fmtHrs(r.classHrs+r.generalHrs)}h × ${_fmt(r.hourlyRate)}원</td><td style="text-align:right">${_fmt(r.basePay)}원</td></tr>
+            ${(r.totalHolidayPay||0)>0?`<tr><td>주휴수당</td><td style="text-align:center">주 15h 이상 ${r.weeklyStats.filter(w=>w.qualified).length}주</td><td style="text-align:right">${_fmt(r.totalHolidayPay)}원</td></tr>`:''}
           ` : `
-            <tr><td>📚 수업</td><td style="text-align:center">${_fmtHrs(r.classHrs)}h × ${_fmt(s.classRate)}원</td><td style="text-align:right">${_fmt(r.classPay)}원</td></tr>
-            <tr><td>🏢 일반</td><td style="text-align:center">${_fmtHrs(r.generalHrs)}h × ${_fmt(s.generalRate)}원</td><td style="text-align:right">${_fmt(r.generalPay)}원</td></tr>
-            ${r.monthlyFixed?`<tr><td colspan="2" style="font-weight:700">🏢 고정 월급 적용</td><td style="text-align:right;font-weight:700">${_fmt(s.monthlySalary)}원</td></tr>`:''}
+            <tr><td>수업</td><td style="text-align:center">${_fmtHrs(r.classHrs)}h × ${_fmt(s.classRate)}원</td><td style="text-align:right">${_fmt(r.classPay)}원</td></tr>
+            <tr><td>일반</td><td style="text-align:center">${_fmtHrs(r.generalHrs)}h × ${_fmt(s.generalRate)}원</td><td style="text-align:right">${_fmt(r.generalPay)}원</td></tr>
+            ${r.monthlyFixed?`<tr><td colspan="2" style="font-weight:700">고정 월급 적용</td><td style="text-align:right;font-weight:700">${_fmt(s.monthlySalary)}원</td></tr>`:''}
           `}
         </tbody>
         <tfoot><tr class="sfp-tot"><td colspan="2"><strong>세전 합계</strong></td><td style="text-align:right"><strong>${_fmt(r.totalPay)}원</strong></td></tr></tfoot>
       </table>
-      ${dayRows ? `<table class="sfp-tbl" style="margin-top:8px"><thead><tr><th>날짜</th><th>수업(h)</th><th>일반(h)</th><th>야간(h)</th><th>일 급여</th></tr></thead><tbody>${dayRows}</tbody></table>` : ''}
+      ${dayRows?`<table style="margin-top:8px"><thead><tr><th>날짜</th><th>수업(h)</th><th>일반(h)</th><th>일 급여</th></tr></thead><tbody>${dayRows}</tbody></table>`:''}
       <div class="sfp-sign">
         <div class="sfp-sign-box"><div>확&nbsp;&nbsp;인</div><div class="sfp-sign-line"></div><div>${_e(s.name)} (서명)</div></div>
         <div class="sfp-sign-box"><div>원&nbsp;&nbsp;장</div><div class="sfp-sign-line"></div><div>${_e(acad.name)}</div></div>
       </div>
       <div class="sfp-footer">본 명세서는 ${_e(acad.name)}에서 발행되었습니다.</div>`;
-    window.print();
-    setTimeout(() => frame.remove(), 1500);
+    _printInNewWindow(html);
   }
 
 
@@ -1910,6 +1908,110 @@ const StaffApp = (() => {
     _qResult = { slotResults, grandTotal, totalMin, generalPay, classPay,
                  name: _qBase.name, date: _qBase.date };
     return _qResult;
+  }
+
+
+  /* ── 공통 인쇄 CSS (iframe 실제 인쇄용) ── */
+  const _PRINT_CSS = `
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Noto Sans KR',Arial,sans-serif;font-size:12px;color:#111;padding:20px 28px;background:#fff}
+    .sfp-hdr{display:flex;align-items:flex-start;gap:12px;margin-bottom:10px}
+    .sfp-org-name{font-size:16px;font-weight:900;color:#111}
+    .sfp-title{font-size:12px;color:#555;margin-top:2px}
+    .sfp-date{font-size:10px;color:#888;text-align:right;flex:1;margin-top:2px}
+    .sfp-div{border:none;border-top:2px solid #111;margin:8px 0}
+    table{width:100%;border-collapse:collapse;margin-bottom:10px}
+    th{background:#eef2ff;padding:5px 8px;text-align:left;font-size:10px;font-weight:800;color:#333;border:1px solid #c7d2fe}
+    td{padding:5px 8px;font-size:11px;color:#111;border:1px solid #ddd}
+    tr:nth-child(even) td{background:#fafafa}
+    .sfp-tot td{background:#eef2ff!important;font-weight:900}
+    .sfp-sign{margin-top:20px;display:flex;justify-content:flex-end;gap:36px}
+    .sfp-sign-box{text-align:center;font-size:11px}
+    .sfp-sign-line{border-bottom:1px solid #aaa;width:72px;margin:24px auto 4px}
+    .sfp-footer{font-size:9px;color:#aaa;text-align:center;margin-top:12px}
+    @media print{@page{size:A4;margin:12mm}}
+  `;
+
+  /* ── 앱 내 인쇄 미리보기 모달 ── */
+  function _printInNewWindow(bodyHTML) {
+    // 기존 모달 제거
+    document.getElementById('sf-prev-ov')?.remove();
+
+    const ov = document.createElement('div');
+    ov.id = 'sf-prev-ov';
+    ov.style.cssText = `
+      position:fixed;inset:0;z-index:9999;
+      background:rgba(0,0,0,.55);backdrop-filter:blur(3px);
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      padding:16px;box-sizing:border-box;
+    `;
+
+    ov.innerHTML = `
+      <div style="
+        background:#f8f9fa;border-radius:14px;
+        width:100%;max-width:520px;max-height:88vh;
+        display:flex;flex-direction:column;
+        box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden;
+      ">
+        <!-- 툴바 -->
+        <div style="
+          display:flex;align-items:center;justify-content:space-between;
+          padding:10px 14px;background:#fff;
+          border-bottom:1px solid #e5e7eb;flex-shrink:0;
+        ">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:15px">🖨️</span>
+            <span style="font-size:13px;font-weight:700;color:#111">인쇄 미리보기</span>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button onclick="
+              const fr=document.getElementById('sf-prev-frame');
+              if(fr){fr.contentWindow.focus();fr.contentWindow.print();}
+            " style="
+              padding:7px 18px;border-radius:8px;
+              background:#2563eb;color:#fff;border:none;
+              font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
+            ">🖨️ 인쇄</button>
+            <button onclick="document.getElementById('sf-prev-ov').remove()" style="
+              padding:7px 12px;border-radius:8px;
+              background:#f3f4f6;color:#374151;border:1px solid #d1d5db;
+              font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
+            ">✕ 닫기</button>
+          </div>
+        </div>
+        <!-- 미리보기 영역 (종이 느낌) -->
+        <div style="flex:1;overflow-y:auto;padding:16px;background:#e5e7eb;">
+          <div style="
+            background:#fff;border-radius:4px;
+            box-shadow:0 2px 12px rgba(0,0,0,.18);
+            overflow:hidden;
+          ">
+            <iframe id="sf-prev-frame" style="
+              width:100%;border:none;display:block;
+              min-height:400px;
+            " scrolling="no"></iframe>
+          </div>
+        </div>
+      </div>`;
+
+    document.body.appendChild(ov);
+
+    // iframe에 내용 주입
+    const fr  = document.getElementById('sf-prev-frame');
+    const doc = fr.contentDocument || fr.contentWindow.document;
+    doc.open();
+    doc.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><style>${_PRINT_CSS}</style></head><body>${bodyHTML}</body></html>`);
+    doc.close();
+
+    // iframe 높이를 내용에 맞게 자동 조정
+    const _resize = () => {
+      try {
+        const h = doc.body.scrollHeight;
+        if (h > 0) fr.style.height = h + 'px';
+      } catch {}
+    };
+    setTimeout(_resize, 150);
+    setTimeout(_resize, 400);
   }
 
   /* ── 분 → 시간분 표시 ── */
@@ -2380,11 +2482,10 @@ const StaffApp = (() => {
     const acad    = StaffDB.getAcad();
     const name    = r.name || '(이름 없음)';
     const dateStr = r.date ? new Date(r.date).toLocaleDateString('ko-KR') : '';
-    const logoSrc = (typeof LOGO !== 'undefined' && LOGO.small) ? LOGO.small : '';
 
     const tRows = r.slotResults.map(({ slot, result: sr, index }) => {
       if (!sr) return '';
-      const typeTxt = sr.type === 'class' ? '📚 수업' : '🏢 일반';
+      const typeTxt = sr.type === 'class' ? '수업' : '일반';
       return `<tr>
         <td>[${index}] ${typeTxt}${slot.label?' · '+_e(slot.label):''}</td>
         <td style="text-align:center">${_e(slot.start)}~${_e(slot.end)}</td>
@@ -2394,26 +2495,27 @@ const StaffApp = (() => {
       </tr>`;
     }).join('');
 
-    let frame = document.getElementById('qc-pf');
-    if (!frame) { frame = document.createElement('div'); frame.id = 'qc-pf'; document.body.appendChild(frame); }
-    frame.innerHTML = `
-      <div class="sfp-hdr">${logoSrc?`<img class="sfp-logo" src="${logoSrc}" alt="logo">`:''}
-        <div><div class="sfp-org-name">${_e(acad.name)}</div><div class="sfp-title">⚡ 즉시 시급 정산서</div></div>
+    const html = `
+      <div class="sfp-hdr">
+        <div>
+          <div class="sfp-org-name">${_e(acad.name)}</div>
+          <div class="sfp-title">즉시 시급 정산서</div>
+        </div>
         <div class="sfp-date">발행: ${new Date().toLocaleDateString('ko-KR')}</div>
       </div>
       <hr class="sfp-div">
-      <table class="sfp-tbl" style="margin-bottom:10px">
+      <table style="margin-bottom:10px">
         <tr><th>성&nbsp;명</th><td>${_e(name)}</td><th>날짜</th><td>${dateStr}</td></tr>
         <tr><th>총 근무</th><td>${_qFmtMin(r.totalMin)}</td>
             <th>일반 / 수업</th>
-            <td>${r.generalPay>0?`🏢 ${_fmt(r.generalPay)}원`:'-'} / ${r.classPay>0?`📚 ${_fmt(r.classPay)}원`:'-'}</td>
+            <td>${r.generalPay>0?`일반 ${_fmt(r.generalPay)}원`:'-'} / ${r.classPay>0?`수업 ${_fmt(r.classPay)}원`:'-'}</td>
         </tr>
       </table>
-      <table class="sfp-tbl">
-        <thead><tr><th>항목</th><th>시간</th><th style="text-align:center">근무시간</th><th style="text-align:right">시급</th><th style="text-align:right">금액</th></tr></thead>
+      <table>
+        <thead><tr><th>항목</th><th style="text-align:center">시간대</th><th style="text-align:center">근무시간</th><th style="text-align:right">시급</th><th style="text-align:right">금액</th></tr></thead>
         <tbody>${tRows}</tbody>
         <tfoot><tr class="sfp-tot">
-          <td colspan="4"><strong>⚡ 세전 합계 (총 ${_qFmtMin(r.totalMin)})</strong></td>
+          <td colspan="4"><strong>세전 합계 (총 ${_qFmtMin(r.totalMin)})</strong></td>
           <td style="text-align:right"><strong>${_fmt(r.grandTotal)}원</strong></td>
         </tr></tfoot>
       </table>
@@ -2422,8 +2524,7 @@ const StaffApp = (() => {
         <div class="sfp-sign-box"><div>원&nbsp;&nbsp;장</div><div class="sfp-sign-line"></div><div>${_e(acad.name)}</div></div>
       </div>
       <div class="sfp-footer">본 정산서는 ${_e(acad.name)}에서 발행되었습니다.</div>`;
-    window.print();
-    setTimeout(() => frame.remove(), 1500);
+    _printInNewWindow(html);
   }
 
   /* ── 직원으로 저장 ── */

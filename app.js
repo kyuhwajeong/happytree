@@ -206,7 +206,6 @@ const App = (() => {
     document.querySelectorAll('.bni').forEach(n=>n.classList.remove('on'));
     document.getElementById('page-'+page)?.classList.add('on');
     document.querySelector(`[data-pg="${page}"]`)?.classList.add('on');
-    _refreshAuthUI();
     history.pushState({pg:page},'');
     if(page==='operate') {_renderChips();_renderWeekNav();_renderDays();}
     if(page==='manage')  _renderManage();
@@ -214,6 +213,8 @@ const App = (() => {
     if(page==='booklib' &&typeof BooklibApp!=='undefined') BooklibApp.render();
     if(page==='staff'   &&typeof StaffApp  !=='undefined') StaffApp.render();
     if(page==='grade'   &&typeof GradeApp  !=='undefined') GradeApp.render();
+    // ★ render() 이후 호출해야 동적으로 생성된 로그아웃 버튼이 DOM에 존재함
+    _refreshAuthUI();
   }
 
   function _onBack(e){
@@ -237,6 +238,11 @@ const App = (() => {
     _q('op-share-btn')?.classList.toggle('hidden',!(isAdmin&&S.page==='operate'));
     _q('admin-badge')?.classList.toggle('hidden',!isAdmin);
     _q('mg-logout-btn')?.classList.toggle('hidden',!loggedIn);
+    // ★ 교재·성적·학생·직원 페이지 로그아웃 버튼 — render() 이후 호출되므로 DOM에 항상 존재
+    _q('bl-logout-btn')?.classList.toggle('hidden',!loggedIn);
+    _q('gr-logout-btn')?.classList.toggle('hidden',!loggedIn);
+    _q('st-logout-btn')?.classList.toggle('hidden',!loggedIn);
+    _q('sf-logout-btn')?.classList.toggle('hidden',!loggedIn);
     // ★ admin 전용 탭 표시/숨김 → 동적 nav 렌더로 교체
     _renderNav();
     if(loggedIn)_resetAutoLogout();
