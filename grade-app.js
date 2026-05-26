@@ -5110,6 +5110,13 @@ to{opacity:1;transform:none}}
   }
 
   function _cpLd(pop, on)      { pop.querySelectorAll('[data-cpa]').forEach(function(b){ b.disabled = on; }); }
+
+  function _cpSt(el, cls, msg) {
+    if (!el) return;
+    el.className = 'gr-cp-status-line ' + cls;
+    el.textContent = msg;
+  }
+
   function _cpMsg(err) {
     var m = err && err.message ? err.message : String(err);
     if (m.indexOf('403') >= 0) return 'API 키 오류 또는 할당량 초과';
