@@ -1910,49 +1910,107 @@ const StaffApp = (() => {
   }
 
 
-  /* ── 공통 인쇄 CSS 문자열 (새 창에 주입) ── */
+  /* ── 공통 인쇄 CSS (iframe 실제 인쇄용) ── */
   const _PRINT_CSS = `
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Noto Sans KR',Arial,sans-serif;font-size:12px;color:#111;padding:28px 36px;background:#fff}
-    .sfp-hdr{display:flex;align-items:center;gap:16px;margin-bottom:12px}
-    .sfp-logo{width:48px;height:48px;object-fit:contain}
-    .sfp-org-name{font-size:18px;font-weight:900;color:#111}
-    .sfp-title{font-size:13px;color:#555;margin-top:2px}
-    .sfp-date{font-size:11px;color:#888;text-align:right;flex:1}
-    .sfp-div{border:none;border-top:2px solid #111;margin:10px 0}
-    table{width:100%;border-collapse:collapse;margin-bottom:12px}
-    th{background:#eef2ff;padding:7px 10px;text-align:left;font-size:11px;font-weight:800;color:#333;border:1px solid #c7d2fe}
-    td{padding:7px 10px;font-size:12px;color:#111;border:1px solid #ddd}
+    body{font-family:'Noto Sans KR',Arial,sans-serif;font-size:12px;color:#111;padding:20px 28px;background:#fff}
+    .sfp-hdr{display:flex;align-items:flex-start;gap:12px;margin-bottom:10px}
+    .sfp-org-name{font-size:16px;font-weight:900;color:#111}
+    .sfp-title{font-size:12px;color:#555;margin-top:2px}
+    .sfp-date{font-size:10px;color:#888;text-align:right;flex:1;margin-top:2px}
+    .sfp-div{border:none;border-top:2px solid #111;margin:8px 0}
+    table{width:100%;border-collapse:collapse;margin-bottom:10px}
+    th{background:#eef2ff;padding:5px 8px;text-align:left;font-size:10px;font-weight:800;color:#333;border:1px solid #c7d2fe}
+    td{padding:5px 8px;font-size:11px;color:#111;border:1px solid #ddd}
     tr:nth-child(even) td{background:#fafafa}
-    .sfp-tot td{background:#eef2ff!important;font-weight:900;font-size:13px}
-    .sfp-sign{margin-top:24px;display:flex;justify-content:flex-end;gap:40px}
-    .sfp-sign-box{text-align:center;font-size:12px}
-    .sfp-sign-line{border-bottom:1px solid #aaa;width:80px;margin:28px auto 4px}
-    .sfp-footer{font-size:10px;color:#aaa;text-align:center;margin-top:16px}
-    @media print{@page{margin:15mm}}
+    .sfp-tot td{background:#eef2ff!important;font-weight:900}
+    .sfp-sign{margin-top:20px;display:flex;justify-content:flex-end;gap:36px}
+    .sfp-sign-box{text-align:center;font-size:11px}
+    .sfp-sign-line{border-bottom:1px solid #aaa;width:72px;margin:24px auto 4px}
+    .sfp-footer{font-size:9px;color:#aaa;text-align:center;margin-top:12px}
+    @media print{@page{size:A4;margin:12mm}}
   `;
 
-  /* ── 숨김 iframe으로 인쇄 (새 창/탭 없음) ── */
+  /* ── 앱 내 인쇄 미리보기 모달 ── */
   function _printInNewWindow(bodyHTML) {
-    // 기존 iframe 재사용 또는 신규 생성
-    let iframe = document.getElementById('sf-print-iframe');
-    if (!iframe) {
-      iframe = document.createElement('iframe');
-      iframe.id = 'sf-print-iframe';
-      iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:none;opacity:0;pointer-events:none;z-index:-1';
-      document.body.appendChild(iframe);
-    }
+    // 기존 모달 제거
+    document.getElementById('sf-prev-ov')?.remove();
 
-    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    const ov = document.createElement('div');
+    ov.id = 'sf-prev-ov';
+    ov.style.cssText = `
+      position:fixed;inset:0;z-index:9999;
+      background:rgba(0,0,0,.55);backdrop-filter:blur(3px);
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      padding:16px;box-sizing:border-box;
+    `;
+
+    ov.innerHTML = `
+      <div style="
+        background:#f8f9fa;border-radius:14px;
+        width:100%;max-width:520px;max-height:88vh;
+        display:flex;flex-direction:column;
+        box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden;
+      ">
+        <!-- 툴바 -->
+        <div style="
+          display:flex;align-items:center;justify-content:space-between;
+          padding:10px 14px;background:#fff;
+          border-bottom:1px solid #e5e7eb;flex-shrink:0;
+        ">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:15px">🖨️</span>
+            <span style="font-size:13px;font-weight:700;color:#111">인쇄 미리보기</span>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button onclick="
+              const fr=document.getElementById('sf-prev-frame');
+              if(fr){fr.contentWindow.focus();fr.contentWindow.print();}
+            " style="
+              padding:7px 18px;border-radius:8px;
+              background:#2563eb;color:#fff;border:none;
+              font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
+            ">🖨️ 인쇄</button>
+            <button onclick="document.getElementById('sf-prev-ov').remove()" style="
+              padding:7px 12px;border-radius:8px;
+              background:#f3f4f6;color:#374151;border:1px solid #d1d5db;
+              font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
+            ">✕ 닫기</button>
+          </div>
+        </div>
+        <!-- 미리보기 영역 (종이 느낌) -->
+        <div style="flex:1;overflow-y:auto;padding:16px;background:#e5e7eb;">
+          <div style="
+            background:#fff;border-radius:4px;
+            box-shadow:0 2px 12px rgba(0,0,0,.18);
+            overflow:hidden;
+          ">
+            <iframe id="sf-prev-frame" style="
+              width:100%;border:none;display:block;
+              min-height:400px;
+            " scrolling="no"></iframe>
+          </div>
+        </div>
+      </div>`;
+
+    document.body.appendChild(ov);
+
+    // iframe에 내용 주입
+    const fr  = document.getElementById('sf-prev-frame');
+    const doc = fr.contentDocument || fr.contentWindow.document;
     doc.open();
-    doc.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>인쇄</title><style>${_PRINT_CSS}</style></head><body>${bodyHTML}</body></html>`);
+    doc.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><style>${_PRINT_CSS}</style></head><body>${bodyHTML}</body></html>`);
     doc.close();
 
-    // 렌더링 완료 후 해당 iframe 만 인쇄
-    setTimeout(() => {
-      try { iframe.contentWindow.focus(); iframe.contentWindow.print(); }
-      catch(e) { console.warn('print error', e); }
-    }, 250);
+    // iframe 높이를 내용에 맞게 자동 조정
+    const _resize = () => {
+      try {
+        const h = doc.body.scrollHeight;
+        if (h > 0) fr.style.height = h + 'px';
+      } catch {}
+    };
+    setTimeout(_resize, 150);
+    setTimeout(_resize, 400);
   }
 
   /* ── 분 → 시간분 표시 ── */
