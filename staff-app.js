@@ -1,31 +1,44 @@
 /**
- * staff-app.js — v3.0  (알바·정직원 통합 고도화 UI)
+ * staff-app.js — v3.1  (알바·정직원 통합 + ⚡ 즉시 시급 계산기)
  * ════════════════════════════════════════════════════════════════
- *  v3 신규 UI 기능
+ *  v3 기존 기능 (유지)
  *  ─────────────────────────────────────────────────────────────
- *  [1] 고용 형태 분기 표시
- *      · 직원 카드: 정직원(월급) / 알바(시급) 배지 구분
- *      · 직원 등록/편집: employType 선택 + 필드 동적 노출
- *
- *  [2] 일괄 등록 모달 (Batch Insert)
- *      · 날짜 범위 + 요일 체크박스 + 휴게시간 + 야간 시급
- *      · 중첩 감지 → 덮어쓰기 경고 모달
- *      · 등록 직후 [전체 취소] 버튼 동적 노출 (Undo)
- *
- *  [3] 주휴수당 실시간 프로그레스 바 (알바 달력)
- *      · 이번 주 근무시간 / 15h 프로그레스 바
- *      · 15h 달성 시 ✅ 배지 + 예상 주휴수당 표시
- *
+ *  [1] 고용 형태 분기 표시 (정직원/알바)
+ *  [2] 일괄 등록 모달 — 범위·요일·휴게·야간·Undo
+ *  [3] 주휴수당 실시간 프로그레스 바
  *  [4] 체크박스 다중 선택 삭제
- *      · 달력 근무 항목에 체크박스 제공
- *      · [선택 삭제] 비동기 처리, F5 없이 즉시 반영
+ *  [5] 급여 계산 UI (기본급/야간/주휴수당 분리)
+ *  [6] 전원 급여 일괄 정산 + Excel 다운로드
  *
- *  [5] 급여 계산 UI 확장
- *      · 알바: 기본급 / 야간수당 / 주휴수당 항목별 표시
- *      · 정직원: 고정 월급 or 시급합산 표시
- *      · [이번 달 엑셀 다운로드] 버튼 (SheetJS)
+ *  v3.1 신규 — ⚡ 즉시 시급 계산기
+ *  ─────────────────────────────────────────────────────────────
+ *  [7] 직원 등록 없이 당일 즉시 정산
+ *      · 이름·날짜 선택 (선택사항)
+ *      · 기본 시급 입력 (0=법정 최저시급 자동)
  *
- *  [6] 전원 급여 일괄 계산 탭
+ *  [8] 분(分) 단위 정밀 계산
+ *      · 1분 = 시급 ÷ 60  (초 단위 버림, 원 단위 올림)
+ *      · 시간 입력 → 경과 시간 실시간 표시 (X시간 Y분)
+ *
+ *  [9] 시간대별 차등 시급 슬롯 시스템
+ *      · 슬롯 추가/삭제 (여러 시간대 조합 가능)
+ *      · 슬롯별 시급 개별 지정 가능 (없으면 기본 시급 적용)
+ *
+ *  [10] 업무 유형별 차등 시급 (일반 / 수업)
+ *       · 유형 뱃지 탭 한 번으로 일반 ↔ 수업 토글
+ *       · 슬롯별 개별 시급 오버라이드 가능
+ *       · 야간·야근 수당 개념 없음 (삭제됨)
+ *
+ *  [11] 실시간 결과 패널
+ *       · 슬롯 입력 즉시 우측/하단에 금액 업데이트
+ *       · 슬롯별 내역 테이블 (기본/야간 분리)
+ *       · 총 합계 크게 표시
+ *
+ *  [12] 결과 저장·공유·인쇄
+ *       · 결과 텍스트 클립보드 복사
+ *       · 네이티브 공유 (Web Share API)
+ *       · 브라우저 인쇄 (PDF 저장 가능)
+ *       · 직원으로 연결 저장 (선택)
  * ════════════════════════════════════════════════════════════════
  */
 const StaffApp = (() => {
@@ -53,6 +66,12 @@ const StaffApp = (() => {
     lastBatchId:  null,
     lastBatchCount: 0,
   };
+
+  /* ══ 즉시 계산기 전용 상태 ══ */
+  let _qSlots  = [];   // [{id,label,start,end,type:'general'|'class',rate}]
+  let _qBase   = { name:'', date: new Date().toISOString().slice(0,10), generalRate:0, classRate:0 };
+  let _qResult = null;
+  const _nid2  = () => Date.now().toString(36) + Math.random().toString(36).slice(2,5);
 
   const DOW = StaffDB.DOW_KO;
   const WORK_DAYS = ['월','화','수','목','금','토','일'];
@@ -278,6 +297,122 @@ const StaffApp = (() => {
 .sfp-sign-box{text-align:center;font-size:12px}
 .sfp-sign-line{border-bottom:1px solid #aaa;width:80px;margin:28px auto 4px}
 .sfp-footer{font-size:10px;color:#aaa;text-align:center;margin-top:16px}
+/* ── 즉시 시급 계산기 ── */
+.qc-wrap{display:flex;flex-direction:column;height:100%;overflow:hidden}
+.qc-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 14px 100px}
+
+/* 합계 결과 바 */
+.qc-result-bar{background:linear-gradient(135deg,#1d4ed8,#2563eb);padding:12px 14px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:8px;position:relative;overflow:hidden}
+.qc-result-bar::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.07),transparent);pointer-events:none}
+.qc-result-bar-l{display:flex;flex-direction:column}
+.qc-result-label{font-size:10px;font-weight:700;color:rgba(255,255,255,.65);letter-spacing:.8px}
+.qc-result-total{font-size:30px;font-weight:900;color:#fff;line-height:1.1;letter-spacing:-1px}
+.qc-result-sub{font-size:11px;color:rgba(255,255,255,.55);margin-top:2px}
+.qc-result-bar-r{display:flex;gap:6px;flex-shrink:0}
+.qc-icon-btn{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s}
+.qc-icon-btn:active{transform:scale(.86);background:rgba(255,255,255,.28)}
+
+/* 기본 설정 카드 */
+.qc-top{background:var(--card);border:1.5px solid var(--bdr);border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:var(--sh)}
+.qc-top-title{font-size:10px;font-weight:800;color:var(--a);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.qc-rate-cards{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.qc-rate-card{border-radius:10px;padding:10px 12px;border:2px solid var(--bdr);background:var(--surf2);cursor:pointer;transition:all .16s}
+.qc-rate-card.general{border-color:rgba(5,150,105,.3);background:rgba(5,150,105,.05)}
+.qc-rate-card.class{border-color:var(--a40);background:var(--a10)}
+.qc-rate-card-ico{font-size:18px;margin-bottom:4px}
+.qc-rate-card-lbl{font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:.5px;margin-bottom:4px}
+.qc-rate-val{font-size:16px;font-weight:900;color:var(--tx)}
+.qc-rate-val.general{color:var(--green)}
+.qc-rate-val.class{color:var(--a)}
+.qc-info-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.qc-info-row .qc-full{grid-column:1/-1}
+.qc-label{display:block;font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:.4px;margin-bottom:4px}
+.qc-inp{width:100%;padding:9px 12px;border-radius:10px;background:var(--surf2);border:1.5px solid var(--bdr);font-size:13px;color:var(--tx);outline:none;font-family:var(--font);box-sizing:border-box;transition:border-color .18s}
+.qc-inp:focus{border-color:var(--a);background:var(--a10)}
+.qc-inp::placeholder{color:var(--tx3)}
+.qc-mw-hint{font-size:10px;color:var(--tx3);margin-top:4px;padding:3px 8px;background:var(--surf2);border-radius:6px;display:inline-flex;align-items:center;gap:4px}
+
+/* 슬롯 헤더 */
+.qc-slots-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.qc-slots-title{font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:1px;text-transform:uppercase}
+.qc-add-slot{display:flex;align-items:center;gap:4px;padding:5px 12px;border-radius:8px;background:var(--a10);border:1.5px solid var(--a40);color:var(--a);font-size:11px;font-weight:800;cursor:pointer;font-family:var(--font);transition:all .15s;white-space:nowrap}
+.qc-add-slot:active{transform:scale(.93)}
+
+/* 슬롯 카드 */
+.qc-slot{background:var(--card);border:1.5px solid var(--bdr);border-radius:14px;padding:12px;margin-bottom:10px;box-shadow:var(--sh);animation:cardIn .2s ease both;transition:border-color .18s}
+.qc-slot.type-general{border-left:4px solid var(--green)}
+.qc-slot.type-class{border-left:4px solid var(--a)}
+.qc-slot-hdr{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.qc-type-badge{padding:3px 9px;border-radius:7px;font-size:10px;font-weight:800;flex-shrink:0;cursor:pointer;transition:all .15s;border:1.5px solid transparent}
+.qc-type-badge.general{background:rgba(5,150,105,.1);color:var(--green);border-color:rgba(5,150,105,.3)}
+.qc-type-badge.class{background:var(--a10);color:var(--a);border-color:var(--a40)}
+.qc-type-badge:active{transform:scale(.9)}
+.qc-slot-name-inp{flex:1;border:none;background:transparent;font-size:12px;font-weight:700;color:var(--tx2);font-family:var(--font);outline:none;padding:0;min-width:0}
+.qc-slot-del{width:26px;height:26px;border-radius:7px;background:none;border:1px solid var(--bdr);color:var(--tx3);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all .14s;flex-shrink:0}
+.qc-slot-del:active{background:#fee2e2;color:#ef4444;border-color:#ef4444}
+
+/* 시간 행 */
+.qc-time-row{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:end;margin-bottom:8px}
+.qc-dur-badge{padding:7px 8px;border-radius:9px;background:var(--surf2);border:1.5px solid var(--bdr);text-align:center;white-space:nowrap;min-width:52px}
+.qc-dur-time{font-size:13px;font-weight:900;color:var(--tx);line-height:1.1}
+.qc-dur-min{font-size:9px;color:var(--tx3);letter-spacing:.3px;margin-top:1px}
+
+/* 상세 행 */
+.qc-detail-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+
+/* 슬롯 결과 */
+.qc-slot-result{padding:8px 10px;background:var(--surf2);border-radius:8px;border:1px solid var(--bdr);display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-size:11px}
+.qc-sr-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.qc-sr-lbl{color:var(--tx3)}
+.qc-sr-val{font-weight:700;color:var(--tx)}
+.qc-sr-total{margin-left:auto;font-size:15px;font-weight:900;color:var(--a)}
+.qc-sr-total.general{color:var(--green)}
+.qc-sr-sep{width:1px;height:14px;background:var(--bdr);flex-shrink:0}
+
+/* 빈 상태 */
+.qc-empty-slots{text-align:center;padding:32px 16px;color:var(--tx3);border:2px dashed var(--bdr);border-radius:14px;margin-bottom:14px}
+.qc-empty-icon{font-size:40px;margin-bottom:10px}
+.qc-empty-txt{font-size:13px;line-height:1.9}
+
+/* 결과 카드 */
+.qc-detail-card{background:var(--card);border:1px solid var(--bdr);border-radius:14px;overflow:hidden;box-shadow:var(--sh);margin-bottom:14px;animation:cardIn .22s ease both}
+.qc-dc-hdr{padding:12px 14px;background:linear-gradient(135deg,rgba(37,99,235,.06),rgba(5,150,105,.04));border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;gap:8px}
+.qc-dc-name{font-size:14px;font-weight:900;color:var(--tx)}
+.qc-dc-date{font-size:11px;color:var(--tx3);margin-top:2px}
+.qc-dc-rows{padding:4px 0}
+.qc-dc-row{display:flex;align-items:center;padding:8px 14px;gap:10px;border-bottom:1px solid var(--bdr);transition:background .12s}
+.qc-dc-row:last-child{border-bottom:none}
+.qc-dc-row:hover{background:var(--card2)}
+.qc-dc-typebadge{padding:2px 8px;border-radius:6px;font-size:10px;font-weight:800;flex-shrink:0}
+.qc-dc-typebadge.general{background:rgba(5,150,105,.1);color:var(--green)}
+.qc-dc-typebadge.class{background:var(--a10);color:var(--a)}
+.qc-dc-info{flex:1;min-width:0}
+.qc-dc-time{font-size:12px;font-weight:700;color:var(--tx)}
+.qc-dc-meta{font-size:10px;color:var(--tx3);margin-top:2px;display:flex;flex-wrap:wrap;gap:5px}
+.qc-dc-pay{font-size:14px;font-weight:900;color:var(--tx);white-space:nowrap}
+.qc-summary-row{display:flex;gap:0;border-top:1px solid var(--bdr)}
+.qc-summary-cell{flex:1;padding:10px 12px;text-align:center;border-right:1px solid var(--bdr)}
+.qc-summary-cell:last-child{border-right:none}
+.qc-sc-lbl{font-size:9px;font-weight:800;color:var(--tx3);letter-spacing:.6px;margin-bottom:3px}
+.qc-sc-val{font-size:13px;font-weight:800;color:var(--tx)}
+.qc-sc-val.general{color:var(--green)}
+.qc-sc-val.class{color:var(--a)}
+.qc-total-row{padding:12px 14px;background:linear-gradient(135deg,var(--a10),rgba(5,150,105,.06));display:flex;align-items:center;justify-content:space-between;border-top:2px solid var(--a)}
+.qc-total-l{font-size:13px;font-weight:800;color:var(--tx)}
+.qc-total-v{font-size:26px;font-weight:900;color:var(--a)}
+.qc-share-row{display:flex;gap:6px;padding:10px 14px;border-top:1px solid var(--bdr);flex-wrap:wrap}
+.qc-sb{flex:1;min-width:60px;padding:10px 4px;border-radius:10px;font-size:11px;font-weight:700;cursor:pointer;border:none;font-family:var(--font);transition:all .15s}
+.qc-sb.copy{background:var(--a10);color:var(--a);border:1px solid var(--a40)}
+.qc-sb.share{background:var(--a);color:#fff;box-shadow:0 3px 10px var(--a40)}
+.qc-sb.print{background:rgba(5,150,105,.1);color:var(--green);border:1px solid rgba(5,150,105,.3)}
+.qc-sb.save{background:rgba(245,158,11,.1);color:#d97706;border:1px solid rgba(245,158,11,.3)}
+.qc-sb:active{transform:scale(.95)}
+
+/* 인쇄 */
+#qc-pf{display:none}
+@media print{
+  #qc-pf{display:block!important;position:fixed;inset:0;z-index:99999;background:#fff;padding:24px 32px;overflow:auto;font-family:'Noto Sans KR',sans-serif;font-size:12px;color:#111}
+}
 `;
     document.head.appendChild(s);
   }
@@ -301,9 +436,10 @@ const StaffApp = (() => {
   function render() {
     const pg = document.getElementById('page-staff'); if (!pg) return;
     pg.innerHTML = _shell();
-    if (_st.subTab === 'list')   _renderList();
-    else if (_st.subTab === 'salary') _renderSalary();
-    else if (_st.subTab === 'all')    _renderAll();
+    if      (_st.subTab === 'list')      _renderList();
+    else if (_st.subTab === 'salary')    _renderSalary();
+    else if (_st.subTab === 'all')       _renderAll();
+    else if (_st.subTab === 'quickcalc') _renderQuickCalc();
   }
 
   function _shell() {
@@ -319,9 +455,10 @@ const StaffApp = (() => {
         <div class="phr"><button class="ibtn" onclick="StaffApp.openAdd()" title="직원 추가">➕</button></div>
       </div>
       <div class="sf-stabs">
-        <button class="sf-stab ${_st.subTab==='list'?'on':''}"   onclick="StaffApp.switchTab('list')">👥 직원</button>
-        <button class="sf-stab ${_st.subTab==='salary'?'on':''}" onclick="StaffApp.switchTab('salary')">💰 급여</button>
-        <button class="sf-stab ${_st.subTab==='all'?'on':''}"    onclick="StaffApp.switchTab('all')">📊 전원정산</button>
+        <button class="sf-stab ${_st.subTab==='list'?'on':''}"      onclick="StaffApp.switchTab('list')">👥 직원</button>
+        <button class="sf-stab ${_st.subTab==='salary'?'on':''}"    onclick="StaffApp.switchTab('salary')">💰 급여</button>
+        <button class="sf-stab ${_st.subTab==='all'?'on':''}"       onclick="StaffApp.switchTab('all')">📊 전원</button>
+        <button class="sf-stab ${_st.subTab==='quickcalc'?'on':''}" onclick="StaffApp.switchTab('quickcalc')" style="color:${_st.subTab==='quickcalc'?'var(--a)':'#d97706'}">⚡ 즉시계산</button>
       </div>
       <div id="sf-cnt" style="flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;"></div>
       <div id="sf-edit-ov" class="ov hidden" onclick="if(event.target.id==='sf-edit-ov')StaffApp.closeEdit()">
@@ -341,17 +478,23 @@ const StaffApp = (() => {
       </div>
       <div id="sf-templ-add-ov" class="ov hidden" onclick="if(event.target.id==='sf-templ-add-ov')StaffApp.closeTemplAdd()">
         <div class="sh" id="sf-templ-add-sh" onclick="event.stopPropagation()" style="max-height:80vh;display:flex;flex-direction:column;"></div>
+      </div>
+      <div id="sf-qsave-ov" class="ov hidden" onclick="if(event.target.id==='sf-qsave-ov')StaffApp._closeQSave()">
+        <div class="sh" id="sf-qsave-sh" onclick="event.stopPropagation()" style="max-height:70vh;display:flex;flex-direction:column;"></div>
       </div>`;
   }
 
   function switchTab(tab) {
     _st.subTab = tab;
+    const TABS = ['list','salary','all','quickcalc'];
     document.querySelectorAll('.sf-stab').forEach((b, i) => {
-      b.classList.toggle('on', ['list','salary','all'][i] === tab);
+      b.classList.toggle('on', TABS[i] === tab);
+      if (TABS[i] === 'quickcalc') b.style.color = tab === 'quickcalc' ? 'var(--a)' : '#d97706';
     });
-    if (tab === 'list')   _renderList();
-    else if (tab === 'salary') _renderSalary();
-    else if (tab === 'all')    _renderAll();
+    if      (tab === 'list')      _renderList();
+    else if (tab === 'salary')    _renderSalary();
+    else if (tab === 'all')       _renderAll();
+    else if (tab === 'quickcalc') _renderQuickCalc();
   }
 
   /* ══════════════════════════════════════════
@@ -1465,6 +1608,626 @@ const StaffApp = (() => {
     setTimeout(() => frame.remove(), 1500);
   }
 
+
+
+
+  /* ══════════════════════════════════════════════════════════════
+   * ⚡ 즉시 시급 계산기  v2 — 업무 유형별 차등 시급 (야간수당 없음)
+   * ══════════════════════════════════════════════════════════════ */
+
+  /* ── 슬롯 단일 계산 ──
+   * type: 'general'(일반) | 'class'(수업)
+   * rate: 0이면 기본 설정 시급, 그 외 개별 시급 우선
+   * 계산: 분단위 → Math.ceil(순근무분 / 60 × 시급)
+   */
+  function _qCalcSlot(slot) {
+    const start = slot.start, end = slot.end;
+    if (!start || !end) return null;
+
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    let rawMin = (eh * 60 + em) - (sh * 60 + sm);
+    if (rawMin <= 0) rawMin += 1440;          // 자정 넘김 처리
+    if (rawMin <= 0) return null;
+    const netMin = rawMin;
+
+    const mw = StaffDB.getMinWage();
+    // 시급 결정 우선순위: 슬롯 개별시급 > 유형 기본시급 > 최저시급
+    const baseByType = slot.type === 'class'
+      ? (Number(_qBase.classRate)   || mw)
+      : (Number(_qBase.generalRate) || mw);
+    const rate = Number(slot.rate) > 0 ? Number(slot.rate) : baseByType;
+
+    const pay = Math.ceil(netMin / 60 * rate);   // 분 단위 올림 계산
+    return { rate, netMin, rawMin, pay, type: slot.type };
+  }
+
+  /* ── 전체 합산 ── */
+  function _qCompute() {
+    if (!_qSlots.length) { _qResult = null; return null; }
+    let grandTotal = 0, totalMin = 0, generalPay = 0, classPay = 0;
+    const slotResults = _qSlots.map((slot, i) => {
+      const r = _qCalcSlot(slot);
+      if (r) {
+        grandTotal += r.pay;
+        totalMin   += r.netMin;
+        if (r.type === 'class') classPay   += r.pay;
+        else                    generalPay += r.pay;
+      }
+      return { slot, result: r, index: i + 1 };
+    });
+    _qResult = { slotResults, grandTotal, totalMin, generalPay, classPay,
+                 name: _qBase.name, date: _qBase.date };
+    return _qResult;
+  }
+
+  /* ── 분 → 시간분 표시 ── */
+  function _qFmtMin(min) {
+    if (!min || min <= 0) return '-';
+    const h = Math.floor(min / 60), m = min % 60;
+    return h > 0 ? (m > 0 ? `${h}시간 ${m}분` : `${h}시간`) : `${m}분`;
+  }
+
+  /* ── 슬롯 추가 ── */
+  function _qAddSlot() {
+    const lastEnd  = _qSlots.length ? _qSlots[_qSlots.length - 1].end : '';
+    const lastType = _qSlots.length ? _qSlots[_qSlots.length - 1].type : 'general';
+    _qSlots.push({
+      id:       _nid2(),
+      label:    '',
+      start:    lastEnd || '09:00',
+      end:      '',
+      type:     lastType,
+      rate:     0,
+    });
+    _qRender();
+    setTimeout(() => {
+      const ends = document.querySelectorAll('.qc-slot-end');
+      if (ends.length) ends[ends.length - 1].focus();
+    }, 80);
+  }
+
+  /* ── 슬롯 삭제 ── */
+  function _qDelSlot(id) {
+    _qSlots = _qSlots.filter(s => s.id !== id);
+    _qRender();
+  }
+
+  /* ── 슬롯 유형 토글 (일반 ↔ 수업) ── */
+  function _qToggleType(id) {
+    const slot = _qSlots.find(s => s.id === id); if (!slot) return;
+    slot.type = slot.type === 'class' ? 'general' : 'class';
+    // 배지만 갱신
+    const badge = document.getElementById(`qctype-${id}`);
+    if (badge) {
+      badge.className = `qc-type-badge ${slot.type}`;
+      badge.textContent = slot.type === 'class' ? '📚 수업' : '🏢 일반';
+    }
+    const card = document.getElementById(`qcs-${id}`);
+    if (card) { card.className = `qc-slot type-${slot.type}`; }
+    _qRefreshSlot(id);
+  }
+
+  /* ── 슬롯 필드 업데이트 ── */
+  function _qUpdate(id, field, value) {
+    const slot = _qSlots.find(s => s.id === id); if (!slot) return;
+    slot[field] = field === 'rate' ? (Number(value) || 0) : value;
+    _qRefreshSlot(id);
+    _qUpdateResultBar();
+  }
+
+  /* ── 슬롯 결과 미니패널 + 경과시간 뱃지 새로고침 ── */
+  function _qRefreshSlot(id) {
+    const slot = _qSlots.find(s => s.id === id); if (!slot) return;
+    const r    = _qCalcSlot(slot);
+
+    // 경과시간 뱃지
+    const durEl = document.getElementById(`qcdur-${id}`);
+    if (durEl) {
+      if (slot.start && slot.end) {
+        const [sh, sm] = slot.start.split(':').map(Number);
+        const [eh, em] = slot.end.split(':').map(Number);
+        let raw = (eh*60+em)-(sh*60+sm); if(raw<=0) raw+=1440;
+        const h = Math.floor(raw/60), m = raw%60;
+        durEl.querySelector('.qc-dur-time').textContent = h>0?(m>0?`${h}h${m}m`:`${h}h`):(m>0?`${m}m`:'-');
+        durEl.querySelector('.qc-dur-min').textContent  = '근무시간';
+      } else {
+        durEl.querySelector('.qc-dur-time').textContent = '-';
+        durEl.querySelector('.qc-dur-min').textContent  = '';
+      }
+    }
+
+    // 결과 미니패널
+    const resEl = document.getElementById(`qcres-${id}`);
+    if (!resEl) return;
+    if (!r) {
+      resEl.innerHTML = `<span style="font-size:11px;color:var(--tx3)">⏳ 시작·종료 시간을 입력하세요</span>`;
+      return;
+    }
+    const typeColor = r.type === 'class' ? 'var(--a)' : 'var(--green)';
+    const typeTxt   = r.type === 'class' ? '수업' : '일반';
+    resEl.innerHTML = `
+      <div class="qc-sr-dot" style="background:${typeColor}"></div>
+      <span class="qc-sr-lbl">${typeTxt}</span>
+      <span class="qc-sr-sep"></span>
+      <span class="qc-sr-lbl">⏱</span>
+      <span class="qc-sr-val">${_qFmtMin(r.netMin)}</span>
+      <span class="qc-sr-sep"></span>
+      <span class="qc-sr-lbl">시급</span>
+      <span class="qc-sr-val">${_fmt(r.rate)}원</span>
+      <span class="qc-sr-total ${r.type}">${_fmt(r.pay)}원</span>`;
+  }
+
+  /* ── 결과 바만 갱신 ── */
+  function _qUpdateResultBar() {
+    const r = _qCompute();
+    const bar = document.getElementById('qc-result-bar'); if (!bar) return;
+    const totEl = bar.querySelector('.qc-result-total');
+    const subEl = bar.querySelector('.qc-result-sub');
+    if (!r || r.grandTotal === 0) {
+      totEl.textContent = '— 원';
+      subEl.textContent = '시간대를 입력하면 자동 계산됩니다';
+      return;
+    }
+    totEl.textContent = _fmt(r.grandTotal) + '원';
+    const parts = [];
+    if (r.generalPay > 0) parts.push(`일반 ${_fmt(r.generalPay)}원`);
+    if (r.classPay   > 0) parts.push(`수업 ${_fmt(r.classPay)}원`);
+    subEl.textContent = `총 ${_qFmtMin(r.totalMin)}  ·  ${parts.join(' + ')}`;
+  }
+
+  /* ── 기본 설정 변경 ── */
+  function _qBaseUpdate() {
+    _qBase.name        = document.getElementById('qc-name')?.value?.trim()    || '';
+    _qBase.date        = document.getElementById('qc-date')?.value             || _qBase.date;
+    _qBase.generalRate = Number(document.getElementById('qc-grate')?.value)   || 0;
+    _qBase.classRate   = Number(document.getElementById('qc-crate')?.value)   || 0;
+
+    // 시급 카드 표시 갱신
+    const mw = StaffDB.getMinWage();
+    const gEl = document.getElementById('qc-grate-disp');
+    const cEl = document.getElementById('qc-crate-disp');
+    if (gEl) gEl.textContent = _fmt(_qBase.generalRate || mw) + '원';
+    if (cEl) cEl.textContent = _fmt(_qBase.classRate   || mw) + '원';
+
+    // 모든 슬롯 결과 갱신
+    _qSlots.forEach(s => _qRefreshSlot(s.id));
+    _qUpdateResultBar();
+  }
+
+  /* ── 초기화 ── */
+  function _qReset() {
+    if (_qSlots.length > 0 && !confirm('모든 시간대를 초기화하시겠습니까?')) return;
+    _qSlots  = [];
+    _qResult = null;
+    _qBase   = { name:'', date: new Date().toISOString().slice(0,10), generalRate:0, classRate:0 };
+    _qRender();
+  }
+
+  /* ── 전체 재렌더 (슬롯 추가/삭제 시) ── */
+  function _qRender() {
+    if (_st.subTab === 'quickcalc') _renderQuickCalc();
+  }
+
+  /* ── 메인 렌더 ── */
+  function _renderQuickCalc() {
+    const cnt = document.getElementById('sf-cnt'); if (!cnt) return;
+    const mw  = StaffDB.getMinWage();
+    const r   = _qCompute();
+
+    cnt.innerHTML = `
+      <div class="qc-wrap">
+
+        <!-- ① 합계 결과 바 (상단 고정) -->
+        <div class="qc-result-bar" id="qc-result-bar">
+          <div class="qc-result-bar-l">
+            <span class="qc-result-label">⚡ 즉시 정산 · 세전 합계</span>
+            <span class="qc-result-total">${r && r.grandTotal>0 ? _fmt(r.grandTotal)+'원' : '— 원'}</span>
+            <span class="qc-result-sub">${r && r.grandTotal>0
+              ? `총 ${_qFmtMin(r.totalMin)}  ·  ${[r.generalPay>0?`일반 ${_fmt(r.generalPay)}원`:'', r.classPay>0?`수업 ${_fmt(r.classPay)}원`:''].filter(Boolean).join(' + ')}`
+              : '시간대를 입력하면 자동 계산됩니다'}</span>
+          </div>
+          <div class="qc-result-bar-r">
+            <button class="qc-icon-btn" title="복사"   onclick="StaffApp._qCopy()"  >📋</button>
+            <button class="qc-icon-btn" title="공유"   onclick="StaffApp._qShare()" >📤</button>
+            <button class="qc-icon-btn" title="인쇄"   onclick="StaffApp._qPrint()" >🖨️</button>
+          </div>
+        </div>
+
+        <!-- ② 스크롤 본문 -->
+        <div class="qc-scroll">
+
+          <!-- 기본 설정 -->
+          <div class="qc-top">
+            <div class="qc-top-title">⚙️ 기본 설정</div>
+
+            <!-- 시급 카드 2개 -->
+            <div class="qc-rate-cards">
+              <div class="qc-rate-card general">
+                <div class="qc-rate-card-ico">🏢</div>
+                <div class="qc-rate-card-lbl">일반 업무 시급</div>
+                <div class="qc-rate-val general" id="qc-grate-disp">${_fmt(_qBase.generalRate||mw)}원</div>
+              </div>
+              <div class="qc-rate-card class">
+                <div class="qc-rate-card-ico">📚</div>
+                <div class="qc-rate-card-lbl">수업 담당 시급</div>
+                <div class="qc-rate-val class" id="qc-crate-disp">${_fmt(_qBase.classRate||mw)}원</div>
+              </div>
+            </div>
+
+            <div class="qc-info-row">
+              <div>
+                <span class="qc-label">🏢 일반 시급 (원)</span>
+                <input class="qc-inp" id="qc-grate" type="number" min="0"
+                  placeholder="${mw} (최저시급)"
+                  value="${_qBase.generalRate||''}"
+                  oninput="StaffApp._qBaseUpdate()">
+              </div>
+              <div>
+                <span class="qc-label">📚 수업 시급 (원)</span>
+                <input class="qc-inp" id="qc-crate" type="number" min="0"
+                  placeholder="${mw} (최저시급)"
+                  value="${_qBase.classRate||''}"
+                  oninput="StaffApp._qBaseUpdate()">
+              </div>
+              <div>
+                <span class="qc-label">이름 (선택)</span>
+                <input class="qc-inp" id="qc-name" placeholder="예) 홍길동"
+                  value="${_e(_qBase.name)}"
+                  oninput="StaffApp._qBaseUpdate()">
+              </div>
+              <div>
+                <span class="qc-label">날짜</span>
+                <input class="qc-inp" id="qc-date" type="date"
+                  value="${_qBase.date}"
+                  oninput="StaffApp._qBaseUpdate()">
+              </div>
+            </div>
+            <div class="qc-mw-hint" style="margin-top:6px">
+              ⚖️ ${new Date().getFullYear()}년 최저시급 <strong>${_fmt(mw)}원</strong> — 시급 빈칸 시 자동 적용
+            </div>
+          </div>
+
+          <!-- 슬롯 목록 -->
+          <div class="qc-slots-hdr">
+            <span class="qc-slots-title">⏰ 시간대별 근무</span>
+            <button class="qc-add-slot" onclick="StaffApp._qAddSlot()">＋ 시간대 추가</button>
+          </div>
+
+          <div id="qc-slots-list">
+            ${_qSlots.length === 0
+              ? `<div class="qc-empty-slots">
+                  <div class="qc-empty-icon">⏱</div>
+                  <div class="qc-empty-txt">
+                    아직 시간대가 없습니다<br>
+                    <strong>＋ 시간대 추가</strong>로 근무 시간을 입력하세요<br>
+                    <small style="font-size:11px;opacity:.7">
+                      일반·수업 업무를 자유롭게 조합하고<br>
+                      시간대별 다른 시급을 적용할 수 있습니다
+                    </small>
+                  </div>
+                </div>`
+              : _qSlots.map((s, i) => _qSlotHTML(s, i)).join('')}
+          </div>
+
+          ${_qSlots.length > 0 ? `
+            <button class="qc-add-slot"
+              style="width:100%;justify-content:center;padding:11px;border-radius:12px;font-size:13px;margin-bottom:14px"
+              onclick="StaffApp._qAddSlot()">＋ 시간대 추가</button>` : ''}
+
+          <!-- 초기화 -->
+          ${_qSlots.length > 0 ? `
+            <button onclick="StaffApp._qReset()"
+              style="width:100%;padding:10px;border-radius:10px;background:var(--card2);border:1px solid var(--bdr2);color:var(--tx3);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);margin-bottom:14px">
+              🗑 전체 초기화
+            </button>` : ''}
+
+          <!-- 결과 상세 카드 -->
+          ${r && r.grandTotal > 0 ? _qDetailCardHTML(r) : ''}
+
+        </div>
+      </div>`;
+  }
+
+  /* ── 슬롯 카드 HTML ── */
+  function _qSlotHTML(slot, idx) {
+    const mw          = StaffDB.getMinWage();
+    const baseByType  = slot.type === 'class'
+      ? (Number(_qBase.classRate)   || mw)
+      : (Number(_qBase.generalRate) || mw);
+    const appliedRate = Number(slot.rate) > 0 ? Number(slot.rate) : baseByType;
+    const r           = _qCalcSlot(slot);
+
+    // 경과 시간
+    let durTime = '-', durSub = '';
+    if (slot.start && slot.end) {
+      const [sh, sm] = slot.start.split(':').map(Number);
+      const [eh, em] = slot.end.split(':').map(Number);
+      let raw = (eh*60+em)-(sh*60+sm); if(raw<=0) raw+=1440;
+      const h = Math.floor(raw/60), m = raw%60;
+      durTime = h>0?(m>0?`${h}h${m}m`:`${h}h`):(m>0?`${m}m`:'-');
+      durSub  = '근무시간';
+    }
+
+    const typeLabel = slot.type === 'class' ? '📚 수업' : '🏢 일반';
+    const typeColor = slot.type === 'class' ? 'var(--a)' : 'var(--green)';
+
+    return `<div class="qc-slot type-${slot.type}" id="qcs-${slot.id}">
+      <!-- 헤더 -->
+      <div class="qc-slot-hdr">
+        <button class="qc-type-badge ${slot.type}" id="qctype-${slot.id}"
+          onclick="StaffApp._qToggleType('${slot.id}')" title="탭하여 유형 변경">
+          ${typeLabel}
+        </button>
+        <input class="qc-slot-name-inp" value="${_e(slot.label)}"
+          placeholder="메모 (예: 오전 수업, 행정 업무...)"
+          oninput="StaffApp._qUpdate('${slot.id}','label',this.value)">
+        <button class="qc-slot-del" onclick="StaffApp._qDelSlot('${slot.id}')">✕</button>
+      </div>
+
+      <!-- 시간 입력 -->
+      <div class="qc-time-row">
+        <div>
+          <span class="qc-label">출근</span>
+          <input class="qc-inp qc-slot-start" type="time" value="${slot.start}"
+            oninput="StaffApp._qUpdate('${slot.id}','start',this.value)">
+        </div>
+        <div>
+          <span class="qc-label">퇴근</span>
+          <input class="qc-inp qc-slot-end" type="time" value="${slot.end}"
+            oninput="StaffApp._qUpdate('${slot.id}','end',this.value)">
+        </div>
+        <div class="qc-dur-badge" id="qcdur-${slot.id}">
+          <div class="qc-dur-time">${durTime}</div>
+          <div class="qc-dur-min">${durSub}</div>
+        </div>
+      </div>
+
+      <!-- 개별 시급 -->
+      <div style="margin-bottom:8px">
+        <span class="qc-label">개별 시급 (0 = ${_fmt(baseByType)}원 자동)</span>
+        <input class="qc-inp" type="number" min="0"
+          placeholder="${baseByType}"
+          value="${slot.rate||''}"
+          oninput="StaffApp._qUpdate('${slot.id}','rate',this.value)">
+      </div>
+
+      <!-- 슬롯 결과 미니 -->
+      <div class="qc-slot-result" id="qcres-${slot.id}">
+        ${r
+          ? `<div class="qc-sr-dot" style="background:${typeColor}"></div>
+             <span class="qc-sr-lbl">${slot.type==='class'?'수업':'일반'}</span>
+             <span class="qc-sr-sep"></span>
+             <span class="qc-sr-lbl">⏱</span>
+             <span class="qc-sr-val">${_qFmtMin(r.netMin)}</span>
+             <span class="qc-sr-sep"></span>
+             <span class="qc-sr-lbl">시급</span>
+             <span class="qc-sr-val">${_fmt(r.rate)}원</span>
+             ${r.breakMin>0?`<span class="qc-sr-sep"></span><span class="qc-sr-lbl">휴게 -${r.breakMin}분</span>`:''}
+             <span class="qc-sr-total ${slot.type}">${_fmt(r.pay)}원</span>`
+          : `<span style="font-size:11px;color:var(--tx3)">⏳ 시작·종료 시간을 입력하세요</span>`}
+      </div>
+    </div>`;
+  }
+
+  /* ── 결과 상세 카드 ── */
+  function _qDetailCardHTML(r) {
+    const acad   = StaffDB.getAcad();
+    const name   = r.name || '(이름 없음)';
+    const dateKo = r.date
+      ? new Date(r.date).toLocaleDateString('ko-KR', {year:'numeric',month:'long',day:'numeric',weekday:'short'})
+      : '';
+
+    const rows = r.slotResults.map(({ slot, result: sr, index }) => {
+      if (!sr) return '';
+      const isClass = sr.type === 'class';
+      return `<div class="qc-dc-row">
+        <span class="qc-dc-typebadge ${sr.type}">${isClass?'📚 수업':'🏢 일반'}</span>
+        <div class="qc-dc-info">
+          <div class="qc-dc-time">${_e(slot.start)} ~ ${_e(slot.end)}${slot.label?' · '+_e(slot.label):''}</div>
+          <div class="qc-dc-meta">
+            <span>⏱ ${_qFmtMin(sr.netMin)}</span>
+            <span>시급 ${_fmt(sr.rate)}원</span>
+
+          </div>
+        </div>
+        <div class="qc-dc-pay" style="color:${isClass?'var(--a)':'var(--green)'}">${_fmt(sr.pay)}원</div>
+      </div>`;
+    }).join('');
+
+    // 요약 행 (일반/수업 분리)
+    const hasGeneral = r.generalPay > 0;
+    const hasClass   = r.classPay   > 0;
+    const summaryHTML = `
+      <div class="qc-summary-row">
+        ${hasGeneral ? `<div class="qc-summary-cell">
+          <div class="qc-sc-lbl">🏢 일반 합계</div>
+          <div class="qc-sc-val general">${_fmt(r.generalPay)}원</div>
+        </div>` : ''}
+        ${hasClass ? `<div class="qc-summary-cell">
+          <div class="qc-sc-lbl">📚 수업 합계</div>
+          <div class="qc-sc-val class">${_fmt(r.classPay)}원</div>
+        </div>` : ''}
+        <div class="qc-summary-cell">
+          <div class="qc-sc-lbl">⏱ 총 근무</div>
+          <div class="qc-sc-val">${_qFmtMin(r.totalMin)}</div>
+        </div>
+      </div>`;
+
+    return `<div class="qc-detail-card">
+      <div class="qc-dc-hdr">
+        <div>
+          <div class="qc-dc-name">📋 ${_e(name)} 정산 내역</div>
+          <div class="qc-dc-date">${dateKo} · ${_e(acad.name)}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:10px;color:var(--tx3)">슬롯 ${r.slotResults.filter(x=>x.result).length}개</div>
+        </div>
+      </div>
+      <div class="qc-dc-rows">${rows}</div>
+      ${summaryHTML}
+      <div class="qc-total-row">
+        <span class="qc-total-l">⚡ 세전 합계</span>
+        <span class="qc-total-v">${_fmt(r.grandTotal)}원</span>
+      </div>
+      <div class="qc-share-row">
+        <button class="qc-sb copy"  onclick="StaffApp._qCopy()" >📋 복사</button>
+        <button class="qc-sb share" onclick="StaffApp._qShare()">📤 공유</button>
+        <button class="qc-sb print" onclick="StaffApp._qPrint()">🖨️ 인쇄</button>
+        <button class="qc-sb save"  onclick="StaffApp._qOpenSave()">💾 저장</button>
+      </div>
+    </div>`;
+  }
+
+  /* ── 결과 텍스트 ── */
+  function _qPayText() {
+    const r = _qResult; if (!r || !r.grandTotal) return '';
+    const acad = StaffDB.getAcad();
+    const lines = [
+      `══════════════════════`,
+      `🏫 ${acad.name}`,
+      `⚡ 즉시 시급 정산서`,
+      `══════════════════════`,
+      `👤 ${r.name || '(이름 없음)'}`,
+      `📅 ${r.date ? new Date(r.date).toLocaleDateString('ko-KR') : ''}`,
+      `─────────────────────`,
+    ];
+    r.slotResults.forEach(({ slot, result: sr, index }) => {
+      if (!sr) return;
+      const typeTxt = sr.type === 'class' ? '📚 수업' : '🏢 일반';
+      lines.push(`[${index}] ${typeTxt}  ${slot.start}~${slot.end}${slot.label?' · '+slot.label:''}`);
+      lines.push(`    ⏱ ${_qFmtMin(sr.netMin)} × ${_fmt(sr.rate)}원/h`);
+      lines.push(`    → ${_fmt(sr.pay)}원`);
+    });
+    lines.push(`─────────────────────`);
+    if (r.generalPay > 0) lines.push(`🏢 일반 합계: ${_fmt(r.generalPay)}원`);
+    if (r.classPay   > 0) lines.push(`📚 수업 합계: ${_fmt(r.classPay)}원`);
+    lines.push(`⚡ 세전 합계: ${_fmt(r.grandTotal)}원  (총 ${_qFmtMin(r.totalMin)})`);
+    return lines.join('\n');
+  }
+
+  async function _qCopy() {
+    const t = _qPayText();
+    if (!t) { _toast('⚠️ 계산 결과가 없습니다'); return; }
+    try { await navigator.clipboard.writeText(t); _toast('📋 복사됐습니다', 'success'); }
+    catch { _toast('⚠️ 복사 실패'); }
+  }
+
+  async function _qShare() {
+    const r = _qResult; if (!r || !r.grandTotal) { _toast('⚠️ 계산 결과가 없습니다'); return; }
+    const t = _qPayText();
+    const sd = { title: `${r.name||'즉시계산'} 정산서`, text: t };
+    if (navigator.share && navigator.canShare?.(sd)) {
+      try { await navigator.share(sd); _toast('📤 공유 완료', 'success'); return; }
+      catch(e) { if (e.name === 'AbortError') return; }
+    }
+    _qCopy();
+  }
+
+  function _qPrint() {
+    const r = _qResult; if (!r || !r.grandTotal) { _toast('⚠️ 계산 결과가 없습니다'); return; }
+    const acad    = StaffDB.getAcad();
+    const name    = r.name || '(이름 없음)';
+    const dateStr = r.date ? new Date(r.date).toLocaleDateString('ko-KR') : '';
+    const logoSrc = (typeof LOGO !== 'undefined' && LOGO.small) ? LOGO.small : '';
+
+    const tRows = r.slotResults.map(({ slot, result: sr, index }) => {
+      if (!sr) return '';
+      const typeTxt = sr.type === 'class' ? '📚 수업' : '🏢 일반';
+      return `<tr>
+        <td>[${index}] ${typeTxt}${slot.label?' · '+_e(slot.label):''}</td>
+        <td style="text-align:center">${_e(slot.start)}~${_e(slot.end)}</td>
+        <td style="text-align:center">${_qFmtMin(sr.netMin)}</td>
+        <td style="text-align:right">${_fmt(sr.rate)}원</td>
+        <td style="text-align:right">${_fmt(sr.pay)}원</td>
+      </tr>`;
+    }).join('');
+
+    let frame = document.getElementById('qc-pf');
+    if (!frame) { frame = document.createElement('div'); frame.id = 'qc-pf'; document.body.appendChild(frame); }
+    frame.innerHTML = `
+      <div class="sfp-hdr">${logoSrc?`<img class="sfp-logo" src="${logoSrc}" alt="logo">`:''}
+        <div><div class="sfp-org-name">${_e(acad.name)}</div><div class="sfp-title">⚡ 즉시 시급 정산서</div></div>
+        <div class="sfp-date">발행: ${new Date().toLocaleDateString('ko-KR')}</div>
+      </div>
+      <hr class="sfp-div">
+      <table class="sfp-tbl" style="margin-bottom:10px">
+        <tr><th>성&nbsp;명</th><td>${_e(name)}</td><th>날짜</th><td>${dateStr}</td></tr>
+        <tr><th>총 근무</th><td>${_qFmtMin(r.totalMin)}</td>
+            <th>일반 / 수업</th>
+            <td>${r.generalPay>0?`🏢 ${_fmt(r.generalPay)}원`:'-'} / ${r.classPay>0?`📚 ${_fmt(r.classPay)}원`:'-'}</td>
+        </tr>
+      </table>
+      <table class="sfp-tbl">
+        <thead><tr><th>항목</th><th>시간</th><th style="text-align:center">근무시간</th><th style="text-align:right">시급</th><th style="text-align:right">금액</th></tr></thead>
+        <tbody>${tRows}</tbody>
+        <tfoot><tr class="sfp-tot">
+          <td colspan="4"><strong>⚡ 세전 합계 (총 ${_qFmtMin(r.totalMin)})</strong></td>
+          <td style="text-align:right"><strong>${_fmt(r.grandTotal)}원</strong></td>
+        </tr></tfoot>
+      </table>
+      <div class="sfp-sign">
+        <div class="sfp-sign-box"><div>확&nbsp;&nbsp;인</div><div class="sfp-sign-line"></div><div>${_e(name)}</div></div>
+        <div class="sfp-sign-box"><div>원&nbsp;&nbsp;장</div><div class="sfp-sign-line"></div><div>${_e(acad.name)}</div></div>
+      </div>
+      <div class="sfp-footer">본 정산서는 ${_e(acad.name)}에서 발행되었습니다.</div>`;
+    window.print();
+    setTimeout(() => frame.remove(), 1500);
+  }
+
+  /* ── 직원으로 저장 ── */
+  function _qOpenSave() {
+    const r = _qResult; if (!r || !r.grandTotal) { _toast('⚠️ 계산 결과가 없습니다'); return; }
+    const staff = StaffDB.getActive();
+    const sh    = document.getElementById('sf-qsave-sh');
+    sh.innerHTML = `
+      <div class="sh-handle"></div>
+      <div class="sh-title">💾 직원 근무로 저장</div>
+      <div style="padding:12px;flex:1;overflow-y:auto">
+        <p style="font-size:13px;color:var(--tx2);margin:0 0 12px">
+          정산 내역을 직원의 <strong>${r.date}</strong> 근무 기록으로 저장합니다.
+        </p>
+        <span class="sf-fl">저장할 직원</span>
+        <select class="sf-fi" id="qsave-sid" style="margin-bottom:10px">
+          <option value="">— 직원 선택 —</option>
+          ${staff.map(s=>`<option value="${s.id}">${_e(s.name)} (${s.employType==='parttime'?'알바':'정직원'})</option>`).join('')}
+        </select>
+        <div style="background:var(--surf2);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--tx3)">
+          ${r.slotResults.filter(x=>x.result).map(({slot,result:sr,index})=>
+            `<div>• [${index}] ${sr.type==='class'?'📚수업':'🏢일반'} ${_e(slot.start)}~${_e(slot.end)} → ${_fmt(sr.pay)}원</div>`
+          ).join('')}
+          <div style="margin-top:4px;font-weight:700;color:var(--a)">합계: ${_fmt(r.grandTotal)}원</div>
+        </div>
+      </div>
+      <div class="sh-acts">
+        <button class="btn-x"  onclick="StaffApp._closeQSave()">취소</button>
+        <button class="btn-ok" onclick="StaffApp._doQSave()">저장</button>
+      </div>`;
+    document.getElementById('sf-qsave-ov')?.classList.remove('hidden');
+  }
+
+  function _closeQSave() { document.getElementById('sf-qsave-ov')?.classList.add('hidden'); }
+
+  async function _doQSave() {
+    const sid = document.getElementById('qsave-sid')?.value;
+    if (!sid) { _toast('⚠️ 직원을 선택해주세요'); return; }
+    const r = _qResult; if (!r) return;
+    for (const { slot, result: sr } of r.slotResults) {
+      if (!sr) continue;
+      await StaffDB.addWorkEntry(sid, r.date, {
+        type:      sr.type,
+        start:     slot.start,
+        end:       slot.end,
+        hours:     sr.netMin / 60,
+        baseHours: sr.netMin / 60,
+        appliedRate: sr.rate,
+        note:      slot.label || `즉시계산(${sr.type==='class'?'수업':'일반'})`,
+      });
+    }
+    _closeQSave();
+    _toast('✅ 직원 근무로 저장 완료', 'success');
+  }
+
   /* ══ 유틸 ══ */
   const _fmtHrs = h => { const n = Math.round(Number(h || 0) * 100) / 100; return n % 1 === 0 ? String(n) : String(n); };
   const _fmt    = n => Number(n).toLocaleString('ko-KR');
@@ -1491,5 +2254,11 @@ const StaffApp = (() => {
     _onSel, _calcAndRender, _saveAcad,
     _calcAll, _downloadExcel,
     _copy, _pdf, _share,
+    /* ⚡ 즉시 계산기 */
+    _renderQuickCalc,
+    _qAddSlot, _qDelSlot, _qUpdate, _qToggleNight,
+    _qBaseUpdate, _qReset,
+    _qCopy, _qShare, _qPrint,
+    _qOpenSave, _closeQSave, _doQSave,
   };
 })();
