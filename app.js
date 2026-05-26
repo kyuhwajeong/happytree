@@ -237,6 +237,11 @@ const App = (() => {
     _q('op-share-btn')?.classList.toggle('hidden',!(isAdmin&&S.page==='operate'));
     _q('admin-badge')?.classList.toggle('hidden',!isAdmin);
     _q('mg-logout-btn')?.classList.toggle('hidden',!loggedIn);
+    // ★ 교재·성적·학생·직원 페이지 로그아웃 버튼 동기화
+    _q('bl-logout-btn')?.classList.toggle('hidden',!loggedIn);
+    _q('gr-logout-btn')?.classList.toggle('hidden',!loggedIn);
+    _q('st-logout-btn')?.classList.toggle('hidden',!loggedIn);
+    _q('sf-logout-btn')?.classList.toggle('hidden',!loggedIn);
     // ★ admin 전용 탭 표시/숨김 → 동적 nav 렌더로 교체
     _renderNav();
     if(loggedIn)_resetAutoLogout();

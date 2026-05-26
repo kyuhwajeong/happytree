@@ -977,6 +977,7 @@ to{opacity:1;transform:none}}
         </div>
         <div class="phr">
           <button class="ibtn" id="gr-rpt-btn" title="전체 성적표" onclick="GradeApp.openReport()" style="display:none">📋</button>
+          <button id="gr-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>
         </div>
       </div>
       <div class="gr-toolbar">

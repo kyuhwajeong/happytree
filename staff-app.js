@@ -492,6 +492,7 @@ const StaffApp = (() => {
             <span id="sf-pin-dot" style="position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:50%;background:var(--a);display:${_loadHomeTab()==='list'?'none':'block'}"></span>
           </button>
           <button class="ibtn" onclick="StaffApp.openAdd()" title="직원 추가">➕</button>
+          <button id="sf-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>
         </div>
       </div>
       <div class="sf-stabs">

@@ -240,6 +240,7 @@ const StudentApp = (() => {
         </div>
         <div class="phr">
           <button class="ibtn" onclick="StudentApp.openImport()" title="엑셀 가져오기">📥</button>
+          <button id="st-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>
         </div>
       </div>
 

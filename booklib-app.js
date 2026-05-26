@@ -260,10 +260,10 @@ const BooklibApp = (() => {
         <div style="min-width:0">
           <div class="ph-title" onclick="BooklibApp.render()" title="새로고침" style="cursor:pointer">교재 학습 관리 <span class="admin-badge">🔑 관리자</span></div>
           <div class="ph-sub" id="bl-ph-sub">교재 등록 · 챕터 체크</div>
-          </div>
-
-
-
+        </div>
+      </div>
+      <div class="phr">
+        <button id="bl-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>
       </div>
     </div>
     <div class="bl-stabs">
