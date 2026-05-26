@@ -44,7 +44,7 @@
 const StaffApp = (() => {
   /* ══ 상태 ══ */
   let _st = {
-    subTab:       'list',
+    subTab:       _loadHomeTab ? _loadHomeTab() : 'list',
     editId:       null,
     calStaffId:   null,
     calYear:      new Date().getFullYear(),
@@ -66,6 +66,22 @@ const StaffApp = (() => {
     lastBatchId:  null,
     lastBatchCount: 0,
   };
+
+  /* ── 홈탭 설정 ── */
+  const LS_HOME_TAB = 'hk10b_staff_home';
+  const TAB_META = {
+    list:      { icon:'👥', label:'직원 목록',  desc:'재직/퇴직 직원 카드 목록' },
+    salary:    { icon:'💰', label:'급여 계산',  desc:'직원 개별 월별 급여 산출' },
+    all:       { icon:'📊', label:'일괄정산',   desc:'전직원 월별·연간 급여 집계' },
+    quickcalc: { icon:'⚡', label:'즉시 계산',  desc:'직원 등록 없이 바로 시급 계산' },
+  };
+
+  function _loadHomeTab() {
+    try { return localStorage.getItem(LS_HOME_TAB) || 'list'; } catch { return 'list'; }
+  }
+  function _saveHomeTab(tab) {
+    try { localStorage.setItem(LS_HOME_TAB, tab); } catch {}
+  }
 
   /* ══ 즉시 계산기 전용 상태 ══ */
   let _qSlots  = [];   // [{id,label,start,end,type:'general'|'class',rate}]
@@ -306,6 +322,20 @@ const StaffApp = (() => {
 .sfp-sign-box{text-align:center;font-size:12px}
 .sfp-sign-line{border-bottom:1px solid #aaa;width:80px;margin:28px auto 4px}
 .sfp-footer{font-size:10px;color:#aaa;text-align:center;margin-top:16px}
+/* ── 시작화면 설정 ── */
+.sf-home-dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--a);margin-left:3px;vertical-align:middle;flex-shrink:0}
+.sf-ht-item{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;border:2px solid var(--bdr);background:var(--card);cursor:pointer;transition:all .18s}
+.sf-ht-item:active{transform:scale(.97)}
+.sf-ht-item.active{border-color:var(--a);background:var(--a10)}
+.sf-ht-ico{font-size:22px;width:36px;height:36px;border-radius:10px;background:var(--surf2);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sf-ht-item.active .sf-ht-ico{background:var(--a20)}
+.sf-ht-info{flex:1;min-width:0}
+.sf-ht-name{font-size:14px;font-weight:800;color:var(--tx)}
+.sf-ht-desc{font-size:11px;color:var(--tx3);margin-top:2px}
+.sf-ht-radio{width:20px;height:20px;border-radius:50%;border:2px solid var(--bdr2);background:var(--card);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:border-color .15s}
+.sf-ht-item.active .sf-ht-radio{border-color:var(--a)}
+.sf-ht-radio-dot{width:10px;height:10px;border-radius:50%;background:var(--a)}
+
 /* ── 즉시 시급 계산기 ── */
 .qc-wrap{display:flex;flex-direction:column;height:100%;overflow:hidden}
 .qc-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 14px 100px}
@@ -432,13 +462,15 @@ const StaffApp = (() => {
   async function init() {
     _css();
     if (typeof StaffDB === 'undefined') { console.warn('[StaffApp] StaffDB not loaded'); return; }
+    // 저장된 홈탭 적용
+    _st.subTab = _loadHomeTab();
     await StaffDB.init();
     StaffDB.on('staff', () => {
       const pg = document.getElementById('page-staff');
       if (!pg?.classList.contains('on')) return;
       if (_st.subTab === 'list') _renderList();
     });
-    console.log('[StaffApp v3] ✅');
+    console.log('[StaffApp v3.2] ✅ homeTab:', _st.subTab);
   }
 
   /* ══ RENDER ══ */
@@ -461,13 +493,25 @@ const StaffApp = (() => {
             <div class="ph-sub" id="sf-sub">직원 정보 · 근무 · 급여</div>
           </div>
         </div>
-        <div class="phr"><button class="ibtn" onclick="StaffApp.openAdd()" title="직원 추가">➕</button></div>
+        <div class="phr" style="display:flex;gap:5px;align-items:center">
+          <button class="ibtn" id="sf-pin-btn" onclick="StaffApp._openHomeTabSetting()"
+            title="시작 화면 설정" style="font-size:14px;position:relative">
+            📌
+            <span id="sf-pin-dot" style="position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:50%;background:var(--a);display:${_loadHomeTab()==='list'?'none':'block'}"></span>
+          </button>
+          <button class="ibtn" onclick="StaffApp.openAdd()" title="직원 추가">➕</button>
+        </div>
       </div>
       <div class="sf-stabs">
-        <button class="sf-stab ${_st.subTab==='list'?'on':''}"      onclick="StaffApp.switchTab('list')">👥 직원</button>
-        <button class="sf-stab ${_st.subTab==='salary'?'on':''}"    onclick="StaffApp.switchTab('salary')">💰 급여</button>
-        <button class="sf-stab ${_st.subTab==='all'?'on':''}"       onclick="StaffApp.switchTab('all')">📊 일괄정산</button>
-        <button class="sf-stab ${_st.subTab==='quickcalc'?'on':''}" onclick="StaffApp.switchTab('quickcalc')" style="color:${_st.subTab==='quickcalc'?'var(--a)':'#d97706'}">⚡ 즉시계산</button>
+        ${['list','salary','all','quickcalc'].map(t => {
+          const home = _loadHomeTab() === t;
+          const labels = {list:'👥 직원', salary:'💰 급여', all:'📊 일괄정산', quickcalc:'⚡ 즉시계산'};
+          return `<button class="sf-stab ${_st.subTab===t?'on':''}"
+            onclick="StaffApp.switchTab('${t}')"
+            style="${t==='quickcalc'&&_st.subTab!==t?'color:#d97706':''}">
+            ${labels[t]}${home?'<span class="sf-home-dot"></span>':''}
+          </button>`;
+        }).join('')}
       </div>
       <div id="sf-cnt" style="flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;"></div>
       <div id="sf-edit-ov" class="ov hidden" onclick="if(event.target.id==='sf-edit-ov')StaffApp.closeEdit()">
@@ -500,6 +544,9 @@ const StaffApp = (() => {
       b.classList.toggle('on', TABS[i] === tab);
       if (TABS[i] === 'quickcalc') b.style.color = tab === 'quickcalc' ? 'var(--a)' : '#d97706';
     });
+    // 핀 도트 갱신
+    const dot = document.getElementById('sf-pin-dot');
+    if (dot) dot.style.display = _loadHomeTab() === 'list' ? 'none' : 'block';
     if      (tab === 'list')      _renderList();
     else if (tab === 'salary')    _renderSalary();
     else if (tab === 'all')       _renderAll();
@@ -2440,6 +2487,66 @@ const StaffApp = (() => {
     el._t = setTimeout(() => el.classList.add('hidden'), 3000);
   }
 
+  /* ── 시작 화면 설정 ── */
+  function _openHomeTabSetting() {
+    const sh      = document.getElementById('sf-hometab-sh');
+    const current = _loadHomeTab();
+    sh.innerHTML = `
+      <div class="sh-handle"></div>
+      <div class="sh-title">📌 시작 화면 설정</div>
+      <div style="padding:10px 4px 8px;flex:1;overflow-y:auto">
+        <p style="font-size:12px;color:var(--tx3);margin:0 0 14px;padding:0 4px">
+          직원 메뉴를 열 때 <strong>처음 표시될 화면</strong>을 선택하세요.<br>
+          선택한 탭에 <span style="color:var(--a)">●</span> 표시가 붙습니다.
+        </p>
+        <div id="sf-ht-list" style="display:flex;flex-direction:column;gap:8px">
+          ${Object.entries(TAB_META).map(([key, meta]) => `
+            <div class="sf-ht-item ${current===key?'active':''}" onclick="StaffApp._selectHomeTab('${key}')">
+              <div class="sf-ht-ico">${meta.icon}</div>
+              <div class="sf-ht-info">
+                <div class="sf-ht-name">${meta.label}</div>
+                <div class="sf-ht-desc">${meta.desc}</div>
+              </div>
+              <div class="sf-ht-radio">${current===key?'<div class="sf-ht-radio-dot"></div>':''}</div>
+            </div>`).join('')}
+        </div>
+      </div>
+      <div class="sh-acts">
+        <button class="btn-x" onclick="StaffApp._closeHomeTabSetting()">닫기</button>
+      </div>`;
+    document.getElementById('sf-hometab-ov')?.classList.remove('hidden');
+  }
+
+  function _selectHomeTab(tab) {
+    _saveHomeTab(tab);
+    // UI 즉시 갱신
+    document.querySelectorAll('.sf-ht-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.sf-ht-radio').forEach(el => el.innerHTML = '');
+    const target = document.querySelectorAll('.sf-ht-item')[Object.keys(TAB_META).indexOf(tab)];
+    if (target) {
+      target.classList.add('active');
+      target.querySelector('.sf-ht-radio').innerHTML = '<div class="sf-ht-radio-dot"></div>';
+    }
+    // 핀 도트 갱신
+    const dot = document.getElementById('sf-pin-dot');
+    if (dot) dot.style.display = tab === 'list' ? 'none' : 'block';
+    // 탭 홈 핀 갱신
+    document.querySelectorAll('.sf-home-dot').forEach(d => d.remove());
+    const TABS = ['list','salary','all','quickcalc'];
+    document.querySelectorAll('.sf-stab').forEach((b, i) => {
+      if (TABS[i] === tab) {
+        const dot2 = document.createElement('span');
+        dot2.className = 'sf-home-dot';
+        b.appendChild(dot2);
+      }
+    });
+    _toast(`📌 "${TAB_META[tab].label}" 을 시작 화면으로 설정했습니다`, 'success');
+  }
+
+  function _closeHomeTabSetting() {
+    document.getElementById('sf-hometab-ov')?.classList.add('hidden');
+  }
+
   /* ══ 퍼블릭 ══ */
   return {
     init, render, switchTab,
@@ -2455,6 +2562,8 @@ const StaffApp = (() => {
     _onSel, _calcAndRender, _saveAcad,
     _onAllSel, _calcAll, _renderMonthly, _renderAnnual, _annualBarChart, _downloadExcel,
     _copy, _pdf, _share,
+    /* 시작화면 설정 */
+    _openHomeTabSetting, _selectHomeTab, _closeHomeTabSetting,
     /* ⚡ 즉시 계산기 */
     _renderQuickCalc,
     _qAddSlot, _qDelSlot, _qUpdate, _qToggleType, _qRefreshSlot,
