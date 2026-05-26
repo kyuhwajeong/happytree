@@ -262,7 +262,7 @@ const App = (() => {
           const _am = (DB.getSession()?.allowedMenus) || [];
           if (!_am.includes(def.pg)) return;
         } else {
-          return; // operator 등은 adminOnly 탭 모두 숨김
+          return; // operator 등 일반 비관리자는 adminOnly 탭 모두 숨김
         }
       }
       if (def.pg === 'manage' && role === 'teacher') return;
@@ -1144,19 +1144,161 @@ const App = (() => {
   }
 
   /* 계정 */
-  function _renderMgAcc(){const wrap=document.getElementById('mg-accounts');if(!wrap)return;wrap.innerHTML='';const isAdmin=DB.isAdmin(),sess=DB.getSession();if(isAdmin){const b=document.createElement('button');b.className='add-cls';b.style.marginBottom='6px';b.innerHTML='<span>＋</span> 계정 추가';b.onclick=()=>openAccModal();wrap.appendChild(b);}const note=document.createElement('div');note.style.cssText='font-size:11px;color:var(--tx2);margin-bottom:8px;line-height:1.65;padding:8px 10px;background:var(--card2);border-radius:var(--rs)';note.innerHTML='<b style="color:var(--tx)">admin</b>: 관리메뉴 전체 + 진도입력<br><b style="color:var(--tx)">operator</b>: 진도 입력만<br><b style="color:var(--tx)">teacher(강사)</b>: 지정 반 진도입력 + 관리자가 허용한 추가 메뉴(교재·성적) — <span style="color:var(--a)">담당 반 데이터만 접근</span>';wrap.appendChild(note);const card=document.createElement('div');card.className='acc-card';DB.getAccounts().forEach(acc=>{const isMe=sess?.id===acc.id,row=document.createElement('div');row.className='acc-row';
-    // ★ 강사 추가 메뉴 권한 배지
-    const menuBadge=(acc.role==='teacher'&&acc.allowedMenus?.length)
-      ?`<div style="font-size:10px;color:var(--a);margin-top:3px">추가 메뉴: ${acc.allowedMenus.map(m=>m==='booklib'?'📖 교재':m==='grade'?'📝 성적':m).join(' · ')}</div>`:''
-    ;
-    row.innerHTML=`<div style="flex:1;min-width:0"><div class="acc-nm">${_esc(acc.username)}${isMe?'&nbsp;<span style="color:var(--green);font-size:10px">●</span>':''}<span class="role-badge ${acc.role}">${acc.role==='admin'?'관리자':acc.role==='teacher'?'강사':'운용자'}</span></div><div class="acc-role">${acc.role==='admin'?'모든 기능':acc.role==='teacher'?'지정 반 진도 입력':'진도 입력만'}</div>${acc.role==='teacher'&&acc.teacherClasses?.length?`<div style="font-size:10px;color:var(--a);margin-top:3px">담당 반: ${acc.teacherClasses.map(id=>{const c=DB.getActiveClasses().find(cl=>cl.id===id);return c?c.name:'?';}).join(', ')}</div>`:''}${menuBadge}</div><div class="acc-acts">${isAdmin?`<button class="ibtn" onclick="App.openAccModal('${acc.id}')">✏️</button>`:''}${isAdmin&&!isMe?`<button class="ibtn red" onclick="App.delAcc('${acc.id}','${_esc(acc.username)}')">🗑</button>`:''}</div>`;card.appendChild(row);});wrap.appendChild(card);}
+  // ★ 일괄 삭제 선택 모드 상태
+  let _accBulkMode = false;
+
+  function _renderMgAcc(){
+    const wrap=document.getElementById('mg-accounts'); if(!wrap) return;
+    wrap.innerHTML='';
+    const isAdmin=DB.isAdmin(), sess=DB.getSession();
+    const accs=DB.getAccounts();
+
+    /* ── 상단 버튼 행 ── */
+    if(isAdmin){
+      const topRow=document.createElement('div');
+      topRow.style.cssText='display:flex;gap:7px;margin-bottom:6px;align-items:center';
+
+      // 계정 추가
+      const addBtn=document.createElement('button');
+      addBtn.className='add-cls';
+      addBtn.style.cssText='flex:1;padding:11px';
+      addBtn.innerHTML='<span style="font-size:16px">＋</span> 계정 추가';
+      addBtn.onclick=()=>openAccModal();
+      topRow.appendChild(addBtn);
+
+      // 선택 삭제 토글 (삭제 가능한 계정 있을 때만)
+      const deletable=accs.filter(a=>a.id!==sess?.id);
+      if(deletable.length>0){
+        const selBtn=document.createElement('button');
+        selBtn.className='acc-sel-btn'+(_accBulkMode?' on':'');
+        selBtn.id='acc-sel-mode-btn';
+        selBtn.textContent=_accBulkMode?'✕ 선택 취소':'☑ 선택 삭제';
+        selBtn.onclick=()=>{ _accBulkMode=!_accBulkMode; _renderMgAcc(); };
+        topRow.appendChild(selBtn);
+      }
+      wrap.appendChild(topRow);
+    }
+
+    /* ── 일괄 삭제 액션 바 ── */
+    const bulkBar=document.createElement('div');
+    bulkBar.className='acc-bulk-bar'+(_accBulkMode?' on':'');
+    bulkBar.id='acc-bulk-bar';
+    bulkBar.innerHTML=`
+      <div class="acc-bulk-cnt" id="acc-bulk-cnt">0개 선택</div>
+      <button class="acc-bulk-del" id="acc-bulk-del-btn" disabled onclick="App.delAccBulk()">🗑 선택 삭제</button>
+      <button class="acc-bulk-cancel" onclick="App._cancelAccBulk()">취소</button>`;
+    wrap.appendChild(bulkBar);
+
+    /* ── 역할 안내 ── */
+    const note=document.createElement('div');
+    note.style.cssText='font-size:11px;color:var(--tx2);margin-bottom:8px;line-height:1.65;padding:8px 10px;background:var(--card2);border-radius:var(--rs)';
+    note.innerHTML='<b style="color:var(--tx)">admin</b>: 관리메뉴 전체 + 진도입력<br><b style="color:var(--tx)">operator</b>: 진도 입력만<br><b style="color:var(--tx)">teacher(강사)</b>: 지정 반 진도입력 + 관리자가 허용한 추가 메뉴(교재·성적) — <span style="color:var(--a)">담당 반 데이터만 접근</span>';
+    wrap.appendChild(note);
+
+    /* ── 계정 카드 ── */
+    const card=document.createElement('div');
+    card.className='acc-card';
+
+    accs.forEach(acc=>{
+      const isMe=sess?.id===acc.id;
+      const canDelete=isAdmin&&!isMe;
+      const row=document.createElement('div');
+      row.className='acc-row';
+      row.dataset.accId=acc.id;
+
+      // ★ 선택 체크박스 (일괄 삭제 모드 & 삭제 가능 계정만)
+      const ck=document.createElement('input');
+      ck.type='checkbox';
+      ck.className='acc-row-ck'+(_accBulkMode&&canDelete?' on':'');
+      ck.dataset.accId=acc.id;
+      ck.disabled=!canDelete;
+      ck.addEventListener('change',_syncBulkBar);
+      row.appendChild(ck);
+
+      // ★ 강사 추가 메뉴 권한 배지
+      const menuBadge=(acc.role==='teacher'&&acc.allowedMenus?.length)
+        ?`<div style="font-size:10px;color:var(--a);margin-top:3px">추가 메뉴: ${acc.allowedMenus.map(m=>m==='booklib'?'📖 교재':m==='grade'?'📝 성적':m).join(' · ')}</div>`:''
+      ;
+
+      // 정보 영역
+      const info=document.createElement('div');
+      info.style.cssText='flex:1;min-width:0';
+      info.innerHTML=`
+        <div class="acc-nm">${_esc(acc.username)}${isMe?'&nbsp;<span style="color:var(--green);font-size:10px">●</span>':''}
+          <span class="role-badge ${acc.role}">${acc.role==='admin'?'관리자':acc.role==='teacher'?'강사':'운용자'}</span>
+        </div>
+        <div class="acc-role">${acc.role==='admin'?'모든 기능':acc.role==='teacher'?'지정 반 진도 입력':'진도 입력만'}</div>
+        ${acc.role==='teacher'&&acc.teacherClasses?.length
+          ?`<div style="font-size:10px;color:var(--a);margin-top:3px">담당 반: ${acc.teacherClasses.map(id=>{const c=DB.getActiveClasses().find(cl=>cl.id===id);return c?c.name:'?';}).join(', ')}</div>`:''
+        }${menuBadge}`;
+      row.appendChild(info);
+
+      // 개별 액션 버튼 (일괄 모드 아닐 때만)
+      if(!_accBulkMode){
+        const acts=document.createElement('div');
+        acts.className='acc-acts';
+        if(isAdmin) acts.innerHTML+=`<button class="ibtn" onclick="App.openAccModal('${acc.id}')">✏️</button>`;
+        if(canDelete) acts.innerHTML+=`<button class="ibtn red" onclick="App.delAcc('${acc.id}','${_esc(acc.username)}')">🗑</button>`;
+        row.appendChild(acts);
+      }
+
+      // 선택 모드: 행 전체 클릭으로 체크 토글
+      if(_accBulkMode&&canDelete){
+        row.style.cursor='pointer';
+        row.addEventListener('click', e=>{
+          if(e.target===ck) return;
+          ck.checked=!ck.checked;
+          row.classList.toggle('selected', ck.checked);
+          _syncBulkBar();
+        });
+      }
+
+      card.appendChild(row);
+    });
+
+    wrap.appendChild(card);
+  }
+
+  // ★ 체크박스 상태 → 액션 바 동기화
+  function _syncBulkBar(){
+    const checked=[...document.querySelectorAll('.acc-row-ck:checked')];
+    const cnt=document.getElementById('acc-bulk-cnt');
+    const delBtn=document.getElementById('acc-bulk-del-btn');
+    if(cnt) cnt.textContent=`${checked.length}개 선택`;
+    if(delBtn) delBtn.disabled=checked.length===0;
+    document.querySelectorAll('.acc-row-ck').forEach(ck=>{
+      ck.closest('.acc-row')?.classList.toggle('selected', ck.checked);
+    });
+  }
+
+  // ★ 일괄 삭제 모드 취소
+  function _cancelAccBulk(){ _accBulkMode=false; _renderMgAcc(); }
+
+  // ★ 선택 계정 일괄 삭제
+  async function delAccBulk(){
+    const checked=[...document.querySelectorAll('.acc-row-ck:checked')];
+    if(!checked.length){_toast('⚠️ 삭제할 계정을 선택하세요','error');return;}
+    const ids=checked.map(ck=>ck.dataset.accId);
+    const names=ids.map(id=>DB.getAccounts().find(a=>a.id===id)?.username||id);
+    if(!confirm(`다음 계정 ${ids.length}개를 삭제하시겠습니까?\n\n${names.map(n=>'  · '+n).join('\n')}\n\n이 작업은 되돌릴 수 없습니다.`)) return;
+    const delBtn=document.getElementById('acc-bulk-del-btn');
+    if(delBtn){delBtn.disabled=true;delBtn.textContent='⏳ 삭제 중...';}
+    for(const id of ids) await DB.deleteAccount(id);
+    _accBulkMode=false;
+    _renderMgAcc();
+    _toast(`🗑 ${ids.length}개 계정 삭제 완료`,'success',3000);
+  }
+
   function openAccModal(id=null){S.editAccId=id;const acc=id?DB.getAccounts().find(a=>a.id===id):null;_q('macc-t').textContent=id?'계정 수정':'계정 추가';_q('f-aid').value=acc?.username||'';_q('f-aid').readOnly=!!id;_q('f-apw').value='';_q('f-arole').value=acc?.role||'operator';
+    // ★ allowedMenus 3번째 인자로 전달
     App._onRoleChange(acc?.role||'operator', acc?.teacherClasses||[], acc?.allowedMenus||[]);_q('modal-acc').classList.remove('hidden');}
+
   async function saveAccount(){const u=_q('f-aid').value.trim(),p=_q('f-apw').value,role=_q('f-arole').value;
     const teacherClasses=role==='teacher'?[...document.querySelectorAll('#f-teacher-cls-list input:checked')].map(c=>c.value):[];
     // ★ 강사 추가 메뉴 권한 수집 (강사 아닐 경우 빈 배열로 초기화)
     const allowedMenus=role==='teacher'?[...document.querySelectorAll('#f-teacher-menu-list input:checked')].map(c=>c.value):[];
     if(!u){_toast('⚠️ 아이디를 입력해주세요','error');return;}if(!S.editAccId&&!p){_toast('⚠️ 비밀번호를 입력해주세요','error');return;}if(S.editAccId){const d=p?{password:p,role,teacherClasses,allowedMenus}:{role,teacherClasses,allowedMenus};await DB.updateAccount(S.editAccId,d);_toast('✅ 계정 수정 완료','success');}else{if(!await DB.addAccount(u,p,role,teacherClasses,allowedMenus)){_toast('⚠️ 이미 존재하는 아이디','error');return;}_toast('✅ 계정 추가 완료','success');}closeModal('acc');_renderMgAcc();}
+
   async function delAcc(id,u){if(DB.getSession()?.id===id){_toast('⚠️ 현재 계정은 삭제 불가','error');return;}if(!confirm(`"${u}" 계정을 삭제하시겠습니까?`))return;await DB.deleteAccount(id);_renderMgAcc();_toast('🗑 삭제 완료');}
 
   /* 테마 */
@@ -1379,7 +1521,7 @@ const App = (() => {
     openClassModal,saveClass,delClass,_onDayCkChange,
     openCopyModal,doCopyBooks,
     mgPrev,mgNext,
-    openAccModal,saveAccount,delAcc,
+    openAccModal,saveAccount,delAcc,delAccBulk,_cancelAccBulk,
     handleImport,shareUrl,sendSms,shareCurrentClass,
     closeModal,
     _saveNavOrder, _renderNav, _applyNavOrder, _resetNavOrder, _toast,
