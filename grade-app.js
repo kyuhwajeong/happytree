@@ -1205,20 +1205,61 @@ to{opacity:1;transform:none}}
   }
 
   /* ── 전체 학생 검색+그룹핑 패널 (반/교재 미선택 전용) ── */
+  let _stuSearchComposing = false; // 한글 IME 조합 중 플래그
+
   function _renderStudentSearch(panel) {
+    // ── input 요소가 없을 때만 최초 1회 골격 생성 ──
+    if (!panel.querySelector('.gr-stu-search')) {
+      panel.innerHTML = `
+        <div class="gr-stu-search-wrap">
+          <input class="gr-stu-search" placeholder="🔍 이름/닉네임"
+            autocomplete="off" autocorrect="off" spellcheck="false" />
+        </div>
+        <div class="gr-stu-list-body"></div>`;
+
+      const inp = panel.querySelector('.gr-stu-search');
+
+      // 한글 조합 시작 — 목록 갱신 보류
+      inp.addEventListener('compositionstart', () => {
+        _stuSearchComposing = true;
+      });
+      // 한글 조합 완료 — 확정된 값으로 목록 갱신
+      inp.addEventListener('compositionend', e => {
+        _stuSearchComposing = false;
+        _stuSearch = e.target.value;
+        _updateStuListBody(panel);
+      });
+      // 영문·백스페이스 등 non-IME 입력
+      inp.addEventListener('input', e => {
+        if (_stuSearchComposing) return; // 조합 중이면 무시
+        _stuSearch = e.target.value;
+        _updateStuListBody(panel);
+      });
+    }
+
+    // input 값 동기화 (외부에서 _stuSearch가 바뀐 경우)
+    const inp = panel.querySelector('.gr-stu-search');
+    if (inp && inp.value !== _stuSearch) inp.value = _stuSearch;
+
+    // 목록만 갱신 (input DOM은 건드리지 않음)
+    _updateStuListBody(panel);
+  }
+
+  /* 목록 영역만 교체 — input은 절대 건드리지 않음 */
+  function _updateStuListBody(panel) {
+    const listBody = panel.querySelector('.gr-stu-list-body');
+    if (!listBody) return;
+
     const allStudents = typeof StudentDB !== 'undefined'
       ? StudentDB.getFiltered({ status: '재원' }) : [];
     const classes = typeof DB !== 'undefined' ? DB.getActiveClasses() : [];
-
     const q = _stuSearch.trim().toLowerCase();
     const filtered = q
       ? allStudents.filter(s =>
           (s.name     || '').toLowerCase().includes(q) ||
-          (s.nickname || '').toLowerCase().includes(q)
-        )
+          (s.nickname || '').toLowerCase().includes(q))
       : allStudents;
 
-    // 반별 그룹핑 (반 순서 유지)
     const rows = [];
     for (const cls of classes) {
       const inCls = filtered.filter(s => s.classCode === cls.name);
@@ -1234,29 +1275,15 @@ to{opacity:1;transform:none}}
       }
     }
 
-    const prevScroll  = panel.scrollTop;
-    const wasFocused  = document.activeElement?.classList.contains('gr-stu-search');
-    panel.innerHTML = `
-      <div class="gr-stu-search-wrap">
-        <input class="gr-stu-search" placeholder="🔍 이름/닉네임" value="${_e(_stuSearch)}"
-          oninput="GradeApp._onStuSearch(this.value)" />
-      </div>
-      ${rows.join('') || '<div style="padding:12px 8px;font-size:11px;color:var(--tx3);text-align:center">검색 결과 없음</div>'}`;
-
-    // 검색창에 포커스가 있었으면 재렌더 후 항상 복원 (검색어 유무 무관)
-    if (wasFocused || _stuSearch) {
-      const inp = panel.querySelector('.gr-stu-search');
-      if (inp) {
-        inp.focus();
-        inp.setSelectionRange(inp.value.length, inp.value.length);
-      }
-      panel.scrollTop = prevScroll;
-    }
+    listBody.innerHTML = rows.join('')
+      || '<div style="padding:12px 8px;font-size:11px;color:var(--tx3);text-align:center">검색 결과 없음</div>';
   }
 
+  /* _onStuSearch — 외부 호출용 (기존 호환 유지, 실제 입력은 addEventListener로 처리) */
   function _onStuSearch(val) {
     _stuSearch = val;
-    _renderStudentSearch(document.getElementById('gr-stu-panel'));
+    const panel = document.getElementById('gr-stu-panel');
+    if (panel) _updateStuListBody(panel);
   }
 
   function _emoji(s, achW) {
