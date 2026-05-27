@@ -1234,7 +1234,8 @@ to{opacity:1;transform:none}}
       }
     }
 
-    const prevScroll = panel.scrollTop;
+    const prevScroll  = panel.scrollTop;
+    const wasFocused  = document.activeElement?.classList.contains('gr-stu-search');
     panel.innerHTML = `
       <div class="gr-stu-search-wrap">
         <input class="gr-stu-search" placeholder="🔍 이름/닉네임" value="${_e(_stuSearch)}"
@@ -1242,10 +1243,10 @@ to{opacity:1;transform:none}}
       </div>
       ${rows.join('') || '<div style="padding:12px 8px;font-size:11px;color:var(--tx3);text-align:center">검색 결과 없음</div>'}`;
 
-    // 검색 중이면 포커스·스크롤 위치 복원
-    if (_stuSearch) {
+    // 검색창에 포커스가 있었으면 재렌더 후 항상 복원 (검색어 유무 무관)
+    if (wasFocused || _stuSearch) {
       const inp = panel.querySelector('.gr-stu-search');
-      if (inp && document.activeElement !== inp) {
+      if (inp) {
         inp.focus();
         inp.setSelectionRange(inp.value.length, inp.value.length);
       }
