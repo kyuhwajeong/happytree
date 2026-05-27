@@ -715,79 +715,109 @@ const MonitorApp = (() => {
 
   /* ═══════════════════════════════════════════════════════════
    * 삭제 기능
+   *
+   * ★ 수정 (v4.1)
+   *   - 커스텀 모달 → window.confirm() 사용
+   *     (PWA/모바일에서 커스텀 모달이 #mon-ov 뒤에 숨는 z-index 문제 해결)
+   *   - 낙관적 UI 업데이트: Firebase 응답 전에 _sessions에서 즉시 제거
+   *     → 화면에서 바로 사라짐, Firebase 삭제는 백그라운드 처리
    * ═══════════════════════════════════════════════════════════ */
-  function deleteOne(id, e) {
+
+  /* 세션 단건 삭제 */
+  async function deleteOne(id, e) {
     if (e) e.stopPropagation();
     const s      = _sessions.find(x => x.id === id);
-    const name   = s ? `${s.username} (${_ts(s.loginAt)})` : id;
-    const online = s && MonitorDB.isOnline(s);
+    if (!s) return;
+    const name   = `${s.username} (${_ts(s.loginAt)})`;
+    const online = MonitorDB.isOnline(s);
 
-    _confirm(
-      online ? '⚠️ 접속 중인 세션 삭제' : '세션 기록 삭제',
-      online
-        ? `${name}\n\n현재 접속 중인 세션입니다.\n삭제 후에도 사용자는 계속 이용 가능하며\n이후 활동 기록만 사라집니다.`
-        : `${name}\n\n이 세션의 접속 기록과 활동 로그를 삭제합니다.`,
-      async () => {
-        const ok = await MonitorDB.deleteSession(id);
-        if (ok) {
-          if (_selId === id) { _selId = null; }
-          _toast('🗑 세션 삭제 완료');
-        }
+    const msg = online
+      ? `[${name}]\n\n현재 접속 중인 세션입니다.\n삭제해도 사용자는 계속 이용 가능하며 이후 기록만 사라집니다.\n\n삭제하시겠습니까?`
+      : `[${name}]\n\n이 세션 기록을 삭제하시겠습니까?`;
+
+    if (!window.confirm(msg)) return;
+
+    /* ★ 낙관적 UI 업데이트 — Firebase 응답 기다리지 않고 즉시 제거 */
+    _sessions = _sessions.filter(x => x.id !== id);
+    if (_selId === id) _selId = null;
+    _updateList();
+    _updateRightPanel();
+    _toast('🗑 세션 삭제 중...');
+
+    /* Firebase 백그라운드 삭제 */
+    try {
+      if (FireDB.ready()) {
+        await FireDB.remove(`hakwon10/monitor/sessions/${id}`);
       }
-    );
+      _toast('🗑 세션 삭제 완료');
+    } catch(err) {
+      console.warn('[MonitorApp] deleteOne Firebase 오류:', err);
+      _toast('⚠️ Firebase 삭제 실패 — 새로고침 후 재시도');
+    }
   }
 
-  function clearFinished() {
+  /* 완료(오프라인) 세션 일괄 삭제 */
+  async function clearFinished() {
     const offline = _sessions.filter(s => !MonitorDB.isOnline(s));
     if (!offline.length) { _toast('삭제할 오프라인 세션이 없습니다'); return; }
-    _confirm(
-      '오프라인 세션 삭제',
-      `로그아웃했거나 5분 이상 비활성인 세션 ${offline.length}개를 삭제합니다.\n현재 접속 중인 세션은 보호됩니다.`,
-      async () => {
-        const n = await MonitorDB.clearFinishedSessions();
-        _selId = null;
-        _toast(`🗑 오프라인 세션 ${n}개 삭제 완료`);
+
+    if (!window.confirm(
+      `오프라인 세션 ${offline.length}개를 삭제합니다.\n(현재 접속 중인 세션은 보호됩니다)\n\n진행하시겠습니까?`
+    )) return;
+
+    /* ★ 낙관적 UI 업데이트 */
+    const offlineIds = new Set(offline.map(s => s.id));
+    _sessions = _sessions.filter(s => !offlineIds.has(s.id));
+    if (offlineIds.has(_selId)) _selId = null;
+    _updateList();
+    _updateRightPanel();
+    _toast(`🗑 ${offline.length}개 삭제 중...`);
+
+    /* Firebase 백그라운드 삭제 */
+    try {
+      if (FireDB.ready()) {
+        await Promise.all([...offlineIds].map(id =>
+          FireDB.remove(`hakwon10/monitor/sessions/${id}`)
+        ));
       }
-    );
-  }
-
-  function clearAll() {
-    const online = _sessions.filter(s => MonitorDB.isOnline(s));
-    const msg = online.length
-      ? `전체 ${_sessions.length}개 세션을 모두 삭제합니다.\n현재 접속 중인 ${online.length}명의 기록도 포함됩니다.\n\n⚠️ 이 작업은 되돌릴 수 없습니다.`
-      : `전체 ${_sessions.length}개 세션을 모두 삭제합니다.\n\n이 작업은 되돌릴 수 없습니다.`;
-    _confirm('⚠️ 전체 초기화', msg, async () => {
-      const n = await MonitorDB.clearAllSessions();
-      _selId = null;
-      _toast(`🗑 전체 ${n}개 세션 초기화 완료`);
-    });
-  }
-
-  /* 확인 모달 */
-  function _confirm(title, msg, onOk) {
-    let ov = document.getElementById('mon-confirm-ov');
-    if (!ov) {
-      ov = document.createElement('div');
-      ov.id = 'mon-confirm-ov';
-      ov.className = 'mon-confirm-ov hidden';
-      ov.innerHTML = `
-        <div class="mon-confirm-box">
-          <div class="mon-confirm-title" id="mcc-title"></div>
-          <div class="mon-confirm-sub"   id="mcc-sub"></div>
-          <div class="mon-confirm-acts">
-            <button class="mon-confirm-cancel" onclick="document.getElementById('mon-confirm-ov').classList.add('hidden')">취소</button>
-            <button class="mon-confirm-ok" id="mcc-ok">삭제</button>
-          </div>
-        </div>`;
-      document.body.appendChild(ov);
+      _toast(`🗑 오프라인 세션 ${offline.length}개 삭제 완료`);
+    } catch(err) {
+      console.warn('[MonitorApp] clearFinished 오류:', err);
+      _toast('⚠️ 일부 삭제 실패 — 새로고침 후 재시도');
     }
-    document.getElementById('mcc-title').textContent = title;
-    document.getElementById('mcc-sub').textContent   = msg;
-    document.getElementById('mcc-ok').onclick = () => {
-      ov.classList.add('hidden');
-      onOk();
-    };
-    ov.classList.remove('hidden');
+  }
+
+  /* 전체 초기화 */
+  async function clearAll() {
+    if (!_sessions.length) { _toast('삭제할 세션이 없습니다'); return; }
+    const online = _sessions.filter(s => MonitorDB.isOnline(s));
+
+    const msg = online.length
+      ? `전체 ${_sessions.length}개 세션을 모두 삭제합니다.\n접속 중인 ${online.length}명의 기록도 포함됩니다.\n\n⚠️ 되돌릴 수 없습니다. 진행하시겠습니까?`
+      : `전체 ${_sessions.length}개 세션을 모두 삭제합니다.\n\n⚠️ 되돌릴 수 없습니다. 진행하시겠습니까?`;
+
+    if (!window.confirm(msg)) return;
+
+    /* ★ 낙관적 UI 업데이트 */
+    const allIds = _sessions.map(s => s.id);
+    _sessions = [];
+    _selId    = null;
+    _updateList();
+    _updateRightPanel();
+    _toast(`🗑 ${allIds.length}개 삭제 중...`);
+
+    /* Firebase 백그라운드 삭제 */
+    try {
+      if (FireDB.ready()) {
+        await Promise.all(allIds.map(id =>
+          FireDB.remove(`hakwon10/monitor/sessions/${id}`)
+        ));
+      }
+      _toast(`🗑 전체 ${allIds.length}개 삭제 완료`);
+    } catch(err) {
+      console.warn('[MonitorApp] clearAll 오류:', err);
+      _toast('⚠️ 일부 삭제 실패 — 새로고침 후 재시도');
+    }
   }
 
   /* 토스트 */
