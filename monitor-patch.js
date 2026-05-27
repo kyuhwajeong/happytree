@@ -1,18 +1,13 @@
 /**
- * monitor-patch.js — v2.1 (버그 수정)
+ * monitor-patch.js — v2.2
  *
- * 해피트리 영어학원 — 모니터링 자동 연동 패치
- *
- * ■ 핵심 수정사항 (v2.1)
- *   app.js 마지막에 document.addEventListener('DOMContentLoaded', App.init) 으로
- *   원본 함수 참조가 이미 등록되어 있어, App.init 래핑 방식은 동작하지 않음.
- *
- *   → App.doLogin 을 스크립트 로드 즉시(동기) 패치
- *     onclick="App.doLogin()" 은 클릭 시점에 App 객체를 조회하므로 즉시 패치가 적용됨
- *   → 나머지 패치는 DOMContentLoaded + 충분한 지연(2초)으로 App.init 완료 후 적용
+ * ■ v2.2 수정사항
+ *   - 이미 로그인된 상태(localStorage 세션 복구)에서도 자동으로 추적 시작
+ *   - admin 포함 모든 계정 추적
+ *   - 페이지 로드 직후 DB.isLoggedIn() 확인 → 세션 자동 등록
  *
  * ■ 로드 순서 (index.html)
- *   app.js  →  monitor-db.js  →  monitor-app.js  →  monitor-patch.js  (맨 마지막)
+ *   app.js → monitor-db.js → monitor-app.js → monitor-patch.js  (맨 마지막)
  */
 
 (function () {
@@ -47,15 +42,16 @@
   }
 
   /* ══════════════════════════════════════════════════════
-   * ★★★ STEP 1: App.doLogin 즉시(동기) 패치 ★★★
+   * STEP 1: App.doLogin 즉시(동기) 패치
    *
-   * 이 파일이 로드되는 시점에 App은 이미 정의되어 있음.
-   * onclick="App.doLogin()" 은 클릭 시 App.doLogin 을 동적 조회하므로
-   * 지금 교체하면 바로 적용됨.
+   * app.js 마지막 줄이 DOMContentLoaded 리스너에 원본 App.init 참조를
+   * 등록해 버리므로 App.init 래핑은 의미 없음.
+   * 반면 onclick="App.doLogin()" 은 클릭 시점에 App.doLogin 을
+   * 동적으로 조회하므로, 지금 교체하면 즉시 적용됨.
    * ══════════════════════════════════════════════════════ */
   (function _patchLoginNow() {
     if (typeof App === 'undefined') {
-      console.warn('[MonitorPatch] App not found — 패치 실패');
+      console.warn('[MonitorPatch] App 없음 — 패치 실패');
       return;
     }
 
@@ -65,70 +61,91 @@
       const id = (document.getElementById('li-id')?.value || '').trim();
       const pw =  document.getElementById('li-pw')?.value || '';
 
-      /* ★ 히든 모니터링 모드 ─────────────────────────── */
+      /* ★ 히든 모니터링 모드 진입 */
       if (id === 'admin' &&
           typeof MonitorDB !== 'undefined' &&
           MonitorDB.isMonitorPassword(pw)) {
 
-        // 로그인 창·앱 숨기기
         document.getElementById('login-gate')?.classList.add('hidden');
-        // 비밀번호 필드 즉시 소거 (보안)
         const pwEl = document.getElementById('li-pw');
         if (pwEl) pwEl.value = '';
-        // 아이디 기억 기능이 켜진 경우도 비밀번호는 저장 안 함
+        // 기억하기 ON이어도 히든 PW는 저장 안 함
         localStorage.removeItem('hk_rem_pw');
 
-        // 모니터링 대시보드 표시
         if (typeof MonitorApp !== 'undefined') {
           MonitorApp.show();
-        } else {
-          console.error('[MonitorPatch] MonitorApp이 로드되지 않았습니다.');
         }
-        return; // 일반 로그인 처리 중단
+        return; // 일반 로그인 중단
       }
 
-      /* 일반 로그인 처리 (원본 실행) ─────────────────── */
+      /* 일반 로그인 (원본 실행) */
       await _origDoLogin.apply(this, arguments);
 
-      /* 로그인 성공 여부 확인 → 세션 시작 */
+      /* 로그인 성공 → 세션 시작 (admin 포함 모든 계정) */
       const gate = document.getElementById('login-gate');
-      const loginSucceeded = gate?.classList.contains('hidden');
-      if (loginSucceeded) {
-        try {
-          const sess = (typeof DB !== 'undefined') ? DB.getSession() : null;
-          if (sess && typeof MonitorDB !== 'undefined') {
-            await MonitorDB.startSession(sess.username, sess.role);
-            _log(DB.getRole() === 'teacher' ? 'operate' : 'manage', '로그인');
-          }
-        } catch(e) { console.warn('[MonitorPatch] 세션 시작 오류:', e); }
+      if (gate?.classList.contains('hidden')) {
+        await _startSessionIfNeeded('doLogin');
       }
     };
 
-    console.log('[MonitorPatch] ✅ doLogin 패치 완료 (즉시)');
+    console.log('[MonitorPatch] ✅ STEP1: doLogin 패치 즉시 적용');
   })();
 
   /* ══════════════════════════════════════════════════════
-   * ★★★ STEP 2: 나머지 패치 — DOMContentLoaded 후 적용 ★★★
+   * STEP 2: DOMContentLoaded + 충분한 지연 후 나머지 패치
    *
-   * App.init 은 비동기(async)이므로 충분한 지연 후 패치.
-   * DOMContentLoaded 리스너는 등록 순서대로 실행되고,
-   * app.js 의 App.init 리스너가 먼저 등록되었으므로 먼저 실행됨.
+   * App.init 이 async이고 Firebase 초기화 최대 5초가 걸리므로
+   * 3초 여유를 두고 적용. 동시에 "이미 로그인" 상태도 감지.
    * ══════════════════════════════════════════════════════ */
   document.addEventListener('DOMContentLoaded', function () {
-    // App.init 이 DB 초기화(Firebase 로드, seed 등) 완료할 시간 확보
-    // Firebase 초기화는 최대 5초 타임아웃 설정되어 있으므로 2초로 충분
-    setTimeout(_applyRemainingPatches, 2000);
+    setTimeout(_applyRemainingPatches, 3000);
   });
 
   /* ══════════════════════════════════════════════════════
-   * 나머지 패치 적용 함수
+   * 핵심 보조 함수: 세션이 없으면 지금 로그인 상태로 세션 시작
+   *
+   * 호출 상황:
+   *  a) doLogin 성공 직후
+   *  b) 페이지 로드 시 이미 로그인 상태 (localStorage 세션 복구)
+   * ══════════════════════════════════════════════════════ */
+  async function _startSessionIfNeeded(reason) {
+    try {
+      if (typeof DB === 'undefined' || typeof MonitorDB === 'undefined') return;
+      if (!DB.isLoggedIn()) return;
+      if (MonitorDB.hasSession()) return; // 이미 세션 있으면 중복 생성 안 함
+
+      const sess = DB.getSession();
+      if (!sess) return;
+
+      await MonitorDB.startSession(sess.username, sess.role);
+
+      // 현재 페이지 기록
+      const curPage = document.querySelector('.bni.on')?.dataset?.pg
+                   || document.querySelector('.page.on')?.id?.replace('page-','')
+                   || 'operate';
+      MonitorDB.logAction(curPage, reason === 'resume' ? '세션 복구 (이미 로그인 상태)' : '로그인');
+      MonitorDB.updateMenu(curPage, '');
+
+      console.log(`[MonitorPatch] ✅ 세션 시작: ${sess.username} (${reason})`);
+    } catch(e) {
+      console.warn('[MonitorPatch] 세션 시작 오류:', e);
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════
+   * 나머지 패치 + 이미 로그인 상태 감지
    * ══════════════════════════════════════════════════════ */
   function _applyRemainingPatches() {
     if (typeof App === 'undefined') return;
 
+    /* ── ★★★ 이미 로그인된 상태 자동 감지 ★★★
+     *   remember-me 또는 세션 유지 중인 모든 사용자 (admin 포함) 추적 시작
+     * ── */
+    _startSessionIfNeeded('resume');
+
     /* ── logout ── */
     _wrap(App, 'logout', async () => {
-      _log('logout', '로그아웃');
+      _log(DB?.getRole()==='teacher'?'operate':'manage', '로그아웃');
       if (typeof MonitorDB !== 'undefined' && MonitorDB.hasSession())
         await MonitorDB.endSession();
     });
@@ -147,7 +164,7 @@
       _log('manage', `관리 탭: ${labels[tab] || tab}`);
     });
 
-    /* ── saveClass (반 추가/수정) ── */
+    /* ── saveClass ── */
     _wrap(App, 'saveClass', async () => {
       const name = document.getElementById('f-cname')?.value?.trim() || '';
       const days = [...document.querySelectorAll('#modal-cls .day-ck input:checked')]
@@ -155,13 +172,13 @@
       _log('manage', `반 저장: ${name}`, `요일: ${days}`);
     });
 
-    /* ── delClass (반 삭제) ── */
+    /* ── delClass ── */
     _wrap(App, 'delClass', async (id) => {
-      const cls = (typeof DB !== 'undefined') ? DB.getClassById(id) : null;
+      const cls = DB?.getClassById(id);
       _log('manage', `반 삭제: ${cls?.name || id}`);
     });
 
-    /* ── saveAccount (계정 저장) ── */
+    /* ── saveAccount ── */
     _wrap(App, 'saveAccount', async () => {
       const u    = document.getElementById('f-aid')?.value?.trim() || '';
       const role = document.getElementById('f-arole')?.value || '';
@@ -169,46 +186,43 @@
       _log('manage', `계정 저장: ${u}`, `역할: ${lbl[role] || role}`);
     });
 
-    /* ── delAcc (계정 삭제) ── */
+    /* ── delAcc ── */
     _wrap(App, 'delAcc', async (id, username) => {
       _log('manage', `계정 삭제: ${username || id}`);
     });
 
-    /* ── delAccBulk (계정 일괄 삭제) ── */
+    /* ── delAccBulk ── */
     _wrap(App, 'delAccBulk', async () => {
       const n = document.querySelectorAll('.acc-ck:checked').length;
       _log('manage', `계정 일괄 삭제 ${n}개`);
     });
 
-    /* ── doCopyBooks (교재 복사) ── */
+    /* ── doCopyBooks ── */
     _wrap(App, 'doCopyBooks', async () => {
       const sel = document.getElementById('f-copy-from');
       const txt = sel?.options[sel.selectedIndex]?.text || '';
       _log('manage', `교재 복사: ${txt}`);
     });
 
-    /* ── handleImport (xlsx 가져오기) ── */
+    /* ── handleImport ── */
     _wrap(App, 'handleImport', async (input) => {
       const f = input?.files?.[0];
       if (f) _log('operate', `xlsx 가져오기: ${f.name}`, `${input.files.length}개`);
     });
 
-    /* ── shareUrl / shareCurrentClass ── */
+    /* ── share ── */
     _wrap(App, 'shareUrl', async () => { _log('operate', '진도 공유 URL 생성'); });
     if (typeof App.shareCurrentClass === 'function')
       _wrap(App, 'shareCurrentClass', async () => { _log('operate', '현재 반 공유'); });
 
-    /* ── prevWeek / nextWeek ── */
+    /* ── 주간 이동 ── */
     _wrap(App, 'prevWeek', async () => { _log('operate', '이전 주로 이동'); });
     _wrap(App, 'nextWeek', async () => { _log('operate', '다음 주로 이동'); });
 
     /* ── BooklibApp ── */
     if (typeof BooklibApp !== 'undefined') {
       _wrap(BooklibApp, '_toggleCheck', async (clsId, bkId, stuId, chId) => {
-        const bk  = _bkName(bkId);
-        const stu = _stuName(stuId);
-        const ch  = _chName(chId);
-        _log('booklib', `교재 체크 토글: ${stu} / ${ch}`, `교재: ${bk}`);
+        _log('booklib', `교재 체크 토글: ${_stuName(stuId)} / ${_chName(chId)}`, `교재: ${_bkName(bkId)}`);
       });
       _wrap(BooklibApp, '_toggleStamp', async (chId) => {
         _log('booklib', `진도 스탬프 토글: ${_chName(chId)}`);
@@ -223,12 +237,12 @@
         });
     }
 
-    /* ── 이벤트 위임 (진도 입력 / 학생 / 직원) ── */
+    /* ── 이벤트 위임 ── */
     _watchOperateEvents();
     _watchStudentEvents();
     _watchStaffEvents();
 
-    console.log('[MonitorPatch] ✅ 나머지 패치 모두 적용 완료');
+    console.log('[MonitorPatch] ✅ STEP2: 나머지 패치 모두 적용');
   }
 
   /* ══════════════════════════════════════════════════════
@@ -239,7 +253,6 @@
     if (_opWatched) return;
     _opWatched = true;
 
-    // 진도 범위 입력 focusout
     document.addEventListener('focusout', e => {
       const el = e.target;
       if (!el.classList.contains('sv-bk-range') && !el.closest?.('.sv-bk-range')) return;
@@ -249,9 +262,8 @@
       if (val) _log('operate', `진도 입력: ${clsName}`, `값: ${val}`);
     }, true);
 
-    // 반 칩 클릭
     document.addEventListener('click', e => {
-      const chip = e.target.closest('.cls-chip, .chip-btn, [data-cls]');
+      const chip = e.target.closest('.cls-chip,.chip-btn,[data-cls]');
       if (!chip) return;
       const name = chip.dataset?.name || chip.dataset?.cls
                 || chip.textContent?.trim()?.slice(0, 20) || '';
@@ -267,7 +279,7 @@
     if (!pg || pg._monPatched) return;
     pg._monPatched = true;
     pg.addEventListener('click', e => {
-      const card = e.target.closest('.st-card, .st-row');
+      const card = e.target.closest('.st-card,.st-row');
       if (card) {
         const name = card.querySelector('.st-name,.st-nm')?.textContent?.trim() || '';
         if (name) _log('students', `학생 조회: ${name}`);
@@ -275,7 +287,7 @@
       const btn = e.target.closest('[data-status]');
       if (btn) _log('students', `재원 상태 변경: ${btn.dataset.status}`);
     });
-    const srch = pg.querySelector('#st-search, .st-search');
+    const srch = pg.querySelector('#st-search,.st-search');
     if (srch && !srch._monPatched) {
       srch._monPatched = true;
       let t;
@@ -296,7 +308,7 @@
     if (!pg || pg._monPatched) return;
     pg._monPatched = true;
     pg.addEventListener('click', e => {
-      const card = e.target.closest('.sf-card, .sf-row');
+      const card = e.target.closest('.sf-card,.sf-row');
       if (card) {
         const name = card.querySelector('.sf-name,.sf-nm')?.textContent?.trim() || '';
         if (name) _log('staff', `직원 조회: ${name}`);
@@ -308,9 +320,7 @@
    * DB 헬퍼
    * ══════════════════════════════════════════════════════ */
   function _bkName(bkId) {
-    try {
-      return (typeof BookLibDB !== 'undefined' && BookLibDB.getBook(bkId))?.name || bkId || '';
-    } catch { return bkId || ''; }
+    try { return BookLibDB?.getBook(bkId)?.name || bkId || ''; } catch { return bkId || ''; }
   }
   function _chName(chId) {
     try {
@@ -320,8 +330,8 @@
   }
   function _stuName(stuId) {
     try {
-      const stus = typeof StudentDB !== 'undefined' ? StudentDB.getStudents() : [];
-      return stus.find(s => s.id === stuId)?.name || stuId || '';
+      return (typeof StudentDB !== 'undefined' ? StudentDB.getStudents() : [])
+        .find(s => s.id === stuId)?.name || stuId || '';
     } catch { return stuId || ''; }
   }
 
