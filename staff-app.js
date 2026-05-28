@@ -588,6 +588,7 @@ const StaffApp = (() => {
           <span class="sf-bdg ${off ? 'off' : 'ok'}">${s.status}</span>
           <span class="sf-bdg ${isPt ? 'pt' : 'ft'}">${isPt ? '⏱ 알바' : '🏢 정직원'}</span>
           ${s.contractType === 'contract' ? `<span class="sf-bdg ctrt">계약직</span>` : ''}
+          ${s.employType !== 'parttime' && s.overtimeEnabled ? `<span class="sf-bdg" style="background:rgba(124,58,237,.1);border-color:rgba(124,58,237,.3);color:#7c3aed">🌙 야근수당</span>` : ''}
           ${s.phone ? `<span class="sf-bdg">📞 ${_e(s.phone)}</span>` : ''}
           ${s.hireDate ? `<span class="sf-bdg">📅 ${s.hireDate.slice(0, 7)}</span>` : ''}
           <span class="sf-bdg">${rateLabel}</span>
@@ -635,9 +636,36 @@ const StaffApp = (() => {
             </select>
           </div>
           <!-- 정직원 필드 -->
-          <div class="sf-full" id="sf-f-monthly-wrap" ${isPt?'style="display:none"':''}>
-            <span class="sf-fl">월 고정급 (0=시급합산)</span>
-            <input class="sf-fi" id="sf-f-monthly" type="number" min="0" placeholder="0" value="${s?.monthlySalary||0}">
+          <div id="sf-f-ft-wrap" ${isPt?'style="display:none"':''}>
+            <div class="sf-full">
+              <span class="sf-fl">월 고정급 (0=시급합산)</span>
+              <input class="sf-fi" id="sf-f-monthly" type="number" min="0" placeholder="0" value="${s?.monthlySalary||0}">
+            </div>
+            <!-- 야근수당 옵션 -->
+            <div class="sf-full" style="margin-top:2px">
+              <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:1.5px solid var(--bdr);background:var(--surf2);cursor:pointer;transition:all .15s" id="sf-ot-label">
+                <input type="checkbox" id="sf-f-ot" style="width:16px;height:16px;accent-color:var(--a);cursor:pointer;flex-shrink:0"
+                  ${s?.overtimeEnabled?'checked':''}
+                  onchange="StaffApp._toggleOT(this.checked)">
+                <div>
+                  <div style="font-size:12px;font-weight:800;color:var(--tx)">🌙 야근 수당 적용</div>
+                  <div style="font-size:10px;color:var(--tx3);margin-top:1px">22:00 이후 추가 가산 수당 계산</div>
+                </div>
+              </label>
+            </div>
+            <!-- 야근 상세 설정 (체크 시 노출) -->
+            <div id="sf-f-ot-detail" ${s?.overtimeEnabled?'':'style="display:none"'}>
+              <div class="sf-fg" style="margin-top:6px">
+                <div>
+                  <span class="sf-fl">야근 시작 시각</span>
+                  <input class="sf-fi" id="sf-f-ot-start" type="time" value="${s?.overtimeStart||'22:00'}">
+                </div>
+                <div>
+                  <span class="sf-fl">야근 배율 (기본 1.5배)</span>
+                  <input class="sf-fi" id="sf-f-ot-rate" type="number" min="1" max="3" step="0.1" placeholder="1.5" value="${s?.overtimeRate||1.5}">
+                </div>
+              </div>
+            </div>
           </div>
           <!-- 알바 필드 -->
           <div class="sf-full" id="sf-f-hourly-wrap" ${!isPt?'style="display:none"':''}>
@@ -666,7 +694,7 @@ const StaffApp = (() => {
 
   function _toggleEtype() {
     const t = document.getElementById('sf-f-etype')?.value;
-    document.getElementById('sf-f-monthly-wrap')?.style.setProperty('display', t === 'parttime' ? 'none' : '');
+    document.getElementById('sf-f-ft-wrap')?.style.setProperty('display', t === 'parttime' ? 'none' : '');
     document.getElementById('sf-f-hourly-wrap')?.style.setProperty('display', t === 'parttime' ? '' : 'none');
   }
 
@@ -754,6 +782,14 @@ const StaffApp = (() => {
   }
   function closeTemplAdd() { document.getElementById('sf-templ-add-ov')?.classList.add('hidden'); }
 
+  function _toggleOT(checked) {
+    const detail = document.getElementById('sf-f-ot-detail');
+    const label  = document.getElementById('sf-ot-label');
+    if (detail) detail.style.display = checked ? '' : 'none';
+    if (label)  label.style.borderColor = checked ? 'var(--a)' : 'var(--bdr)';
+    if (label)  label.style.background  = checked ? 'var(--a10)' : 'var(--surf2)';
+  }
+
   async function saveStaff() {
     const name = document.getElementById('sf-f-name')?.value?.trim();
     if (!name) { _toast('⚠️ 이름은 필수입니다'); return; }
@@ -771,7 +807,10 @@ const StaffApp = (() => {
       baseHourlyRate: Number(document.getElementById('sf-f-hourly')?.value)  || 0,
       classRate:      Number(document.getElementById('sf-f-cr')?.value)      || mw,
       generalRate:    Number(document.getElementById('sf-f-gr')?.value)      || mw,
-      payDay:         Number(document.getElementById('sf-f-pd')?.value)      || 0,
+      payDay:          Number(document.getElementById('sf-f-pd')?.value)       || 0,
+      overtimeEnabled: document.getElementById('sf-f-ot')?.checked === true,
+      overtimeRate:    Number(document.getElementById('sf-f-ot-rate')?.value)  || 1.5,
+      overtimeStart:   document.getElementById('sf-f-ot-start')?.value         || '22:00',
       memo:           document.getElementById('sf-f-memo')?.value?.trim()    || '',
     };
     let id = _st.editId;
@@ -1156,11 +1195,11 @@ const StaffApp = (() => {
     // 중첩 감지
     const overlaps = StaffDB.checkOverlap(_st.calStaffId, dates);
     if (overlaps.length > 0) {
-      _showOverlapModal(overlaps, dates, { startDate:sd, endDate:ed, startTime:st, endTime:et, breakMin:brk, type, hourlyRate:rate, nightRate:nrate, note });
+      _showOverlapModal(overlaps, dates, { startDate:sd, endDate:ed, startTime:st, endTime:et, breakMin:brk, type, hourlyRate:rate, note });
       return;
     }
 
-    await _executeBatch({ startDate:sd, endDate:ed, startTime:st, endTime:et, breakMin:brk, type, hourlyRate:rate, nightRate:nrate, note, overwrite:true });
+    await _executeBatch({ startDate:sd, endDate:ed, startTime:st, endTime:et, breakMin:brk, type, hourlyRate:rate, note, overwrite:true });
   }
 
   function _showOverlapModal(overlaps, dates, opts) {
@@ -1240,7 +1279,7 @@ const StaffApp = (() => {
         </div>
         ${isPt ? `<div class="sf-fg" style="margin-bottom:8px">
           <div><span class="sf-fl">무급 휴게(분)</span><input class="sf-fi" id="sf-wbrk" type="number" min="0" placeholder="0" value="0" oninput="StaffApp._chrs()"></div>
-          <div><span class="sf-fl">시급 (0=자동 ${_fmt(rate)}원)</span><input class="sf-fi" id="sf-wrate" type="number" min="0" placeholder="${rate}" value="0"></div>
+          <div><span class="sf-fl" id="sf-wrate-lbl">시급 (0=자동: ${_st.workType==='class'?`수업 ${_fmt(s?.classRate||mw)}원`:`일반 ${_fmt(s?.generalRate||mw)}원`})</span><input class="sf-fi" id="sf-wrate" type="number" min="0" placeholder="${_st.workType==='class'?(s?.classRate||mw):(s?.generalRate||mw)}" value="0"></div>
         </div>` : ''}
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
           <span style="font-size:11px;color:var(--tx3);flex-shrink:0">직접 입력(h):</span>
@@ -1260,7 +1299,7 @@ const StaffApp = (() => {
   function _entryHTML(e, s) {
     const c     = e.type === 'class' ? { tx: 'var(--a)', l: '수업' } : { tx: 'var(--green)', l: '일반' };
     const night = e.nightHours > 0 ? ` 🌙야간 ${_fmtHrs(e.nightHours)}h` : '';
-    const rateInfo = e.appliedRate ? ` @${_fmt(e.appliedRate)}원` : '';
+    const rateInfo = e.appliedRate ? ` (시급 ${_fmt(e.appliedRate)}원)` : '';
     return `<div class="sf-ei">
       <div class="sf-edot" style="background:${c.tx}"></div>
       <span style="font-size:11px;font-weight:700;color:${c.tx};min-width:28px">${c.l}</span>
@@ -1271,10 +1310,18 @@ const StaffApp = (() => {
 
   function _wtype(t) {
     _st.workType = t;
-    document.getElementById('sf-wb-class')?.classList.toggle('on', t === 'class');
-    document.getElementById('sf-wb-class')?.classList.toggle('class', t === 'class');
-    document.getElementById('sf-wb-gen')?.classList.toggle('on', t === 'general');
+    document.getElementById('sf-wb-class')?.classList.toggle('on',      t === 'class');
+    document.getElementById('sf-wb-class')?.classList.toggle('class',   t === 'class');
+    document.getElementById('sf-wb-gen')?.classList.toggle('on',      t === 'general');
     document.getElementById('sf-wb-gen')?.classList.toggle('general', t === 'general');
+    // 시급 힌트 갱신
+    const s  = StaffDB.getById(_st.calStaffId);
+    const mw = StaffDB.getMinWage();
+    const autoRate = t === 'class' ? (s?.classRate || mw) : (s?.generalRate || mw);
+    const rateInp  = document.getElementById('sf-wrate');
+    const rateLbl  = document.getElementById('sf-wrate-lbl');
+    if (rateInp) rateInp.placeholder = autoRate;
+    if (rateLbl) rateLbl.textContent = `시급 (0=자동: ${t==='class'?`수업 ${_fmt(autoRate)}원`:`일반 ${_fmt(autoRate)}원`})`;
   }
 
   let _manualHrsVal = null;
@@ -1312,14 +1359,18 @@ const StaffApp = (() => {
     }
     if (hours <= 0) { _toast('⚠️ 근무 시간이 0입니다'); return; }
 
-    const s = StaffDB.getById(_st.calStaffId);
+    const s  = StaffDB.getById(_st.calStaffId);
     const mw = StaffDB.getMinWage();
-    const appliedRate      = manualRate > 0 ? manualRate : (s?.baseHourlyRate > 0 ? s.baseHourlyRate : mw);
-    const appliedNightRate = Math.round(appliedRate * 1.5);
+    // 수업/일반 타입에 맞는 시급 결정
+    // 우선순위: 수동 입력 > 타입별 시급(수업/일반) > 기본시급 > 최저시급
+    const typeRate = _st.workType === 'class'
+      ? (s?.classRate   || s?.baseHourlyRate || mw)
+      : (s?.generalRate || s?.baseHourlyRate || mw);
+    const appliedRate = manualRate > 0 ? manualRate : typeRate;
 
     await StaffDB.addWorkEntry(_st.calStaffId, _st.workDate, {
       type: _st.workType, start, end, hours, baseHours, nightHours,
-      breakMin: brk, appliedRate, appliedNightRate, note,
+      breakMin: brk, appliedRate, note,
     });
     _drawWork();
     _toast(`✅ ${_st.workType==='class'?'수업':'일반'} ${_fmtHrs(hours)}h 등록`, 'success');
@@ -1437,13 +1488,17 @@ const StaffApp = (() => {
       </div>
       <div class="sf-prows">
         ${isPt ? `
-          <div class="sf-pr">
-            <span class="sf-pr-l">💰 기본 시급 (${_fmtHrs(r.classHrs+r.generalHrs)}h × ${_fmt(r.hourlyRate)}원)</span>
+          ${r.classHrs > 0 ? `<div class="sf-pr">
+            <span class="sf-pr-l"><span style="width:8px;height:8px;border-radius:50%;background:var(--a);display:inline-block;margin-right:6px"></span>📚 수업 (${_fmtHrs(r.classHrs)}h × ${_fmt(r.classRate)}원)</span>
+            <span class="sf-pr-v">${_fmt(r.classPayPt||0)}원</span>
+          </div>` : ''}
+          ${r.generalHrs > 0 ? `<div class="sf-pr">
+            <span class="sf-pr-l"><span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;margin-right:6px"></span>🏢 일반 (${_fmtHrs(r.generalHrs)}h × ${_fmt(r.generalRate)}원)</span>
+            <span class="sf-pr-v">${_fmt(r.generalPayPt||0)}원</span>
+          </div>` : ''}
+          ${r.classHrs > 0 && r.generalHrs > 0 ? `<div class="sf-pr" style="font-size:11px;color:var(--tx3);padding:4px 0 6px">
+            <span class="sf-pr-l">합계</span>
             <span class="sf-pr-v">${_fmt(r.basePay)}원</span>
-          </div>
-          ${r.nightPay > 0 ? `<div class="sf-pr night-row">
-            <span class="sf-pr-l">🌙 야간 수당 <small style="font-size:10px">(22:00 이후 1.5배)</small></span>
-            <span class="sf-pr-v">+${_fmt(r.nightPay)}원</span>
           </div>` : ''}
           ${weekRows}
           <div class="sf-pr sf-tot">
@@ -1462,6 +1517,12 @@ const StaffApp = (() => {
           ${r.monthlyFixed ? `<div class="sf-pr" style="background:var(--a10);border-radius:8px;padding:8px 10px;border:1px solid var(--a40)">
             <span class="sf-pr-l" style="font-weight:800">🏢 고정 월급 적용</span>
             <span class="sf-pr-v" style="color:var(--a)">${_fmt(s.monthlySalary)}원</span>
+          </div>` : ''}
+          ${(r.overtimePay||0) > 0 ? `<div class="sf-pr" style="background:rgba(124,58,237,.06);border-radius:8px;padding:8px 10px;border:1px solid rgba(124,58,237,.25)">
+            <span class="sf-pr-l">🌙 야근 수당 <small style="font-size:10px;color:var(--tx3)">(${s.overtimeStart||'22:00'} 이후 ${s.overtimeRate||1.5}배 가산)</small></span>
+            <span class="sf-pr-v" style="color:#7c3aed">+${_fmt(r.overtimePay)}원</span>
+          </div>` : r.otEnabled ? `<div class="sf-pr" style="opacity:.5;font-size:11px">
+            <span class="sf-pr-l">🌙 야근 수당</span><span class="sf-pr-v">해당 없음 (야근 기록 없음)</span>
           </div>` : ''}
           <div class="sf-pr sf-tot">
             <span class="sf-pr-l">⏱ 총 ${_fmtHrs(r.classHrs+r.generalHrs)}h · 세전 합계</span>
@@ -1784,7 +1845,6 @@ const StaffApp = (() => {
     ];
     if (isPt) {
       lines.push(`💰 기본급: ${_fmtHrs(r.classHrs+r.generalHrs)}h × ${_fmt(r.hourlyRate)}원 = ${_fmt(r.basePay)}원`);
-      if (r.nightPay > 0) lines.push(`🌙 야간수당: ${_fmt(r.nightPay)}원`);
       if (r.totalHolidayPay > 0) lines.push(`✅ 주휴수당: ${_fmt(r.totalHolidayPay)}원`);
     } else {
       lines.push(`📚 수업: ${_fmtHrs(r.classHrs)}h × ${_fmt(s.classRate)}원 = ${_fmt(r.classPay)}원`);
@@ -1838,12 +1898,14 @@ const StaffApp = (() => {
         <thead><tr><th>항&nbsp;&nbsp;목</th><th style="text-align:center">내&nbsp;&nbsp;역</th><th style="text-align:right">지급금액</th></tr></thead>
         <tbody>
           ${isPt ? `
-            <tr><td>기본 근무</td><td style="text-align:center">${_fmtHrs(r.classHrs+r.generalHrs)}h × ${_fmt(r.hourlyRate)}원</td><td style="text-align:right">${_fmt(r.basePay)}원</td></tr>
+            ${r.classHrs>0?`<tr><td>📚 수업</td><td style="text-align:center">${_fmtHrs(r.classHrs)}h × ${_fmt(r.classRate)}원</td><td style="text-align:right">${_fmt(r.classPayPt||0)}원</td></tr>`:''}
+            ${r.generalHrs>0?`<tr><td>🏢 일반</td><td style="text-align:center">${_fmtHrs(r.generalHrs)}h × ${_fmt(r.generalRate)}원</td><td style="text-align:right">${_fmt(r.generalPayPt||0)}원</td></tr>`:''}
             ${(r.totalHolidayPay||0)>0?`<tr><td>주휴수당</td><td style="text-align:center">주 15h 이상 ${r.weeklyStats.filter(w=>w.qualified).length}주</td><td style="text-align:right">${_fmt(r.totalHolidayPay)}원</td></tr>`:''}
           ` : `
             <tr><td>수업</td><td style="text-align:center">${_fmtHrs(r.classHrs)}h × ${_fmt(s.classRate)}원</td><td style="text-align:right">${_fmt(r.classPay)}원</td></tr>
             <tr><td>일반</td><td style="text-align:center">${_fmtHrs(r.generalHrs)}h × ${_fmt(s.generalRate)}원</td><td style="text-align:right">${_fmt(r.generalPay)}원</td></tr>
             ${r.monthlyFixed?`<tr><td colspan="2" style="font-weight:700">고정 월급 적용</td><td style="text-align:right;font-weight:700">${_fmt(s.monthlySalary)}원</td></tr>`:''}
+            ${(r.overtimePay||0)>0?`<tr><td>🌙 야근 수당</td><td style="text-align:center">${s.overtimeStart||'22:00'} 이후 ${s.overtimeRate||1.5}배</td><td style="text-align:right">${_fmt(r.overtimePay)}원</td></tr>`:''}
           `}
         </tbody>
         <tfoot><tr class="sfp-tot"><td colspan="2"><strong>세전 합계</strong></td><td style="text-align:right"><strong>${_fmt(r.totalPay)}원</strong></td></tr></tfoot>
@@ -2654,7 +2716,7 @@ const StaffApp = (() => {
   /* ══ 퍼블릭 ══ */
   return {
     init, render, switchTab,
-    openAdd, openEdit, closeEdit, saveStaff, deleteStaff, _toggleEtype,
+    openAdd, openEdit, closeEdit, saveStaff, deleteStaff, _toggleEtype, _toggleOT,
     openCal, closeCal, _calPrev, _calNext, _calToSalary,
     _calCellClick, _entryClick, _confirmCopy, _cancelCopy, _applyTemplModal,
     _toggleSelectMode, _deleteSelected, _cancelSelect,

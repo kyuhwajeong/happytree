@@ -50,7 +50,6 @@ const StaffDB = (() => {
   /* ── 상수 ── */
   const MIN_WAGES    = { 2024: 9860, 2025: 10030, 2026: 10320 };
   const NIGHT_START  = 22 * 60;   // 22:00 (분 단위)
-  const NIGHT_MULT   = 1.5;       // 야간 배율 기본값
   const DOW_KO       = ['일','월','화','수','목','금','토'];
   const WEEK_DAYS_KO = ['월','화','수','목','금','토','일'];
 
@@ -97,6 +96,9 @@ const StaffDB = (() => {
       employType:    'fulltime',
       monthlySalary: 0,
       baseHourlyRate: 0,
+      overtimeEnabled: false,
+      overtimeRate: 1.5,
+      overtimeStart: '22:00',
       ...s,
     }));
 
@@ -150,6 +152,9 @@ const StaffDB = (() => {
       contractType:   data.contractType || 'regular',  // 정규직|계약직
       employType:     data.employType   || 'fulltime',  // fulltime|parttime
       monthlySalary:  Number(data.monthlySalary)  || 0,
+      overtimeEnabled: data.overtimeEnabled === true ? true : false,  // 야근수당 적용 여부 (기본 false)
+      overtimeRate:   Number(data.overtimeRate)    || 1.5,   // 야근 배율 (기본 1.5배)
+      overtimeStart:  data.overtimeStart || '22:00',         // 야근 시작 시각
       baseHourlyRate: Number(data.baseHourlyRate) || 0,
       classRate:      Number(data.classRate)       || mw,
       generalRate:    Number(data.generalRate)     || mw,
@@ -370,8 +375,7 @@ const StaffDB = (() => {
    *   breakMin:   number (기본 0),
    *   type:       'class'|'general',
    *   hourlyRate: number (0=자동),
-   *   nightRate:  number (0=자동 1.5배),
-   *   note:       string,
+     *   note:       string,
    *   overwrite:  boolean (중첩 덮어쓰기 여부)
    * }
    * @returns { batchId, count, dates, skipped }
@@ -380,7 +384,7 @@ const StaffDB = (() => {
     const {
       startDate, endDate, daysOfWeek, startTime, endTime,
       breakMin = 0, type = 'general', hourlyRate = 0,
-      nightRate = 0, note = '', overwrite = true,
+      note = '', overwrite = true,
     } = opts;
 
     if (!startDate || !endDate || !startTime || !endTime) {
@@ -389,8 +393,6 @@ const StaffDB = (() => {
 
     const year = new Date(startDate).getFullYear();
     const appliedRate      = resolveRate(sid, hourlyRate, year);
-    const appliedNightRate = nightRate > 0 ? nightRate : Math.round(appliedRate * NIGHT_MULT);
-
     const { baseHours, nightHours } = splitNightHours(startTime, endTime, breakMin);
     const hours = baseHours + nightHours;
 
@@ -424,7 +426,6 @@ const StaffDB = (() => {
         baseHours,
         nightHours,
         appliedRate,
-        appliedNightRate,
         note,
       };
 
@@ -576,58 +577,89 @@ const StaffDB = (() => {
       });
       classHrs   += dc;
       generalHrs += dg;
-      byDay[date] = { classHrs: dc, generalHrs: dg, baseHrs: dBase, nightHrs: dNight, entries };
+      byDay[date] = { classHrs: dc, generalHrs: dg, entries };
     });
     classHrs   = Math.round(classHrs   * 100) / 100;
     generalHrs = Math.round(generalHrs * 100) / 100;
 
-    /* ─ 정직원: 고정 월급 ─ */
+    /* ─ 정직원: 고정 월급 (+ 야근수당 옵션) ─ */
     if (s.employType === 'fulltime') {
-      const classPay   = Math.round(classHrs   * s.classRate);
+      const classPay   = Math.round(classHrs * s.classRate);
       const generalPay = Math.round(generalHrs * s.generalRate);
       const workPay    = classPay + generalPay;
-      const totalPay   = s.monthlySalary > 0 ? s.monthlySalary : workPay;
+
+      // 야근수당 계산 (overtimeEnabled === true 일 때만)
+      let overtimePay = 0;
+      const otEnabled = s.overtimeEnabled === true;
+      if (otEnabled) {
+        const otRate  = Number(s.overtimeRate)  || 1.5;
+        const otStart = s.overtimeStart || '22:00';
+        const [otH, otM] = otStart.split(':').map(Number);
+        const otStartMin = otH * 60 + otM;
+
+        Object.values(work).forEach(entries => {
+          entries.forEach(e => {
+            if (!e.start || !e.end) return;
+            const { nightHours } = splitNightHours(e.start, e.end, 0);
+            if (nightHours <= 0) return;
+            // 야근 시간 × (배율-1) × 해당 시급  → 추가 가산분만
+            const baseR = e.type === 'class' ? s.classRate : s.generalRate;
+            overtimePay += Math.round(nightHours * baseR * (otRate - 1));
+          });
+        });
+      }
+
+      const totalPay = s.monthlySalary > 0
+        ? s.monthlySalary + overtimePay
+        : workPay + overtimePay;
 
       return {
         type: 'fulltime',
-        classPay, generalPay, workPay, totalPay,
+        classPay, generalPay, workPay, overtimePay, totalPay,
         classHrs, generalHrs,
         monthlyFixed: s.monthlySalary > 0,
+        otEnabled,
         weeklyStats: [],
         totalHolidayPay: 0,
         byDay, staff: s, from, to, year, month,
       };
     }
 
-    /* ─ 알바: 시급 계산 + 주휴수당 ─ */
-    const hourlyRate     = s.baseHourlyRate > 0 ? s.baseHourlyRate : getMinWage(year);
-    const nightHourlyRate = Math.round(hourlyRate * NIGHT_MULT);
+    /* ─ 알바: 시급 계산 + 주휴수당 ─
+     * 시급 우선순위: appliedRate(등록 시 지정) > type별 시급(수업/일반) > 기본시급 > 최저시급
+     */
+    const mw          = getMinWage(year);
+    const defaultRate = s.baseHourlyRate > 0 ? s.baseHourlyRate : mw;
+    const classRate_  = s.classRate   > 0 ? s.classRate   : defaultRate;
+    const generalRate_= s.generalRate > 0 ? s.generalRate : defaultRate;
 
-    // 항목별 정산 (appliedRate 우선, 없으면 staff 시급)
-    let basePay = 0, nightPay = 0;
+    let basePay = 0, classPayPt = 0, generalPayPt = 0;
     Object.values(work).forEach(entries => {
       entries.forEach(e => {
-        const rate      = Number(e.appliedRate)      || hourlyRate;
-        const nRate     = Number(e.appliedNightRate) || Math.round(rate * NIGHT_MULT);
-        const bh = Number(e.baseHours  || e.hours || 0);
-        const nh = Number(e.nightHours || 0);
-        basePay  += bh * rate;
-        nightPay += nh * nRate;
+        const h = Number(e.hours || (e.baseHours || 0) + (e.nightHours || 0));
+        // appliedRate 우선, 없으면 type에 맞는 시급
+        const typeRate = e.type === 'class' ? classRate_ : generalRate_;
+        const rate     = Number(e.appliedRate) > 0 ? Number(e.appliedRate) : typeRate;
+        const pay      = h * rate;
+        basePay += pay;
+        if (e.type === 'class') classPayPt += pay; else generalPayPt += pay;
       });
     });
-    basePay  = Math.round(basePay);
-    nightPay = Math.round(nightPay);
+    basePay      = Math.round(basePay);
+    classPayPt   = Math.round(classPayPt);
+    generalPayPt = Math.round(generalPayPt);
 
     // 주휴수당
-    const weeklyStats    = getWeeklyStats(sid, year, month);
+    const weeklyStats     = getWeeklyStats(sid, year, month);
     const totalHolidayPay = weeklyStats.reduce((sum, w) => sum + w.holidayPay, 0);
-    const totalPay = basePay + nightPay + totalHolidayPay;
+    const totalPay        = basePay + totalHolidayPay;
 
     return {
       type: 'parttime',
-      basePay, nightPay, totalHolidayPay, totalPay,
+      basePay, classPayPt, generalPayPt, totalHolidayPay, totalPay,
       classHrs, generalHrs,
-      hourlyRate, nightHourlyRate,
+      classRate: classRate_, generalRate: generalRate_,
+      defaultRate,
       weeklyStats,
       byDay, staff: s, from, to, year, month,
     };
@@ -642,8 +674,8 @@ const StaffDB = (() => {
 
     rows.push([
       '직원명', '고용형태', '계약유형',
-      '총근무일', '수업(h)', '일반(h)', '야간(h)',
-      '기본급(원)', '야간수당(원)', '주휴수당(원)', '최종지급액(원)',
+      '총근무일', '수업(h)', '일반(h)',
+      '기본급(원)', '주휴수당(원)', '최종지급액(원)',
       '주휴수당해당주차', '비고',
     ]);
 
@@ -652,7 +684,7 @@ const StaffDB = (() => {
       if (!r) return;
 
       const totalDays  = Object.keys(r.byDay).length;
-      const nightHrs   = Object.values(r.byDay).reduce((sum, d) => sum + (d.nightHrs || 0), 0);
+
       const holidayWks = r.weeklyStats?.filter(w => w.qualified).map(w => w.weekLabel).join(' / ') || '';
 
       if (r.type === 'fulltime') {
@@ -663,9 +695,7 @@ const StaffDB = (() => {
           totalDays,
           r.classHrs,
           r.generalHrs,
-          Math.round(nightHrs * 100) / 100,
           r.monthlyFixed ? s.monthlySalary : r.workPay,
-          0,
           0,
           r.totalPay,
           '-',
@@ -679,9 +709,7 @@ const StaffDB = (() => {
           totalDays,
           r.classHrs,
           r.generalHrs,
-          Math.round(nightHrs * 100) / 100,
           r.basePay,
-          r.nightPay,
           r.totalHolidayPay,
           r.totalPay,
           holidayWks || '없음',
