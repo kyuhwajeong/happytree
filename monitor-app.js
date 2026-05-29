@@ -203,8 +203,8 @@ const MonitorApp = (() => {
 .mon-lbl-input{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:7px;padding:6px 10px;font-size:11px;color:#e2e8f0;outline:none;transition:border-color .15s;}
 .mon-lbl-input:focus{border-color:#38bdf8;}
 .mon-lbl-input::placeholder{color:#475569;}
-.mon-lbl-input.ip {width:130px;font-family:monospace;}
-.mon-lbl-input.nm {flex:1;min-width:120px;}
+.mon-lbl-input.ip{width:130px;font-family:monospace;}
+.mon-lbl-input.nm{flex:1;min-width:120px;}
 .mon-lbl-color-pick{width:32px;height:32px;border-radius:6px;border:1px solid rgba(255,255,255,.1);cursor:pointer;padding:2px;background:transparent;}
 .mon-lbl-add-btn{background:rgba(56,189,248,.15);border:1px solid rgba(56,189,248,.3);color:#38bdf8;border-radius:7px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s;}
 .mon-lbl-add-btn:hover{background:rgba(56,189,248,.28);}
@@ -215,13 +215,94 @@ const MonitorApp = (() => {
 .mon-lbl-name{font-size:11px;color:#e2e8f0;font-weight:600;flex:1;}
 .mon-lbl-del{background:transparent;border:none;color:#475569;font-size:12px;cursor:pointer;padding:2px 5px;border-radius:4px;transition:all .15s;}
 .mon-lbl-del:hover{background:rgba(239,68,68,.2);color:#ef4444;}
+
+/* ═══ 모바일 어코디언 ═══ */
+.mon-accordion{
+  overflow:hidden;
+  max-height:0;
+  transition:max-height .32s cubic-bezier(.4,0,.2,1);
+  background:rgba(56,189,248,.04);
+  border:1px solid rgba(56,189,248,.18);
+  border-top:none;
+  border-radius:0 0 12px 12px;
+  margin-top:-7px;
+  margin-bottom:8px;
+}
+.mon-accordion-body{padding:12px 14px 14px;}
+.mon-accordion-tl{max-height:260px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#334155 transparent;}
+.mon-accordion-tl::-webkit-scrollbar{width:3px;}
+.mon-accordion-tl::-webkit-scrollbar-thumb{background:#334155;border-radius:3px;}
+.mon-card.open{border-radius:11px 11px 0 0;border-bottom-color:transparent;}
+
+/* ═══ 모바일 하단 통계 시트 ═══ */
+.mon-sheet-ov{
+  position:fixed;inset:0;z-index:100003;
+  background:rgba(0,0,0,.55);
+  display:flex;align-items:flex-end;
+  transition:opacity .25s;
+}
+.mon-sheet-ov.hidden{display:none;}
+.mon-sheet{
+  width:100%;max-height:88vh;
+  background:#1e293b;
+  border-radius:18px 18px 0 0;
+  border-top:1px solid rgba(255,255,255,.1);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+  transform:translateY(100%);
+  transition:transform .3s cubic-bezier(.4,0,.2,1);
+}
+.mon-sheet.open{transform:translateY(0);}
+.mon-sheet-handle{
+  width:36px;height:4px;border-radius:2px;
+  background:rgba(255,255,255,.2);
+  margin:10px auto 0;flex-shrink:0;
+}
+.mon-sheet-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px 10px;
+  border-bottom:1px solid rgba(255,255,255,.07);
+  flex-shrink:0;
+}
+.mon-sheet-title{font-size:14px;font-weight:800;color:#e2e8f0;}
+.mon-sheet-close{background:rgba(255,255,255,.06);border:none;color:#94a3b8;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;}
+.mon-sheet-body{flex:1;overflow-y:auto;padding:14px 16px;scrollbar-width:thin;scrollbar-color:#334155 transparent;}
+.mon-sheet-body::-webkit-scrollbar{width:3px;}
+.mon-sheet-body::-webkit-scrollbar-thumb{background:#334155;border-radius:3px;}
+
+/* ═══ 모바일 하단 액션 바 ═══ */
+.mon-mob-bar{
+  display:none;
+  position:fixed;bottom:0;left:0;right:0;z-index:100001;
+  background:rgba(15,23,42,.96);
+  border-top:1px solid rgba(255,255,255,.08);
+  padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+  gap:6px;
+}
+.mon-mob-bar-btn{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);
+  border-radius:10px;padding:8px 4px;cursor:pointer;transition:background .15s;
+}
+.mon-mob-bar-btn:active{background:rgba(255,255,255,.12);}
+.mon-mob-bar-ico{font-size:16px;line-height:1;}
+.mon-mob-bar-lbl{font-size:9px;color:#64748b;font-weight:600;}
+.mon-mob-bar-btn.sky .mon-mob-bar-lbl{color:#38bdf8;}
+
+/* ═══ 반응형 ═══ */
 @media(max-width:640px){
-  .mon-list{width:100%;border-right:none;}
-  .mon-body{flex-direction:column;}
-  .mon-detail{display:none;}
-  .mon-detail.show{display:flex;}
   .mon-stats{display:none;}
   .mon-hsub{display:none;}
+  /* PC의 우측 패널은 모바일에서 숨김 — 어코디언으로 대체 */
+  .mon-detail{display:none !important;}
+  /* 헤더 버튼 일부 숨김 — 하단 바로 이동 */
+  .mon-btn.amber,.mon-btn.red{display:none;}
+  .mon-list{width:100%;border-right:none;padding-bottom:80px;}
+  .mon-mob-bar{display:flex;}
+  /* 히트맵 모바일 최적화 */
+  .mon-hm-td{width:14px;height:14px;}
+  .mon-hm-th{font-size:8px;padding:1px 2px;}
+  .mon-sum-grid{grid-template-columns:repeat(3,1fr);}
 }
     `;
     document.head.appendChild(s);
@@ -433,6 +514,44 @@ const MonitorApp = (() => {
         <span class="mon-fdot">•</span>
         <span style="color:#334155">삭제 후 재접속 시 새 기록 자동 생성</span>
       </div>
+
+      <!-- ★ 모바일 하단 액션 바 -->
+      <div class="mon-mob-bar" id="mon-mob-bar">
+        <div class="mon-mob-bar-btn sky" onclick="MonitorApp.showStatsSheet()">
+          <span class="mon-mob-bar-ico">📊</span>
+          <span class="mon-mob-bar-lbl">통계</span>
+        </div>
+        <div class="mon-mob-bar-btn" onclick="MonitorApp.clearFinished()">
+          <span class="mon-mob-bar-ico">🗑</span>
+          <span class="mon-mob-bar-lbl">완료삭제</span>
+        </div>
+        <div class="mon-mob-bar-btn" onclick="MonitorApp.clearAll()">
+          <span class="mon-mob-bar-ico">⚠️</span>
+          <span class="mon-mob-bar-lbl">초기화</span>
+        </div>
+        <div class="mon-mob-bar-btn" id="mob-notif-btn" onclick="MonitorApp._toggleNotif()">
+          <span class="mon-mob-bar-ico">🔕</span>
+          <span class="mon-mob-bar-lbl">알림</span>
+        </div>
+        <div class="mon-mob-bar-btn" onclick="MonitorApp.hide()">
+          <span class="mon-mob-bar-ico">✕</span>
+          <span class="mon-mob-bar-lbl">닫기</span>
+        </div>
+      </div>
+
+      <!-- ★ 모바일 통계 바텀 시트 -->
+      <div class="mon-sheet-ov hidden" id="mon-sheet-ov" onclick="MonitorApp._closeSheet(event)">
+        <div class="mon-sheet" id="mon-sheet">
+          <div class="mon-sheet-handle"></div>
+          <div class="mon-sheet-hdr">
+            <span class="mon-sheet-title">📊 통계 &amp; 히트맵</span>
+            <button class="mon-sheet-close" onclick="MonitorApp.hideStatsSheet()">닫기</button>
+          </div>
+          <div class="mon-sheet-body" id="mon-sheet-body">
+            <!-- 통계 내용 동적 삽입 -->
+          </div>
+        </div>
+      </div>
     `;
   }
 
@@ -461,8 +580,15 @@ const MonitorApp = (() => {
       const online   = MonitorDB.isOnline(s);
       const anomalies= _getAnomalies(s, _sessions);
       const card     = document.createElement('div');
-      card.className = `mon-card ${online?'on-line':'off-line'}${_selId===s.id?' sel':''}${anomalies.length?' flagged':''}`;
-      card.onclick   = e => { if (!e.target.closest('.mon-del-btn')) MonitorApp.selectSession(s.id); };
+      const isOpen   = _selId === s.id;
+      card.className = `mon-card ${online?'on-line':'off-line'}${isOpen?' sel':''}${anomalies.length?' flagged':''}${isOpen&&_isMobile()?' open':''}`;
+
+      /* ★ 클릭: 모바일 → 어코디언, PC → 우측 패널 */
+      card.onclick = e => {
+        if (e.target.closest('.mon-del-btn,.mon-lbl-add-btn,[onclick]')) return;
+        if (_isMobile()) _toggleAccordion(s.id, card);
+        else MonitorApp.selectSession(s.id);
+      };
 
       const acts    = _acts(s);
       const menuPct = _menuPct(acts);
@@ -584,145 +710,13 @@ const MonitorApp = (() => {
     `;
   }
 
-  /* ═══════════════════════════════════════════════════════════
-   * 통계 & 히트맵 패널
-   * ═══════════════════════════════════════════════════════════ */
+  /* ══════════════════════════════════════════════════════
+   * 통계 패널 렌더 (PC 우측 탭용)
+   * ══════════════════════════════════════════════════════ */
   function _renderStats() {
     const wrap = document.getElementById('mon-right-body');
     if (!wrap) return;
-
-    const stats  = _computeStats(_sessions);
-    const hmData = _computeHeatmap(_sessions);
-    const hmMax  = Math.max(1, ...hmData.flat());
-
-    /* ── 메뉴 사용 바 ── */
-    const menuEntries = Object.entries(stats.menuCounts)
-      .sort((a,b) => b[1]-a[1]).slice(0, 7);
-    const menuTotal = menuEntries.reduce((s,[,v])=>s+v, 0) || 1;
-    const menuBars = menuEntries.map(([m, cnt]) => {
-      const pct = Math.round(cnt / menuTotal * 100);
-      return `
-        <div class="mon-menu-bar-row">
-          <span class="mon-menu-bar-lbl">${MENU[m]||m}</span>
-          <div class="mon-menu-bar-track">
-            <div class="mon-menu-bar-fill" style="width:${pct}%"></div>
-            <span class="mon-menu-bar-pct">${pct}%</span>
-          </div>
-        </div>`;
-    }).join('');
-
-    /* ── 사용자 활동 바 ── */
-    const userEntries = Object.entries(stats.userCounts)
-      .sort((a,b) => b[1]-a[1]).slice(0, 8);
-    const userMax = Math.max(1, ...userEntries.map(([,v])=>v));
-    const USER_COLORS = ['#38bdf8','#4ade80','#fb923c','#f472b6','#818cf8','#34d399','#fbbf24','#a78bfa'];
-    const userBars = userEntries.map(([u, cnt], i) => {
-      const pct = Math.round(cnt / userMax * 100);
-      return `
-        <div class="mon-user-bar-row">
-          <span class="mon-user-bar-lbl" title="${_e(u)}">${_e(u)}</span>
-          <div class="mon-user-bar-track">
-            <div class="mon-user-bar-fill" style="width:${pct}%;background:${USER_COLORS[i%USER_COLORS.length]}40;border-right:2px solid ${USER_COLORS[i%USER_COLORS.length]}"></div>
-            <span class="mon-user-bar-cnt">${cnt}회</span>
-          </div>
-        </div>`;
-    }).join('');
-
-    /* ── 히트맵 테이블 ── */
-    const HOURS = Array.from({length:24},(_,i)=>`${i}시`);
-    const hmHeader = `<tr>
-      <th class="mon-hm-th" style="width:22px"></th>
-      ${HOURS.map((h,i)=>`<th class="mon-hm-th" style="color:${i>=23||i<6?'#818cf8':'#475569'}">${i%3===0?h:''}</th>`).join('')}
-    </tr>`;
-
-    const hmRows = DAYS_KO.map((d, di) => `
-      <tr>
-        <td class="mon-hm-th" style="text-align:right;padding-right:4px">${d}</td>
-        ${hmData[di].map((v, hi) => {
-          const intensity = v / hmMax;
-          const alpha     = Math.round(intensity * 220);
-          const hex       = alpha.toString(16).padStart(2,'0');
-          const isNight   = hi >= 23 || hi < 6;
-          const color     = isNight ? `#818cf8${hex}` : `#38bdf8${hex}`;
-          const bg        = v === 0 ? 'rgba(255,255,255,.04)' : color;
-          return `<td class="mon-hm-td" style="background:${bg}" data-tip="${d}요일 ${hi}시: ${v}건"></td>`;
-        }).join('')}
-      </tr>`).join('');
-
-    wrap.innerHTML = `
-      <div class="mon-stats-body">
-
-        <div class="mon-stat-section">
-          <div class="mon-stat-sec-title">48시간 요약</div>
-          <div class="mon-sum-grid">
-            <div class="mon-sum-card">
-              <div class="mon-sum-val" style="color:#4ade80">${stats.total}</div>
-              <div class="mon-sum-lbl">총 세션</div>
-            </div>
-            <div class="mon-sum-card">
-              <div class="mon-sum-val" style="color:#38bdf8">${stats.avgDur}분</div>
-              <div class="mon-sum-lbl">평균 사용</div>
-            </div>
-            <div class="mon-sum-card">
-              <div class="mon-sum-val" style="color:#fb923c">${stats.anomalyCount}</div>
-              <div class="mon-sum-lbl">이상 감지</div>
-            </div>
-          </div>
-        </div>
-
-        ${menuBars ? `
-        <div class="mon-stat-section">
-          <div class="mon-stat-sec-title">메뉴 사용 빈도 (상위 7)</div>
-          ${menuBars}
-        </div>` : ''}
-
-        ${userBars ? `
-        <div class="mon-stat-section">
-          <div class="mon-stat-sec-title">사용자별 접속 횟수</div>
-          ${userBars}
-        </div>` : ''}
-
-        <div class="mon-stat-section">
-          <div class="mon-stat-sec-title">시간대별 활동 히트맵</div>
-          <div style="font-size:10px;color:#334155;margin-bottom:6px">
-            <span style="display:inline-block;width:12px;height:10px;background:rgba(56,189,248,.6);border-radius:2px;margin-right:3px;vertical-align:middle"></span>일반 시간대
-            <span style="display:inline-block;width:12px;height:10px;background:rgba(129,140,248,.6);border-radius:2px;margin-left:8px;margin-right:3px;vertical-align:middle"></span>심야(23시~06시)
-          </div>
-          <div class="mon-heatmap">
-            <table class="mon-hm-table">
-              ${hmHeader}
-              ${hmRows}
-            </table>
-          </div>
-          <div style="font-size:10px;color:#334155;margin-top:6px;text-align:right">
-            셀에 마우스를 올리면 건수 표시
-          </div>
-        </div>
-
-        <!-- ★ IP 장소 라벨 관리 -->
-        <div class="mon-stat-section">
-          <div class="mon-stat-sec-title">
-            🏷 IP 장소 라벨 관리
-          </div>
-          <div class="mon-lbl-panel">
-            <div class="mon-lbl-add-row">
-              <input class="mon-lbl-input ip" id="lbl-ip"   placeholder="IP 대역 (예: 211.234.12)" />
-              <input class="mon-lbl-input nm" id="lbl-name" placeholder="장소명 (예: 해피트리영어학원)" />
-              <input type="color" class="mon-lbl-color-pick" id="lbl-color" value="#38bdf8" title="배지 색상" />
-              <button class="mon-lbl-add-btn" onclick="MonitorApp.addIpLabel()">+ 추가</button>
-            </div>
-            <div class="mon-lbl-list" id="lbl-list">
-              ${_renderLabelList()}
-            </div>
-            <div style="font-size:10px;color:#334155;margin-top:8px">
-              * IP 대역이 길수록 더 구체적으로 매칭됩니다<br>
-              * "211.234.12" → 211.234.12.* 전체 일치
-            </div>
-          </div>
-        </div>
-
-      </div>
-    `;
+    wrap.innerHTML = `<div class="mon-stats-body">${_buildStatsHTML()}</div>`;
   }
 
   /* ═══════════════════════════════════════════════════════════
@@ -965,6 +959,239 @@ const MonitorApp = (() => {
   function _v(id, val) { const el=document.getElementById(id); if(el) el.textContent=val; }
 
   /* ══════════════════════════════════════════════════════
+   * 모바일 감지
+   * ══════════════════════════════════════════════════════ */
+  function _isMobile() {
+    return window.innerWidth <= 640;
+  }
+
+  /* ══════════════════════════════════════════════════════
+   * 어코디언 토글 (모바일 전용)
+   *
+   * 카드 아래 인라인으로 세션 상세를 펼치고 접습니다.
+   * 한 번에 하나만 열립니다.
+   * ══════════════════════════════════════════════════════ */
+  function _toggleAccordion(id, card) {
+    /* 이미 열린 어코디언이면 닫기 */
+    const existing = card.nextElementSibling;
+    if (existing?.classList.contains('mon-accordion')) {
+      existing.style.maxHeight = '0';
+      card.classList.remove('sel', 'open');
+      setTimeout(() => { if(existing.parentNode) existing.remove(); }, 330);
+      _selId = null;
+      return;
+    }
+
+    /* 다른 열린 어코디언 모두 닫기 */
+    document.querySelectorAll('.mon-accordion').forEach(el => {
+      el.style.maxHeight = '0';
+      setTimeout(() => { if(el.parentNode) el.remove(); }, 330);
+    });
+    document.querySelectorAll('.mon-card').forEach(c => c.classList.remove('sel','open'));
+
+    /* 선택 상태 업데이트 */
+    _selId = id;
+    card.classList.add('sel', 'open');
+
+    /* 세션 데이터 조회 */
+    const s = _sessions.find(x => x.id === id);
+    if (!s) return;
+
+    /* 어코디언 엘리먼트 생성 */
+    const acc = document.createElement('div');
+    acc.className = 'mon-accordion';
+
+    const acts    = _acts(s).slice().reverse();
+    const online  = MonitorDB.isOnline(s);
+    const geo     = MonitorDB.geoStr(s);
+    const lbl     = _matchLabel(s.ip);
+    const rLbl    = ROLE[s.role] || s.role;
+    const rClr    = ROLE_COLOR[s.role] || '#64748b';
+    const dur     = _dur(s.loginAt, s.loggedOut || new Date().toISOString());
+    const anomalies = _getAnomalies(s, _sessions);
+
+    acc.innerHTML = `
+      <div class="mon-accordion-body">
+        <!-- 요약 메타 -->
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;font-size:11px;color:#64748b;">
+          <span>${online ? '<span style="color:#4ade80">● 접속 중</span>' : '<span style="color:#475569">○ 오프라인</span>'}</span>
+          <span>🌐 ${_e(s.ip)}</span>
+          ${geo ? `<span>📍 ${_e(geo)}</span>` : ''}
+          ${s.isp ? `<span>📡 ${_e(s.isp)}</span>` : ''}
+          ${lbl ? `<span class="mon-ip-label" style="color:${lbl.color};background:${lbl.color}20;border-color:${lbl.color}40">🏷 ${_e(lbl.label)}</span>` : ''}
+          <span>⏱ ${dur}</span>
+          <span>🔑 ${_ts(s.loginAt)}</span>
+          ${s.loggedOut ? `<span>🚪 ${_ts(s.loggedOut)}</span>` : ''}
+        </div>
+        ${anomalies.length ? `
+          <div class="mon-flags" style="margin-bottom:8px;">
+            ${anomalies.map(f=>`<span class="mon-flag ${f.type}">${f.icon} ${f.label}</span>`).join('')}
+          </div>` : ''}
+        <!-- 삭제 버튼 -->
+        <button onclick="MonitorApp.deleteOne('${s.id}')"
+          style="font-size:11px;font-weight:700;color:#ef4444;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:7px;padding:5px 12px;cursor:pointer;margin-bottom:10px;">
+          🗑 이 세션 삭제
+        </button>
+        <!-- 타임라인 -->
+        <div style="font-size:10px;color:#475569;margin-bottom:5px;">액션 로그 ${acts.length}건 (최신순)</div>
+        <div class="mon-accordion-tl">
+          ${acts.length
+            ? acts.map(a=>`
+              <div class="mon-tl-item">
+                <span class="mon-tl-t">${_shortT(a.t)}</span>
+                <span class="mon-tl-ico">${TYPE_ICON[a.type]||'🖱'}</span>
+                <div class="mon-tl-body">
+                  <div class="mon-tl-menu">${MENU[a.menu]||a.menu||''}</div>
+                  ${a.detail?`<div class="mon-tl-det">${_e(a.detail)}</div>`:''}
+                  ${a.extra ?`<div class="mon-tl-ext">${_e(a.extra)}</div>` :''}
+                </div>
+              </div>`).join('')
+            : '<div style="color:#475569;font-size:11px;text-align:center;padding:10px">기록된 활동이 없습니다</div>'}
+        </div>
+      </div>
+    `;
+
+    /* 카드 뒤에 삽입 후 애니메이션 */
+    card.after(acc);
+    requestAnimationFrame(() => {
+      acc.style.maxHeight = acc.scrollHeight + 'px';
+    });
+
+    /* 부드럽게 스크롤 */
+    setTimeout(() => card.scrollIntoView({ behavior:'smooth', block:'nearest' }), 50);
+  }
+
+  /* ══════════════════════════════════════════════════════
+   * 통계 바텀 시트 (모바일 전용)
+   * ══════════════════════════════════════════════════════ */
+  function showStatsSheet() {
+    const ov    = document.getElementById('mon-sheet-ov');
+    const sheet = document.getElementById('mon-sheet');
+    const body  = document.getElementById('mon-sheet-body');
+    if (!ov || !sheet || !body) return;
+
+    /* 통계 내용 렌더 */
+    body.innerHTML = _buildStatsHTML();
+
+    ov.classList.remove('hidden');
+    requestAnimationFrame(() => sheet.classList.add('open'));
+  }
+
+  function hideStatsSheet() {
+    const ov    = document.getElementById('mon-sheet-ov');
+    const sheet = document.getElementById('mon-sheet');
+    if (!ov || !sheet) return;
+    sheet.classList.remove('open');
+    setTimeout(() => ov.classList.add('hidden'), 300);
+  }
+
+  function _closeSheet(e) {
+    /* 시트 바깥(오버레이) 클릭 시 닫기 */
+    if (e.target.id === 'mon-sheet-ov') hideStatsSheet();
+  }
+
+  /* ══════════════════════════════════════════════════════
+   * 통계 HTML 생성 (PC 우측 패널 + 모바일 시트 공통)
+   * ══════════════════════════════════════════════════════ */
+  function _buildStatsHTML() {
+    const stats  = _computeStats(_sessions);
+    const hmData = _computeHeatmap(_sessions);
+    const hmMax  = Math.max(1, ...hmData.flat());
+    const mobile = _isMobile();
+
+    /* 메뉴 바 */
+    const menuEntries = Object.entries(stats.menuCounts).sort((a,b)=>b[1]-a[1]).slice(0,7);
+    const menuTotal   = menuEntries.reduce((s,[,v])=>s+v,0)||1;
+    const menuBars = menuEntries.map(([m,cnt])=>{
+      const pct = Math.round(cnt/menuTotal*100);
+      return `<div class="mon-menu-bar-row">
+        <span class="mon-menu-bar-lbl">${MENU[m]||m}</span>
+        <div class="mon-menu-bar-track">
+          <div class="mon-menu-bar-fill" style="width:${pct}%"></div>
+          <span class="mon-menu-bar-pct">${pct}%</span>
+        </div>
+      </div>`;
+    }).join('');
+
+    /* 사용자 바 */
+    const userEntries = Object.entries(stats.userCounts).sort((a,b)=>b[1]-a[1]).slice(0,8);
+    const userMax     = Math.max(1,...userEntries.map(([,v])=>v));
+    const UC = ['#38bdf8','#4ade80','#fb923c','#f472b6','#818cf8','#34d399','#fbbf24','#a78bfa'];
+    const userBars = userEntries.map(([u,cnt],i)=>{
+      const pct = Math.round(cnt/userMax*100);
+      return `<div class="mon-user-bar-row">
+        <span class="mon-user-bar-lbl" title="${_e(u)}">${_e(u)}</span>
+        <div class="mon-user-bar-track">
+          <div class="mon-user-bar-fill" style="width:${pct}%;background:${UC[i%UC.length]}40;border-right:2px solid ${UC[i%UC.length]}"></div>
+          <span class="mon-user-bar-cnt">${cnt}회</span>
+        </div>
+      </div>`;
+    }).join('');
+
+    /* 히트맵 — 모바일: 3시간 단위 레이블, 셀 14px / PC: 1시간 */
+    const STEP  = mobile ? 3 : 1;
+    const HOURS = Array.from({length:24},(_,i)=>i);
+    const hmHeader = `<tr>
+      <th class="mon-hm-th" style="min-width:18px"></th>
+      ${HOURS.map(i=>`<th class="mon-hm-th" style="color:${i>=23||i<6?'#818cf8':'#475569'}">${i%STEP===0?i+'시':''}</th>`).join('')}
+    </tr>`;
+    const hmRows = DAYS_KO.map((d,di)=>`
+      <tr>
+        <td class="mon-hm-th" style="text-align:right;padding-right:4px;white-space:nowrap">${d}</td>
+        ${hmData[di].map((v,hi)=>{
+          const alpha = Math.round((v/hmMax)*220).toString(16).padStart(2,'0');
+          const night = hi>=23||hi<6;
+          const bg    = v===0 ? 'rgba(255,255,255,.04)' : (night?`#818cf8${alpha}`:`#38bdf8${alpha}`);
+          return `<td class="mon-hm-td" style="background:${bg}" data-tip="${d}요일 ${hi}시: ${v}건"></td>`;
+        }).join('')}
+      </tr>`).join('');
+
+    /* IP 라벨 섹션 */
+    const lblSection = `
+      <div class="mon-stat-section">
+        <div class="mon-stat-sec-title">🏷 IP 장소 라벨 관리</div>
+        <div class="mon-lbl-panel">
+          <div class="mon-lbl-add-row">
+            <input class="mon-lbl-input ip" id="lbl-ip"   placeholder="IP 대역 (예: 211.234.12)" />
+            <input class="mon-lbl-input nm" id="lbl-name" placeholder="장소명" />
+            <input type="color" class="mon-lbl-color-pick" id="lbl-color" value="#38bdf8" />
+            <button class="mon-lbl-add-btn" onclick="MonitorApp.addIpLabel()">+ 추가</button>
+          </div>
+          <div class="mon-lbl-list" id="lbl-list">${_renderLabelList()}</div>
+          <div style="font-size:10px;color:#334155;margin-top:8px">
+            * "211.234.12" → 211.234.12.* 전체 일치
+          </div>
+        </div>
+      </div>`;
+
+    return `
+      <div class="mon-stat-section">
+        <div class="mon-stat-sec-title">48시간 요약</div>
+        <div class="mon-sum-grid">
+          <div class="mon-sum-card"><div class="mon-sum-val" style="color:#4ade80">${stats.total}</div><div class="mon-sum-lbl">총 세션</div></div>
+          <div class="mon-sum-card"><div class="mon-sum-val" style="color:#38bdf8">${stats.avgDur}분</div><div class="mon-sum-lbl">평균 사용</div></div>
+          <div class="mon-sum-card"><div class="mon-sum-val" style="color:#fb923c">${stats.anomalyCount}</div><div class="mon-sum-lbl">이상 감지</div></div>
+        </div>
+      </div>
+      ${menuBars ? `<div class="mon-stat-section"><div class="mon-stat-sec-title">메뉴 사용 빈도</div>${menuBars}</div>` : ''}
+      ${userBars ? `<div class="mon-stat-section"><div class="mon-stat-sec-title">사용자별 접속</div>${userBars}</div>` : ''}
+      <div class="mon-stat-section">
+        <div class="mon-stat-sec-title">시간대별 활동 히트맵</div>
+        <div style="font-size:10px;color:#334155;margin-bottom:6px">
+          <span style="display:inline-block;width:10px;height:10px;background:rgba(56,189,248,.6);border-radius:2px;margin-right:3px;vertical-align:middle"></span>일반
+          <span style="display:inline-block;width:10px;height:10px;background:rgba(129,140,248,.6);border-radius:2px;margin-left:8px;margin-right:3px;vertical-align:middle"></span>심야(23~06시)
+          ${mobile ? '<span style="color:#475569;margin-left:8px">← 좌우 스크롤</span>' : ''}
+        </div>
+        <div class="mon-heatmap">
+          <table class="mon-hm-table">${hmHeader}${hmRows}</table>
+        </div>
+        <div style="font-size:10px;color:#334155;margin-top:6px;text-align:right">셀 터치 시 건수 표시</div>
+      </div>
+      ${lblSection}
+    `;
+  }
+
+  /* ══════════════════════════════════════════════════════
    * IP 라벨 헬퍼
    * ══════════════════════════════════════════════════════ */
 
@@ -1059,9 +1286,9 @@ const MonitorApp = (() => {
     switchRightTab,
     deleteOne, clearFinished, clearAll,
     _toggleNotif,
+    /* 모바일 바텀 시트 */
+    showStatsSheet, hideStatsSheet, _closeSheet,
     /* IP 라벨 */
-    addIpLabel,
-    promptAddLabel,
-    deleteIpLabel,
+    addIpLabel, promptAddLabel, deleteIpLabel,
   };
 })();
