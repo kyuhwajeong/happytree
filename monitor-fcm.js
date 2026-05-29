@@ -22,7 +22,7 @@ const MonitorFCM = (() => {
    *   Firebase Console → Project Settings →
    *   Cloud Messaging → Web Push certificates → Generate key pair
    * ══════════════════════════════════════════════════════ */
-  const VAPID_KEY = 'REPLACE_WITH_YOUR_VAPID_PUBLIC_KEY';
+  const VAPID_KEY = 'BKfXqq2yPv7UHXoXRRZEPitBrFe1-3DuLE2DYpvgBDqqe0Ils1ireJQhN3Tv2ieRgiHQ7aItEfOtolW4hMovwJQ';
 
   /* ══════════════════════════════════════════════════════
    * 내부 상수
