@@ -91,7 +91,15 @@ const StaffDB = (() => {
    * ════════════════════════════════════════ */
   async function init() {
     _staff = _lg(LS_STAFF) || [];
-    _work  = _lg(LS_WORK)  || {};
+    /* localStorage 로드 시 날짜 키 변환 (2026_05_15 → 2026-05-15) */
+    const _rawWork = _lg(LS_WORK) || {};
+    _work = {};
+    Object.entries(_rawWork).forEach(([sid, days]) => {
+      _work[sid] = {};
+      Object.entries(days || {}).forEach(([k, v]) => {
+        _work[sid][k.replace(/_/g, '-')] = v;
+      });
+    });
     _templ = _lg(LS_TEMPL) || {};
     _acad  = { name: '해피트리 영어학원', ...(_lg(LS_ACAD) || {}) };
 
@@ -115,11 +123,24 @@ const StaffDB = (() => {
       ]);
       if (sS) {
         _staff = Object.values(sS).map(s => ({
-          employType: 'fulltime', monthlySalary: 0, baseHourlyRate: 0, ...s,
+          employType: 'fulltime', monthlySalary: 0, baseHourlyRate: 0,
+          overtimeEnabled: false, overtimeRate: 1.5, overtimeStart: '22:00',
+          ...s,
         }));
         _ls(LS_STAFF, _staff);
       }
-      if (wS) { _work = wS; _ls(LS_WORK, _work); }
+      if (wS) {
+        /* Firebase 키: 2026_05_15 → 메모리 키: 2026-05-15 로 변환 */
+        _work = {};
+        Object.entries(wS).forEach(([sid, days]) => {
+          _work[sid] = {};
+          Object.entries(days || {}).forEach(([dayKey, entries]) => {
+            const dateKey = dayKey.replace(/_/g, '-');
+            _work[sid][dateKey] = entries;
+          });
+        });
+        _ls(LS_WORK, _work);
+      }
       if (tS) { _templ = tS; _ls(LS_TEMPL, _templ); }
     } catch(e) { console.warn('[StaffDB v3] init', e); }
 
