@@ -293,7 +293,11 @@ const App = (() => {
     history.pushState({pg:'login'},'');
     setTimeout(()=>(sp?_q('li-pw'):si?_q('li-pw'):_q('li-id')).focus(),300);
   }
-  function cancelLogin(){_q('login-gate').classList.add('hidden');}
+  function cancelLogin(){
+    // 로그인 창만 닫고 현재 페이지 유지 (페이지 이동 없음)
+    _q('login-gate').classList.add('hidden');
+    history.pushState({pg:S.page},'');
+  }
   function doLogin(){
     const id=_q('li-id').value.trim(), pw=_q('li-pw').value;
     // ★ Firebase 초기화 후에도 기본 admin으로 로그인 가능
@@ -312,7 +316,15 @@ const App = (() => {
       _toast(`✅ ${acc.username} (${acc.role==='admin'?'관리자':acc.role==='teacher'?'강사':'운용자'}) 로그인`,'success');
     } else {_q('li-err').textContent='⚠️ 아이디 또는 비밀번호가 올바르지 않습니다';_q('li-pw').value='';}
   }
-  function logout(){if(!confirm('로그아웃 하시겠습니까?'))return;DB.clearSession();clearTimeout(_autoLogoutTimer);_refreshAuthUI();go('operate');_toast('로그아웃 되었습니다');}
+  function logout(){
+    DB.clearSession();
+    clearTimeout(_autoLogoutTimer);
+    go('operate');
+    _refreshAuthUI();
+    _toast('로그아웃 되었습니다');
+    // ★ 로그아웃 즉시 로그인 창 표시
+    _showLogin('');
+  }
 
   /* ══ 운용 - 칩 ══ */
   // ════════════════════════════════════════
