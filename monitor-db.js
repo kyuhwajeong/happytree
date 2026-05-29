@@ -99,6 +99,12 @@ const MonitorDB = (() => {
     _actions = [];
     _startHB();
     _cleanupExpired();   // 오래된 세션 정리
+
+    /* ★ FCM 푸시 알림 — 등록된 모니터링 기기로 즉시 전송 */
+    if (typeof MonitorFCM !== 'undefined') {
+      MonitorFCM.notifyNewSession(session).catch(() => {});
+    }
+
     return sid;
   }
 
@@ -207,12 +213,49 @@ const MonitorDB = (() => {
     return String(t||'').replace(/pass(?:word)?[\s=:]+\S+/gi,'****').slice(0,120);
   }
 
+  /* 세션 단건 삭제 */
+  async function deleteSession(sessionId) {
+    if (!FireDB.ready() || !sessionId) return false;
+    try { await FireDB.remove(`${PATH}/${sessionId}`); return true; }
+    catch(e) { console.warn('[MonitorDB] deleteSession:', e); return false; }
+  }
+
+  /* 완료 세션만 삭제 (로그아웃 또는 오프라인) */
+  async function clearFinishedSessions() {
+    if (!FireDB.ready()) return 0;
+    try {
+      const raw = await FireDB.get(PATH);
+      if (!raw) return 0;
+      const now = Date.now();
+      const toDelete = Object.entries(raw).filter(([, s]) =>
+        s && (s.loggedOut || new Date(s.lastSeen).getTime() < now - ONLINE_MS)
+      );
+      await Promise.all(toDelete.map(([id]) => FireDB.remove(`${PATH}/${id}`)));
+      return toDelete.length;
+    } catch(e) { console.warn('[MonitorDB] clearFinished:', e); return 0; }
+  }
+
+  /* 전체 세션 완전 삭제 (온라인 포함) */
+  async function clearAllSessions() {
+    if (!FireDB.ready()) return 0;
+    try {
+      const raw = await FireDB.get(PATH);
+      if (!raw) return 0;
+      const ids = Object.keys(raw);
+      await Promise.all(ids.map(id => FireDB.remove(`${PATH}/${id}`)));
+      return ids.length;
+    } catch(e) { console.warn('[MonitorDB] clearAll:', e); return 0; }
+  }
+
   /* ══ 공개 API ══ */
   return {
     isMonitorPassword, hasSession, isOnline,
     startSession, endSession,
     updateMenu, logAction,
     listenSessions,
+    deleteSession,
+    clearFinishedSessions,
+    clearAllSessions,
     cleanupExpired: _cleanupExpired,
     ONLINE_MS,
   };

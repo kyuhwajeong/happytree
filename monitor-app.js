@@ -309,6 +309,16 @@ const MonitorApp = (() => {
     _startListen();
     _startClock();
     _requestNotifPermission();
+    /* ★ FCM 토큰 등록 — 페이지 닫혀도 푸시 수신 가능 */
+    if (typeof MonitorFCM !== 'undefined') {
+      MonitorFCM.register().then(ok => {
+        const btn = document.getElementById('mon-notif-btn');
+        if (btn && ok) {
+          btn.className = 'mon-notif-toggle on';
+          btn.textContent = '🔔 알림 ON (FCM)';
+        }
+      });
+    }
   }
 
   function hide() {
@@ -316,6 +326,7 @@ const MonitorApp = (() => {
     document.getElementById('app')?.classList.remove('hidden');
     _stopListen();
     _stopClock();
+    /* FCM 토큰 유지 — 페이지 닫혀도 푸시 수신되도록 unregister 하지 않음 */
   }
 
   function selectSession(id) {
