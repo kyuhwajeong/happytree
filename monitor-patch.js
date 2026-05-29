@@ -82,11 +82,54 @@
     } catch { return stuId || ''; }
   }
 
-  /* BookLibDB 교재명 */
+  /* BookLibDB 교재명 — 다중 폴백으로 최대한 이름 조회
+   *
+   * 조회 우선순위:
+   *   1. DOM select 옵션 (bl-bsel / gr-bsel) — 가장 신뢰성 높음
+   *   2. BookLibDB.getBook(id)   — API 메서드명이 맞으면 성공
+   *   3. BookLibDB.getBooks() / BookLibDB.books   — 배열/객체 탐색
+   *   4. 폴백: "(bkId)" 형식으로 표시 — ID임을 명시
+   *
+   * 표시 형식: "교재명(id)" 또는 "(id)"
+   */
   function _bkName(bkId) {
+    if (!bkId) return '';
+    let name = '';
+
     try {
-      return (typeof BookLibDB !== 'undefined' && BookLibDB.getBook?.(bkId))?.name || bkId || '';
-    } catch { return bkId || ''; }
+      /* 1순위: DOM select 옵션에서 value === bkId 인 option의 text */
+      for (const selId of ['bl-bsel','gr-bsel']) {
+        const sel = document.getElementById(selId);
+        if (!sel) continue;
+        const opt = [...sel.options].find(o => o.value === bkId);
+        if (opt?.text?.trim()) { name = opt.text.trim(); break; }
+      }
+    } catch {}
+
+    if (!name) {
+      try {
+        /* 2순위: BookLibDB.getBook(id) */
+        const book = typeof BookLibDB !== 'undefined'
+          ? (BookLibDB.getBook?.(bkId) ?? BookLibDB.getBookById?.(bkId))
+          : null;
+        if (book?.name) name = book.name;
+      } catch {}
+    }
+
+    if (!name) {
+      try {
+        /* 3순위: BookLibDB.getBooks() 배열 또는 BookLibDB.books 객체 탐색 */
+        if (typeof BookLibDB !== 'undefined') {
+          const books = BookLibDB.getBooks?.() ?? BookLibDB.getAllBooks?.() ?? BookLibDB.books;
+          const arr   = Array.isArray(books) ? books : (books ? Object.values(books) : []);
+          const found = arr.find(b => b?.id === bkId || b?.key === bkId);
+          if (found?.name) name = found.name;
+        }
+      } catch {}
+    }
+
+    /* 표시 형식: 이름이 있으면 "교재명(id)", 없으면 "(id)" */
+    return name ? `${name}(${bkId})` : `(${bkId})`;
   }
 
   /* 챕터명 DOM 조회 */
