@@ -45,32 +45,29 @@ const MonitorDB = (() => {
    * ══════════════════════════════════════════════════════ */
   async function _fetchGeo() {
     try {
-      /* ip-api.com: 분당 45회 무료, 한국어(lang=ko) 지원 */
+      /*
+       * ★ /api/geoip (Vercel serverless) 를 통해 서버사이드에서 ip-api.com 호출
+       *   이유: ip-api.com 은 HTTP만 지원 → HTTPS 사이트에서 직접 호출 시
+       *         브라우저 혼합 콘텐츠 차단으로 실패함
+       *   /api/geoip 는 서버(Node.js)에서 HTTP 호출 → HTTP 제한 없음
+       *   결과: 한국어 도시·지역명 정상 반환
+       */
       const r = await Promise.race([
-        fetch('http://ip-api.com/json/?lang=ko&fields=status,message,country,regionName,city,isp,query'),
-        new Promise((_,rej) => setTimeout(() => rej(), 4000)),
+        fetch('/api/geoip'),
+        new Promise((_,rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
       ]);
+      if (!r.ok) throw new Error('geoip api error');
       const d = await r.json();
-      if (d.status !== 'success') throw new Error(d.message || 'geo fail');
       return {
-        ip:     d.query      || '알 수 없음',
-        city:   d.city       || '',
-        region: d.regionName || '',
-        country:d.country    || '',
-        isp:    d.isp        || '',
+        ip:     d.ip      || '알 수 없음',
+        city:   d.city    || '',
+        region: d.region  || '',
+        country:d.country || '',
+        isp:    d.isp     || '',
       };
-    } catch {
-      /* 지오코딩 실패 시 IP만 별도로 조회 */
-      try {
-        const r2 = await Promise.race([
-          fetch('https://api.ipify.org?format=json'),
-          new Promise((_,rej) => setTimeout(() => rej(), 3000)),
-        ]);
-        const d2 = await r2.json();
-        return { ip: d2.ip || '알 수 없음', city:'', region:'', country:'', isp:'' };
-      } catch {
-        return { ip:'알 수 없음', city:'', region:'', country:'', isp:'' };
-      }
+    } catch(e) {
+      console.warn('[MonitorDB] 지오코딩 실패:', e.message);
+      return { ip:'알 수 없음', city:'', region:'', country:'', isp:'' };
     }
   }
 
