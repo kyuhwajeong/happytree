@@ -93,6 +93,10 @@ const MonitorApp = (() => {
 .mon-uname{font-size:13px;font-weight:700;color:#e2e8f0;display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
 .mon-rbdg{font-size:9px;font-weight:600;border-radius:3px;padding:1px 4px;}
 .mon-ip{font-size:10px;color:#64748b;margin-top:2px;}
+/* 지오 위치 표시 */
+.mon-geo{font-size:10px;color:#38bdf8;margin-top:1px;display:flex;align-items:center;gap:3px;}
+/* IP 라벨 배지 */
+.mon-ip-label{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;border-radius:4px;padding:1px 6px;margin-top:2px;border:1px solid;}
 .mon-cright{text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
 .mon-mbdg{font-size:10px;background:rgba(56,189,248,.15);color:#38bdf8;border-radius:5px;padding:2px 7px;font-weight:600;white-space:nowrap;}
 .mon-dur{font-size:10px;color:#64748b;}
@@ -192,6 +196,25 @@ const MonitorApp = (() => {
 .mon-ftr{display:flex;align-items:center;gap:10px;padding:7px 16px;background:rgba(0,0,0,.25);border-top:1px solid rgba(255,255,255,.06);font-size:10px;color:#475569;flex-shrink:0;flex-wrap:wrap;}
 .mon-fdot{color:#334155;}
 
+/* ═══ IP 라벨 관리 패널 ═══ */
+.mon-lbl-panel{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:12px 14px;margin-bottom:14px;}
+.mon-lbl-panel-title{font-size:11px;color:#475569;font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;}
+.mon-lbl-add-row{display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap;}
+.mon-lbl-input{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:7px;padding:6px 10px;font-size:11px;color:#e2e8f0;outline:none;transition:border-color .15s;}
+.mon-lbl-input:focus{border-color:#38bdf8;}
+.mon-lbl-input::placeholder{color:#475569;}
+.mon-lbl-input.ip {width:130px;font-family:monospace;}
+.mon-lbl-input.nm {flex:1;min-width:120px;}
+.mon-lbl-color-pick{width:32px;height:32px;border-radius:6px;border:1px solid rgba(255,255,255,.1);cursor:pointer;padding:2px;background:transparent;}
+.mon-lbl-add-btn{background:rgba(56,189,248,.15);border:1px solid rgba(56,189,248,.3);color:#38bdf8;border-radius:7px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s;}
+.mon-lbl-add-btn:hover{background:rgba(56,189,248,.28);}
+.mon-lbl-list{display:flex;flex-direction:column;gap:5px;}
+.mon-lbl-row{display:flex;align-items:center;gap:8px;padding:5px 8px;background:rgba(255,255,255,.04);border-radius:7px;}
+.mon-lbl-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.mon-lbl-prefix{font-size:11px;color:#94a3b8;font-family:monospace;min-width:110px;}
+.mon-lbl-name{font-size:11px;color:#e2e8f0;font-weight:600;flex:1;}
+.mon-lbl-del{background:transparent;border:none;color:#475569;font-size:12px;cursor:pointer;padding:2px 5px;border-radius:4px;transition:all .15s;}
+.mon-lbl-del:hover{background:rgba(239,68,68,.2);color:#ef4444;}
 @media(max-width:640px){
   .mon-list{width:100%;border-right:none;}
   .mon-body{flex-direction:column;}
@@ -208,6 +231,8 @@ const MonitorApp = (() => {
    * 브라우저 알림 권한 요청
    * ═══════════════════════════════════════════════════════════ */
   let _notifEnabled = true;
+  let _ipLabels     = [];   // ★ IP 라벨 캐시 (실시간 리스닝으로 갱신)
+  let _unlistenLbls = null;
 
   async function _requestNotifPermission() {
     if (!('Notification' in window)) return;
@@ -309,6 +334,11 @@ const MonitorApp = (() => {
     _startListen();
     _startClock();
     _requestNotifPermission();
+    /* ★ IP 라벨 실시간 리스닝 시작 */
+    _unlistenLbls = MonitorDB.listenIpLabels(labels => {
+      _ipLabels = labels;
+      _updateList(); // 라벨 변경 시 카드 즉시 갱신
+    });
     /* ★ FCM 토큰 등록 — 페이지 닫혀도 푸시 수신 가능 */
     if (typeof MonitorFCM !== 'undefined') {
       MonitorFCM.register().then(ok => {
@@ -326,6 +356,7 @@ const MonitorApp = (() => {
     document.getElementById('app')?.classList.remove('hidden');
     _stopListen();
     _stopClock();
+    if (_unlistenLbls) { _unlistenLbls(); _unlistenLbls = null; }
     /* FCM 토큰 유지 — 페이지 닫혀도 푸시 수신되도록 unregister 하지 않음 */
   }
 
@@ -440,6 +471,10 @@ const MonitorApp = (() => {
       const menuLbl = MENU[s.currentMenu] || s.currentMenu || '';
       const rLbl    = ROLE[s.role] || s.role;
       const rClr    = ROLE_COLOR[s.role] || '#64748b';
+      /* ★ 지오 정보 */
+      const geo     = MonitorDB.geoStr(s);
+      /* ★ IP 라벨 매칭 */
+      const lbl     = _matchLabel(s.ip);
 
       card.innerHTML = `
         <div class="mon-ctop">
@@ -451,6 +486,8 @@ const MonitorApp = (() => {
                 <span class="mon-rbdg" style="background:${rClr}20;color:${rClr}">${rLbl}</span>
               </div>
               <div class="mon-ip">🌐 ${_e(s.ip)}</div>
+              ${geo ? `<div class="mon-geo">📍 ${_e(geo)}</div>` : ''}
+              ${lbl ? `<div><span class="mon-ip-label" style="color:${lbl.color};background:${lbl.color}20;border-color:${lbl.color}40">🏷 ${_e(lbl.label)}</span></div>` : `<div style="margin-top:2px"><button style="font-size:9px;background:transparent;border:1px dashed #334155;color:#475569;border-radius:4px;padding:1px 6px;cursor:pointer;" onclick="MonitorApp.promptAddLabel('${_e(s.ip)}',event)">+ 장소 지정</button></div>`}
               <div class="mon-ip">${_dIco(s.ua)} ${_e(s.ua)}</div>
             </div>
           </div>
@@ -499,6 +536,8 @@ const MonitorApp = (() => {
     const rLbl     = ROLE[s.role] || s.role;
     const rClr     = ROLE_COLOR[s.role] || '#64748b';
     const dur      = _dur(s.loginAt, s.loggedOut || new Date().toISOString());
+    const geo      = MonitorDB.geoStr(s);
+    const lbl      = _matchLabel(s.ip);
 
     wrap.innerHTML = `
       <div class="mon-detail-body" id="mon-detail-content">
@@ -513,6 +552,9 @@ const MonitorApp = (() => {
           </div>
           <div class="mon-dmeta">
             <span>🌐 ${_e(s.ip)}</span>
+            ${geo ? `<span>📍 ${_e(geo)}</span>` : ''}
+            ${s.isp ? `<span>📡 ${_e(s.isp)}</span>` : ''}
+            ${lbl ? `<span><span class="mon-ip-label" style="color:${lbl.color};background:${lbl.color}20;border-color:${lbl.color}40">🏷 ${_e(lbl.label)}</span></span>` : ''}
             <span>${_dIco(s.ua)} ${_e(s.ua)}</span>
             <span>⏱ ${dur}</span>
             <span>🔑 ${_ts(s.loginAt)}</span>
@@ -654,6 +696,28 @@ const MonitorApp = (() => {
           </div>
           <div style="font-size:10px;color:#334155;margin-top:6px;text-align:right">
             셀에 마우스를 올리면 건수 표시
+          </div>
+        </div>
+
+        <!-- ★ IP 장소 라벨 관리 -->
+        <div class="mon-stat-section">
+          <div class="mon-stat-sec-title">
+            🏷 IP 장소 라벨 관리
+          </div>
+          <div class="mon-lbl-panel">
+            <div class="mon-lbl-add-row">
+              <input class="mon-lbl-input ip" id="lbl-ip"   placeholder="IP 대역 (예: 211.234.12)" />
+              <input class="mon-lbl-input nm" id="lbl-name" placeholder="장소명 (예: 해피트리영어학원)" />
+              <input type="color" class="mon-lbl-color-pick" id="lbl-color" value="#38bdf8" title="배지 색상" />
+              <button class="mon-lbl-add-btn" onclick="MonitorApp.addIpLabel()">+ 추가</button>
+            </div>
+            <div class="mon-lbl-list" id="lbl-list">
+              ${_renderLabelList()}
+            </div>
+            <div style="font-size:10px;color:#334155;margin-top:8px">
+              * IP 대역이 길수록 더 구체적으로 매칭됩니다<br>
+              * "211.234.12" → 211.234.12.* 전체 일치
+            </div>
           </div>
         </div>
 
@@ -900,6 +964,94 @@ const MonitorApp = (() => {
   }
   function _v(id, val) { const el=document.getElementById(id); if(el) el.textContent=val; }
 
+  /* ══════════════════════════════════════════════════════
+   * IP 라벨 헬퍼
+   * ══════════════════════════════════════════════════════ */
+
+  /* 캐시(_ipLabels)에서 IP에 매칭되는 가장 긴 prefix 라벨 반환 */
+  function _matchLabel(ip) {
+    if (!ip || ip === '알 수 없음' || !_ipLabels.length) return null;
+    const sorted = [..._ipLabels].sort((a,b) => b.prefix.length - a.prefix.length);
+    return sorted.find(l => ip.startsWith(l.prefix)) || null;
+  }
+
+  /* 라벨 목록 HTML 생성 */
+  function _renderLabelList() {
+    if (!_ipLabels.length) {
+      return '<div style="font-size:11px;color:#475569;text-align:center;padding:10px 0">등록된 라벨이 없습니다</div>';
+    }
+    return _ipLabels.map(l => `
+      <div class="mon-lbl-row">
+        <span class="mon-lbl-dot" style="background:${l.color}"></span>
+        <span class="mon-lbl-prefix">${_e(l.prefix)}.*</span>
+        <span class="mon-lbl-name">${_e(l.label)}</span>
+        <button class="mon-lbl-del" onclick="MonitorApp.deleteIpLabel('${l.id}')" title="삭제">✕</button>
+      </div>`).join('');
+  }
+
+  /* 라벨 목록 부분 갱신 (전체 재렌더 없이) */
+  function _refreshLabelList() {
+    const el = document.getElementById('lbl-list');
+    if (el) el.innerHTML = _renderLabelList();
+  }
+
+  /* ══════════════════════════════════════════════════════
+   * 공개: 라벨 추가
+   * ══════════════════════════════════════════════════════ */
+  async function addIpLabel() {
+    const prefix = document.getElementById('lbl-ip')?.value?.trim() || '';
+    const label  = document.getElementById('lbl-name')?.value?.trim() || '';
+    const color  = document.getElementById('lbl-color')?.value || '#38bdf8';
+
+    if (!prefix) { _toast('⚠️ IP 대역을 입력하세요'); return; }
+    if (!label)  { _toast('⚠️ 장소명을 입력하세요'); return; }
+
+    /* 기본 IP 형식 검증 */
+    if (!/^\d+(\.\d+)*$/.test(prefix)) {
+      _toast('⚠️ IP 대역 형식이 올바르지 않습니다 (예: 211.234.12)');
+      return;
+    }
+
+    await MonitorDB.saveIpLabel(prefix, label, color);
+
+    /* 입력 필드 초기화 */
+    const ipEl = document.getElementById('lbl-ip');
+    const nmEl = document.getElementById('lbl-name');
+    if (ipEl) ipEl.value = '';
+    if (nmEl) nmEl.value = '';
+
+    _toast(`🏷 "${label}" 라벨 저장됨`);
+    // listenIpLabels 가 _ipLabels 를 갱신하고 _updateList() 를 호출하므로 자동 반영
+  }
+
+  /* ══════════════════════════════════════════════════════
+   * 공개: 카드에서 빠른 라벨 추가 ("+ 장소 지정" 버튼)
+   * ══════════════════════════════════════════════════════ */
+  function promptAddLabel(ip, e) {
+    if (e) e.stopPropagation();
+
+    /* IP 앞 3옥텟 자동 채우기 */
+    const prefix = ip.split('.').slice(0, 3).join('.');
+    const name   = window.prompt(
+      `IP 대역 [${prefix}.*] 에 장소명을 입력하세요\n(예: 해피트리영어학원, 원장님 자택)`,
+      ''
+    );
+    if (!name?.trim()) return;
+
+    MonitorDB.saveIpLabel(prefix, name.trim(), '#38bdf8')
+      .then(() => _toast(`🏷 "${name.trim()}" 라벨 저장됨`));
+  }
+
+  /* ══════════════════════════════════════════════════════
+   * 공개: 라벨 삭제
+   * ══════════════════════════════════════════════════════ */
+  async function deleteIpLabel(id) {
+    if (!window.confirm('이 라벨을 삭제하시겠습니까?')) return;
+    await MonitorDB.deleteIpLabel(id);
+    _toast('🗑 라벨 삭제됨');
+    // listenIpLabels 가 자동으로 _ipLabels 갱신 후 _updateList() 호출
+  }
+
   /* ══ 공개 API ══ */
   return {
     show, hide,
@@ -907,5 +1059,9 @@ const MonitorApp = (() => {
     switchRightTab,
     deleteOne, clearFinished, clearAll,
     _toggleNotif,
+    /* IP 라벨 */
+    addIpLabel,
+    promptAddLabel,
+    deleteIpLabel,
   };
 })();
