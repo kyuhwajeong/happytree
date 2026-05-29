@@ -318,6 +318,22 @@ const StaffApp = (() => {
 .sfp-sign-line{border-bottom:1px solid #aaa;width:80px;margin:28px auto 4px}
 .sfp-footer{font-size:10px;color:#aaa;text-align:center;margin-top:16px}
 /* ── 시작화면 설정 ── */
+/* ── 급여 이력 ── */
+.ph-month-card{background:var(--card);border:1px solid var(--bdr);border-radius:12px;margin-bottom:10px;overflow:hidden;box-shadow:var(--sh);animation:cardIn .2s ease both}
+.ph-month-hdr{padding:10px 14px;background:linear-gradient(135deg,var(--a10),rgba(5,150,105,.06));display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bdr)}
+.ph-month-title{font-size:13px;font-weight:800;color:var(--tx)}
+.ph-month-total{font-size:13px;font-weight:900;color:var(--a)}
+.ph-staff-row{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--bdr);cursor:pointer;transition:background .12s}
+.ph-staff-row:last-child{border-bottom:none}
+.ph-staff-row:hover{background:var(--card2)}
+.ph-staff-name{font-size:13px;font-weight:700;color:var(--tx);flex:1}
+.ph-staff-info{font-size:10px;color:var(--tx3);margin-top:2px}
+.ph-staff-pay{font-size:14px;font-weight:900;color:var(--a);white-space:nowrap}
+.ph-saved-badge{font-size:9px;padding:2px 6px;border-radius:5px;background:rgba(5,150,105,.1);color:var(--green);border:1px solid rgba(5,150,105,.3);font-weight:700;flex-shrink:0}
+.ph-del-btn{padding:4px 8px;border-radius:6px;background:none;border:1px solid var(--bdr);color:var(--tx3);font-size:11px;cursor:pointer;font-family:var(--font);flex-shrink:0}
+.ph-del-btn:active{background:#fee2e2;color:#ef4444;border-color:#ef4444}
+.ph-sync-btn{padding:7px 14px;border-radius:8px;background:var(--a10);border:1px solid var(--a40);color:var(--a);font-size:11px;font-weight:700;cursor:pointer;font-family:var(--font)}
+
 .sf-home-dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--a);margin-left:3px;vertical-align:middle;flex-shrink:0}
 .sf-ht-item{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;border:2px solid var(--bdr);background:var(--card);cursor:pointer;transition:all .18s}
 .sf-ht-item:active{transform:scale(.97)}
@@ -530,6 +546,9 @@ const StaffApp = (() => {
       </div>
       <div id="sf-hometab-ov" class="ov hidden" onclick="if(event.target.id==='sf-hometab-ov')StaffApp._closeHomeTabSetting()">
         <div class="sh" id="sf-hometab-sh" onclick="event.stopPropagation()" style="max-height:60vh;display:flex;flex-direction:column;"></div>
+      </div>
+      <div id="sf-payhist-ov" class="ov hidden" onclick="if(event.target.id==='sf-payhist-ov')StaffApp._closePayHistory()">
+        <div class="sh" id="sf-payhist-sh" onclick="event.stopPropagation()" style="max-height:92vh;display:flex;flex-direction:column;"></div>
       </div>`;
   }
 
@@ -1414,6 +1433,8 @@ const StaffApp = (() => {
           </select>
         </div>
         <button class="sf-calc-btn" onclick="StaffApp._calcAndRender()">계산</button>
+        <button class="sf-calc-btn" style="background:var(--surf2);color:var(--tx2);border:1px solid var(--bdr2);box-shadow:none"
+          onclick="StaffApp._openPayHistory()">📂 이력</button>
       </div>
       <div id="sf-pb" class="sf-scroll">
         ${_st.payResult ? _payHTML(_st.payResult)
@@ -1426,13 +1447,17 @@ const StaffApp = (() => {
     _st.payYear    = Number(document.getElementById('sf-py')?.value) || new Date().getFullYear();
     _st.payMonth   = Number(document.getElementById('sf-pm')?.value) || new Date().getMonth() + 1;
   }
-  function _calcAndRender() {
+  async function _calcAndRender() {
     _onSel();
     if (!_st.payStaffId) { _toast('⚠️ 직원을 선택해주세요'); return; }
     const r = StaffDB.calcPay(_st.payStaffId, _st.payYear, _st.payMonth);
     _st.payResult = r;
     const pb = document.getElementById('sf-pb');
     if (pb) pb.innerHTML = _payHTML(r);
+    try {
+      await StaffDB.savePayResult(_st.payStaffId, _st.payYear, _st.payMonth, r);
+      _toast('💾 급여 저장 완료', 'success');
+    } catch(e) { console.warn('savePayResult', e); }
   }
   function _saveAcad() { const name = document.getElementById('sf-acad-inp')?.value?.trim(); if (!name) return; StaffDB.setAcad({ name }); _toast(`🏫 "${name}" 저장`, 'success'); }
 
@@ -1587,13 +1612,22 @@ const StaffApp = (() => {
     _st.payMonth = Number(document.getElementById('sf-all-m')?.value) || 0;
   }
 
-  function _calcAll() {
+  async function _calcAll() {
     _onAllSel();
     const staff = StaffDB.getActive();
     const body  = document.getElementById('sf-all-body'); if (!body) return;
     if (!staff.length) { body.innerHTML = '<div class="sf-empty">등록된 직원이 없습니다</div>'; return; }
-    if (_st.payMonth === 0) _renderAnnual(staff, body);
-    else                    _renderMonthly(staff, body);
+    if (_st.payMonth === 0) {
+      _renderAnnual(staff, body);
+    } else {
+      _renderMonthly(staff, body);
+      try {
+        const results = staff.map(s => ({ sid: s.id, r: StaffDB.calcPay(s.id, _st.payYear, _st.payMonth) }));
+        await StaffDB.savePayAllResult(_st.payYear, _st.payMonth, results);
+        await Promise.all(results.map(({ sid, r }) => r ? StaffDB.savePayResult(sid, _st.payYear, _st.payMonth, r) : null));
+        _toast('💾 급여 집계 저장 완료', 'success');
+      } catch(e) { console.warn('savePayAllResult', e); }
+    }
   }
 
   /* ─── 월별 집계 ─────────────────────────────────────────────── */
@@ -2713,6 +2747,105 @@ const StaffApp = (() => {
     document.getElementById('sf-hometab-ov')?.classList.add('hidden');
   }
 
+  /* ── 급여 이력 모달 ── */
+  function _openPayHistory() {
+    const sh = document.getElementById('sf-payhist-sh');
+    if (!sh) return;
+    const year = _st.payYear || new Date().getFullYear();
+    _drawPayHistory(sh, year);
+    document.getElementById('sf-payhist-ov')?.classList.remove('hidden');
+  }
+
+  function _closePayHistory() {
+    document.getElementById('sf-payhist-ov')?.classList.add('hidden');
+  }
+
+  function _drawPayHistory(sh, year) {
+    const allStaff = StaffDB.getAll();
+    const months   = Array.from({length:12},(_,i)=>12-i);
+    sh.innerHTML = `
+      <div class="sh-handle"></div>
+      <div class="sh-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <span>📂 급여 저장 이력</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <select style="padding:5px 8px;border-radius:8px;border:1.5px solid var(--bdr);background:var(--surf2);font-size:12px;color:var(--tx);font-family:var(--font)"
+            onchange="StaffApp._drawPayHistory(document.getElementById('sf-payhist-sh'),Number(this.value))">
+            ${[year-1,year,year+1].map(y=>`<option value="${y}" ${y===year?'selected':''}>${y}년</option>`).join('')}
+          </select>
+          <button class="ph-sync-btn" onclick="StaffApp._syncAndRefreshHist(${year})">🔄 동기화</button>
+        </div>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:8px 0">
+        ${_payHistBodyHTML(allStaff,year,months)}
+      </div>
+      <div class="sh-acts"><button class="btn-x" onclick="StaffApp._closePayHistory()">닫기</button></div>`;
+  }
+
+  function _payHistBodyHTML(allStaff, year, months) {
+    const rows = months.map(month => {
+      const saved = allStaff.map(s=>({s, snap:StaffDB.getSavedPay(s.id,year,month)}));
+      if (!saved.some(x=>x.snap)) return '';
+      const monthTotal = saved.reduce((sum,x)=>sum+(x.snap?.totalPay||0),0);
+      const savedAt = saved.find(x=>x.snap)?.snap?.savedAt;
+      const savedDate = savedAt ? new Date(savedAt).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric',hour:'numeric',minute:'numeric'}) : '';
+      return `<div class="ph-month-card">
+        <div class="ph-month-hdr">
+          <div><div class="ph-month-title">📅 ${year}년 ${month}월</div><div style="font-size:10px;color:var(--tx3);margin-top:2px">💾 ${savedDate} 저장</div></div>
+          <div class="ph-month-total">${_fmt(monthTotal)}원</div>
+        </div>
+        <div>
+          ${saved.filter(x=>x.snap).map(({s,snap})=>{
+            const isPt=snap.employType==='parttime';
+            const detail=isPt
+              ?`${_fmtHrs(snap.classHrs+snap.generalHrs)}h · 수업 ${_fmt(snap.classPayPt||0)}원 + 일반 ${_fmt(snap.generalPayPt||0)}원${snap.totalHolidayPay>0?' + 주휴 '+_fmt(snap.totalHolidayPay)+'원':''}`
+              :`${_fmtHrs(snap.classHrs+snap.generalHrs)}h${snap.monthlyFixed?' · 고정월급':''}${snap.overtimePay>0?' + 야근 '+_fmt(snap.overtimePay)+'원':''}`;
+            return `<div class="ph-staff-row" onclick="StaffApp._loadSavedPay('${s.id}',${year},${month})">
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span class="ph-staff-name">${_e(s.name)}</span>
+                  <span class="sf-bdg ${isPt?'pt':'ft'}">${isPt?'알바':'정직원'}</span>
+                  <span class="ph-saved-badge">✅ 저장됨</span>
+                </div>
+                <div class="ph-staff-info">${detail}</div>
+              </div>
+              <span class="ph-staff-pay">${_fmt(snap.totalPay)}원</span>
+              <button class="ph-del-btn" onclick="event.stopPropagation();StaffApp._deletePaySnap('${s.id}',${year},${month})">🗑</button>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }).filter(Boolean).join('');
+
+    return rows || `<div style="text-align:center;padding:40px 20px;color:var(--tx3)">
+      <div style="font-size:36px;margin-bottom:8px">📭</div>
+      <div style="font-size:13px">${year}년에 저장된 급여 이력이 없습니다</div>
+      <div style="font-size:11px;opacity:.7;margin-top:6px">급여 탭에서 계산하면 자동 저장됩니다</div>
+    </div>`;
+  }
+
+  function _loadSavedPay(sid, year, month) {
+    _closePayHistory();
+    _st.payStaffId = sid; _st.payYear = year; _st.payMonth = month;
+    switchTab('salary');
+    setTimeout(_calcAndRender, 150);
+  }
+
+  async function _deletePaySnap(sid, year, month) {
+    if (!confirm('이 급여 저장 기록을 삭제할까요?')) return;
+    await StaffDB.deletePayResult(sid, year, month);
+    _toast('🗑 삭제 완료');
+    const sh = document.getElementById('sf-payhist-sh');
+    if (sh) _drawPayHistory(sh, year);
+  }
+
+  async function _syncAndRefreshHist(year) {
+    _toast('🔄 동기화 중...');
+    await StaffDB.syncPayHistory();
+    const sh = document.getElementById('sf-payhist-sh');
+    if (sh) _drawPayHistory(sh, year);
+    _toast('✅ 동기화 완료', 'success');
+  }
+
   /* ══ 퍼블릭 ══ */
   return {
     init, render, switchTab,
@@ -2728,6 +2861,9 @@ const StaffApp = (() => {
     _onSel, _calcAndRender, _saveAcad,
     _onAllSel, _calcAll, _renderMonthly, _renderAnnual, _annualBarChart, _downloadExcel,
     _copy, _pdf, _share,
+    _openPayHistory, _closePayHistory,
+    _drawPayHistory, _loadSavedPay,
+    _deletePaySnap, _syncAndRefreshHist,
     /* 시작화면 설정 */
     _openHomeTabSetting, _selectHomeTab, _closeHomeTabSetting,
     /* ⚡ 즉시 계산기 */

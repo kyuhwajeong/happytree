@@ -45,7 +45,9 @@ const StaffDB = (() => {
   const LS_ACAD  = 'hk10b_acad';
   const FB_STAFF = 'hakwon10/staff';
   const FB_WORK  = 'hakwon10/staffwork';
-  const FB_TEMPL = 'hakwon10/stafftempl';
+  const FB_TEMPL  = 'hakwon10/stafftempl';
+  const FB_PAY    = 'hakwon10/staffpay';    // 개인 급여 저장
+  const FB_PAYALL = 'hakwon10/staffpayall'; // 전원 일괄 급여
 
   /* ── 상수 ── */
   const MIN_WAGES    = { 2024: 9860, 2025: 10030, 2026: 10320 };
@@ -74,7 +76,9 @@ const StaffDB = (() => {
   let _staff = [];
   let _work  = {};   // { staffId: { "YYYY-MM-DD": [entry,...] } }
   let _templ = {};   // { staffId: { 월:[entry,...], ... } }
-  let _acad  = { name: '해피트리 영어학원' };
+  let _acad   = { name: '해피트리 영어학원' };
+  let _pay    = {};  // { "YYYY_MM": { staffId: snapshot } }
+  let _payAll = {};  // { "YYYY_MM": summary }
 
   /* ════════════════════════════════════════
    * 학원 정보
@@ -665,6 +669,107 @@ const StaffDB = (() => {
     };
   }
 
+
+  /* ════════════════════════════════════════
+   * 급여 저장 / 조회 (Firebase + 메모리)
+   * ════════════════════════════════════════ */
+
+  async function savePayResult(sid, year, month, result) {
+    const key = `${year}_${String(month).padStart(2,'0')}`;
+    const s   = getById(sid);
+    const snapshot = {
+      sid, year, month, key, savedAt: _now(),
+      staffName:    s?.name        || '',
+      employType:   s?.employType  || 'fulltime',
+      type:         result.type,
+      totalPay:     result.totalPay,
+      classHrs:     result.classHrs,
+      generalHrs:   result.generalHrs,
+      classPayPt:   result.classPayPt   || 0,
+      generalPayPt: result.generalPayPt || 0,
+      basePay:      result.basePay      || 0,
+      classPay:     result.classPay     || 0,
+      generalPay:   result.generalPay   || 0,
+      workPay:      result.workPay      || 0,
+      overtimePay:  result.overtimePay  || 0,
+      totalHolidayPay: result.totalHolidayPay || 0,
+      monthlyFixed: result.monthlyFixed || false,
+      from: result.from, to: result.to,
+      weeklyStats: (result.weeklyStats || []).map(w => ({
+        weekLabel: w.weekLabel, hours: w.hours,
+        qualified: w.qualified, holidayPay: w.holidayPay,
+      })),
+      byDaySummary: Object.fromEntries(
+        Object.entries(result.byDay || {}).map(([date, d]) => [
+          date, { classHrs: d.classHrs||0, generalHrs: d.generalHrs||0, count: (d.entries||[]).length }
+        ])
+      ),
+    };
+    if (!_pay[key]) _pay[key] = {};
+    _pay[key][sid] = snapshot;
+    if (_fb()) await FireDB.set(`${FB_PAY}/${key}/${sid}`, snapshot).catch(console.warn);
+    return snapshot;
+  }
+
+  async function savePayAllResult(year, month, results) {
+    const key = `${year}_${String(month).padStart(2,'0')}`;
+    const summary = {
+      year, month, key, savedAt: _now(),
+      totalStaff: results.length,
+      grandTotal: results.reduce((sum, { r }) => sum + (r?.totalPay || 0), 0),
+      items: results.map(({ sid, r }) => {
+        const s = getById(sid);
+        return {
+          sid, staffName: s?.name||'', employType: s?.employType||'fulltime',
+          totalPay: r?.totalPay||0, classHrs: r?.classHrs||0,
+          generalHrs: r?.generalHrs||0, totalHolidayPay: r?.totalHolidayPay||0,
+        };
+      }),
+    };
+    _payAll[key] = summary;
+    if (_fb()) await FireDB.set(`${FB_PAYALL}/${key}`, summary).catch(console.warn);
+    return summary;
+  }
+
+  function getSavedPay(sid, year, month) {
+    const key = `${year}_${String(month).padStart(2,'0')}`;
+    return _pay[key]?.[sid] || null;
+  }
+
+  function getPayHistory(sid) {
+    return Object.values(_pay)
+      .map(m => m[sid]).filter(Boolean)
+      .sort((a,b) => b.key > a.key ? 1 : -1);
+  }
+
+  function getPayAllHistory(year) {
+    return Object.entries(_payAll)
+      .filter(([k]) => k.startsWith(String(year)))
+      .map(([,v]) => v).sort((a,b) => b.month - a.month);
+  }
+
+  async function syncPayHistory() {
+    if (!_fb()) return;
+    try {
+      const [pD, paD] = await Promise.all([
+        FireDB.get(FB_PAY).catch(() => null),
+        FireDB.get(FB_PAYALL).catch(() => null),
+      ]);
+      if (pD)  _pay    = pD;
+      if (paD) _payAll = paD;
+      console.log('[StaffDB] 급여 이력 동기화 완료');
+    } catch(e) { console.warn('[StaffDB] syncPayHistory', e); }
+  }
+
+  async function deletePayResult(sid, year, month) {
+    const key = `${year}_${String(month).padStart(2,'0')}`;
+    if (_pay[key]?.[sid]) {
+      delete _pay[key][sid];
+      if (!Object.keys(_pay[key]).length) delete _pay[key];
+      if (_fb()) await FireDB.remove(`${FB_PAY}/${key}/${sid}`).catch(console.warn);
+    }
+  }
+
   /* ════════════════════════════════════════
    * 엑셀 출력 데이터 생성 (SheetJS 용)
    * ════════════════════════════════════════ */
@@ -748,5 +853,10 @@ const StaffDB = (() => {
     calcPay, getMonthRange,
     /* 엑셀 */
     buildExcelData,
+    /* 급여 저장/조회 */
+    savePayResult, savePayAllResult,
+    getSavedPay, getPayHistory,
+    getPayAllHistory, syncPayHistory,
+    deletePayResult,
   };
 })();
