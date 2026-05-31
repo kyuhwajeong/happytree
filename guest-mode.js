@@ -49,14 +49,17 @@ const GuestMode = (() => {
         {
           text: '안녕하세요! 👋\n해피트리 영어학원 <b>진도 관리 시스템</b>에 오신 걸 환영합니다.\n\n이 화면은 학원 운영의 <b>핵심 — 수업 진도 기록</b>을 담당합니다.\n우선 화면 상단의 <b>반 선택 칩</b>부터 살펴보겠습니다.',
           highlight: '.chip-bar',
+          highlightLabel: '반 선택 영역',
         },
         {
           text: '👆 여기가 <b>반 선택 칩</b>입니다.\n\nH1, H2, T1 같은 반 이름이 칩 형태로 나열되어 있고,\n탭 한 번으로 원하는 반의 주간 진도로 즉시 이동합니다.\n\n수업 시간이 설정된 반은 <b>오늘 수업과 가장 가까운 반이 자동으로 선택</b>됩니다.',
           highlight: '.chip-row',
+          highlightLabel: '반 칩 목록',
         },
         {
           text: '📆 이 영역은 <b>주간 네비게이터</b>입니다.\n\n"이전 / 다음" 버튼으로 원하는 주차로 이동하고,\n중앙의 📆 버튼으로 <b>달력에서 날짜를 직접 선택</b>할 수 있습니다.\n\n오늘이 포함된 주가 기본으로 표시됩니다.',
           highlight: '.wk-nav',
+          highlightLabel: '주간 이동 바',
         },
         {
           diagram: {
@@ -123,10 +126,12 @@ const GuestMode = (() => {
         {
           text: '⚙️ <b>관리 화면</b>입니다.\n\n학원 운영의 모든 설정을 이 한 화면에서 처리합니다.\n상단 탭 5개 — <b>반 / 계정 / 테마 / 백업 / 공유</b>로 구성됩니다.\n\n먼저 <b>📋 반 탭</b>부터 살펴보겠습니다.',
           highlight: '.mg-tabs',
+          highlightLabel: '관리 탭 메뉴',
         },
         {
           text: '📋 <b>반(클래스) 관리</b> 탭입니다.\n\n① 상단 <b>📆 달력 버튼</b>으로 원하는 월로 이동합니다.\n② "＋ 반 추가" 버튼으로 새 반을 등록합니다.\n   → 반 이름, 수업 요일, 요일별 수업 시간, 편성 시작 월을 설정합니다.\n③ 반 카드에서 ✏️ 수정 / 🗑 삭제 / 📋 교재복사를 실행합니다.',
           highlight: '#mg-classes',
+          highlightLabel: '반 관리 영역',
         },
         {
           diagram: {
@@ -237,10 +242,12 @@ const GuestMode = (() => {
         {
           text: '📖 <b>교재 학습 관리</b> 화면입니다.\n\n교재별 챕터·유닛 단위로 <b>학생별 학습 체크리스트</b>를 관리하고,\n단어 스탬프, AI 문제 생성, 학습 리포트까지 제공하는\n이 시스템의 핵심 학습 관리 모듈입니다.\n\n화면 상단 탭부터 살펴보겠습니다.',
           highlight: '.bl-stabs',
+          highlightLabel: '교재 관리 탭',
         },
         {
           text: '📚 첫 번째는 <b>교재 라이브러리 탭</b>입니다.\n\n여기에 교재를 등록하고 챕터(단원)를 설정합니다.\n\n• 교재명 입력 후 추가 → 카드로 표시\n• 카드를 탭하면 <b>챕터 편집 모달</b>이 열립니다\n• 챕터는 직접 입력하거나, AI가 교재명 기반으로 <b>자동 생성</b>합니다\n• 교재별 성적 설정(단어 문항수·리딩 체크)도 여기서 구성',
           highlight: '#page-booklib',
+          highlightLabel: '교재 학습 관리 전체',
         },
         {
           diagram: {
@@ -344,10 +351,12 @@ const GuestMode = (() => {
         {
           text: '📝 <b>성적 관리</b> 화면입니다.\n\n단어 시험과 리딩 시험 점수를 반·교재별로 입력하고,\n통계 분석과 성적 리포트까지 생성하는 종합 성적 관리 모듈입니다.\n\n먼저 상단 툴바를 살펴보겠습니다.',
           highlight: '.gr-toolbar',
+          highlightLabel: '성적 관리 툴바',
         },
         {
           text: '🎯 <b>반 선택 → 교재 선택</b> 드롭다운으로 원하는 시험 데이터를 불러옵니다.\n\n우측에는 보기 전환 버튼이 있습니다:\n• <b>Excel 모드</b> — 스프레드시트 형태로 여러 학생 동시 입력\n• <b>카드 모드</b> — 학생별 카드 형태, 슬라이드로 이동\n\n마지막에 <b>💾 저장</b> 버튼으로 일괄 저장합니다.',
           highlight: '.gr-toolbar',
+          highlightLabel: '반·교재 선택 & 보기 전환',
         },
         {
           diagram: {
@@ -452,10 +461,12 @@ const GuestMode = (() => {
         {
           text: '👨‍🎓 <b>학생 관리</b> 화면입니다.\n\n학원에 재원 중인 모든 학생의 정보를 등록하고\n재원 상태·반 배정·연락처를 체계적으로 관리합니다.\n\n상단 통계 카드부터 확인해보겠습니다.',
           highlight: '#page-students',
+          highlightLabel: '학생 관리 화면',
         },
         {
           text: '📊 <b>상단 통계 카드</b>에서 현황을 한눈에 파악합니다.\n\n탭 한 번으로 해당 상태의 학생만 필터링됩니다:\n• <b>전체</b> / <b style="color:#16a34a">재원</b> / <b style="color:#f59e0b">휴원</b> / <b style="color:#ef4444">퇴원</b>\n\n검색창에 이름·닉네임·전화번호를 입력하면\n실시간으로 필터링됩니다.',
           highlight: '#page-students',
+          highlightLabel: '통계 카드 & 검색 영역',
         },
         {
           diagram: {
@@ -527,10 +538,12 @@ const GuestMode = (() => {
         {
           text: '👩‍💼 <b>직원 관리</b> 화면입니다.\n\n강사·직원의 인사 정보, 출퇴근 기록, 급여 계산, 업무 일정을\n통합 관리하는 화면입니다.\n\n세 개의 서브탭 — <b>직원 목록 / 근무 달력 / ⚡ 즉시 시급계산기</b>로 구성됩니다.',
           highlight: '#page-staff',
+          highlightLabel: '직원 관리 화면',
         },
         {
           text: '📋 <b>직원 목록 탭</b>에서 직원 카드를 관리합니다.\n\n각 카드에 입력 가능한 정보:\n• 이름, 직책 (정직원/알바), 입사일\n• 전화번호, 이메일\n• 기본 시급 / 월급\n• 업무 유형별 시급 (일반 / 수업)\n\n직원 카드를 탭하면 상세 편집 모달이 열립니다.',
           highlight: '#page-staff',
+          highlightLabel: '직원 목록 영역',
         },
         {
           diagram: {
@@ -610,11 +623,10 @@ const GuestMode = (() => {
 #gm-badge .gm-b-x:hover { background:rgba(255,255,255,.45); }
 body.gm-on { padding-top:30px !important; }
 
-/* ── 오버레이 ── */
+/* ── 오버레이 (배경은 SVG 마스크가 담당 — 여기선 투명) ── */
 #gm-overlay {
   position:fixed; inset:0; z-index:8800;
-  background:rgba(8,8,24,.68);
-  backdrop-filter:blur(5px); -webkit-backdrop-filter:blur(5px);
+  background:transparent;
   display:flex; align-items:flex-end; justify-content:center;
   opacity:0; pointer-events:none;
   transition:opacity .32s ease;
@@ -624,10 +636,11 @@ body.gm-on { padding-top:30px !important; }
   width:100%; max-width:580px; max-height:85vh;
   background:var(--card,#fff);
   border-radius:22px 22px 0 0;
-  box-shadow:0 -8px 48px rgba(0,0,0,.28);
+  box-shadow:0 -8px 48px rgba(0,0,0,.38);
   display:flex; flex-direction:column; overflow:hidden;
   transform:translateY(50px);
   transition:transform .36s cubic-bezier(.22,1,.36,1);
+  position:relative; z-index:8900;
 }
 #gm-overlay.gm-show .gm-panel { transform:translateY(0); }
 
@@ -723,15 +736,75 @@ body.gm-on { padding-top:30px !important; }
   cursor:not-allowed;
 }
 
-/* 스포트라이트 */
-#gm-spotlight {
-  position:fixed; z-index:8700; pointer-events:none;
-  border-radius:12px;
-  box-shadow:0 0 0 2px var(--a,#4f46e5), 0 0 0 6px rgba(99,102,241,.3);
-  transition:all .4s cubic-bezier(.22,1,.36,1);
+/* ── SVG 마스크 배경 (구멍 뚫기 방식) ── */
+#gm-mask-svg {
+  position:fixed; inset:0; z-index:8750;
+  pointer-events:none;
   opacity:0;
+  transition:opacity .38s ease;
+}
+#gm-mask-svg.gm-mask-on { opacity:1; }
+
+/* 스포트라이트 테두리 + 펄스 링 */
+#gm-spotlight {
+  position:fixed; z-index:8790; pointer-events:none;
+  border-radius:14px;
+  opacity:0;
+  transition:left .42s cubic-bezier(.22,1,.36,1),
+             top  .42s cubic-bezier(.22,1,.36,1),
+             width .42s cubic-bezier(.22,1,.36,1),
+             height .42s cubic-bezier(.22,1,.36,1),
+             opacity .3s ease;
 }
 #gm-spotlight.gm-spot-on { opacity:1; }
+
+/* 스포트라이트 내부 테두리 (밝은 선) */
+#gm-spotlight::before {
+  content:'';
+  position:absolute; inset:-3px;
+  border-radius:16px;
+  border:2.5px solid rgba(255,255,255,.9);
+  box-shadow:
+    0 0 0 1px rgba(99,102,241,.8),
+    0 0 20px 4px rgba(99,102,241,.5),
+    inset 0 0 12px rgba(255,255,255,.08);
+}
+
+/* 펄스 애니메이션 링 */
+#gm-spotlight::after {
+  content:'';
+  position:absolute; inset:-10px;
+  border-radius:22px;
+  border:2px solid rgba(99,102,241,.6);
+  animation:gm-pulse 1.8s ease-out infinite;
+}
+@keyframes gm-pulse {
+  0%   { opacity:.9; transform:scale(1); }
+  70%  { opacity:0;  transform:scale(1.06); }
+  100% { opacity:0;  transform:scale(1.06); }
+}
+
+/* 스포트라이트 라벨 말풍선 */
+#gm-spot-label {
+  position:fixed; z-index:8795; pointer-events:none;
+  background:linear-gradient(135deg,#4f46e5,#7c3aed);
+  color:#fff; font-size:11px; font-weight:800;
+  padding:5px 12px 5px 9px; border-radius:20px;
+  box-shadow:0 4px 16px rgba(79,70,229,.5);
+  display:flex; align-items:center; gap:5px;
+  white-space:nowrap;
+  opacity:0;
+  transform:translateY(6px);
+  transition:opacity .3s ease, transform .3s ease;
+  letter-spacing:.2px;
+}
+#gm-spot-label::before {
+  content:'👆';
+  font-size:13px;
+}
+#gm-spot-label.gm-label-on {
+  opacity:1; transform:translateY(0);
+}
 
 /* 차단 토스트 */
 #gm-toast {
@@ -756,6 +829,48 @@ input[data-gm-ro], textarea[data-gm-ro] {
 }
 `;
     document.head.appendChild(s);
+  }
+
+  /* ═══════════════════════════════════════════════
+   * SVG 마스크 레이어 생성 (구멍 뚫기 dim 효과)
+   * ══════════════════════════════════════════════ */
+  function _makeMaskLayer() {
+    if (document.getElementById('gm-mask-svg')) return;
+
+    // SVG 마스크: 화면 전체 어둡게 + 하이라이트 영역만 투명(구멍)
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.id = 'gm-mask-svg';
+    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    svg.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;z-index:8750;pointer-events:none;opacity:0;transition:opacity .38s ease;';
+
+    svg.innerHTML = `
+      <defs>
+        <mask id="gm-hole-mask">
+          <!-- 전체 흰색 = 어두운 레이어 표시 영역 -->
+          <rect id="gm-mask-bg" x="0" y="0" width="100%" height="100%" fill="white"/>
+          <!-- 구멍: 검정 = 투명(밝게) / 라운드 rect -->
+          <rect id="gm-mask-hole" x="-999" y="-999" width="0" height="0" rx="14" ry="14" fill="black"/>
+        </mask>
+      </defs>
+      <!-- 어두운 반투명 레이어 (mask 적용) -->
+      <rect x="0" y="0" width="100%" height="100%"
+            fill="rgba(6,6,20,0.78)"
+            mask="url(#gm-hole-mask)"/>
+    `;
+    document.body.appendChild(svg);
+
+    // 스포트라이트 테두리 div
+    if (!document.getElementById('gm-spotlight')) {
+      const sp = document.createElement('div');
+      sp.id = 'gm-spotlight';
+      document.body.appendChild(sp);
+    }
+    // 라벨 말풍선
+    if (!document.getElementById('gm-spot-label')) {
+      const lbl = document.createElement('div');
+      lbl.id = 'gm-spot-label';
+      document.body.appendChild(lbl);
+    }
   }
 
   /* ═══════════════════════════════════════════════
@@ -828,6 +943,7 @@ input[data-gm-ro], textarea[data-gm-ro] {
     if (_open) _closeImmediate();
     _open = true;
 
+    _makeMaskLayer();
     _makeOverlay();
 
     const title  = document.getElementById('gm-title');
@@ -867,8 +983,8 @@ input[data-gm-ro], textarea[data-gm-ro] {
     if (pf) pf.style.width = pct + '%';
     if (cnt) cnt.textContent = `${_stepIdx + 1} / ${_steps.length}`;
 
-    // 스포트라이트
-    _spotlight(step.highlight || null);
+    // 스포트라이트 (라벨은 step에 highlightLabel 있으면 사용, 없으면 기본)
+    _spotlight(step.highlight || null, step.highlightLabel || null);
 
     let onDone = () => { nextBtn.disabled = false; body.scrollTop = body.scrollHeight; };
 
@@ -958,36 +1074,101 @@ input[data-gm-ro], textarea[data-gm-ro] {
     _renderStep();
   }
 
-  /* ─── 스포트라이트 ─── */
-  function _spotlight(selector) {
-    let spot = document.getElementById(SPOT_ID);
-    if (!spot) {
-      spot = document.createElement('div');
-      spot.id = SPOT_ID;
-      document.body.appendChild(spot);
+  /* ─── 스포트라이트 (SVG 마스크 구멍 뚫기) ─── */
+  function _spotlight(selector, labelText) {
+    const svg     = document.getElementById('gm-mask-svg');
+    const hole    = document.getElementById('gm-mask-hole');
+    const spot    = document.getElementById('gm-spotlight');
+    const lbl     = document.getElementById('gm-spot-label');
+
+    // highlight 없는 스텝: 마스크만 어둡게, 구멍 없음
+    if (!selector) {
+      if (svg)  { svg.classList.add('gm-mask-on'); }
+      if (hole) { hole.setAttribute('x', '-999'); hole.setAttribute('y', '-999'); hole.setAttribute('width', '0'); hole.setAttribute('height', '0'); }
+      if (spot) { spot.classList.remove('gm-spot-on'); }
+      if (lbl)  { lbl.classList.remove('gm-label-on'); }
+      return;
     }
-    _spotEl = null;
-    spot.classList.remove('gm-spot-on');
-    if (!selector) return;
 
     const el = document.querySelector(selector);
-    if (!el) return;
-    _spotEl = el;
+    if (!el) {
+      if (svg) svg.classList.add('gm-mask-on');
+      return;
+    }
 
-    const r = el.getBoundingClientRect();
-    const pad = 6;
-    spot.style.cssText = `
-      left:${r.left - pad}px; top:${r.top - pad + window.scrollY}px;
-      width:${r.width + pad * 2}px; height:${r.height + pad * 2}px;
-    `;
-    requestAnimationFrame(() => spot.classList.add('gm-spot-on'));
+    const r   = el.getBoundingClientRect();
+    const pad = 10; // 하이라이트 여백
+
+    const x = r.left   - pad;
+    const y = r.top    - pad;
+    const w = r.width  + pad * 2;
+    const h = r.height + pad * 2;
+
+    // SVG 마스크 구멍 업데이트
+    if (svg && hole) {
+      // SVG viewBox를 화면 크기에 맞춤
+      svg.setAttribute('viewBox', `0 0 ${window.innerWidth} ${window.innerHeight}`);
+      // 배경 rect도 화면 크기로
+      const bgRect = svg.getElementById ? null : null;
+      const rects = svg.querySelectorAll('rect');
+      rects.forEach(r2 => {
+        if (r2.id === 'gm-mask-bg') {
+          r2.setAttribute('width', window.innerWidth);
+          r2.setAttribute('height', window.innerHeight);
+        }
+      });
+
+      hole.setAttribute('x',      x);
+      hole.setAttribute('y',      y);
+      hole.setAttribute('width',  w);
+      hole.setAttribute('height', h);
+      svg.classList.add('gm-mask-on');
+    }
+
+    // 테두리 div 위치
+    if (spot) {
+      spot.style.left   = x + 'px';
+      spot.style.top    = y + window.scrollY + 'px';
+      spot.style.width  = w + 'px';
+      spot.style.height = h + 'px';
+      requestAnimationFrame(() => spot.classList.add('gm-spot-on'));
+    }
+
+    // 라벨 말풍선 위치 (요소 위 또는 아래)
+    if (lbl && labelText) {
+      lbl.textContent = '';
+      lbl.innerHTML = `<span style="font-size:13px">👆</span>${labelText}`;
+      // 위쪽에 공간이 있으면 위, 없으면 아래
+      const lblH = 32;
+      const topPos = y - lblH - 10;
+      if (topPos > 40) {
+        lbl.style.top  = (topPos + window.scrollY) + 'px';
+      } else {
+        lbl.style.top  = (y + h + 10 + window.scrollY) + 'px';
+      }
+      lbl.style.left = Math.max(8, x) + 'px';
+      requestAnimationFrame(() => lbl.classList.add('gm-label-on'));
+    } else if (lbl) {
+      lbl.classList.remove('gm-label-on');
+    }
+  }
+
+  /* 스포트라이트 해제 */
+  function _clearSpotlight() {
+    const svg  = document.getElementById('gm-mask-svg');
+    const hole = document.getElementById('gm-mask-hole');
+    const spot = document.getElementById('gm-spotlight');
+    const lbl  = document.getElementById('gm-spot-label');
+    if (svg)  svg.classList.remove('gm-mask-on');
+    if (hole) { hole.setAttribute('x','-999'); hole.setAttribute('y','-999'); hole.setAttribute('width','0'); hole.setAttribute('height','0'); }
+    if (spot) spot.classList.remove('gm-spot-on');
+    if (lbl)  lbl.classList.remove('gm-label-on');
   }
 
   /* ─── 닫기 ─── */
   function _close() {
+    _clearSpotlight();
     _closeImmediate();
-    const spot = document.getElementById(SPOT_ID);
-    if (spot) spot.classList.remove('gm-spot-on');
   }
   function _closeImmediate() {
     clearTimeout(_typeTimer);
@@ -998,6 +1179,9 @@ input[data-gm-ro], textarea[data-gm-ro] {
       ov.classList.remove('gm-show');
       setTimeout(() => { if (ov.parentNode) ov.remove(); }, 380);
     }
+    // 마스크도 숨김
+    const svg = document.getElementById('gm-mask-svg');
+    if (svg) svg.classList.remove('gm-mask-on');
   }
 
   /* ═══════════════════════════════════════════════
