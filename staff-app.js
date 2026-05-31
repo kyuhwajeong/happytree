@@ -1890,8 +1890,28 @@ const StaffApp = (() => {
     return lines.join('\n');
   }
 
-  async function _copy()  { try { await navigator.clipboard.writeText(_payText()); _toast('📋 복사됐습니다', 'success'); } catch { _toast('⚠️ 복사 실패'); } }
-  async function _share() { const r = _st.payResult; if (!r) return; const t = _payText(); const sd = { title: `${r.staff.name} 급여 명세`, text: t }; if (navigator.share && navigator.canShare?.(sd)) { try { await navigator.share(sd); _toast('📤 공유 완료', 'success'); return; } catch(e) { if (e.name === 'AbortError') return; } } _copy(); }
+  async function _copy()  {
+    try { await navigator.clipboard.writeText(_payText()); _toast('📋 복사됐습니다', 'success'); }
+    catch { _toast('⚠️ 복사 실패'); }
+  }
+  async function _share() {
+    const r = _st.payResult; if (!r) return;
+    const t  = _payText();
+    const sd = { title: `${r.staff.name} 급여 명세`, text: t };
+    // navigator.share 직접 시도 (canShare 체크 생략 — iOS/Android 호환성)
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share(sd);
+        _toast('📤 공유 완료', 'success');
+        return;
+      } catch(e) {
+        if (e.name === 'AbortError') return; // 사용자가 취소
+        // share 실패 시 클립보드로 폴백
+      }
+    }
+    // Web Share API 미지원 환경 → 클립보드 복사
+    _copy();
+  }
 
   function _pdf() {
     const r = _st.payResult; if (!r) return;
@@ -2566,9 +2586,9 @@ const StaffApp = (() => {
 
   async function _qShare() {
     const r = _qResult; if (!r || !r.grandTotal) { _toast('⚠️ 계산 결과가 없습니다'); return; }
-    const t = _qPayText();
+    const t  = _qPayText();
     const sd = { title: `${r.name||'즉시계산'} 정산서`, text: t };
-    if (navigator.share && navigator.canShare?.(sd)) {
+    if (typeof navigator.share === 'function') {
       try { await navigator.share(sd); _toast('📤 공유 완료', 'success'); return; }
       catch(e) { if (e.name === 'AbortError') return; }
     }
