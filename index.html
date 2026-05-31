@@ -191,11 +191,11 @@
       <span>아이디 · 비밀번호 기억하기</span>
     </label>
     <!-- ★ GUEST 데모 힌트 -->
-    <div id="guest-hint-box" style="margin:10px 0 0;padding:10px 14px;background:linear-gradient(135deg,rgba(79,70,229,.10),rgba(124,58,237,.10));border:1.5px solid rgba(99,102,241,.35);border-radius:12px;font-size:11px;color:var(--tx2);line-height:1.7">
-      <div style="font-weight:800;color:var(--a);margin-bottom:4px;font-size:12px">🎭 체험 계정 (읽기 전용)</div>
-      <div>아이디: <b style="color:var(--tx)">guest</b> &nbsp;/&nbsp; 비밀번호: <b style="color:var(--tx)">guest</b></div>
-      <div style="color:var(--tx3);font-size:10px;margin-top:3px">모든 메뉴를 읽기 전용으로 체험할 수 있습니다</div>
-      <button onclick="document.getElementById('li-id').value='guest';document.getElementById('li-pw').value='guest';App.doLogin();" style="margin-top:8px;width:100%;padding:8px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;letter-spacing:.3px">🚀 체험 계정으로 바로 로그인</button>
+    <div id="gm-login-hint" style="margin:12px 0 2px;padding:12px 14px 10px;background:linear-gradient(135deg,rgba(79,70,229,.09),rgba(124,58,237,.09));border:1.5px solid rgba(99,102,241,.3);border-radius:13px;font-size:11.5px;color:var(--tx2);line-height:1.75">
+      <div style="font-weight:900;color:var(--a);margin-bottom:5px;font-size:13px;display:flex;align-items:center;gap:6px"><span>🎭</span> 체험 계정 (읽기 전용)</div>
+      <div>아이디: <b style="color:var(--tx);font-size:13px">guest</b> &nbsp;/&nbsp; 비밀번호: <b style="color:var(--tx);font-size:13px">guest</b></div>
+      <div style="color:var(--tx3);font-size:10.5px;margin-top:3px;line-height:1.6">모든 메뉴를 열람하고 각 화면의 기능을<br>나레이션 가이드와 함께 체험할 수 있습니다</div>
+      <button onclick="(function(){document.getElementById('li-id').value='guest';document.getElementById('li-pw').value='guest';App.doLogin();})()" style="margin-top:10px;width:100%;padding:9px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:9px;font-size:12.5px;font-weight:800;cursor:pointer;letter-spacing:.3px;box-shadow:0 3px 12px rgba(99,102,241,.35)">🚀 체험 계정으로 바로 로그인</button>
     </div>
     <div class="sh-acts">
       <button class="btn-x"  onclick="App.cancelLogin()">취소</button>
