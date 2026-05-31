@@ -1878,11 +1878,13 @@ const StaffApp = (() => {
       `─────────────────────`,
     ];
     if (isPt) {
-      lines.push(`💰 기본급: ${_fmtHrs(r.classHrs+r.generalHrs)}h × ${_fmt(r.hourlyRate)}원 = ${_fmt(r.basePay)}원`);
+      if (r.classHrs   > 0) lines.push(`📚 수업: ${_fmtHrs(r.classHrs)}h × ${_fmt(r.classRate || r.defaultRate || StaffDB.getMinWage())}원 = ${_fmt(r.classPayPt||0)}원`);
+      if (r.generalHrs > 0) lines.push(`🏢 일반: ${_fmtHrs(r.generalHrs)}h × ${_fmt(r.generalRate || r.defaultRate || StaffDB.getMinWage())}원 = ${_fmt(r.generalPayPt||0)}원`);
       if (r.totalHolidayPay > 0) lines.push(`✅ 주휴수당: ${_fmt(r.totalHolidayPay)}원`);
     } else {
       lines.push(`📚 수업: ${_fmtHrs(r.classHrs)}h × ${_fmt(s.classRate)}원 = ${_fmt(r.classPay)}원`);
       lines.push(`🏢 일반: ${_fmtHrs(r.generalHrs)}h × ${_fmt(s.generalRate)}원 = ${_fmt(r.generalPay)}원`);
+      if ((r.overtimePay||0) > 0) lines.push(`🌙 야근수당: ${_fmt(r.overtimePay)}원`);
     }
     lines.push(`─────────────────────`, `세전 합계: ${_fmt(r.totalPay)}원`);
     return lines.join('\n');
@@ -1926,7 +1928,7 @@ const StaffApp = (() => {
         <tr><th>지 급 일</th><td>${pdStr}</td><th>연락처</th><td>${_e(s.phone||'-')}</td></tr>
         <tr><th>고용 형태</th><td>${isPt?'알바(시급제)':'정직원'} / ${s.contractType==='contract'?'계약직':'정규직'}</td>
             <th>${isPt?'기본 시급':'수업/일반 시급'}</th>
-            <td>${isPt?`${_fmt(r.hourlyRate)}원`:`${_fmt(s.classRate)}원 / ${_fmt(s.generalRate)}원`}</td></tr>
+            <td>${isPt?`수업 ${_fmt(r.classRate||r.defaultRate||StaffDB.getMinWage())}원 / 일반 ${_fmt(r.generalRate||r.defaultRate||StaffDB.getMinWage())}원`:`수업 ${_fmt(s.classRate)}원 / 일반 ${_fmt(s.generalRate)}원`}</td></tr>
       </table>
       <table>
         <thead><tr><th>항&nbsp;&nbsp;목</th><th style="text-align:center">내&nbsp;&nbsp;역</th><th style="text-align:right">지급금액</th></tr></thead>
