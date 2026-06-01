@@ -1158,7 +1158,7 @@ const StaffApp = (() => {
         <button class="btn-x"  onclick="StaffApp.closeBatch()">취소</button>
         <button class="btn-ok" onclick="StaffApp._doBatch()">✅ 등록</button>
       </div>`;
-    document.getElementById('sf-batch-ov')?.classList.remove('hidden');
+    document.getElementById('sf-batch-ov')?.classList.remove('hidden'); history.pushState({ pg:'staff', modal:'batch' }, '');
     _batchHrs();
   }
 
@@ -2256,6 +2256,11 @@ const StaffApp = (() => {
   `;
 
   /* ── 앱 내 인쇄 미리보기 모달 ── */
+  function _closePrevOv() {
+    const el = document.getElementById('sf-prev-ov');
+    if (el) el.remove();
+  }
+
   function _printInNewWindow(bodyHTML) {
     // 기존 모달 제거
     document.getElementById('sf-prev-ov')?.remove();
@@ -2297,7 +2302,7 @@ const StaffApp = (() => {
               background:#059669;color:#fff;border:none;
               font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
             ">📤 공유</button>
-            <button onclick="document.getElementById('sf-prev-ov').remove()" style="
+            <button onclick="StaffApp._closePrevOv()" style="
               padding:7px 10px;border-radius:8px;
               background:#f3f4f6;color:#374151;border:1px solid #d1d5db;
               font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
@@ -2320,6 +2325,9 @@ const StaffApp = (() => {
       </div>`;
 
     document.body.appendChild(ov);
+
+    // 뒤로가기 처리를 위해 history 스택에 추가
+    history.pushState({ pg: 'staff', modal: 'prev-ov' }, '');
 
     // iframe에 내용 주입
     const fr  = document.getElementById('sf-prev-frame');
@@ -2880,7 +2888,7 @@ const StaffApp = (() => {
         <button class="btn-x"  onclick="StaffApp._closeQSave()">취소</button>
         <button class="btn-ok" onclick="StaffApp._doQSave()">저장</button>
       </div>`;
-    document.getElementById('sf-qsave-ov')?.classList.remove('hidden');
+    document.getElementById('sf-qsave-ov')?.classList.remove('hidden'); history.pushState({ pg:'staff', modal:'qsave' }, '');
   }
 
   function _closeQSave() { document.getElementById('sf-qsave-ov')?.classList.add('hidden'); }
@@ -2943,7 +2951,7 @@ const StaffApp = (() => {
       <div class="sh-acts">
         <button class="btn-x" onclick="StaffApp._closeHomeTabSetting()">닫기</button>
       </div>`;
-    document.getElementById('sf-hometab-ov')?.classList.remove('hidden');
+    document.getElementById('sf-hometab-ov')?.classList.remove('hidden'); history.pushState({ pg:'staff', modal:'hometab' }, '');
   }
 
   function _selectHomeTab(tab) {
@@ -2981,7 +2989,7 @@ const StaffApp = (() => {
     const sh = document.getElementById('sf-payhist-sh');
     if (!sh) return;
     const year = _st.payYear || new Date().getFullYear();
-    document.getElementById('sf-payhist-ov')?.classList.remove('hidden');
+    document.getElementById('sf-payhist-ov')?.classList.remove('hidden'); history.pushState({ pg:'staff', modal:'payhist' }, '');
     // 열자마자 로딩 표시
     sh.innerHTML = `
       <div class="sh-handle"></div>
@@ -3100,7 +3108,7 @@ const StaffApp = (() => {
     _onSel, _calcAndRender, _saveAcad,
     _onAllSel, _calcAll, _renderMonthly, _renderAnnual, _annualBarChart, _downloadExcel,
     _copy, _pdf, _share,
-    _prevPrint, _prevSharePDF, _captureAndShare,
+    _prevPrint, _prevSharePDF, _captureAndShare, _closePrevOv,
     _openPayHistory, _closePayHistory,
     _drawPayHistory, _loadSavedPay,
     _deletePaySnap, _syncAndRefreshHist,
