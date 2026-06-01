@@ -318,6 +318,9 @@ const StaffApp = (() => {
 .sfp-sign-line{border-bottom:1px solid #aaa;width:80px;margin:28px auto 4px}
 .sfp-footer{font-size:10px;color:#aaa;text-align:center;margin-top:16px}
 /* ── 시작화면 설정 ── */
+/* ── spin 애니메이션 ── */
+@keyframes spin{to{transform:rotate(360deg)}}
+
 /* ── 급여 이력 ── */
 .ph-month-card{background:var(--card);border:1px solid var(--bdr);border-radius:12px;margin-bottom:10px;overflow:hidden;box-shadow:var(--sh);animation:cardIn .2s ease both}
 .ph-month-hdr{padding:10px 14px;background:linear-gradient(135deg,var(--a10),rgba(5,150,105,.06));display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bdr)}
@@ -1558,9 +1561,9 @@ const StaffApp = (() => {
       ${dayRows ? `<div style="padding:4px 14px 12px;border-top:1px solid var(--bdr)"><span class="sf-lbl" style="padding-top:10px">근무 상세</span>${dayRows}</div>` : `<div style="padding:14px 16px;text-align:center;color:var(--tx3);font-size:13px">이 기간에 등록된 근무가 없습니다</div>`}
       <div class="sf-acts2">
         <button class="sf-ab cal"   onclick="StaffApp.openCal('${s.id}')">📅 달력</button>
-        <button class="sf-ab copy"  onclick="StaffApp._copy()">📋 복사</button>
+        <button class="sf-ab copy"  onclick="StaffApp._captureAndShare()">📸 캡처공유</button>
         <button class="sf-ab pdf"   onclick="StaffApp._pdf()">🖨️ PDF</button>
-        <button class="sf-ab share" onclick="StaffApp._share()">📤 공유</button>
+        <button class="sf-ab share" onclick="StaffApp._share()">📤 문자공유</button>
       </div>
     </div>`;
   }
@@ -2029,6 +2032,103 @@ const StaffApp = (() => {
   }
 
 
+  /* ── 미리보기 인쇄 ── */
+  function _prevPrint() {
+    const fr = document.getElementById('sf-prev-frame');
+    if (fr) { fr.contentWindow.focus(); fr.contentWindow.print(); }
+  }
+
+  /* ── 미리보기 PDF 공유 ──
+   * iframe 내용을 html2canvas 로 이미지 캡처 → PNG blob → Web Share API
+   * 공유 미지원 시 → 직접 다운로드
+   */
+  async function _prevSharePDF() {
+    const fr = document.getElementById('sf-prev-frame');
+    if (!fr) { _toast('⚠️ 미리보기를 먼저 열어주세요'); return; }
+
+    _toast('📸 이미지 생성 중...');
+    try {
+      const canvas = await html2canvas(fr.contentDocument.body, {
+        scale: 2, useCORS: true, backgroundColor: '#ffffff',
+        scrollY: 0, windowWidth: fr.contentDocument.body.scrollWidth,
+      });
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/png', 0.95));
+      const file = new File([blob], '급여명세서.png', { type: 'image/png' });
+
+      if (typeof navigator.share === 'function' && navigator.canShare({ files: [file] })) {
+        await navigator.share({ title: '급여 명세서', files: [file] });
+        _toast('📤 공유 완료', 'success');
+      } else {
+        /* 파일 공유 불가 → 이미지 다운로드 */
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = '급여명세서.png';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+        _toast('📥 이미지 저장 완료', 'success');
+      }
+    } catch(e) {
+      console.warn('prevSharePDF', e);
+      if (e.name !== 'AbortError') _toast('⚠️ 공유 실패 — 인쇄로 저장해 주세요');
+    }
+  }
+
+  /* ── 급여 카드 캡처 후 공유 ──
+   * 화면의 급여 결과 카드(.sf-pcard)를 html2canvas 로 캡처
+   * → Web Share API 로 카카오톡 등 외부 앱에 공유
+   */
+  async function _captureAndShare() {
+    const r = _st.payResult; if (!r) { _toast('⚠️ 급여 계산을 먼저 해주세요'); return; }
+
+    /* 캡처할 카드 요소 */
+    const card = document.querySelector('.sf-pcard');
+    if (!card) { _toast('⚠️ 급여 카드를 찾을 수 없습니다'); return; }
+
+    _toast('📸 이미지 생성 중...');
+    try {
+      /* 스크롤 위치 보정 */
+      const scrollEl = card.closest('.sf-scroll') || document.body;
+      const origScroll = scrollEl.scrollTop;
+
+      const canvas = await html2canvas(card, {
+        scale: 2.5,
+        useCORS: true,
+        backgroundColor: null,
+        scrollY: -window.scrollY,
+        onclone: (doc) => {
+          /* 캡처 시 그림자 제거 (흰 배경 클리어) */
+          const el = doc.querySelector('.sf-pcard');
+          if (el) el.style.boxShadow = 'none';
+        },
+      });
+      scrollEl.scrollTop = origScroll;
+
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/png', 0.95));
+      const name = `${r.staff.name}_${r.year}년${r.month}월_급여.png`;
+      const file = new File([blob], name, { type: 'image/png' });
+
+      if (typeof navigator.share === 'function' && navigator.canShare({ files: [file] })) {
+        await navigator.share({ title: `${r.staff.name} ${r.year}년 ${r.month}월 급여`, files: [file] });
+        _toast('📤 공유 완료', 'success');
+      } else if (typeof navigator.share === 'function') {
+        /* 파일 공유 미지원 — 텍스트 공유 폴백 */
+        await navigator.share({ title: `${r.staff.name} 급여 명세`, text: _payText() });
+        _toast('📤 공유 완료', 'success');
+      } else {
+        /* 다운로드 폴백 */
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+        _toast('📥 이미지 저장 완료', 'success');
+      }
+    } catch(e) {
+      console.warn('captureAndShare', e);
+      if (e.name !== 'AbortError') _toast('⚠️ 공유 실패');
+    }
+  }
+
   /* ── 공통 인쇄 CSS (iframe 실제 인쇄용) ── */
   const _PRINT_CSS = `
     *{box-sizing:border-box;margin:0;padding:0}
@@ -2077,24 +2177,26 @@ const StaffApp = (() => {
           padding:10px 14px;background:#fff;
           border-bottom:1px solid #e5e7eb;flex-shrink:0;
         ">
-          <div style="display:flex;align-items:center;gap:8px">
+          <div style="display:flex;align-items:center;gap:6px">
             <span style="font-size:15px">🖨️</span>
             <span style="font-size:13px;font-weight:700;color:#111">인쇄 미리보기</span>
           </div>
-          <div style="display:flex;gap:6px">
-            <button onclick="
-              const fr=document.getElementById('sf-prev-frame');
-              if(fr){fr.contentWindow.focus();fr.contentWindow.print();}
-            " style="
-              padding:7px 18px;border-radius:8px;
+          <div style="display:flex;gap:5px">
+            <button onclick="StaffApp._prevPrint()" style="
+              padding:7px 12px;border-radius:8px;
               background:#2563eb;color:#fff;border:none;
               font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
             ">🖨️ 인쇄</button>
-            <button onclick="document.getElementById('sf-prev-ov').remove()" style="
+            <button onclick="StaffApp._prevSharePDF()" style="
               padding:7px 12px;border-radius:8px;
+              background:#059669;color:#fff;border:none;
+              font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
+            ">📤 공유</button>
+            <button onclick="document.getElementById('sf-prev-ov').remove()" style="
+              padding:7px 10px;border-radius:8px;
               background:#f3f4f6;color:#374151;border:1px solid #d1d5db;
               font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
-            ">✕ 닫기</button>
+            ">✕</button>
           </div>
         </div>
         <!-- 미리보기 영역 (종이 느낌) -->
@@ -2770,12 +2872,22 @@ const StaffApp = (() => {
   }
 
   /* ── 급여 이력 모달 ── */
-  function _openPayHistory() {
+  async function _openPayHistory() {
     const sh = document.getElementById('sf-payhist-sh');
     if (!sh) return;
     const year = _st.payYear || new Date().getFullYear();
-    _drawPayHistory(sh, year);
     document.getElementById('sf-payhist-ov')?.classList.remove('hidden');
+    // 열자마자 로딩 표시
+    sh.innerHTML = `
+      <div class="sh-handle"></div>
+      <div class="sh-title">📂 급여 저장 이력</div>
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;color:var(--tx3)">
+        <div style="font-size:28px;animation:spin 1s linear infinite">⏳</div>
+        <div style="font-size:12px">Firebase에서 동기화 중...</div>
+      </div>`;
+    // Firebase 자동 동기화
+    try { await StaffDB.syncPayHistory(); } catch(e) { console.warn(e); }
+    _drawPayHistory(sh, year);
   }
 
   function _closePayHistory() {
@@ -2883,6 +2995,7 @@ const StaffApp = (() => {
     _onSel, _calcAndRender, _saveAcad,
     _onAllSel, _calcAll, _renderMonthly, _renderAnnual, _annualBarChart, _downloadExcel,
     _copy, _pdf, _share,
+    _prevPrint, _prevSharePDF, _captureAndShare,
     _openPayHistory, _closePayHistory,
     _drawPayHistory, _loadSavedPay,
     _deletePaySnap, _syncAndRefreshHist,
