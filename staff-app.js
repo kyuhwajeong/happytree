@@ -2080,27 +2080,137 @@ const StaffApp = (() => {
   async function _captureAndShare() {
     const r = _st.payResult; if (!r) { _toast('⚠️ 급여 계산을 먼저 해주세요'); return; }
 
-    const card = document.querySelector('.sf-pcard');
-    if (!card) { _toast('⚠️ 급여 카드를 찾을 수 없습니다'); return; }
-
     _toast('📸 이미지 생성 중...');
     try {
-      const canvas = await html2canvas(card, {
-        scale: 2.5,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        scrollY: -window.scrollY,
-        onclone: (doc) => {
-          // 버튼 영역(.sf-acts2) 숨김 — 급여 내역만 캡처
-          const acts = doc.querySelector('.sf-acts2');
-          if (acts) acts.style.display = 'none';
-          // 그림자 제거
-          const el = doc.querySelector('.sf-pcard');
-          if (el) el.style.boxShadow = 'none';
-        },
-      });
+      /* ── CSS 변수 없는 독립 HTML 생성 (백화 방지) ── */
+      const s      = r.staff;
+      const isPt   = r.type === 'parttime';
+      const acad   = StaffDB.getAcad();
+      const pd     = Number(s.payDay || 0);
+      const pdStr  = pd === 0 ? '말일' : `${pd}일`;
 
-      const blob = await new Promise(res => canvas.toBlob(res, 'image/png', 0.95));
+      // 일별 상세 행
+      const dayRowsHTML = Object.keys(r.byDay).sort().map(date => {
+        const d   = r.byDay[date];
+        const dow = StaffDB.DOW_KO[new Date(date).getDay()];
+        const amt = isPt
+          ? Math.round(d.entries.reduce((sum, e) => {
+              const h  = Number(e.baseHours || e.hours || 0);
+              const tr = e.type === 'class'
+                ? (r.classRate   || r.defaultRate || StaffDB.getMinWage())
+                : (r.generalRate || r.defaultRate || StaffDB.getMinWage());
+              return sum + h * (Number(e.appliedRate) > 0 ? Number(e.appliedRate) : tr);
+            }, 0))
+          : Math.round((d.classHrs||0)*s.classRate + (d.generalHrs||0)*s.generalRate);
+        return `<tr>
+          <td>${date.slice(5)} (${dow})</td>
+          <td style="text-align:center">${d.classHrs?_fmtHrs(d.classHrs)+'h':'-'}</td>
+          <td style="text-align:center">${d.generalHrs?_fmtHrs(d.generalHrs)+'h':'-'}</td>
+          <td style="text-align:right;font-weight:700">${_fmt(amt)}원</td>
+        </tr>`;
+      }).join('');
+
+      // 주휴수당 행 (알바)
+      const weekRows = isPt && r.weeklyStats?.length
+        ? r.weeklyStats.filter(w => w.qualified).map(w =>
+            `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0fdf4">
+              <span style="color:#059669;font-size:12px">✅ 주휴수당 — ${w.weekLabel}</span>
+              <span style="color:#059669;font-weight:700">+${_fmt(w.holidayPay)}원</span>
+            </div>`).join('')
+        : '';
+
+      // 캡처 전용 HTML (CSS 변수 없이 실제 색상 하드코딩)
+      const captureHTML = `
+        <div style="font-family:'Noto Sans KR',Arial,sans-serif;background:#ffffff;width:360px;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.12)">
+          <!-- 헤더 -->
+          <div style="background:linear-gradient(135deg,#f0fdf4,#eff6ff);padding:16px 18px;border-bottom:1px solid #e5e7eb">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div>
+                <div style="font-size:11px;color:#6b7280;font-weight:700;letter-spacing:.5px">💰 급여 명세서</div>
+                <div style="font-size:18px;font-weight:900;color:#111;margin-top:3px">${_e(s.name)}</div>
+                <div style="font-size:11px;color:#6b7280;margin-top:3px">
+                  ${isPt?'⏱ 알바':'🏢 정직원'} · ${r.from} ~ ${r.to} · 지급 ${pdStr}
+                </div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:11px;color:#6b7280">세전 합계</div>
+                <div style="font-size:26px;font-weight:900;color:#2563eb;line-height:1.1">${_fmt(r.totalPay)}</div>
+                <div style="font-size:12px;color:#2563eb">원</div>
+              </div>
+            </div>
+          </div>
+          <!-- 급여 항목 -->
+          <div style="padding:12px 18px">
+            ${isPt ? `
+              ${r.classHrs > 0 ? `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f3f4f6">
+                <span style="color:#374151;font-size:13px">📚 수업 ${_fmtHrs(r.classHrs)}h × ${_fmt(r.classRate||r.defaultRate||StaffDB.getMinWage())}원</span>
+                <span style="font-weight:700;color:#111;font-size:13px">${_fmt(r.classPayPt||0)}원</span>
+              </div>` : ''}
+              ${r.generalHrs > 0 ? `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f3f4f6">
+                <span style="color:#374151;font-size:13px">🏢 일반 ${_fmtHrs(r.generalHrs)}h × ${_fmt(r.generalRate||r.defaultRate||StaffDB.getMinWage())}원</span>
+                <span style="font-weight:700;color:#111;font-size:13px">${_fmt(r.generalPayPt||0)}원</span>
+              </div>` : ''}
+              ${weekRows}
+            ` : `
+              <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f3f4f6">
+                <span style="color:#374151;font-size:13px">📚 수업 ${_fmtHrs(r.classHrs)}h × ${_fmt(s.classRate)}원</span>
+                <span style="font-weight:700;color:#111;font-size:13px">${_fmt(r.classPay||0)}원</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f3f4f6">
+                <span style="color:#374151;font-size:13px">🏢 일반 ${_fmtHrs(r.generalHrs)}h × ${_fmt(s.generalRate)}원</span>
+                <span style="font-weight:700;color:#111;font-size:13px">${_fmt(r.generalPay||0)}원</span>
+              </div>
+              ${(r.overtimePay||0)>0 ? `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f3f4f6">
+                <span style="color:#7c3aed;font-size:13px">🌙 야근수당</span>
+                <span style="font-weight:700;color:#7c3aed;font-size:13px">+${_fmt(r.overtimePay)}원</span>
+              </div>` : ''}
+              ${r.monthlyFixed ? `<div style="padding:7px 10px;background:#eff6ff;border-radius:8px;margin-top:6px;font-size:12px;font-weight:700;color:#2563eb">🏢 고정 월급 적용</div>` : ''}
+            `}
+            <!-- 합계 -->
+            <div style="display:flex;justify-content:space-between;padding:10px 0 4px;border-top:2px solid #2563eb;margin-top:8px">
+              <span style="font-size:14px;font-weight:800;color:#111">⚡ 세전 합계</span>
+              <span style="font-size:20px;font-weight:900;color:#2563eb">${_fmt(r.totalPay)}원</span>
+            </div>
+          </div>
+          ${dayRowsHTML ? `
+          <!-- 일별 상세 -->
+          <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:10px 18px 14px">
+            <div style="font-size:10px;font-weight:800;color:#9ca3af;letter-spacing:.8px;margin-bottom:6px">근무 상세</div>
+            <table style="width:100%;border-collapse:collapse;font-size:11px">
+              <thead><tr style="background:#f3f4f6">
+                <th style="padding:5px 6px;text-align:left;color:#6b7280;border-bottom:1px solid #e5e7eb">날짜</th>
+                <th style="padding:5px 6px;text-align:center;color:#6b7280;border-bottom:1px solid #e5e7eb">수업</th>
+                <th style="padding:5px 6px;text-align:center;color:#6b7280;border-bottom:1px solid #e5e7eb">일반</th>
+                <th style="padding:5px 6px;text-align:right;color:#6b7280;border-bottom:1px solid #e5e7eb">금액</th>
+              </tr></thead>
+              <tbody>${dayRowsHTML}</tbody>
+            </table>
+          </div>` : ''}
+          <!-- 푸터 -->
+          <div style="padding:10px 18px;background:#f9fafb;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:11px;color:#9ca3af">🏫 ${_e(acad.name)}</span>
+            <span style="font-size:10px;color:#9ca3af">${new Date().toLocaleDateString('ko-KR')}</span>
+          </div>
+        </div>`;
+
+      /* ── 화면 밖에 임시 렌더 → 캡처 → 제거 ── */
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'position:fixed;top:-9999px;left:-9999px;padding:16px;background:#f3f4f6';
+      wrapper.innerHTML = captureHTML;
+      document.body.appendChild(wrapper);
+
+      // 폰트 로딩 대기
+      await document.fonts.ready;
+
+      const canvas = await html2canvas(wrapper.firstElementChild, {
+        scale: 3,
+        useCORS: true,
+        backgroundColor: '#f3f4f6',
+        logging: false,
+      });
+      document.body.removeChild(wrapper);
+
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/png', 0.97));
       const name = `${r.staff.name}_${r.year}년${r.month}월_급여.png`;
       const file = new File([blob], name, { type: 'image/png' });
 
@@ -2108,11 +2218,9 @@ const StaffApp = (() => {
         await navigator.share({ title: `${r.staff.name} ${r.year}년 ${r.month}월 급여`, files: [file] });
         _toast('📤 공유 완료', 'success');
       } else if (typeof navigator.share === 'function') {
-        /* 파일 공유 미지원 — 텍스트 공유 폴백 */
         await navigator.share({ title: `${r.staff.name} 급여 명세`, text: _payText() });
         _toast('📤 공유 완료', 'success');
       } else {
-        /* 다운로드 폴백 */
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = name;
