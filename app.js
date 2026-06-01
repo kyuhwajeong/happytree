@@ -307,13 +307,7 @@ const App = (() => {
   }
   function doLogin(){
     const id=_q('li-id').value.trim(), pw=_q('li-pw').value;
-    // ★ Firebase 초기화 후에도 기본 admin으로 로그인 가능
-    let acc=DB.login(id,pw);
-    if(!acc && id==='admin' && pw==='1234'){
-      // DB에 admin이 없는 경우 임시 admin 세션 생성 후 DB 재생성
-      DB._forceAdminLogin();
-      acc=DB.login(id,pw);
-    }
+    const acc=DB.login(id,pw);
     if(acc){
       if(_q('li-remember').checked){localStorage.setItem(LS_REM,id);localStorage.setItem(LS_REM_PW,pw);}
       else{localStorage.removeItem(LS_REM);localStorage.removeItem(LS_REM_PW);}

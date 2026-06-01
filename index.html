@@ -182,8 +182,14 @@
     </div>
     <div class="f-grp">
       <label class="f-lbl">비밀번호</label>
-      <input class="f-inp" id="li-pw" type="password" placeholder="비밀번호"
-             autocomplete="current-password" onkeydown="if(event.key==='Enter')App.doLogin()">
+      <div style="position:relative;display:flex;align-items:center">
+        <input class="f-inp" id="li-pw" type="password" placeholder="비밀번호"
+               autocomplete="current-password" onkeydown="if(event.key==='Enter')App.doLogin()"
+               style="padding-right:36px">
+        <button type="button" tabindex="-1"
+          onclick="(function(){var i=document.getElementById('li-pw');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈';})(this)"
+          style="position:absolute;right:6px;background:none;border:none;cursor:pointer;font-size:15px;padding:2px 4px;color:var(--tx3);line-height:1;user-select:none">👁</button>
+      </div>
     </div>
     <!-- ★ ID+PW 기억하기 -->
     <label class="remember-row">
@@ -268,7 +274,13 @@
     </div>
     <div class="f-grp">
       <label class="f-lbl">비밀번호</label>
-      <input class="f-inp" id="f-apw" type="password" placeholder="비밀번호" maxlength="30">
+      <div style="position:relative;display:flex;align-items:center">
+        <input class="f-inp" id="f-apw" type="password" placeholder="비밀번호" maxlength="30"
+               style="padding-right:36px">
+        <button type="button" tabindex="-1"
+          onclick="(function(){var i=document.getElementById('f-apw');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈';})(this)"
+          style="position:absolute;right:6px;background:none;border:none;cursor:pointer;font-size:15px;padding:2px 4px;color:var(--tx3);line-height:1;user-select:none">👁</button>
+      </div>
     </div>
     <div class="f-grp">
       <label class="f-lbl">역할</label>
