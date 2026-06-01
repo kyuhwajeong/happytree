@@ -14,6 +14,7 @@ const DB = (() => {
   const LS = {
     classes:'hk10b_cls', progress:'hk10b_prog',
     accounts:'hk10b_acc', theme:'hk10b_theme', session:'hk10b_sess',
+    inited:'hk10b_inited',  // ★ 최초 설치 완료 플래그
   };
   const lg = k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
   const ls = (k,v) => { try { localStorage.setItem(k,JSON.stringify(v)); } catch {} };
@@ -38,10 +39,13 @@ const DB = (() => {
   }
 
   async function _loadFB() {
+    // ★ LS에 이미 계정이 있으면 먼저 LS 로드 (빠른 시작)
+    const lsAccs = lg(LS.accounts) || [];
+    if (lsAccs.length > 0) _loadLS();
     try {
       const snap = await Promise.race([
         FireDB.get(FireDB.P.root),
-        new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),5000)),
+        new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),3000)), // ★ 5초→3초
       ]);
       if (snap) {
         C.classes  = snap.classes  ? Object.values(snap.classes)  : [];
@@ -50,6 +54,8 @@ const DB = (() => {
         C.theme    = snap.theme    || null;
         ls(LS.classes,C.classes); ls(LS.progress,C.progress);
         ls(LS.accounts,C.accounts); ls(LS.theme,C.theme);
+        // ★ Firebase에서 계정 정상 로드 시 초기화 플래그 설정
+        if (C.accounts.length > 0) ls(LS.inited, true);
       } else _loadLS();
     } catch(e) { console.warn('FB→LS', e.message); _loadLS(); }
   }
@@ -68,8 +74,17 @@ const DB = (() => {
     FireDB.listen(FireDB.P.accounts, async v => {
       const nd=v?Object.values(v):[];
       if (JSON.stringify(nd)!==JSON.stringify(C.accounts)) {
-        C.accounts=nd; ls(LS.accounts,C.accounts);
-        // ★ 보안: Firebase 동기화 시 _ensureAdmin() 제거 — 기본 비번 재생성 차단
+        // ★ 핵심 보안: Firebase에서 빈 accounts가 오면 LS를 절대 덮어쓰지 않음
+        //   오프라인·캐시 만료·Firebase 초기화 등으로 v=null이 올 수 있음
+        //   → LS를 빈 배열로 덮어쓰면 다음 로드 시 admin/1234 재생성 트리거됨
+        if (nd.length > 0) {
+          C.accounts = nd;
+          ls(LS.accounts, C.accounts);
+          ls(LS.inited, true); // 실제 계정 데이터 수신 → 플래그 갱신
+        } else {
+          // Firebase가 빈값 → C.accounts만 동기화, LS는 기존 값 유지
+          C.accounts = nd;
+        }
         _fire('accounts');
       }
     });
@@ -99,19 +114,29 @@ const DB = (() => {
     C.theme    = lg(LS.theme)    || null;
   }
 
-  // ★ admin 계정 보장 — 완전 최초 설치 시에만 기본 계정 생성
+  // ★ admin 계정 보장 — 완전 최초 설치(플래그 없음 + 계정 없음) 시에만 기본 계정 생성
   async function _ensureAdmin() {
-    // ★ 보안 핵심: LS에 계정이 있으면 기본 admin/1234 생성 완전 차단
-    //   C.accounts가 비어도 LS를 신뢰 (Firebase 동기화 오류·오프라인 상황 대응)
+    // ★ 1차 가드: 초기화 플래그 — 한번이라도 계정이 존재했으면 절대 admin/1234 생성 안 함
+    if (lg(LS.inited)) {
+      if (C.accounts.length === 0) {
+        const lsAccs = lg(LS.accounts) || [];
+        if (lsAccs.length > 0) C.accounts = lsAccs;
+      }
+      return;
+    }
+    // ★ 2차 가드: LS 계정 존재 여부
     const lsAccs = lg(LS.accounts) || [];
     if (lsAccs.length > 0) {
-      // C.accounts가 비어있는데 LS에 계정이 있으면 메모리 복구
+      ls(LS.inited, true); // 기존 계정 있음 → 플래그 세팅
       if (C.accounts.length === 0) C.accounts = lsAccs;
-      return; // 기존 계정 있음 → 절대 admin/1234 생성 안 함
+      return;
     }
-    // 완전 최초 설치: LS도 C도 모두 빈 상태일 때만 기본 계정 생성
-    const hasAdmin = C.accounts.some(a => a.role === 'admin');
-    if (hasAdmin) return;
+    // ★ 3차: C.accounts에 admin이 있으면 플래그만 세팅
+    if (C.accounts.some(a => a.role === 'admin')) {
+      ls(LS.inited, true);
+      return;
+    }
+    // 완전 최초 설치: 기본 계정 생성 후 플래그 영구 저장
     const existing = C.accounts.find(a => a.username === 'admin');
     if (existing) {
       existing.role = 'admin';
@@ -120,6 +145,7 @@ const DB = (() => {
     } else {
       await _addAcc('admin', '1234', 'admin');
     }
+    ls(LS.inited, true); // ★ 초기화 완료 플래그 영구 저장
   }
 
   async function _seed() {
@@ -160,9 +186,10 @@ const DB = (() => {
     if (acc) { setSession(acc); return acc; } return null;
   }
 
-  // ★ Firebase 초기화 후 admin 강제 생성 (로그인 불가 상황 복구)
+  // ★ 보안: _forceAdminLogin 비활성화 — admin/1234 강제 생성 차단
+  //   (기존에 app.js doLogin 백도어에서 호출하던 함수, 지금은 아무것도 안 함)
   async function _forceAdminLogin() {
-    await _addAcc('admin','1234','admin');
+    console.warn('[DB] _forceAdminLogin 호출 차단됨 (보안 정책)');
   }
 
   /* ═══ ACCOUNTS ═══ */
@@ -179,6 +206,7 @@ const DB = (() => {
   async function _addAcc(username,pw,role) {
     const acc = {id:nid(),username,password:pw,role,createdAt:now()};
     C.accounts = [...C.accounts,acc]; ls(LS.accounts,C.accounts);
+    ls(LS.inited, true); // ★ 계정 생성 시 플래그 갱신
     await _fbWrite(FireDB.set, `${FireDB.P.accounts}/${acc.id}`, acc);
     return acc;
   }
@@ -196,6 +224,7 @@ const DB = (() => {
   async function updateAccount(id,data) {
     const idx=C.accounts.findIndex(a=>a.id===id); if(idx===-1)return null;
     C.accounts[idx]={...C.accounts[idx],...data}; ls(LS.accounts,C.accounts);
+    ls(LS.inited, true); // ★ 계정 수정 시 플래그 갱신
     await _fbWrite(FireDB.set, `${FireDB.P.accounts}/${id}`, C.accounts[idx]);
     return C.accounts[idx];
   }
