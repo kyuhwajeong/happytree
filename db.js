@@ -69,9 +69,7 @@ const DB = (() => {
       const nd=v?Object.values(v):[];
       if (JSON.stringify(nd)!==JSON.stringify(C.accounts)) {
         C.accounts=nd; ls(LS.accounts,C.accounts);
-        // ★ 보안: Firebase 동기화 시 _ensureAdmin() 호출 제거
-        //   → Firebase 데이터가 비어있어도 admin/1234 재생성 차단
-        //   → 초기 세팅은 _seed()에서만 1회 처리
+        // ★ 보안: Firebase 동기화 시 _ensureAdmin() 제거 — 기본 비번 재생성 차단
         _fire('accounts');
       }
     });
@@ -101,25 +99,19 @@ const DB = (() => {
     C.theme    = lg(LS.theme)    || null;
   }
 
-  // ★ admin 계정 보장 — 최초 설치(완전 빈 DB) 시에만 기본 계정 생성
+  // ★ admin 계정 보장 — 완전 최초 설치 시에만 기본 계정 생성
   async function _ensureAdmin() {
-    const hasAdmin = C.accounts.some(a => a.role === 'admin');
-    if (hasAdmin) return; // admin 있으면 끝
-
-    // ★ 보안 핵심: LS에 계정이 하나라도 있으면 기본 admin/1234 생성 금지
-    //   → 비밀번호 변경 후 Firebase 동기화 오류 등으로 C.accounts가
-    //     비어도 기존 계정 정보를 신뢰하여 재생성하지 않음
+    // ★ 보안 핵심: LS에 계정이 있으면 기본 admin/1234 생성 완전 차단
+    //   C.accounts가 비어도 LS를 신뢰 (Firebase 동기화 오류·오프라인 상황 대응)
     const lsAccs = lg(LS.accounts) || [];
     if (lsAccs.length > 0) {
-      // LS에 admin 역할 계정이 있으나 메모리에 없는 경우 → 메모리 복구만 수행
-      const lsAdmin = lsAccs.find(a => a.role === 'admin');
-      if (lsAdmin && !C.accounts.find(a => a.id === lsAdmin.id)) {
-        C.accounts = lsAccs; // LS 계정 복구
-      }
-      return; // 기본 admin/1234 생성 없이 종료
+      // C.accounts가 비어있는데 LS에 계정이 있으면 메모리 복구
+      if (C.accounts.length === 0) C.accounts = lsAccs;
+      return; // 기존 계정 있음 → 절대 admin/1234 생성 안 함
     }
-
-    // 완전 최초 설치: LS도 Firebase도 모두 비어있을 때만 기본 계정 생성
+    // 완전 최초 설치: LS도 C도 모두 빈 상태일 때만 기본 계정 생성
+    const hasAdmin = C.accounts.some(a => a.role === 'admin');
+    if (hasAdmin) return;
     const existing = C.accounts.find(a => a.username === 'admin');
     if (existing) {
       existing.role = 'admin';
@@ -176,7 +168,7 @@ const DB = (() => {
   /* ═══ ACCOUNTS ═══ */
   const getAccounts = () => C.accounts||[];
 
-  // ★ Firebase 쓰기 헬퍼: 온라인 await / 오프라인 fire-and-forget (SDK 재연결 시 자동 동기화)
+  // ★ Firebase 쓰기 헬퍼: 온라인 await / 오프라인 fire-and-forget
   function _fbWrite(op, ...args) {
     if (!FireDB.ready()) return Promise.resolve();
     if (FireDB.isConnected()) return op(...args);
