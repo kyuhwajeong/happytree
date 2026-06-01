@@ -2080,28 +2080,25 @@ const StaffApp = (() => {
   async function _captureAndShare() {
     const r = _st.payResult; if (!r) { _toast('⚠️ 급여 계산을 먼저 해주세요'); return; }
 
-    /* 캡처할 카드 요소 */
     const card = document.querySelector('.sf-pcard');
     if (!card) { _toast('⚠️ 급여 카드를 찾을 수 없습니다'); return; }
 
     _toast('📸 이미지 생성 중...');
     try {
-      /* 스크롤 위치 보정 */
-      const scrollEl = card.closest('.sf-scroll') || document.body;
-      const origScroll = scrollEl.scrollTop;
-
       const canvas = await html2canvas(card, {
         scale: 2.5,
         useCORS: true,
-        backgroundColor: null,
+        backgroundColor: '#ffffff',
         scrollY: -window.scrollY,
         onclone: (doc) => {
-          /* 캡처 시 그림자 제거 (흰 배경 클리어) */
+          // 버튼 영역(.sf-acts2) 숨김 — 급여 내역만 캡처
+          const acts = doc.querySelector('.sf-acts2');
+          if (acts) acts.style.display = 'none';
+          // 그림자 제거
           const el = doc.querySelector('.sf-pcard');
           if (el) el.style.boxShadow = 'none';
         },
       });
-      scrollEl.scrollTop = origScroll;
 
       const blob = await new Promise(res => canvas.toBlob(res, 'image/png', 0.95));
       const name = `${r.staff.name}_${r.year}년${r.month}월_급여.png`;
