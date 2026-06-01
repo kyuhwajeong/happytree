@@ -222,7 +222,14 @@ const App = (() => {
     if(!state){history.pushState({pg:S.page},'');return;}
     const modals=['login-gate','modal-cls','modal-acc','modal-copy','cal-ov','mg-cal-ov',
                   'st-detail-ov','bl-editor-ov','bl-share-ov','bl-report-ov',
-                  'sf-edit-ov','sf-cal-ov','sf-work-ov','gr-cfg-ov','gr-rpt-ov'];
+                  'sf-edit-ov','sf-cal-ov','sf-work-ov','sf-batch-ov',
+                  'sf-overlap-ov','sf-templ-add-ov','sf-qsave-ov',
+                  'sf-hometab-ov','sf-payhist-ov',
+                  'sf-prev-ov',
+                  'gr-cfg-ov','gr-rpt-ov'];
+    // sf-prev-ov(PDF미리보기)는 classList 없이 remove()로 동작하므로 별도 처리
+    const prevOv = document.getElementById('sf-prev-ov');
+    if (prevOv) { prevOv.remove(); history.pushState({pg:S.page},''); return; }
     for(const id of modals){const el=_q(id);if(el&&!el.classList.contains('hidden')){el.classList.add('hidden');history.pushState({pg:S.page},'');return;}}
     if(S.page==='manage'  ){go('operate');return;}
     if(S.page==='students'){go('operate');return;}
