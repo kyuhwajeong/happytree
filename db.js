@@ -161,10 +161,24 @@ const DB = (() => {
 
   /* ═══ ACCOUNTS ═══ */
   const getAccounts = () => C.accounts||[];
+
+  // ★ Firebase 쓰기 헬퍼
+  //   - 온라인  : await op() — 서버 확인 후 완료
+  //   - 오프라인: fire-and-forget — SDK가 큐에 등록, 재연결 시 자동 동기화
+  //              (await 없이 즉시 반환 → UI 멈춤 방지)
+  // guest-mode.js의 _patchDB()가 deleteAccount 등을 런타임 교체하므로
+  // guest 활성 시에는 이 함수 자체가 호출되지 않아 충돌 없음
+  function _fbWrite(op, ...args) {
+    if (!FireDB.ready()) return Promise.resolve();
+    if (FireDB.isConnected()) return op(...args);  // 온라인: await 가능
+    op(...args);                                    // 오프라인: 큐 등록 후 즉시 반환
+    return Promise.resolve();
+  }
+
   async function _addAcc(username,pw,role) {
     const acc = {id:nid(),username,password:pw,role,createdAt:now()};
     C.accounts = [...C.accounts,acc]; ls(LS.accounts,C.accounts);
-    if(FireDB.ready()) await FireDB.set(`${FireDB.P.accounts}/${acc.id}`,acc);
+    await _fbWrite(FireDB.set, `${FireDB.P.accounts}/${acc.id}`, acc);
     return acc;
   }
   async function addAccount(username,pw,role='operator',teacherClasses=[],allowedMenus=[]) {
@@ -174,19 +188,19 @@ const DB = (() => {
       if(teacherClasses.length) acc.teacherClasses = teacherClasses;
       if(allowedMenus.length)   acc.allowedMenus   = allowedMenus;
       ls(LS.accounts, C.accounts);
-      if(FireDB.ready()) await FireDB.set(`${FireDB.P.accounts}/${acc.id}`, acc);
+      await _fbWrite(FireDB.set, `${FireDB.P.accounts}/${acc.id}`, acc);
     }
     return acc;
   }
   async function updateAccount(id,data) {
     const idx=C.accounts.findIndex(a=>a.id===id); if(idx===-1)return null;
     C.accounts[idx]={...C.accounts[idx],...data}; ls(LS.accounts,C.accounts);
-    if(FireDB.ready()) await FireDB.set(`${FireDB.P.accounts}/${id}`,C.accounts[idx]);
+    await _fbWrite(FireDB.set, `${FireDB.P.accounts}/${id}`, C.accounts[idx]);
     return C.accounts[idx];
   }
   async function deleteAccount(id) {
     C.accounts=C.accounts.filter(a=>a.id!==id); ls(LS.accounts,C.accounts);
-    if(FireDB.ready()) await FireDB.remove(`${FireDB.P.accounts}/${id}`);
+    await _fbWrite(FireDB.remove, `${FireDB.P.accounts}/${id}`);
   }
 
   /* ═══ CLASSES (편성 기간 지원) ═══
