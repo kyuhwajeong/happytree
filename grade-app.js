@@ -4508,15 +4508,22 @@ to{opacity:1;transform:none}}
   }
 
   async function saveAll() {
-    const sids = _getSorted().map(s => s.id);
-    if (!sids.length) return;
-    let ok = 0;
+    /* dirty 있는 학생만 저장 (전체 순회 제거 → 성능 개선) */
+    const sids = [..._st.dirty].filter(sid => _getSorted().some(s => s.id === sid));
+    if (!sids.length) { _toast('저장할 내용이 없습니다', 'info'); return; }
+    let ok = 0, fail = 0;
     for (const sid of sids) {
       _ensureData(sid);
-      try { await saveOne(sid); ok++; } catch(e) { console.error('[saveAll]', sid, e); }
+      try { await saveOne(sid); ok++; }
+      catch(e) { console.error('[saveAll]', sid, e); fail++; }
     }
-    _toast(`✅ ${ok}명 저장 완료`, 'success');
-    _renderContent();
+    /* 성공/실패 무관 dirty 강제 클리어 (무한 confirm 방지) */
+    _st.dirty.clear();
+    _refreshDirtyUI();
+    if (fail > 0) _toast(`⚠ ${ok}명 저장 / ${fail}명 실패`, 'error');
+    else          _toast(`✅ ${ok}명 저장 완료`, 'success');
+    /* _setView 흐름에서 호출된 경우 이중 renderContent 방지 */
+    if (_st.viewMode === 'excel') _renderContent();
   }
 
   async function resetOne(sid) {
@@ -4532,8 +4539,8 @@ to{opacity:1;transform:none}}
   async function _onCls(clsId) {
     if (_st.dirty.size > 0) {
       const save = confirm('변경되거나 입력된 값이 있습니다.\n저장하시겠습니까?\n\n[확인] 저장  [취소] 저장 안 함');
-      if (save) await saveAll();
-      else { _st.data={}; _st.dirty.clear(); }
+      if (save) { await saveAll(); }
+      _st.dirty.clear(); _st.data = {};
     }
     _st.classId=clsId||null; _st.bookId=null; _st.studentId=null;
     _st.data={}; _st.dirty.clear(); _st.sortCol=null;
@@ -4546,8 +4553,8 @@ to{opacity:1;transform:none}}
   async function _onBk(bkId) {
     if (_st.dirty.size > 0) {
       const save = confirm('변경되거나 입력된 값이 있습니다.\n저장하시겠습니까?\n\n[확인] 저장  [취소] 저장 안 함');
-      if (save) await saveAll();
-      else { _st.data={}; _st.dirty.clear(); }
+      if (save) { await saveAll(); }
+      _st.dirty.clear(); _st.data = {};
     }
     _st.bookId=bkId||null; _st.studentId=null; _st.data={}; _st.dirty.clear(); _st.sortCol=null;
     _renderStudents(); _renderContent(); _updateRptBtn(); _updateSub(); _refreshToolbar();
@@ -4589,8 +4596,9 @@ to{opacity:1;transform:none}}
   async function _setView(mode) {
     if (_st.dirty.size > 0 && mode !== _st.viewMode) {
       const save = confirm('변경되거나 입력된 값이 있습니다.\n저장하시겠습니까?\n\n[확인] 저장 후 전환   [취소] 저장 없이 전환');
-      if (save) await saveAll();
-      else { _st.data={}; _st.dirty.clear(); }
+      if (save) { await saveAll(); }
+      _st.dirty.clear(); // 저장 성공/실패·취소 무관 항상 클리어 → 무한 confirm 방지
+      _st.data = {};
     }
     _st.viewMode = mode;
     // ★ 리포트 탭 고정 버튼 표시/숨김
@@ -5464,10 +5472,12 @@ to{opacity:1;transform:none}}
   /* 인라인 textarea 입력 → 즉시 메모리 반영 (저장은 자동 or 수동) */
   function _onCmtInput(sid, val) {
     _ensureData(sid);
+    const prev = _st.data[sid].comment || '';
+    /* 값이 실제로 바뀐 경우에만 dirty 추가 (자동완성·스펠체크 등 오트리거 방지) */
+    if (val === prev) return;
     _st.data[sid].comment = val;
     _st.dirty.add(sid);
     _refreshDirtyUI();
-    // 아이콘 has-cmt 상태 갱신
     const icon = document.getElementById('gr-cmtbtn-' + sid);
     if (icon) icon.className = 'gs-cm-icon' + (val.trim() ? ' has-cmt' : '');
   }
