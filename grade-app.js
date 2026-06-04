@@ -4280,7 +4280,7 @@ to{opacity:1;transform:none}}
         const rt = retEl.value === '' ? 0 : Number(retEl.value);
         _st.data[sid].word = { totalQ:tq, retake:rt, pass:Math.max(0,tq-rt) };
       }
-      const cmtEl = document.getElementById(`gr-cmt-${sid}`);
+      const cmtEl = document.getElementById(`gr-cmta-${sid}`);
       if (cmtEl) _st.data[sid].comment = cmtEl.value;
       /* 리딩 */
       const actRevs = GradeDB.getActiveReviews(_st.bookId);
@@ -4508,7 +4508,7 @@ to{opacity:1;transform:none}}
   }
 
   async function saveAll() {
-    /* dirty 있는 학생만 저장 (전체 순회 제거 → 성능 개선) */
+    /* dirty 있는 학생만 저장 */
     const sids = [..._st.dirty].filter(sid => _getSorted().some(s => s.id === sid));
     if (!sids.length) { _toast('저장할 내용이 없습니다', 'info'); return; }
     let ok = 0, fail = 0;
@@ -4517,13 +4517,13 @@ to{opacity:1;transform:none}}
       try { await saveOne(sid); ok++; }
       catch(e) { console.error('[saveAll]', sid, e); fail++; }
     }
-    /* 성공/실패 무관 dirty 강제 클리어 (무한 confirm 방지) */
     _st.dirty.clear();
     _refreshDirtyUI();
     if (fail > 0) _toast(`⚠ ${ok}명 저장 / ${fail}명 실패`, 'error');
     else          _toast(`✅ ${ok}명 저장 완료`, 'success');
-    /* _setView 흐름에서 호출된 경우 이중 renderContent 방지 */
-    if (_st.viewMode === 'excel') _renderContent();
+    /* _setView 흐름이 아닌 직접 저장 버튼 클릭 시에만 렌더 갱신
+       (_setView는 자체적으로 _renderContent 호출하므로 중복 방지) */
+    if (!_viewBusy) _renderContent();
   }
 
   async function resetOne(sid) {
@@ -4593,12 +4593,16 @@ to{opacity:1;transform:none}}
       if(el&&sid){const s=_getStudents().find(s=>s.id===sid);if(s){el.innerHTML=_buildReport(s);requestAnimationFrame(_applyRptStyles);}}
     }
   }
+  let _viewBusy = false; // 연속 클릭 race condition 방지
   async function _setView(mode) {
+    if (_viewBusy) return;
     if (_st.dirty.size > 0 && mode !== _st.viewMode) {
+      _viewBusy = true;
       const save = confirm('변경되거나 입력된 값이 있습니다.\n저장하시겠습니까?\n\n[확인] 저장 후 전환   [취소] 저장 없이 전환');
       if (save) { await saveAll(); }
       _st.dirty.clear(); // 저장 성공/실패·취소 무관 항상 클리어 → 무한 confirm 방지
       _st.data = {};
+      _viewBusy = false;
     }
     _st.viewMode = mode;
     // ★ 리포트 탭 고정 버튼 표시/숨김
