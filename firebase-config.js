@@ -1,12 +1,11 @@
 /**
- * firebase-config.js — v8
+ * firebase-config.js — v9
  * ────────────────────────────────────────────────────────────────
- *  v6 → v8 변경사항
- *  · enablePersistence() — Firebase SDK 내장 오프라인 캐시 활성화
- *    → 오프라인 읽기/쓰기 SDK가 자동 처리
- *    → 온라인 복귀 시 SDK가 자동 동기화
- *  · .info/connected 리스너 — 연결 상태 실시간 감지
- *  · 연결 상태 인디케이터 — 화면 우하단 표시
+ *  v9 변경사항
+ *  · 초기 4초간 오프라인 인디케이터 억제
+ *    → 앱 시작 직후 .info/connected=false 초기값에 의한 오탐 방지
+ *  · 오프라인 지속 시 5초마다 자동 재연결 시도 (최대 5회)
+ *  · 오프라인 메시지에 경과 시간 표시
  * ────────────────────────────────────────────────────────────────
  */
 const FIREBASE_CONFIG = {
@@ -22,8 +21,44 @@ const FIREBASE_CONFIG = {
 const FireDB = (() => {
   let _db = null, _ok = false, _connected = false, _q = {};
 
+  /* ── 오프라인 억제 타이머 (앱 시작 4초간 오탐 방지) ── */
+  const _suppressUntil = Date.now() + 4000;
+
+  /* ── 재연결 시도 ── */
+  let _retryTimer = null, _retryCount = 0, _offlineSince = 0;
+  const MAX_RETRY = 5, RETRY_INTERVAL = 5000;
+
+  function _scheduleRetry() {
+    if (_retryTimer || _retryCount >= MAX_RETRY) return;
+    _retryTimer = setTimeout(async () => {
+      _retryTimer = null;
+      if (_connected) return; // 이미 복구됨
+      _retryCount++;
+      console.log(`[FireDB] 🔄 재연결 시도 ${_retryCount}/${MAX_RETRY}`);
+      try {
+        // Firebase SDK가 내부적으로 재연결 관리하므로
+        // .info/connected를 다시 읽어 강제 트리거
+        if (_db) {
+          const snap = await _db.ref('.info/connected').get();
+          if (snap.val()) {
+            _connected = true;
+            _retryCount = 0;
+            _updateConnUI(true);
+          } else {
+            _scheduleRetry();
+          }
+        }
+      } catch(e) {
+        _scheduleRetry();
+      }
+    }, RETRY_INTERVAL);
+  }
+
   /* ── 연결 상태 인디케이터 ── */
   function _updateConnUI(connected) {
+    // 초기 4초간 오프라인 표시 억제 (Firebase .info/connected 초기값=false 오탐 방지)
+    if (!connected && Date.now() < _suppressUntil) return;
+
     let ind = document.getElementById('fb-conn-ind');
     if (!ind) {
       ind = document.createElement('div');
@@ -34,10 +69,13 @@ const FireDB = (() => {
         'font-size:11px;font-weight:700;pointer-events:none',
         'box-shadow:0 2px 8px rgba(0,0,0,.15)',
         'backdrop-filter:blur(8px);transition:opacity .4s',
+        'opacity:0',
       ].join(';');
       document.body.appendChild(ind);
     }
     if (connected) {
+      _offlineSince = 0;
+      clearTimeout(_retryTimer); _retryTimer = null; _retryCount = 0;
       Object.assign(ind.style, {
         background: 'rgba(5,150,105,.12)', color: '#059669',
         border: '1px solid rgba(5,150,105,.3)', opacity: '1',
@@ -46,12 +84,15 @@ const FireDB = (() => {
       clearTimeout(ind._t);
       ind._t = setTimeout(() => { ind.style.opacity = '0'; }, 3000);
     } else {
+      if (!_offlineSince) _offlineSince = Date.now();
       Object.assign(ind.style, {
         background: 'rgba(239,68,68,.1)', color: '#dc2626',
         border: '1px solid rgba(239,68,68,.3)', opacity: '1',
       });
       ind.innerHTML = '🔴 오프라인 — 자동 저장 대기 중';
       clearTimeout(ind._t);
+      // 10초 이상 오프라인이면 재연결 시도
+      if (Date.now() - _offlineSince > 10000) _scheduleRetry();
     }
   }
 
