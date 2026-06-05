@@ -771,16 +771,48 @@ const MonitorApp = (() => {
   /* ═══════════════════════════════════════════════════════════
    * Firebase 리스닝
    * ═══════════════════════════════════════════════════════════ */
+  let _retryTimer  = null;
+  let _retryCount  = 0;
+  const MAX_RETRY  = 20;   // 최대 20회 (약 40초)
+
   function _startListen() {
     _stopListen();
+    _retryCount = 0;
+    _tryListen();
+  }
+
+  function _tryListen() {
+    /* Firebase 준비 안 됐으면 최대 20회(2초 간격)까지 재시도 */
+    if (!FireDB.ready()) {
+      if (_retryCount >= MAX_RETRY) {
+        console.warn('[MonitorApp] Firebase 연결 실패 — 재시도 한도 초과');
+        _v('mon-empty', '⚠️ Firebase 연결 실패 — 페이지를 새로고침하세요');
+        return;
+      }
+      _retryCount++;
+      _v('mon-empty', `Firebase 연결 중... (${_retryCount}/${MAX_RETRY})`);
+      _retryTimer = setTimeout(_tryListen, 2000);
+      return;
+    }
+
+    /* Firebase 준비됨 → 리스너 등록 */
+    clearTimeout(_retryTimer);
+    _retryTimer = null;
+    console.log(`[MonitorApp] Firebase 리스너 등록 (재시도 ${_retryCount}회)`);
+
     _unlisten = MonitorDB.listenSessions(list => {
-      _checkNewSessions(list);   // ★ 알림 체크
+      _checkNewSessions(list);
       _sessions = list;
       _updateList();
       _updateRightPanel();
     });
   }
-  function _stopListen() { if (_unlisten) { _unlisten(); _unlisten = null; } }
+
+  function _stopListen() {
+    if (_unlisten)    { _unlisten(); _unlisten = null; }
+    if (_retryTimer)  { clearTimeout(_retryTimer); _retryTimer = null; }
+    _retryCount = 0;
+  }
 
   /* ═══════════════════════════════════════════════════════════
    * 삭제 기능
