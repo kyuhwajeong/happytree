@@ -45,7 +45,7 @@ const DB = (() => {
     try {
       const snap = await Promise.race([
         FireDB.get(FireDB.P.root),
-        new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),3000)), // ★ 5초→3초
+        new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),5000)), // ★ 3초→5초
       ]);
       if (snap) {
         C.classes  = snap.classes  ? Object.values(snap.classes)  : [];
