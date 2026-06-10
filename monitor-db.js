@@ -45,21 +45,29 @@ const MonitorDB = (() => {
    * ══════════════════════════════════════════════════════ */
   async function _fetchGeo() {
     try {
-      /*
-       * ★ /api/geoip (Vercel serverless) 를 통해 서버사이드에서 ip-api.com 호출
-       *   이유: ip-api.com 은 HTTP만 지원 → HTTPS 사이트에서 직접 호출 시
-       *         브라우저 혼합 콘텐츠 차단으로 실패함
-       *   /api/geoip 는 서버(Node.js)에서 HTTP 호출 → HTTP 제한 없음
-       *   결과: 한국어 도시·지역명 정상 반환
+      /* ★ Step 1: 브라우저에서 직접 본인 IP 조회 (HTTPS, ipify 무료)
+       *   X-Forwarded-For 방식은 Vercel 프록시 레이어로 인해
+       *   서버 IP(버지니아 등)가 반환되는 문제가 있어 이 방식으로 대체
        */
-      const r = await Promise.race([
-        fetch('/api/geoip'),
-        new Promise((_,rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
+      const ipRes = await Promise.race([
+        fetch('https://api.ipify.org?format=json'),
+        new Promise((_,rej) => setTimeout(() => rej(), 3000)),
       ]);
-      if (!r.ok) throw new Error('geoip api error');
-      const d = await r.json();
+      const { ip: myIp } = await ipRes.json();
+      if (!myIp) throw new Error('IP 조회 실패');
+
+      /* ★ Step 2: 실제 IP를 /api/geoip 에 전달 → 한국어 위치 반환
+       *   서버사이드에서 ip-api.com 호출 (HTTP 혼합 콘텐츠 우회)
+       */
+      const geoRes = await Promise.race([
+        fetch(`/api/geoip?ip=${encodeURIComponent(myIp)}`),
+        new Promise((_,rej) => setTimeout(() => rej(), 5000)),
+      ]);
+      if (!geoRes.ok) throw new Error('geoip api error');
+      const d = await geoRes.json();
+
       return {
-        ip:     d.ip      || '알 수 없음',
+        ip:     myIp,          // ipify 에서 가져온 실제 IP
         city:   d.city    || '',
         region: d.region  || '',
         country:d.country || '',
@@ -67,7 +75,14 @@ const MonitorDB = (() => {
       };
     } catch(e) {
       console.warn('[MonitorDB] 지오코딩 실패:', e.message);
-      return { ip:'알 수 없음', city:'', region:'', country:'', isp:'' };
+      /* 폴백: IP만 ipify로 조회, 위치 정보 없이 저장 */
+      try {
+        const r = await fetch('https://api.ipify.org?format=json');
+        const { ip } = await r.json();
+        return { ip: ip || '알 수 없음', city:'', region:'', country:'', isp:'' };
+      } catch {
+        return { ip:'알 수 없음', city:'', region:'', country:'', isp:'' };
+      }
     }
   }
 
