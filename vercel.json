@@ -5,7 +5,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://cdnjs.cloudflare.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://firebaseinstallations.googleapis.com https://firebase.googleapis.com https://www.googleapis.com https://ip-api.com http://ip-api.com https://*.firebaseio.com wss://*.firebaseio.com https://firestore.googleapis.com https://fcm.googleapis.com https://generativelanguage.googleapis.com https://identitytoolkit.googleapis.com; worker-src 'self' blob:; frame-src 'none';"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://cdnjs.cloudflare.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://api.ipify.org https://firebaseinstallations.googleapis.com https://firebase.googleapis.com https://www.googleapis.com https://ip-api.com http://ip-api.com https://*.firebaseio.com wss://*.firebaseio.com https://firestore.googleapis.com https://fcm.googleapis.com https://generativelanguage.googleapis.com https://identitytoolkit.googleapis.com; worker-src 'self' blob:; frame-src 'none';"
         },
         {
           "key": "X-Content-Type-Options",
