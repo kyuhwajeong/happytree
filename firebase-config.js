@@ -1,11 +1,23 @@
 /**
- * firebase-config.js — v9
+ * firebase-config.js — v10
  * ────────────────────────────────────────────────────────────────
- *  v9 변경사항
- *  · 초기 4초간 오프라인 인디케이터 억제
- *    → 앱 시작 직후 .info/connected=false 초기값에 의한 오탐 방지
- *  · 오프라인 지속 시 5초마다 자동 재연결 시도 (최대 5회)
- *  · 오프라인 메시지에 경과 시간 표시
+ *  v10 변경사항 (버그 수정 + 안정화)
+ *
+ *  ★ 버그 수정 1 — _scheduleRetry() 절대 호출 안 되는 구조적 버그 수정
+ *    · _offlineSince = Date.now() 직후 (Date.now()-_offlineSince > 10000)
+ *      조건은 항상 ~0ms → 절대 true 불가 → 재연결 시도 dead code
+ *    · 수정: 최초 오프라인 감지 시 즉시 _scheduleRetry() 호출
+ *
+ *  ★ 버그 수정 2 — 오프라인 배너 즉시 표시 문제
+ *    · Firebase .info/connected 특성상 네트워크 일시 흔들림·탭 전환·
+ *      WiFi↔LTE 전환에도 false 발생 후 SDK가 5~15초 내 자동 재연결
+ *    · 수정: 8초 디바운스 적용 — 8초 후에도 오프라인이면 배너 표시
+ *      → 일시적 끊김(< 8초)은 배너 없이 자동 해결됨
+ *
+ *  ★ 추가 — keepSynced(true)
+ *    · 주요 경로 WebSocket 연결 유지로 재연결 빈도 감소
+ *
+ *  ★ 유지 — 초기 4초 억제, 재연결 최대 5회
  * ────────────────────────────────────────────────────────────────
  */
 const FIREBASE_CONFIG = {
@@ -25,8 +37,12 @@ const FireDB = (() => {
   const _suppressUntil = Date.now() + 4000;
 
   /* ── 재연결 시도 ── */
-  let _retryTimer = null, _retryCount = 0, _offlineSince = 0;
+  let _retryTimer = null, _retryCount = 0;
   const MAX_RETRY = 5, RETRY_INTERVAL = 5000;
+
+  /* ── 오프라인 상태 추적 ── */
+  let _offlineSince = 0;
+  let _offlineShowTimer = null;   // 8초 디바운스 타이머
 
   function _scheduleRetry() {
     if (_retryTimer || _retryCount >= MAX_RETRY) return;
@@ -37,62 +53,95 @@ const FireDB = (() => {
       console.log(`[FireDB] 🔄 재연결 시도 ${_retryCount}/${MAX_RETRY}`);
       try {
         // Firebase SDK가 내부적으로 재연결 관리하므로
-        // .info/connected를 다시 읽어 강제 트리거
+        // goOffline → goOnline 사이클로 WebSocket 강제 재협상
         if (_db) {
-          const snap = await _db.ref('.info/connected').get();
-          if (snap.val()) {
-            _connected = true;
-            _retryCount = 0;
-            _updateConnUI(true);
-          } else {
-            _scheduleRetry();
-          }
+          _db.goOffline();
+          await new Promise(r => setTimeout(r, 500));
+          _db.goOnline();
+          // .info/connected 리스너가 재연결 결과를 자동 수신함
         }
       } catch(e) {
+        console.warn('[FireDB] 재연결 오류:', e);
         _scheduleRetry();
       }
     }, RETRY_INTERVAL);
   }
 
+  /* ── 오프라인 UI 실제 표시 (8초 디바운스 후 호출) ── */
+  function _showOfflineUI() {
+    let ind = document.getElementById('fb-conn-ind');
+    if (!ind) ind = _createInd();
+    Object.assign(ind.style, {
+      background: 'rgba(239,68,68,.1)', color: '#dc2626',
+      border: '1px solid rgba(239,68,68,.3)', opacity: '1',
+    });
+    const elapsed = _offlineSince ? Math.round((Date.now() - _offlineSince) / 1000) : 0;
+    ind.innerHTML = `🔴 오프라인${elapsed > 0 ? ` (${elapsed}초)` : ''} — 재연결 중...`;
+    clearTimeout(ind._t);
+  }
+
+  /* ── 인디케이터 DOM 생성 ── */
+  function _createInd() {
+    const ind = document.createElement('div');
+    ind.id = 'fb-conn-ind';
+    ind.style.cssText = [
+      'position:fixed;bottom:72px;right:12px;z-index:8888',
+      'padding:5px 12px;border-radius:20px',
+      'font-size:11px;font-weight:700;pointer-events:none',
+      'box-shadow:0 2px 8px rgba(0,0,0,.15)',
+      'backdrop-filter:blur(8px);transition:opacity .4s',
+      'opacity:0',
+    ].join(';');
+    document.body.appendChild(ind);
+    return ind;
+  }
+
   /* ── 연결 상태 인디케이터 ── */
   function _updateConnUI(connected) {
-    // 초기 4초간 오프라인 표시 억제 (Firebase .info/connected 초기값=false 오탐 방지)
+    // 초기 4초간 오프라인 표시 억제
     if (!connected && Date.now() < _suppressUntil) return;
 
-    let ind = document.getElementById('fb-conn-ind');
-    if (!ind) {
-      ind = document.createElement('div');
-      ind.id = 'fb-conn-ind';
-      ind.style.cssText = [
-        'position:fixed;bottom:72px;right:12px;z-index:8888',
-        'padding:5px 12px;border-radius:20px',
-        'font-size:11px;font-weight:700;pointer-events:none',
-        'box-shadow:0 2px 8px rgba(0,0,0,.15)',
-        'backdrop-filter:blur(8px);transition:opacity .4s',
-        'opacity:0',
-      ].join(';');
-      document.body.appendChild(ind);
-    }
     if (connected) {
+      /* ─── 온라인 복귀 ─── */
+      const wasOffline = _offlineSince > 0;
+
+      // 오프라인 상태 초기화
       _offlineSince = 0;
-      clearTimeout(_retryTimer); _retryTimer = null; _retryCount = 0;
-      Object.assign(ind.style, {
-        background: 'rgba(5,150,105,.12)', color: '#059669',
-        border: '1px solid rgba(5,150,105,.3)', opacity: '1',
-      });
-      ind.innerHTML = '🟢 서버 연결됨';
-      clearTimeout(ind._t);
-      ind._t = setTimeout(() => { ind.style.opacity = '0'; }, 3000);
+      clearTimeout(_offlineShowTimer); _offlineShowTimer = null;
+      clearTimeout(_retryTimer);       _retryTimer = null;
+      _retryCount = 0;
+
+      let ind = document.getElementById('fb-conn-ind');
+      if (!ind) ind = _createInd();
+
+      // 실제로 오프라인이 표시됐던 경우에만 "연결됨" 배너 표시
+      if (wasOffline) {
+        Object.assign(ind.style, {
+          background: 'rgba(5,150,105,.12)', color: '#059669',
+          border: '1px solid rgba(5,150,105,.3)', opacity: '1',
+        });
+        ind.innerHTML = '🟢 서버 연결됨';
+        clearTimeout(ind._t);
+        ind._t = setTimeout(() => { ind.style.opacity = '0'; }, 3000);
+      }
+
     } else {
-      if (!_offlineSince) _offlineSince = Date.now();
-      Object.assign(ind.style, {
-        background: 'rgba(239,68,68,.1)', color: '#dc2626',
-        border: '1px solid rgba(239,68,68,.3)', opacity: '1',
-      });
-      ind.innerHTML = '🔴 오프라인 — 자동 저장 대기 중';
-      clearTimeout(ind._t);
-      // 10초 이상 오프라인이면 재연결 시도
-      if (Date.now() - _offlineSince > 10000) _scheduleRetry();
+      /* ─── 오프라인 감지 ─── */
+      if (!_offlineSince) {
+        _offlineSince = Date.now();
+        // ★ 버그 수정: 즉시 재연결 시도 스케줄 (이전 코드는 여기서 절대 retry 안 됐음)
+        _scheduleRetry();
+      }
+
+      // ★ 핵심 개선: 8초 디바운스
+      // Firebase SDK가 보통 5~15초 내 자동 재연결하므로
+      // 일시적 끊김(WiFi 전환, 탭 전환 등)은 배너 없이 자동 해결됨
+      if (!_offlineShowTimer) {
+        _offlineShowTimer = setTimeout(() => {
+          _offlineShowTimer = null;
+          if (!_connected) _showOfflineUI(); // 8초 후에도 오프라인이면 표시
+        }, 8000);
+      }
     }
   }
 
@@ -118,6 +167,15 @@ const FireDB = (() => {
       _ok = true;
       console.log('[FireDB] ✅ connected');
 
+      /* ★ keepSynced: 주요 경로 WebSocket 연결 유지 (재연결 빈도 감소) */
+      try {
+        _db.ref('hakwon10/classes').keepSynced(true);
+        _db.ref('hakwon10/accounts').keepSynced(true);
+        console.log('[FireDB] ✅ keepSynced 활성화');
+      } catch(e) {
+        console.warn('[FireDB] keepSynced 오류:', e);
+      }
+
       /* 연결 상태 실시간 감지 */
       _db.ref('.info/connected').on('value', snap => {
         const prev = _connected;
@@ -127,7 +185,7 @@ const FireDB = (() => {
           console.log('[FireDB] 🌐 온라인 복귀 — SDK 자동 동기화');
         }
         if (!_connected) {
-          console.log('[FireDB] 📴 오프라인 — SDK 캐시 사용');
+          console.log('[FireDB] 📴 연결 끊김 — 8초 후 배너 표시 예정');
         }
       });
 
