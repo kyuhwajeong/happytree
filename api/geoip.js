@@ -5,24 +5,28 @@
  *   브라우저는 HTTPS → HTTP 혼합 콘텐츠 차단으로 ip-api.com 직접 호출 불가
  *   이 API Route가 서버사이드에서 ip-api.com 을 호출하고 한국어 결과를 반환
  *
- * ■ 호출 방법
- *   GET /api/geoip          → 접속자 본인 IP 조회
- *   GET /api/geoip?ip=x.x.x.x → 특정 IP 조회
- *
- * ■ 응답 예시
- *   { ip:"211.x.x.x", city:"수원시", region:"경기도",
- *     country:"대한민국", isp:"SK브로드밴드", lat:37.26, lon:127.0 }
+ * ■ IP 판별 우선순위
+ *   1. ?ip=xxx 파라미터 (명시적 지정)
+ *   2. X-Forwarded-For 헤더 (Vercel이 접속자 실제 IP를 자동 기록)
+ *   3. X-Real-IP 헤더 (대체 헤더)
+ *   ※ 파라미터 없으면 Vercel 서버가 아닌 실제 접속자 IP를 사용
  */
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  /* 조회할 IP — 파라미터 없으면 접속자 본인 IP 자동 감지 */
-  const targetIp = req.query.ip || '';
+  /* ★ 실제 접속자 IP 추출
+   *   Vercel은 X-Forwarded-For 헤더에 원본 클라이언트 IP를 기록함
+   *   (여러 IP가 쉼표로 연결될 경우 첫 번째가 실제 사용자 IP)
+   */
+  const clientIp =
+    req.query.ip ||
+    (req.headers['x-forwarded-for'] || '').split(',')[0].trim() ||
+    req.headers['x-real-ip'] ||
+    '';
 
-  /* ip-api.com 서버사이드 호출 (HTTP 허용, 한국어, 무료 분당 45회) */
-  const url = targetIp
-    ? `http://ip-api.com/json/${targetIp}?lang=ko&fields=status,message,country,regionName,city,isp,query,lat,lon`
+  const url = clientIp
+    ? `http://ip-api.com/json/${clientIp}?lang=ko&fields=status,message,country,regionName,city,isp,query,lat,lon`
     : `http://ip-api.com/json/?lang=ko&fields=status,message,country,regionName,city,isp,query,lat,lon`;
 
   try {
@@ -31,13 +35,13 @@ export default async function handler(req, res) {
 
     if (d.status !== 'success') {
       return res.status(200).json({
-        ip: targetIp || '알 수 없음',
+        ip: clientIp || '알 수 없음',
         city:'', region:'', country:'', isp:'', lat:0, lon:0,
       });
     }
 
     return res.status(200).json({
-      ip:     d.query      || targetIp || '알 수 없음',
+      ip:     d.query      || clientIp || '알 수 없음',
       city:   d.city       || '',
       region: d.regionName || '',
       country:d.country    || '',
@@ -48,7 +52,7 @@ export default async function handler(req, res) {
   } catch(err) {
     console.error('[geoip] 오류:', err);
     return res.status(200).json({
-      ip: targetIp || '알 수 없음',
+      ip: clientIp || '알 수 없음',
       city:'', region:'', country:'', isp:'', lat:0, lon:0,
     });
   }
