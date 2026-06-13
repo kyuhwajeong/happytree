@@ -764,8 +764,9 @@ const BooklibApp = (() => {
   }
   // ★ 교재 등록 팝업 모달 (bl-reg-area DOM 없을 때 폴백)
   function _openRegModal() {
+    console.log('[BooklibApp] _openRegModal 호출됨');
     let modal = document.getElementById('bl-reg-modal');
-    if (modal) { modal.remove(); return; }
+    if (modal) { console.log('[BooklibApp] 기존 모달 닫음'); modal.remove(); return; }
 
     const allCls   = typeof DB!=='undefined' ? DB.getActiveClasses() : [];
     const allStus  = typeof StudentDB!=='undefined' ? StudentDB.getAll().filter(s=>s.status!=='퇴원') : [];
@@ -864,7 +865,7 @@ const BooklibApp = (() => {
     acts.innerHTML = `
       <button onclick="document.getElementById('bl-reg-modal')?.remove()"
         style="flex:1;padding:12px;border:none;border-radius:10px;background:var(--surf2);color:var(--tx3);font-size:13px;font-family:var(--font);cursor:pointer">취소</button>
-      <button onclick="BooklibApp._modalAddBook()"
+      <button onclick="console.log('[BooklibApp] 등록완료 버튼 클릭됨');BooklibApp._modalAddBook()"
         style="flex:2;padding:12px;border:none;border-radius:10px;background:var(--a);color:#fff;font-size:13px;font-weight:800;font-family:var(--font);cursor:pointer;box-shadow:0 3px 10px var(--a40)">📖 등록 완료</button>`;
     sheet.appendChild(acts);
 
@@ -1025,10 +1026,13 @@ const BooklibApp = (() => {
   }
 
   async function _modalAddBook() {
+    console.log('[BooklibApp] _modalAddBook 호출됨');
     const inp = document.getElementById('bl-modal-inp');
-    if (!inp || !inp.value.trim()) { inp?.focus(); _toast('⚠️ 교재명을 입력해주세요','error'); return; }
+    console.log('[BooklibApp] inp 요소:', inp, '값:', inp?.value);
+    if (!inp || !inp.value.trim()) { console.log('[BooklibApp] 교재명 비어있음 → 중단'); inp?.focus(); _toast('⚠️ 교재명을 입력해주세요','error'); return; }
     const name = inp.value.trim();
-    if (BookLibDB.getBooks().some(b=>b.name===name)) { _toast('⚠️ 이미 존재하는 교재명입니다','error'); return; }
+    if (BookLibDB.getBooks().some(b=>b.name===name)) { console.log('[BooklibApp] 중복 교재명 → 중단:', name); _toast('⚠️ 이미 존재하는 교재명입니다','error'); return; }
+    console.log('[BooklibApp] 등록 진행:', name);
 
     const modal = document.getElementById('bl-reg-modal');
     const selCls  = modal?._selCls  || new Set();
@@ -1044,7 +1048,9 @@ const BooklibApp = (() => {
     try {
       // 1. 교재 생성 (필수 — 실패 시 전체 중단)
       book = await BookLibDB.addBook(name);
+      console.log('[BooklibApp] addBook 결과:', book);
       if (!book || !book.id) throw new Error('addBook 결과가 비정상입니다');
+      console.log('[BooklibApp] 선택된 반:', [...selCls], '선택된 학생:', [...selStus.keys()]);
 
       // 2. 반 배정 (개별 실패는 무시하고 계속 진행)
       for (const cid of selCls) {
@@ -1064,6 +1070,7 @@ const BooklibApp = (() => {
       return;
     }
 
+    console.log('[BooklibApp] 등록 완료. classFail:', clsFailCnt, 'stuFail:', stuFail, '최종 books 수:', BookLibDB.getBooks().length);
     // ★ 성공/부분실패 여부와 무관하게 항상 모달 닫고 목록 갱신
     document.getElementById('bl-reg-modal')?.remove();
     _renderLibrary();
