@@ -1031,7 +1031,34 @@ const BooklibApp = (() => {
     console.log('[BooklibApp] inp 요소:', inp, '값:', inp?.value);
     if (!inp || !inp.value.trim()) { console.log('[BooklibApp] 교재명 비어있음 → 중단'); inp?.focus(); _toast('⚠️ 교재명을 입력해주세요','error'); return; }
     const name = inp.value.trim();
-    if (BookLibDB.getBooks().some(b=>b.name===name)) { console.log('[BooklibApp] 중복 교재명 → 중단:', name); _toast('⚠️ 이미 존재하는 교재명입니다','error'); return; }
+    if (BookLibDB.getBooks().some(b=>b.name===name)) {
+      console.log('[BooklibApp] 중복 교재명 → 중단:', name);
+      _toast(`⚠️ "${name}" 은 이미 등록된 교재명입니다`,'error');
+      // ★ 입력창에 시각적으로 명확하게 표시 (모달이 토스트를 가릴 수 있어 보강)
+      inp.style.borderColor = '#ef4444';
+      inp.style.background = 'rgba(239,68,68,.06)';
+      inp.focus();
+      inp.select();
+      let hint = document.getElementById('bl-modal-dup-hint');
+      if (!hint) {
+        hint = document.createElement('div');
+        hint.id = 'bl-modal-dup-hint';
+        hint.style.cssText = 'color:#ef4444;font-size:11px;font-weight:700;margin-top:4px';
+        inp.parentElement?.appendChild(hint);
+      }
+      hint.textContent = `⚠️ "${name}" 은 이미 등록된 교재명입니다. 다른 이름을 입력해주세요.`;
+      const resetStyle = () => {
+        inp.style.borderColor = '';
+        inp.style.background = '';
+        hint?.remove();
+        inp.removeEventListener('input', resetStyle);
+      };
+      inp.addEventListener('input', resetStyle);
+      return;
+    }
+    document.getElementById('bl-modal-dup-hint')?.remove();
+    inp.style.borderColor = '';
+    inp.style.background = '';
     console.log('[BooklibApp] 등록 진행:', name);
 
     const modal = document.getElementById('bl-reg-modal');
