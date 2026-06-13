@@ -1034,15 +1034,45 @@ const BooklibApp = (() => {
     const selCls  = modal?._selCls  || new Set();
     const selStus = modal?._selStus || new Map();
 
-    const book = await BookLibDB.addBook(name);
-    // 반 배정
-    for (const cid of selCls) await BookLibDB.assignBook(book.id, cid).catch(console.warn);
-    // 학생 배정
-    if (selStus.size) await BookLibDB.batchAddStudents(book.id, [...selStus.keys()]).catch(console.warn);
+    // ★ 버튼 중복 클릭 방지 + 진행 중 표시
+    const btn = modal?.querySelector('button[onclick*="_modalAddBook"]');
+    if (btn) { if(btn.disabled) return; btn.disabled = true; btn.textContent = '등록 중...'; }
 
+    let book = null;
+    let clsFailCnt = 0, stuFail = false;
+
+    try {
+      // 1. 교재 생성 (필수 — 실패 시 전체 중단)
+      book = await BookLibDB.addBook(name);
+      if (!book || !book.id) throw new Error('addBook 결과가 비정상입니다');
+
+      // 2. 반 배정 (개별 실패는 무시하고 계속 진행)
+      for (const cid of selCls) {
+        try { await BookLibDB.assignBook(book.id, cid); }
+        catch(e) { clsFailCnt++; console.error('[BooklibApp] assignBook 실패', cid, e); }
+      }
+
+      // 3. 학생 배정 (실패해도 계속 진행)
+      if (selStus.size) {
+        try { await BookLibDB.batchAddStudents(book.id, [...selStus.keys()]); }
+        catch(e) { stuFail = true; console.error('[BooklibApp] batchAddStudents 실패', e); }
+      }
+    } catch(e) {
+      console.error('[BooklibApp] 교재 등록 실패', e);
+      if (btn) { btn.disabled = false; btn.textContent = '📖 등록 완료'; }
+      _toast(`❌ 등록 실패: ${e.message||e}`,'error');
+      return;
+    }
+
+    // ★ 성공/부분실패 여부와 무관하게 항상 모달 닫고 목록 갱신
     document.getElementById('bl-reg-modal')?.remove();
     _renderLibrary();
-    _toast(`📖 "${name}" 등록 완료`,'success');
+
+    if (clsFailCnt || stuFail) {
+      _toast(`⚠️ "${name}" 등록됨 (일부 배정 실패: ${clsFailCnt?'반':''}${clsFailCnt&&stuFail?'·':''}${stuFail?'학생':''})`,'error');
+    } else {
+      _toast(`📖 "${name}" 등록 완료`,'success');
+    }
   }
 
   async function addBook(nameArg){
