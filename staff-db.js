@@ -254,6 +254,16 @@ const StaffDB = (() => {
   }
 
   /**
+   * 근무 항목 수정 (기존 항목을 patch로 덮어씀)
+   */
+  async function updateWorkEntry(sid, date, entryId, patch) {
+    const entries = getWorkDay(sid, date).map(e =>
+      e.id === entryId ? { ...e, ...patch, id: e.id } : e
+    );
+    await setWorkDay(sid, date, entries);
+  }
+
+  /**
    * 다중 선택 삭제 (체크박스 삭제)
    * @param {string} sid
    * @param {Array<{date:string, entryId:string}>} list
@@ -861,7 +871,7 @@ const StaffDB = (() => {
     addStaff, updateStaff, deleteStaff,
     /* 근무 */
     getWorkDay, getWorkMonth, getWorkRange,
-    setWorkDay, addWorkEntry, deleteWorkEntry,
+    setWorkDay, addWorkEntry, deleteWorkEntry, updateWorkEntry,
     deleteWorkEntries, copyEntries,
     /* 일괄 등록 */
     checkOverlap, batchInsert, batchDelete,

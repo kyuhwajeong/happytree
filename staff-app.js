@@ -55,6 +55,7 @@ const StaffApp = (() => {
     payResult:    null,
     workType:     'class',
     workDate:     '',
+    editingEntryId: null,  // 근무 항목 수정 중인 entry id
     /* 복사 모드 */
     copyMode:     false,
     copyFromDate: '',
@@ -272,7 +273,14 @@ const StaffApp = (() => {
 .sf-pr.sf-tot .sf-pr-v{font-size:17px;color:var(--a)}
 .sf-pr.holiday-row .sf-pr-v{color:#059669}
 .sf-pr.night-row .sf-pr-v{color:#7c3aed}
-.sf-drow{display:flex;gap:8px;padding:5px 8px;border-radius:8px;font-size:12px;transition:background .12s}
+.sf-drow{display:flex;gap:8px;padding:8px 10px;border-radius:10px;font-size:12px;transition:all .12s;cursor:pointer;border:1px solid transparent}
+.sf-drow:active{transform:scale(.98)}
+.sf-drow-chev{font-size:10px;color:var(--tx3);margin-left:4px}
+.sf-dentry{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:7px;font-size:11px;font-weight:600;background:var(--surf2);border:1px solid var(--bdr)}
+.sf-dentry.class{color:var(--a);border-color:var(--a40);background:var(--a10)}
+.sf-dentry.general{color:var(--green);border-color:rgba(5,150,105,.3);background:rgba(5,150,105,.07)}
+.sf-ei.editing{background:var(--a10);outline:2px solid var(--a40);border-radius:8px}
+.sf-edit-cancel{width:100%;padding:9px;border-radius:9px;background:var(--card2);border:1px solid var(--bdr2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);margin-bottom:10px}
 .sf-drow:hover{background:var(--card2)}
 .sf-ddt{font-weight:700;color:var(--tx3);min-width:58px;flex-shrink:0}
 .sf-dtgs{display:flex;gap:4px;flex-wrap:wrap}
@@ -1030,7 +1038,8 @@ const StaffApp = (() => {
       if (_st.selected.has(key)) _st.selected.delete(key); else _st.selected.add(key);
       _drawCal(); return;
     }
-    StaffApp.openWork(date);
+    openWork(date);     // 해당 날짜 근무 모달 오픈
+    _editEntry(eid);    // 클릭한 항목을 즉시 수정모드로 진입
   }
 
   /* ── 선택 삭제 ── */
@@ -1273,8 +1282,17 @@ const StaffApp = (() => {
   /* ══════════════════════════════════════════
    * 근무 입력 모달 (단일 날짜)
    * ══════════════════════════════════════════ */
-  function openWork(date) { _st.workDate = date; _st.workType = 'class'; _drawWork(); document.getElementById('sf-work-ov')?.classList.remove('hidden'); history.pushState({ pg:'staff', modal:'work' }, ''); }
-  function closeWork()    { document.getElementById('sf-work-ov')?.classList.add('hidden'); _drawCal(); }
+  function openWork(date) { _st.workDate = date; _st.workType = 'class'; _st.editingEntryId = null; _drawWork(); document.getElementById('sf-work-ov')?.classList.remove('hidden'); history.pushState({ pg:'staff', modal:'work' }, ''); }
+  function closeWork() {
+    document.getElementById('sf-work-ov')?.classList.add('hidden');
+    _st.editingEntryId = null;
+    if (document.getElementById('sf-cal-ov') && !document.getElementById('sf-cal-ov').classList.contains('hidden')) {
+      _drawCal();
+    } else if (_st.subTab === 'salary' && _st.payStaffId) {
+      // 급여 탭에서 진입한 경우 — 급여 재계산하여 변경 반영
+      _calcAndRender();
+    }
+  }
 
   function _drawWork() {
     const sh = document.getElementById('sf-work-sh'); if (!sh) return;
@@ -1310,8 +1328,9 @@ const StaffApp = (() => {
                  oninput="StaffApp._manualHrs(this.value)">
         </div>
         <input class="sf-note" id="sf-wn" placeholder="메모 (선택사항)">
-        <button class="btn-ok" style="width:100%;margin-bottom:14px" onclick="StaffApp._addEntry()">✅ 근무 등록</button>
-        <div style="font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:1px;margin-bottom:6px">이 날 근무 (${es.length}건)</div>
+        ${_st.editingEntryId ? `<button class="sf-edit-cancel" onclick="StaffApp._cancelEditEntry()">✕ 수정 취소</button>` : ''}
+        <button class="btn-ok" style="width:100%;margin-bottom:14px;${_st.editingEntryId?'background:#d97706;box-shadow:0 3px 10px rgba(217,119,6,.35)':''}" onclick="StaffApp._addEntry()">${_st.editingEntryId ? '💾 수정 저장' : '✅ 근무 등록'}</button>
+        <div style="font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:1px;margin-bottom:6px">이 날 근무 (${es.length}건) ${_st.editingEntryId?'<span style="color:#d97706">· 항목을 탭하면 수정됩니다</span>':'<span style="opacity:.6">· 항목 탭하여 수정</span>'}</div>
         <div id="sf-el">${es.length ? es.map(e => _entryHTML(e, s)).join('') : '<div style="font-size:12px;color:var(--tx3);padding:6px 4px">등록된 근무 없음</div>'}</div>
       </div>
       <div class="sh-acts"><button class="btn-x" onclick="StaffApp.closeWork()">닫기</button></div>`;
@@ -1322,12 +1341,36 @@ const StaffApp = (() => {
     const c     = e.type === 'class' ? { tx: 'var(--a)', l: '수업' } : { tx: 'var(--green)', l: '일반' };
     const night = e.nightHours > 0 ? ` 🌙야간 ${_fmtHrs(e.nightHours)}h` : '';
     const rateInfo = e.appliedRate ? ` (시급 ${_fmt(e.appliedRate)}원)` : '';
-    return `<div class="sf-ei">
+    const isEditing = _st.editingEntryId === e.id;
+    return `<div class="sf-ei ${isEditing?'editing':''}" onclick="StaffApp._editEntry('${e.id}')" style="cursor:pointer">
       <div class="sf-edot" style="background:${c.tx}"></div>
       <span style="font-size:11px;font-weight:700;color:${c.tx};min-width:28px">${c.l}</span>
       <span style="font-size:12px;color:var(--tx2);flex:1">${_e(e.start||'')}~${_e(e.end||'')} <strong>${_fmtHrs(e.hours)}h</strong>${night}${rateInfo}${e.note ? ' · ' + _e(e.note) : ''}</span>
-      <button class="ibtn red" style="width:28px;height:28px;font-size:12px" onclick="StaffApp._delEntry('${e.id}')">✕</button>
+      ${isEditing ? '<span style="font-size:10px;color:#d97706;font-weight:700;margin-right:4px">✏️</span>' : ''}
+      <button class="ibtn red" style="width:28px;height:28px;font-size:12px" onclick="event.stopPropagation();StaffApp._delEntry('${e.id}')">✕</button>
     </div>`;
+  }
+
+  function _editEntry(id) {
+    const es = StaffDB.getWorkDay(_st.calStaffId, _st.workDate);
+    const e  = es.find(x => x.id === id); if (!e) return;
+    _st.editingEntryId = id;
+    _st.workType = e.type;
+    _drawWork();
+    // 입력값 채우기 (drawWork 직후 DOM 갱신됨)
+    setTimeout(() => {
+      const ws = document.getElementById('sf-ws'); if (ws) ws.value = e.start || '09:00';
+      const we = document.getElementById('sf-we'); if (we) we.value = e.end   || '18:00';
+      const brk = document.getElementById('sf-wbrk'); if (brk) brk.value = e.breakMin || 0;
+      const rateInp = document.getElementById('sf-wrate'); if (rateInp) rateInp.value = e.appliedRate || 0;
+      const noteInp = document.getElementById('sf-wn'); if (noteInp) noteInp.value = e.note || '';
+      _chrs();
+    }, 0);
+  }
+
+  function _cancelEditEntry() {
+    _st.editingEntryId = null;
+    _drawWork();
   }
 
   function _wtype(t) {
@@ -1390,15 +1433,25 @@ const StaffApp = (() => {
       : (s?.generalRate || s?.baseHourlyRate || mw);
     const appliedRate = manualRate > 0 ? manualRate : typeRate;
 
-    await StaffDB.addWorkEntry(_st.calStaffId, _st.workDate, {
+    const patch = {
       type: _st.workType, start, end, hours, baseHours, nightHours,
       breakMin: brk, appliedRate, note,
-    });
-    _drawWork();
-    _toast(`✅ ${_st.workType==='class'?'수업':'일반'} ${_fmtHrs(hours)}h 등록`, 'success');
+    };
+
+    if (_st.editingEntryId) {
+      await StaffDB.updateWorkEntry(_st.calStaffId, _st.workDate, _st.editingEntryId, patch);
+      _st.editingEntryId = null;
+      _drawWork();
+      _toast(`💾 ${_st.workType==='class'?'수업':'일반'} ${_fmtHrs(hours)}h 수정 완료`, 'success');
+    } else {
+      await StaffDB.addWorkEntry(_st.calStaffId, _st.workDate, patch);
+      _drawWork();
+      _toast(`✅ ${_st.workType==='class'?'수업':'일반'} ${_fmtHrs(hours)}h 등록`, 'success');
+    }
   }
 
   async function _delEntry(eid) {
+    if (_st.editingEntryId === eid) _st.editingEntryId = null;
     await StaffDB.deleteWorkEntry(_st.calStaffId, _st.workDate, eid);
     _drawWork();
     _toast('삭제');
@@ -1462,6 +1515,14 @@ const StaffApp = (() => {
       _toast('💾 급여 저장 완료', 'success');
     } catch(e) { console.warn('savePayResult', e); }
   }
+  function _openWorkFromPay(date) {
+    const r = _st.payResult; if (!r) return;
+    _st.calStaffId = r.staff.id;
+    _st.calYear    = r.year;
+    _st.calMonth   = r.month;
+    openWork(date);
+  }
+
   function _saveAcad() { const name = document.getElementById('sf-acad-inp')?.value?.trim(); if (!name) return; StaffDB.setAcad({ name }); _toast(`🏫 "${name}" 저장`, 'success'); }
 
   function _payHTML(r) {
@@ -1473,25 +1534,40 @@ const StaffApp = (() => {
 
     const dayRows = Object.keys(r.byDay).sort().map(date => {
       const d   = r.byDay[date], dow = DOW[new Date(date).getDay()];
-      const baseAmt = isPt
-        ? d.entries.reduce((sum, e) => {
-            const rate = Number(e.appliedRate || s.baseHourlyRate || StaffDB.getMinWage(r.year));
-            return sum + (Number(e.baseHours || e.hours || 0) * rate);
-          }, 0)
-        : Math.round(d.classHrs * s.classRate + d.generalHrs * s.generalRate);
-      const nightAmt = d.entries.reduce((sum, e) => {
-        const nr = Number(e.appliedNightRate || 0);
-        return sum + (Number(e.nightHours || 0) * nr);
-      }, 0);
-      const amt = Math.round(baseAmt + nightAmt);
-      return `<div class="sf-drow">
-        <span class="sf-ddt">${date.slice(5)} (${dow})</span>
-        <div class="sf-dtgs">
-          ${d.classHrs  ? `<span class="sf-ce class"   style="font-size:11px">수업 ${_fmtHrs(d.classHrs)}h</span>` : ''}
-          ${d.generalHrs? `<span class="sf-ce general" style="font-size:11px">일반 ${_fmtHrs(d.generalHrs)}h</span>` : ''}
-          ${(d.nightHrs||0)>0? `<span class="sf-night-tag">🌙야간 ${_fmtHrs(d.nightHrs)}h</span>` : ''}
+      const entries = d.entries || [];
+
+      // 일별 금액: 항목별 타입 시급 적용 (수업/일반 구분)
+      const amt = Math.round(entries.reduce((sum, e) => {
+        const h = Number(e.baseHours || e.hours || 0);
+        let rate;
+        if (isPt) {
+          const typeRate = e.type === 'class'
+            ? (r.classRate   || r.defaultRate || StaffDB.getMinWage(r.year))
+            : (r.generalRate || r.defaultRate || StaffDB.getMinWage(r.year));
+          rate = Number(e.appliedRate) > 0 ? Number(e.appliedRate) : typeRate;
+        } else {
+          rate = e.type === 'class' ? s.classRate : s.generalRate;
+        }
+        return sum + h * rate;
+      }, 0));
+
+      // 항목별 시간대 칩 (출근~퇴근 시각 + 근무시간)
+      const entryChips = entries.map(e => {
+        const hrs  = Number(e.baseHours || e.hours || 0);
+        const icon = e.type === 'class' ? '📚' : '🏢';
+        const time = (e.start && e.end) ? `${e.start}~${e.end}` : '';
+        return `<span class="sf-dentry ${e.type}">${icon} ${time}${time?' · ':''}${_fmtHrs(hrs)}h</span>`;
+      }).join('');
+
+      return `<div class="sf-drow" onclick="StaffApp._openWorkFromPay('${date}')">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center">
+            <span class="sf-ddt">${date.slice(5)} (${dow})</span>
+            <span class="sf-drow-chev">탭하여 수정 ▸</span>
+          </div>
+          <div class="sf-dtgs" style="margin-top:4px">${entryChips}</div>
         </div>
-        <span style="font-size:11px;color:var(--tx3);margin-left:auto">${_fmt(amt)}원</span>
+        <span style="font-size:12px;font-weight:700;color:var(--tx);flex-shrink:0;align-self:center">${_fmt(amt)}원</span>
       </div>`;
     }).join('');
 
@@ -3104,6 +3180,7 @@ const StaffApp = (() => {
     openBatch, closeBatch, _toggleDow, _batchHrs, _batchRateHint, _doBatch,
     _closeOverlap, _confirmOverlap,
     openWork, closeWork, _wtype, _chrs, _manualHrs, _addEntry, _delEntry,
+    _editEntry, _cancelEditEntry, _openWorkFromPay,
     openTemplAdd, closeTemplAdd, _taWtype, _taHrs, _addTemplEntry, _templDel,
     _onSel, _calcAndRender, _saveAcad,
     _onAllSel, _calcAll, _renderMonthly, _renderAnnual, _annualBarChart, _downloadExcel,
