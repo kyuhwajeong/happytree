@@ -688,11 +688,210 @@ const StudentApp = (() => {
 
       <button class="tc-detail-btn" onclick="StudentApp.openTuitionCalc('${s.id}')">💰 수업료 계산</button>
 
-      <div class="sh-acts" style="margin-top:10px">
+      <div class="sh-acts" style="margin-top:10px;flex-wrap:wrap">
         <button class="btn-x" onclick="StudentApp.closeDetail()">닫기</button>
+        <button class="btn-ok" style="flex:1.4" onclick="StudentApp.openEditForm('${s.id}')">✏️ 수정</button>
         <button class="btn-del-ghost" onclick="StudentApp.confirmDelete('${s.id}')">🗑 삭제</button>
       </div>
     `;
+  }
+
+  /* ════════════════════════════════════════════
+   * ✏️ 학생 정보 수정
+   * 상세 모달(st-detail-sh) 안에서 보기 ↔ 수정 폼을 토글한다
+   * ════════════════════════════════════════════ */
+
+  /** 수정 폼 열기 */
+  function openEditForm(id) {
+    const s = StudentDB.getAll().find(x => x.id === id);
+    if (!s) return;
+    const sh = document.getElementById('st-detail-sh');
+    if (!sh) return;
+    sh.innerHTML = _editFormHTML(s);
+  }
+
+  /** 수정 취소 → 상세 보기로 복귀 (저장하지 않음) */
+  function _cancelEdit(id) {
+    const s = StudentDB.getAll().find(x => x.id === id);
+    const sh = document.getElementById('st-detail-sh');
+    if (s && sh) sh.innerHTML = _detailHTML(s);
+  }
+
+  /** 재원상태 선택 변경 → 휴원사유/퇴원일·사유 입력란 표시 토글 */
+  function _onEditStatusChange() {
+    const st = document.getElementById('ed-status')?.value;
+    const pauseGrp = document.getElementById('ed-pause-grp');
+    const leaveGrp = document.getElementById('ed-leave-grp');
+    if (pauseGrp) pauseGrp.style.display = st === '휴원' ? '' : 'none';
+    if (leaveGrp) leaveGrp.style.display = st === '퇴원' ? '' : 'none';
+  }
+
+  /** 수정 폼 HTML */
+  function _editFormHTML(s) {
+    const classNames = (typeof DB !== 'undefined')
+      ? [...new Set(DB.getActiveClasses().map(c => c.name))].filter(Boolean).sort() : [];
+    const grades  = StudentDB.getGrades();
+    const schools = StudentDB.getSchools();
+    const v = x => _e(x ?? '');
+
+    return `
+      <div class="sh-handle"></div>
+      <div class="sh-title">✏️ 학생 정보 수정</div>
+      <div class="sh-sub">${v(s.name)} 학생의 정보를 수정합니다</div>
+
+      <div class="f-grp">
+        <label class="f-lbl">이름 *</label>
+        <input class="f-inp" id="ed-name" value="${v(s.name)}" maxlength="20">
+      </div>
+      <div class="f-grp">
+        <label class="f-lbl">닉네임</label>
+        <input class="f-inp" id="ed-nickname" value="${v(s.nickname)}" maxlength="20">
+      </div>
+      <div class="f-grp" style="display:flex;gap:10px">
+        <div style="flex:1">
+          <label class="f-lbl">반</label>
+          <input class="f-inp" id="ed-classCode" list="ed-cls-list" value="${v(s.classCode)}" maxlength="10">
+          <datalist id="ed-cls-list">${classNames.map(n => `<option value="${v(n)}">`).join('')}</datalist>
+        </div>
+        <div style="flex:1.4">
+          <label class="f-lbl">수업명</label>
+          <input class="f-inp" id="ed-courseName" value="${v(s.courseName)}">
+        </div>
+      </div>
+      <div class="f-grp" style="display:flex;gap:10px">
+        <div style="flex:1">
+          <label class="f-lbl">학년</label>
+          <input class="f-inp" id="ed-grade" list="ed-grade-list" value="${v(s.grade)}">
+          <datalist id="ed-grade-list">${grades.map(g => `<option value="${v(g)}">`).join('')}</datalist>
+        </div>
+        <div style="flex:1">
+          <label class="f-lbl">성별</label>
+          <select class="f-sel" id="ed-gender">
+            <option value="" ${!s.gender ? 'selected' : ''}>—</option>
+            <option value="남" ${s.gender === '남' ? 'selected' : ''}>남</option>
+            <option value="여" ${s.gender === '여' ? 'selected' : ''}>여</option>
+          </select>
+        </div>
+      </div>
+      <div class="f-grp">
+        <label class="f-lbl">학교</label>
+        <input class="f-inp" id="ed-school" list="ed-school-list" value="${v(s.school)}">
+        <datalist id="ed-school-list">${schools.map(sc => `<option value="${v(sc)}">`).join('')}</datalist>
+      </div>
+      <div class="f-grp" style="display:flex;gap:10px">
+        <div style="flex:1">
+          <label class="f-lbl">출결번호</label>
+          <input class="f-inp" id="ed-attendanceNo" value="${v(s.attendanceNo)}">
+        </div>
+        <div style="flex:1.3">
+          <label class="f-lbl">입학일</label>
+          <input class="f-inp" id="ed-enrollDate" placeholder="YYYY-MM-DD" value="${v(s.enrollDate)}">
+        </div>
+      </div>
+      <div class="f-grp">
+        <label class="f-lbl">생일</label>
+        <input class="f-inp" id="ed-birthday" placeholder="YYYY-MM-DD" value="${v(s.birthday)}">
+      </div>
+      <div class="f-grp">
+        <label class="f-lbl">담임강사</label>
+        <input class="f-inp" id="ed-teacher" value="${v(s.teacher)}">
+      </div>
+      <div class="f-grp" style="display:flex;gap:10px">
+        <div style="flex:1">
+          <label class="f-lbl">원생 연락처</label>
+          <input class="f-inp" id="ed-phone" type="tel" value="${v(s.phone)}">
+        </div>
+        <div style="flex:1">
+          <label class="f-lbl">집전화</label>
+          <input class="f-inp" id="ed-homePhone" type="tel" value="${v(s.homePhone)}">
+        </div>
+      </div>
+      <div class="f-grp" style="display:flex;gap:10px">
+        <div style="flex:1">
+          <label class="f-lbl">보호자구분</label>
+          <input class="f-inp" id="ed-parentType" value="${v(s.parentType)}" placeholder="모/부">
+        </div>
+        <div style="flex:2">
+          <label class="f-lbl">보호자 이름</label>
+          <input class="f-inp" id="ed-parentName" value="${v(s.parentName)}">
+        </div>
+      </div>
+      <div class="f-grp">
+        <label class="f-lbl">보호자 연락처</label>
+        <input class="f-inp" id="ed-parentPhone" type="tel" value="${v(s.parentPhone)}">
+      </div>
+
+      <div class="f-grp">
+        <label class="f-lbl">재원상태</label>
+        <select class="f-sel" id="ed-status" onchange="StudentApp._onEditStatusChange()">
+          ${['재원', '휴원', '퇴원'].map(st => `<option value="${st}" ${s.status === st ? 'selected' : ''}>${st}</option>`).join('')}
+        </select>
+      </div>
+      <div class="f-grp" id="ed-pause-grp" style="${s.status === '휴원' ? '' : 'display:none'}">
+        <label class="f-lbl">휴원사유</label>
+        <input class="f-inp" id="ed-pauseReason" value="${v(s.pauseReason)}">
+      </div>
+      <div id="ed-leave-grp" style="${s.status === '퇴원' ? '' : 'display:none'}">
+        <div class="f-grp">
+          <label class="f-lbl">퇴원일</label>
+          <input class="f-inp" id="ed-leaveDate" placeholder="YYYY-MM-DD" value="${v(s.leaveDate)}">
+        </div>
+        <div class="f-grp">
+          <label class="f-lbl">퇴원사유</label>
+          <input class="f-inp" id="ed-leaveReason" value="${v(s.leaveReason)}">
+        </div>
+      </div>
+
+      <div class="f-grp">
+        <label class="f-lbl">메모</label>
+        <textarea class="f-inp" id="ed-memo" rows="3" style="resize:vertical;font-family:var(--font);line-height:1.5">${v(s.memo)}</textarea>
+      </div>
+
+      <div class="sh-acts">
+        <button class="btn-x" onclick="StudentApp._cancelEdit('${s.id}')">취소</button>
+        <button class="btn-ok" onclick="StudentApp.saveEdit('${s.id}')">저장</button>
+      </div>
+    `;
+  }
+
+  /** 수정 폼 저장 */
+  async function saveEdit(id) {
+    const g = key => document.getElementById(key)?.value.trim() ?? '';
+    const name = g('ed-name');
+    if (!name) { _toast('⚠️ 이름을 입력해주세요', 'error'); return; }
+
+    const data = {
+      name,
+      nickname:     g('ed-nickname'),
+      classCode:    g('ed-classCode'),
+      courseName:   g('ed-courseName'),
+      grade:        g('ed-grade'),
+      gender:       g('ed-gender'),
+      school:       g('ed-school'),
+      attendanceNo: g('ed-attendanceNo'),
+      enrollDate:   g('ed-enrollDate'),
+      birthday:     g('ed-birthday'),
+      teacher:      g('ed-teacher'),
+      phone:        g('ed-phone'),
+      homePhone:    g('ed-homePhone'),
+      parentType:   g('ed-parentType'),
+      parentName:   g('ed-parentName'),
+      parentPhone:  g('ed-parentPhone'),
+      status:       g('ed-status') || '재원',
+      pauseReason:  g('ed-pauseReason'),
+      leaveDate:    g('ed-leaveDate'),
+      leaveReason:  g('ed-leaveReason'),
+      memo:         g('ed-memo'),
+    };
+
+    await StudentDB.updateStudent(id, data);
+
+    const updated = StudentDB.getAll().find(x => x.id === id);
+    const sh = document.getElementById('st-detail-sh');
+    if (updated && sh) sh.innerHTML = _detailHTML(updated);
+
+    _renderContent();
+    _toast(`✅ ${name} 정보가 수정되었습니다`, 'success');
   }
 
   /* ──── 빠른 재원 상태 변경 ──── */
@@ -932,6 +1131,7 @@ const StudentApp = (() => {
     openImport, handleFile,
     openDetail, closeDetail,
     quickStatus, confirmDelete,
+    openEditForm, saveEdit, _cancelEdit, _onEditStatusChange,
     _onSearch, _onFilter, _onDetailOvClick,
     openTuitionCalc, closeTuitionCalc, _onTcOvClick, _tcOnChange, _tcApplyMemo,
   };
