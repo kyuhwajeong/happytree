@@ -188,6 +188,34 @@ const StudentApp = (() => {
   padding:24px 32px; text-align:center;
   font-size:14px; font-weight:700; color:var(--tx);
 }
+
+/* ══ 수업료 계산기 ══ */
+.tc-detail-btn{
+  width:100%; margin-top:10px; padding:11px; border-radius:10px;
+  border:1.5px solid var(--a40); background:var(--a10); color:var(--a);
+  font-weight:700; font-size:13px; cursor:pointer; font-family:var(--font);
+}
+.tc-detail-btn:active{ transform:scale(.98); }
+.tc-warn{
+  background:#fff7ed; border:1px solid #fed7aa; color:#c2410c;
+  border-radius:10px; padding:10px 12px; font-size:12px; line-height:1.6; margin-top:6px;
+}
+.dark .tc-warn{ background:#7c2d1233; border-color:#c2410c55; color:#fb923c; }
+.tc-card{
+  background:var(--surf2); border-radius:12px; padding:4px 14px; margin-top:8px;
+}
+.tc-row{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:9px 0; font-size:13px; color:var(--tx2); border-bottom:1px solid var(--bdr);
+  gap:10px;
+}
+.tc-row:last-child{ border-bottom:none; }
+.tc-row b{ color:var(--tx); font-weight:700; text-align:right; }
+.tc-row.tc-dates{ flex-direction:column; align-items:flex-start; gap:4px; }
+.tc-row.tc-dates .tc-dates-val{ font-size:11px; color:var(--tx3); line-height:1.7; text-align:left; }
+.tc-row.tc-total{ padding-top:12px; }
+.tc-row.tc-total b{ font-size:19px; color:var(--a); }
+.tc-row.tc-sub b{ font-size:13px; color:var(--tx3); font-weight:600; }
 `;
     document.head.appendChild(style);
   }
@@ -239,6 +267,7 @@ const StudentApp = (() => {
           </div>
         </div>
         <div class="phr">
+          <button class="ibtn" onclick="StudentApp.openTuitionCalc()" title="수업료 계산기">💰</button>
           <button class="ibtn" onclick="StudentApp.openImport()" title="엑셀 가져오기">📥</button>
           <button id="st-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>
         </div>
@@ -282,6 +311,11 @@ const StudentApp = (() => {
       <!-- 상세 모달 -->
       <div id="st-detail-ov" class="ov hidden" onclick="StudentApp._onDetailOvClick(event)">
         <div class="sh st-detail-sh" id="st-detail-sh" onclick="event.stopPropagation()"></div>
+      </div>
+
+      <!-- 수업료 계산기 모달 -->
+      <div id="st-tc-ov" class="ov hidden" onclick="StudentApp._onTcOvClick(event)">
+        <div class="sh" id="st-tc-sh" onclick="event.stopPropagation()"></div>
       </div>
     `;
   }
@@ -652,11 +686,212 @@ const StudentApp = (() => {
         `).join('')}
       </div>
 
-      <div class="sh-acts" style="margin-top:10px">
+      <button class="tc-detail-btn" onclick="StudentApp.openTuitionCalc('${s.id}')">💰 수업료 계산</button>
+
+      <div class="sh-acts" style="margin-top:10px;flex-wrap:wrap">
         <button class="btn-x" onclick="StudentApp.closeDetail()">닫기</button>
+        <button class="btn-ok" style="flex:1.4" onclick="StudentApp.openEditForm('${s.id}')">✏️ 수정</button>
         <button class="btn-del-ghost" onclick="StudentApp.confirmDelete('${s.id}')">🗑 삭제</button>
       </div>
     `;
+  }
+
+  /* ════════════════════════════════════════════
+   * ✏️ 학생 정보 수정
+   * 상세 모달(st-detail-sh) 안에서 보기 ↔ 수정 폼을 토글한다
+   * ════════════════════════════════════════════ */
+
+  /** 수정 폼 열기 */
+  function openEditForm(id) {
+    const s = StudentDB.getAll().find(x => x.id === id);
+    if (!s) return;
+    const sh = document.getElementById('st-detail-sh');
+    if (!sh) return;
+    sh.innerHTML = _editFormHTML(s);
+  }
+
+  /** 수정 취소 → 상세 보기로 복귀 (저장하지 않음) */
+  function _cancelEdit(id) {
+    const s = StudentDB.getAll().find(x => x.id === id);
+    const sh = document.getElementById('st-detail-sh');
+    if (s && sh) sh.innerHTML = _detailHTML(s);
+  }
+
+  /** 재원상태 선택 변경 → 휴원사유/퇴원일·사유 입력란 표시 토글 */
+  function _onEditStatusChange() {
+    const st = document.getElementById('ed-status')?.value;
+    const pauseGrp = document.getElementById('ed-pause-grp');
+    const leaveGrp = document.getElementById('ed-leave-grp');
+    if (pauseGrp) pauseGrp.style.display = st === '휴원' ? '' : 'none';
+    if (leaveGrp) leaveGrp.style.display = st === '퇴원' ? '' : 'none';
+  }
+
+  /** 수정 폼 HTML */
+  function _editFormHTML(s) {
+    const classNames = (typeof DB !== 'undefined')
+      ? [...new Set(DB.getActiveClasses().map(c => c.name))].filter(Boolean).sort() : [];
+    const grades  = StudentDB.getGrades();
+    const schools = StudentDB.getSchools();
+    const v = x => _e(x ?? '');
+
+    return `
+      <div class="sh-handle"></div>
+      <div class="sh-title">✏️ 학생 정보 수정</div>
+      <div class="sh-sub">${v(s.name)} 학생의 정보를 수정합니다</div>
+
+      <div class="f-grp">
+        <label class="f-lbl">이름 *</label>
+        <input class="f-inp" id="ed-name" value="${v(s.name)}" maxlength="20">
+      </div>
+      <div class="f-grp">
+        <label class="f-lbl">닉네임</label>
+        <input class="f-inp" id="ed-nickname" value="${v(s.nickname)}" maxlength="20">
+      </div>
+      <div class="f-grp" style="display:flex;gap:10px">
+        <div style="flex:1">
+          <label class="f-lbl">반</label>
+          <input class="f-inp" id="ed-classCode" list="ed-cls-list" value="${v(s.classCode)}" maxlength="10">
+          <datalist id="ed-cls-list">${classNames.map(n => `<option value="${v(n)}">`).join('')}</datalist>
+        </div>
+        <div style="flex:1.4">
+          <label class="f-lbl">수업명</label>
+          <input class="f-inp" id="ed-courseName" value="${v(s.courseName)}">
+        </div>
+      </div>
+      <div class="f-grp" style="display:flex;gap:10px">
+        <div style="flex:1">
+          <label class="f-lbl">학년</label>
+          <input class="f-inp" id="ed-grade" list="ed-grade-list" value="${v(s.grade)}">
+          <datalist id="ed-grade-list">${grades.map(g => `<option value="${v(g)}">`).join('')}</datalist>
+        </div>
+        <div style="flex:1">
+          <label class="f-lbl">성별</label>
+          <select class="f-sel" id="ed-gender">
+            <option value="" ${!s.gender ? 'selected' : ''}>—</option>
+            <option value="남" ${s.gender === '남' ? 'selected' : ''}>남</option>
+            <option value="여" ${s.gender === '여' ? 'selected' : ''}>여</option>
+          </select>
+        </div>
+      </div>
+      <div class="f-grp">
+        <label class="f-lbl">학교</label>
+        <input class="f-inp" id="ed-school" list="ed-school-list" value="${v(s.school)}">
+        <datalist id="ed-school-list">${schools.map(sc => `<option value="${v(sc)}">`).join('')}</datalist>
+      </div>
+      <div class="f-grp" style="display:flex;gap:10px">
+        <div style="flex:1">
+          <label class="f-lbl">출결번호</label>
+          <input class="f-inp" id="ed-attendanceNo" value="${v(s.attendanceNo)}">
+        </div>
+        <div style="flex:1.3">
+          <label class="f-lbl">입학일</label>
+          <input class="f-inp" id="ed-enrollDate" placeholder="YYYY-MM-DD" value="${v(s.enrollDate)}">
+        </div>
+      </div>
+      <div class="f-grp">
+        <label class="f-lbl">생일</label>
+        <input class="f-inp" id="ed-birthday" placeholder="YYYY-MM-DD" value="${v(s.birthday)}">
+      </div>
+      <div class="f-grp">
+        <label class="f-lbl">담임강사</label>
+        <input class="f-inp" id="ed-teacher" value="${v(s.teacher)}">
+      </div>
+      <div class="f-grp" style="display:flex;gap:10px">
+        <div style="flex:1">
+          <label class="f-lbl">원생 연락처</label>
+          <input class="f-inp" id="ed-phone" type="tel" value="${v(s.phone)}">
+        </div>
+        <div style="flex:1">
+          <label class="f-lbl">집전화</label>
+          <input class="f-inp" id="ed-homePhone" type="tel" value="${v(s.homePhone)}">
+        </div>
+      </div>
+      <div class="f-grp" style="display:flex;gap:10px">
+        <div style="flex:1">
+          <label class="f-lbl">보호자구분</label>
+          <input class="f-inp" id="ed-parentType" value="${v(s.parentType)}" placeholder="모/부">
+        </div>
+        <div style="flex:2">
+          <label class="f-lbl">보호자 이름</label>
+          <input class="f-inp" id="ed-parentName" value="${v(s.parentName)}">
+        </div>
+      </div>
+      <div class="f-grp">
+        <label class="f-lbl">보호자 연락처</label>
+        <input class="f-inp" id="ed-parentPhone" type="tel" value="${v(s.parentPhone)}">
+      </div>
+
+      <div class="f-grp">
+        <label class="f-lbl">재원상태</label>
+        <select class="f-sel" id="ed-status" onchange="StudentApp._onEditStatusChange()">
+          ${['재원', '휴원', '퇴원'].map(st => `<option value="${st}" ${s.status === st ? 'selected' : ''}>${st}</option>`).join('')}
+        </select>
+      </div>
+      <div class="f-grp" id="ed-pause-grp" style="${s.status === '휴원' ? '' : 'display:none'}">
+        <label class="f-lbl">휴원사유</label>
+        <input class="f-inp" id="ed-pauseReason" value="${v(s.pauseReason)}">
+      </div>
+      <div id="ed-leave-grp" style="${s.status === '퇴원' ? '' : 'display:none'}">
+        <div class="f-grp">
+          <label class="f-lbl">퇴원일</label>
+          <input class="f-inp" id="ed-leaveDate" placeholder="YYYY-MM-DD" value="${v(s.leaveDate)}">
+        </div>
+        <div class="f-grp">
+          <label class="f-lbl">퇴원사유</label>
+          <input class="f-inp" id="ed-leaveReason" value="${v(s.leaveReason)}">
+        </div>
+      </div>
+
+      <div class="f-grp">
+        <label class="f-lbl">메모</label>
+        <textarea class="f-inp" id="ed-memo" rows="3" style="resize:vertical;font-family:var(--font);line-height:1.5">${v(s.memo)}</textarea>
+      </div>
+
+      <div class="sh-acts">
+        <button class="btn-x" onclick="StudentApp._cancelEdit('${s.id}')">취소</button>
+        <button class="btn-ok" onclick="StudentApp.saveEdit('${s.id}')">저장</button>
+      </div>
+    `;
+  }
+
+  /** 수정 폼 저장 */
+  async function saveEdit(id) {
+    const g = key => document.getElementById(key)?.value.trim() ?? '';
+    const name = g('ed-name');
+    if (!name) { _toast('⚠️ 이름을 입력해주세요', 'error'); return; }
+
+    const data = {
+      name,
+      nickname:     g('ed-nickname'),
+      classCode:    g('ed-classCode'),
+      courseName:   g('ed-courseName'),
+      grade:        g('ed-grade'),
+      gender:       g('ed-gender'),
+      school:       g('ed-school'),
+      attendanceNo: g('ed-attendanceNo'),
+      enrollDate:   g('ed-enrollDate'),
+      birthday:     g('ed-birthday'),
+      teacher:      g('ed-teacher'),
+      phone:        g('ed-phone'),
+      homePhone:    g('ed-homePhone'),
+      parentType:   g('ed-parentType'),
+      parentName:   g('ed-parentName'),
+      parentPhone:  g('ed-parentPhone'),
+      status:       g('ed-status') || '재원',
+      pauseReason:  g('ed-pauseReason'),
+      leaveDate:    g('ed-leaveDate'),
+      leaveReason:  g('ed-leaveReason'),
+      memo:         g('ed-memo'),
+    };
+
+    await StudentDB.updateStudent(id, data);
+
+    const updated = StudentDB.getAll().find(x => x.id === id);
+    const sh = document.getElementById('st-detail-sh');
+    if (updated && sh) sh.innerHTML = _detailHTML(updated);
+
+    _renderContent();
+    _toast(`✅ ${name} 정보가 수정되었습니다`, 'success');
   }
 
   /* ──── 빠른 재원 상태 변경 ──── */
@@ -687,6 +922,188 @@ const StudentApp = (() => {
   }
 
   /* ════════════════════════════════════════════
+   * 💰 수업료 계산기
+   *
+   * 반의 수업 요일(DB.classes[].days) × 월 수업료(DB.classes[].tuition)를
+   * 기준으로, 입학일부터 그 달 말일까지 남은 실제 수업일수를 계산해
+   * 입학 첫 달 수업료를 산정한다.
+   * ════════════════════════════════════════════ */
+  const _TC_DOW = { 일:0, 월:1, 화:2, 수:3, 목:4, 금:5, 토:6 };
+
+  /** 해당 연/월에 반 수업요일과 일치하는 날짜(일) 목록 */
+  function _tcMeetDays(days, year, month) {
+    const wanted = (days || []).map(d => _TC_DOW[d]).filter(n => n !== undefined);
+    if (!wanted.length) return [];
+    const lastDay = new Date(year, month, 0).getDate();
+    const res = [];
+    for (let day = 1; day <= lastDay; day++) {
+      if (wanted.includes(new Date(year, month - 1, day).getDay())) res.push(day);
+    }
+    return res;
+  }
+
+  /** classCode(반 이름)로 해당 월에 운용 중이던 반(DB.classes) 정보 조회 */
+  function _tcFindClass(className, enrollDateStr) {
+    if (typeof DB === 'undefined' || !className) return null;
+    const mk = (enrollDateStr && /^\d{4}-\d{2}/.test(enrollDateStr))
+      ? enrollDateStr.slice(0, 7) : DB.monthKey(new Date());
+    const inMonth = DB.getClassesForMonth(mk).find(c => (c.name || '').trim() === className.trim());
+    if (inMonth) return inMonth;
+    return DB.getActiveClasses().find(c => (c.name || '').trim() === className.trim()) || null;
+  }
+
+  /** 반/입학일 기준 프로레이트 수업료 계산 */
+  function _tcCalc(cls, enrollDateStr) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(enrollDateStr || '');
+    if (!cls || !m) return null;
+    const year = +m[1], month = +m[2], day = +m[3];
+    const allDays    = _tcMeetDays(cls.days, year, month);
+    const totalCount = allDays.length;
+    const remainDays = allDays.filter(d => d >= day);
+    const remainCount = remainDays.length;
+    const tuition = Number(cls.tuition) || 0;
+    const perDay  = totalCount ? tuition / totalCount : 0;
+    const amountExact   = Math.round(perDay * remainCount);
+    const amountRounded = Math.round(amountExact / 100) * 100;
+    return { year, month, day, allDays, remainDays, totalCount, remainCount, tuition, perDay, amountExact, amountRounded };
+  }
+
+  /** 반 선택 옵션 (현재 운용 중인 반 이름 목록) */
+  function _tcClassOptions() {
+    if (typeof DB === 'undefined') return [];
+    return [...new Set(DB.getActiveClasses().map(c => c.name))].filter(Boolean).sort();
+  }
+
+  /** 계산기 모달 내부 HTML */
+  function _tcModalHTML(prefill) {
+    const names = _tcClassOptions();
+    const today = new Date().toISOString().slice(0, 10);
+    const selClass   = prefill.classCode || '';
+    const enrollDate = prefill.enrollDate || today;
+    return `
+      <div class="sh-handle"></div>
+      <div class="sh-title">💰 수업료 계산기</div>
+      <div class="sh-sub">${prefill.studentName ? _e(prefill.studentName) + ' 학생 · ' : ''}반의 수업 요일을 기준으로 입학일 이후 남은 수업료를 계산합니다.</div>
+      <div class="f-grp">
+        <label class="f-lbl">반 선택</label>
+        <select class="f-sel" id="tc-cls" onchange="StudentApp._tcOnChange()">
+          <option value="">반을 선택하세요</option>
+          ${names.map(n => `<option value="${_e(n)}" ${n === selClass ? 'selected' : ''}>${_e(n)}</option>`).join('')}
+        </select>
+        ${!names.length ? '<div class="tc-warn">⚠️ 운용 중인 반이 없습니다. 관리 &gt; 반 관리에서 반을 먼저 등록해주세요.</div>' : ''}
+      </div>
+      <div class="f-grp">
+        <label class="f-lbl">입학일</label>
+        <input class="f-inp" id="tc-date" type="date" value="${_e(enrollDate)}" onchange="StudentApp._tcOnChange()">
+      </div>
+      <div id="tc-result"></div>
+      <div class="sh-acts">
+        <button class="btn-x" onclick="StudentApp.closeTuitionCalc()">닫기</button>
+        ${prefill.studentId ? `<button class="btn-ok" id="tc-apply-btn" style="display:none" onclick="StudentApp._tcApplyMemo('${prefill.studentId}')">📝 메모에 저장</button>` : ''}
+      </div>
+    `;
+  }
+
+  /** 계산 결과 렌더 */
+  function _tcRenderResult(cls, calc) {
+    const el = document.getElementById('tc-result');
+    if (!el) return;
+    const applyBtn = document.getElementById('tc-apply-btn');
+    if (!cls) {
+      el.innerHTML = '';
+      if (applyBtn) applyBtn.style.display = 'none';
+      return;
+    }
+    if (!cls.tuition) {
+      el.innerHTML = `<div class="tc-warn">⚠️ "${_e(cls.name)}" 반에 수업료가 설정되어 있지 않습니다.<br>관리 &gt; 반 관리에서 월 수업료를 먼저 입력해주세요.</div>`;
+      if (applyBtn) applyBtn.style.display = 'none';
+      return;
+    }
+    if (!calc) { el.innerHTML = ''; if (applyBtn) applyBtn.style.display = 'none'; return; }
+    if (!calc.totalCount) {
+      el.innerHTML = `<div class="tc-warn">⚠️ ${calc.year}년 ${calc.month}월에는 "${_e(cls.name)}" 반의 수업 요일(${(cls.days||[]).join(', ')})에 해당하는 날짜가 없습니다.</div>`;
+      if (applyBtn) applyBtn.style.display = 'none';
+      return;
+    }
+    const dateList = calc.remainDays.map(d => `${calc.month}/${d}`).join(', ') || '없음';
+    el.innerHTML = `
+      <div class="tc-card">
+        <div class="tc-row"><span>수업 요일</span><b>${_e((cls.days || []).join(', '))}</b></div>
+        <div class="tc-row"><span>월 수업료</span><b>${calc.tuition.toLocaleString()}원</b></div>
+        <div class="tc-row"><span>${calc.year}년 ${calc.month}월 전체 수업일</span><b>${calc.totalCount}일</b></div>
+        <div class="tc-row"><span>입학일 이후 남은 수업일</span><b style="color:var(--a)">${calc.remainCount}일</b></div>
+        <div class="tc-row tc-dates"><span>남은 수업일자</span><span class="tc-dates-val">${_e(dateList)}</span></div>
+        <div class="tc-row"><span>1회당 수업료</span><b>${Math.round(calc.perDay).toLocaleString()}원</b></div>
+        <div class="tc-row tc-total"><span>계산된 수업료</span><b>${calc.amountExact.toLocaleString()}원</b></div>
+        <div class="tc-row tc-sub"><span>100원 단위 청구 권장액</span><b>${calc.amountRounded.toLocaleString()}원</b></div>
+      </div>
+    `;
+    if (applyBtn) applyBtn.style.display = '';
+  }
+
+  /** 반/입학일 입력 변경 시 재계산 */
+  function _tcOnChange() {
+    const clsName     = document.getElementById('tc-cls')?.value || '';
+    const enrollDate  = document.getElementById('tc-date')?.value || '';
+    if (!clsName || !enrollDate) { _tcRenderResult(null, null); return; }
+    const cls  = _tcFindClass(clsName, enrollDate);
+    const calc = cls ? _tcCalc(cls, enrollDate) : null;
+    _tcRenderResult(cls, calc);
+  }
+
+  /** 계산기 열기 (studentId 전달 시 해당 학생 정보로 미리 채움) */
+  function openTuitionCalc(studentId = null) {
+    const s = studentId ? StudentDB.getAll().find(x => x.id === studentId) : null;
+    const prefill = {
+      studentId:   s?.id   || null,
+      studentName: s?.name || '',
+      classCode:   s?.classCode || '',
+      enrollDate:  (s?.enrollDate && /^\d{4}-\d{2}-\d{2}$/.test(s.enrollDate))
+        ? s.enrollDate : new Date().toISOString().slice(0, 10),
+    };
+    const ov = document.getElementById('st-tc-ov');
+    const sh = document.getElementById('st-tc-sh');
+    if (!ov || !sh) return;
+    sh.innerHTML = _tcModalHTML(prefill);
+    ov.classList.remove('hidden');
+    history.pushState({ pg: 'students', modal: 'tuitioncalc' }, '');
+    _tcOnChange();
+  }
+
+  function closeTuitionCalc() {
+    document.getElementById('st-tc-ov')?.classList.add('hidden');
+  }
+
+  function _onTcOvClick(e) {
+    if (e.target.id === 'st-tc-ov') closeTuitionCalc();
+  }
+
+  /** 계산 결과를 학생 메모에 추가 저장 (기존 메모는 보존) */
+  async function _tcApplyMemo(studentId) {
+    const s = StudentDB.getAll().find(x => x.id === studentId);
+    if (!s) return;
+    const clsName    = document.getElementById('tc-cls')?.value || '';
+    const enrollDate = document.getElementById('tc-date')?.value || '';
+    const cls  = clsName ? _tcFindClass(clsName, enrollDate) : null;
+    const calc = cls ? _tcCalc(cls, enrollDate) : null;
+    if (!cls || !calc || !cls.tuition || !calc.totalCount) {
+      _toast('⚠️ 저장할 계산 결과가 없습니다'); return;
+    }
+    const note = `[수업료] ${calc.year}-${String(calc.month).padStart(2,'0')} 입학(${enrollDate}) · ${cls.name}반 · 남은 ${calc.remainCount}/${calc.totalCount}일 · ${calc.amountExact.toLocaleString()}원`;
+    const memo = s.memo ? `${s.memo}\n${note}` : note;
+    await StudentDB.updateStudent(studentId, { memo });
+    _toast('✅ 학생 메모에 저장되었습니다', 'success');
+    closeTuitionCalc();
+    // 상세 모달이 열려 있다면 내용 갱신
+    const detailOv = document.getElementById('st-detail-ov');
+    if (detailOv && !detailOv.classList.contains('hidden')) {
+      const updated = StudentDB.getAll().find(x => x.id === studentId);
+      const sh = document.getElementById('st-detail-sh');
+      if (updated && sh) sh.innerHTML = _detailHTML(updated);
+    }
+  }
+
+  /* ════════════════════════════════════════════
    * 유틸
    * ════════════════════════════════════════════ */
 
@@ -714,6 +1131,8 @@ const StudentApp = (() => {
     openImport, handleFile,
     openDetail, closeDetail,
     quickStatus, confirmDelete,
+    openEditForm, saveEdit, _cancelEdit, _onEditStatusChange,
     _onSearch, _onFilter, _onDetailOvClick,
+    openTuitionCalc, closeTuitionCalc, _onTcOvClick, _tcOnChange, _tcApplyMemo,
   };
 })();
