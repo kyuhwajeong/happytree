@@ -276,7 +276,8 @@ const StaffApp = (() => {
 .sf-drow{display:flex;gap:8px;padding:8px 10px;border-radius:10px;font-size:12px;transition:all .12s;cursor:pointer;border:1px solid transparent}
 .sf-drow:active{transform:scale(.98)}
 .sf-drow-chev{font-size:10px;color:var(--tx3);margin-left:4px}
-.sf-dentry{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:7px;font-size:11px;font-weight:600;background:var(--surf2);border:1px solid var(--bdr)}
+.sf-dentry{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:7px;font-size:11px;font-weight:600;background:var(--surf2);border:1px solid var(--bdr);transition:transform .1s}
+.sf-dentry:active{transform:scale(.93)}
 .sf-dentry.class{color:var(--a);border-color:var(--a40);background:var(--a10)}
 .sf-dentry.general{color:var(--green);border-color:rgba(5,150,105,.3);background:rgba(5,150,105,.07)}
 .sf-ei.editing{background:var(--a10);outline:2px solid var(--a40);border-radius:8px}
@@ -1515,12 +1516,18 @@ const StaffApp = (() => {
       _toast('💾 급여 저장 완료', 'success');
     } catch(e) { console.warn('savePayResult', e); }
   }
-  function _openWorkFromPay(date) {
+  /**
+   * 급여 탭 일별 상세에서 진입
+   * @param {string} date
+   * @param {string} [entryId] - 지정 시 해당 항목을 즉시 "근무 수정" 모드로 오픈
+   */
+  function _openWorkFromPay(date, entryId) {
     const r = _st.payResult; if (!r) return;
     _st.calStaffId = r.staff.id;
     _st.calYear    = r.year;
     _st.calMonth   = r.month;
     openWork(date);
+    if (entryId) _editEntry(entryId);
   }
 
   function _saveAcad() { const name = document.getElementById('sf-acad-inp')?.value?.trim(); if (!name) return; StaffDB.setAcad({ name }); _toast(`🏫 "${name}" 저장`, 'success'); }
@@ -1551,19 +1558,21 @@ const StaffApp = (() => {
         return sum + h * rate;
       }, 0));
 
-      // 항목별 시간대 칩 (출근~퇴근 시각 + 근무시간)
+      // 항목별 시간대 칩 (출근~퇴근 시각 + 근무시간 + 수업/일반 라벨)
+      // 칩을 직접 탭하면 해당 항목이 즉시 "근무 수정" 모드로 진입
       const entryChips = entries.map(e => {
-        const hrs  = Number(e.baseHours || e.hours || 0);
-        const icon = e.type === 'class' ? '📚' : '🏢';
-        const time = (e.start && e.end) ? `${e.start}~${e.end}` : '';
-        return `<span class="sf-dentry ${e.type}">${icon} ${time}${time?' · ':''}${_fmtHrs(hrs)}h</span>`;
+        const hrs   = Number(e.baseHours || e.hours || 0);
+        const icon  = e.type === 'class' ? '📚' : '🏢';
+        const label = e.type === 'class' ? '수업' : '일반';
+        const time  = (e.start && e.end) ? `${e.start}~${e.end}` : '';
+        return `<span class="sf-dentry ${e.type}" onclick="event.stopPropagation();StaffApp._openWorkFromPay('${date}','${e.id}')">${icon} ${label} ${time}${time?' · ':''}${_fmtHrs(hrs)}h</span>`;
       }).join('');
 
       return `<div class="sf-drow" onclick="StaffApp._openWorkFromPay('${date}')">
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center">
             <span class="sf-ddt">${date.slice(5)} (${dow})</span>
-            <span class="sf-drow-chev">탭하여 수정 ▸</span>
+            <span class="sf-drow-chev">${entries.length>1?'＋추가/항목탭 수정 ▸':'탭하여 수정 ▸'}</span>
           </div>
           <div class="sf-dtgs" style="margin-top:4px">${entryChips}</div>
         </div>
