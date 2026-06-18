@@ -1474,28 +1474,28 @@ const StaffApp = (() => {
       </div>
       <div class="sf-pay-bar">
         <div class="sf-pay-item"><span class="sf-pay-lbl">👤 직원</span>
-          <select id="sf-ps" onchange="StaffApp._onSel()">
+          <select id="sf-ps" onchange="StaffApp._onSelChange()">
             <option value="">— 직원 선택 —</option>
             ${staff.map(s => `<option value="${s.id}" ${_st.payStaffId===s.id?'selected':''}>${_e(s.name)} (${s.employType==='parttime'?'알바':'정직원'})</option>`).join('')}
           </select>
         </div>
         <div class="sf-pay-item"><span class="sf-pay-lbl">📅 연도</span>
-          <select id="sf-py" onchange="StaffApp._onSel()">
+          <select id="sf-py" onchange="StaffApp._onSelChange()">
             ${[now.getFullYear()-1,now.getFullYear(),now.getFullYear()+1].map(yr=>`<option value="${yr}" ${y===yr?'selected':''}>${yr}년</option>`).join('')}
           </select>
         </div>
         <div class="sf-pay-item"><span class="sf-pay-lbl">📅 월</span>
-          <select id="sf-pm" onchange="StaffApp._onSel()">
+          <select id="sf-pm" onchange="StaffApp._onSelChange()">
             ${Array.from({length:12},(_,i)=>i+1).map(mo=>`<option value="${mo}" ${m===mo?'selected':''}>${mo}월</option>`).join('')}
           </select>
         </div>
-        <button class="sf-calc-btn" onclick="StaffApp._calcAndRender()">계산</button>
+        <button class="sf-calc-btn" style="flex:none;width:42px;padding:9px 0" onclick="StaffApp._calcAndRender()" title="다시 계산">🔄</button>
         <button class="sf-calc-btn" style="background:var(--surf2);color:var(--tx2);border:1px solid var(--bdr2);box-shadow:none"
           onclick="StaffApp._openPayHistory()">📂 이력</button>
       </div>
       <div id="sf-pb" class="sf-scroll">
         ${_st.payResult ? _payHTML(_st.payResult)
-          : `<div class="sf-empty" style="padding:48px 20px"><div style="font-size:44px;margin-bottom:8px">💰</div>직원과 연월을 선택하고 계산 버튼을 누르세요<br><small style="font-size:12px">급여 기간: 1일~말일</small></div>`}
+          : `<div class="sf-empty" style="padding:48px 20px"><div style="font-size:44px;margin-bottom:8px">💰</div>직원을 선택하면 자동으로 계산됩니다<br><small style="font-size:12px">급여 기간: 1일~말일</small></div>`}
       </div>`;
   }
 
@@ -1504,6 +1504,19 @@ const StaffApp = (() => {
     _st.payYear    = Number(document.getElementById('sf-py')?.value) || new Date().getFullYear();
     _st.payMonth   = Number(document.getElementById('sf-pm')?.value) || new Date().getMonth() + 1;
   }
+
+  /* 직원/연도/월 변경 시 자동 계산 (계산 버튼 불필요) */
+  function _onSelChange() {
+    _onSel();
+    if (_st.payStaffId) {
+      _calcAndRender();
+    } else {
+      _st.payResult = null;
+      const pb = document.getElementById('sf-pb');
+      if (pb) pb.innerHTML = `<div class="sf-empty" style="padding:48px 20px"><div style="font-size:44px;margin-bottom:8px">💰</div>직원을 선택하면 자동으로 계산됩니다<br><small style="font-size:12px">급여 기간: 1일~말일</small></div>`;
+    }
+  }
+
   async function _calcAndRender() {
     _onSel();
     if (!_st.payStaffId) { _toast('⚠️ 직원을 선택해주세요'); return; }
@@ -3191,7 +3204,7 @@ const StaffApp = (() => {
     openWork, closeWork, _wtype, _chrs, _manualHrs, _addEntry, _delEntry,
     _editEntry, _cancelEditEntry, _openWorkFromPay,
     openTemplAdd, closeTemplAdd, _taWtype, _taHrs, _addTemplEntry, _templDel,
-    _onSel, _calcAndRender, _saveAcad,
+    _onSel, _onSelChange, _calcAndRender, _saveAcad,
     _onAllSel, _calcAll, _renderMonthly, _renderAnnual, _annualBarChart, _downloadExcel,
     _copy, _pdf, _share,
     _prevPrint, _prevSharePDF, _captureAndShare, _closePrevOv,
