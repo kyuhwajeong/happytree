@@ -756,7 +756,8 @@ const App = (() => {
       <button class="mg-cal-btn" onclick="App.openMgCal()" title="달력으로 이동">📆</button>
       <button onclick="App.mgPrev()" title="이전 달">‹</button>
       <span class="mg-month-lbl">${mkY}년 ${mkM}월</span>
-      <button onclick="App.mgNext()" title="다음 달">›</button>`;
+      <button onclick="App.mgNext()" title="다음 달">›</button>
+      ${isAdmin?`<button class="mg-cal-btn" onclick="App.exportTuitionExcel()" title="이 달 수업료 수납 엑셀 추출">📤</button>`:''}`;
     top.appendChild(bar);
     wrap.appendChild(top);
     // 스크롤 영역
@@ -1405,6 +1406,45 @@ const App = (() => {
   function _renderMgIO(){const wrap=document.getElementById('mg-io');if(!wrap)return;wrap.innerHTML='';const isAdmin=DB.isAdmin();const card=document.createElement('div');card.className='io-card';const exRow=document.createElement('div');exRow.className='io-row';exRow.innerHTML='<div><div class="io-title">📤 엑셀 내보내기</div><div class="io-desc">반·교재·진도·메모 전체 백업</div></div>';const exBtn=document.createElement('button');exBtn.className='io-btn ex';exBtn.textContent='내보내기';exBtn.disabled=!isAdmin;exBtn.onclick=_exportExcel;exRow.appendChild(exBtn);card.appendChild(exRow);const imRow=document.createElement('div');imRow.className='io-row';imRow.innerHTML='<div><div class="io-title">📥 엑셀 불러오기</div><div class="io-desc">DB 초기화 후에도 복구 가능</div></div>';const imBtn=document.createElement('button');imBtn.className='io-btn im';imBtn.textContent='파일 선택';imBtn.disabled=!isAdmin;imBtn.onclick=()=>_q('xl-in').click();imRow.appendChild(imBtn);card.appendChild(imRow);wrap.appendChild(card);const drop=document.createElement('div');drop.className='drop-zone';drop.innerHTML='📂 엑셀 파일을 여기에 드래그하거나 탭하세요';drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('drag-over');});drop.addEventListener('dragleave',()=>drop.classList.remove('drag-over'));drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('drag-over');const f=e.dataTransfer.files[0];if(f)_processImport(f);});drop.addEventListener('click',()=>_q('xl-in').click());wrap.appendChild(drop);if(!isAdmin){const n=document.createElement('div');n.className='empty';n.textContent='⚠️ 관리자 로그인 후 사용 가능합니다';wrap.appendChild(n);}}
   function _exportExcel(){const data=DB.exportAll();const wb=XLSX.utils.book_new();const clsRows=[];data.classes.forEach(cls=>{const mk=DB.monthKey(new Date());const bks=cls.monthBooks?.[mk]||{main:[],sub:[],pool:[]};clsRows.push({반:cls.name,상태:cls.termEnd?'종료':'운용중',편성시작:cls.termStart||'',편성종료:cls.termEnd||'',요일:(cls.days||[]).join(','),교재목록:(bks.pool||[]).map(b=>b.name).join('/'),주교재:(bks.main||[]).map(b=>b.name).join('/'),부교재:(bks.sub||[]).map(b=>b.name).join('/')});});XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(clsRows),'반목록');const pRows=[];Object.entries(data.progress||{}).forEach(([k,v])=>{if(v===null||v===undefined||v==='')return;const p=k.split('__');const cls=data.classes.find(c=>c.id===p[0]);const cn=cls?.name||p[0];const isMemo=p[3]==='MEMO';const row={반:cn,주차:p[1]||'',요일:p[2]||''};if(isMemo){row.구분='메모';row.교재='';row.값=v;}else{row.구분=p[4]==='savedAt'?'입력시간':'진도';row.교재=p[3]||'';row.값=v;}pRows.push(row);});if(!pRows.length)pRows.push({반:'데이터없음',주차:'',요일:'',구분:'',교재:'',값:''});XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(pRows),'진도메모데이터');XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet([{data:JSON.stringify({version:'10d',classes:data.classes,progress:data.progress,theme:data.theme})}]),'_restore');const n=new Date();XLSX.writeFile(wb,`진도관리백업_${n.getFullYear()}${String(n.getMonth()+1).padStart(2,'0')}${String(n.getDate()).padStart(2,'0')}.xlsx`);_toast('📤 백업 완료','success');}
   function handleImport(input){const f=input.files[0];if(!f)return;input.value='';_processImport(f);}
+
+  /** 📤 반 관리에서 보고 있는 월(S.mgMk) 기준 수업료 수납 등록 엑셀 추출
+   *  반에 등록된 수업료(tuition)를 "[N월] 반이름 교재" 수납명으로 변환
+   *  업로드 양식 컬럼: 수납명/수납구분/판매금액/매입단가/학년/제조사/거래처/메모/재고수량/과세면세/수납생성여부
+   */
+  function exportTuitionExcel(){
+    if(typeof XLSX==='undefined'){_toast('❌ XLSX 라이브러리가 로드되지 않았습니다','error');return;}
+    const mk=S.mgMk;
+    const [y,mo]=mk.split('-').map(Number);
+    const classes=DB.getClassesForMonth(mk).slice().sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+    if(!classes.length){_toast(`⚠️ ${y}년 ${mo}월에 편성된 반이 없습니다`,'error');return;}
+    const withTuition=classes.filter(c=>Number(c.tuition)>0);
+    const missing=classes.filter(c=>!(Number(c.tuition)>0)).map(c=>c.name);
+    if(!withTuition.length){_toast(`⚠️ ${y}년 ${mo}월 반 중 수업료가 등록된 반이 없습니다.\n관리>반 관리에서 월 수업료를 먼저 입력해주세요.`,'error',4500);return;}
+
+    const header=['수납명\n(필수)',
+      "수납구분\n'교재,유니폼,차량비,원복,식비,학용품,교구,신발,기타' 중 택일\n(필수)",
+      "판매금액\n'숫자만입력(콤마허용)'\n(필수)",
+      '매입단가\n\'숫자만입력\'','학년','제조사','거래처','메모',
+      "재고수량\n'숫자만입력'",'과세/면세','수납생성여부\n(Y/N)'];
+    const rows=withTuition.map(c=>[
+      `[${mo}월] ${c.name} 교재`, '교재', String(Math.round(Number(c.tuition))),
+      '', '', '', '', '', '', '면세', 'Y',
+    ]);
+    const ws=XLSX.utils.aoa_to_sheet([header,...rows]);
+    ws['!cols']=[{wch:24},{wch:57},{wch:23},{wch:17},{wch:17},{wch:17},{wch:19},{wch:21},{wch:15},{wch:10},{wch:15}];
+    ws['!rows']=[{hpt:49.5}];
+    // 텍스트 서식 유지 컬럼(수납명/수납구분/판매금액/과세면세/수납생성여부): 숫자로 오인식 방지
+    for(let r=1;r<=rows.length+1;r++){
+      ['A','B','C','J','K'].forEach(col=>{const addr=`${col}${r}`;if(ws[addr])ws[addr].z='@';});
+    }
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'Sheet1');
+    XLSX.writeFile(wb,`수납등록_${y}년${String(mo).padStart(2,'0')}월.xlsx`);
+
+    if(missing.length) _toast(`📤 ${withTuition.length}개 반 추출 완료 · ⚠️ 수업료 미등록 반: ${missing.join(', ')}`,'success',5000);
+    else _toast(`📤 ${y}년 ${mo}월 수납 등록 엑셀 추출 완료 (${withTuition.length}개 반)`,'success');
+  }
+
   async function _processImport(file){const reader=new FileReader();reader.onload=async(e)=>{try{const wb=XLSX.read(e.target.result,{type:'array'});const raw=wb.Sheets['_restore'];if(!raw){_toast('⚠️ 올바른 백업 파일이 아닙니다','error');return;}const rows=XLSX.utils.sheet_to_json(raw);if(!rows[0]?.data){_toast('⚠️ 데이터 없음','error');return;}const data=JSON.parse(rows[0].data);const result=await DB.importAll(data);_renderMgCls();_renderChips();_renderDays();_toast('📥 복원 완료!','success');}catch(err){_toast('⚠️ 파일 오류: '+err.message,'error');}};reader.readAsArrayBuffer(file);}
 
   function _renderMgShare(){
@@ -1548,7 +1588,7 @@ const App = (() => {
     openMgCal,closeMgCal,mgCalPrev,mgCalNext,
     openClassModal,saveClass,delClass,_onDayCkChange,
     openCopyModal,doCopyBooks,
-    mgPrev,mgNext,
+    mgPrev,mgNext,exportTuitionExcel,
     openAccModal,saveAccount,delAcc,delAccBulk,_cancelAccBulk,
     handleImport,shareUrl,sendSms,shareCurrentClass,
     closeModal,
