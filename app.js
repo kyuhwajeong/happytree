@@ -221,7 +221,7 @@ const App = (() => {
     const state=e.state;
     if(!state){history.pushState({pg:S.page},'');return;}
     const modals=['login-gate','modal-cls','modal-acc','modal-copy','cal-ov','mg-cal-ov',
-                  'st-detail-ov','bl-editor-ov','bl-share-ov','bl-report-ov',
+                  'st-detail-ov','st-tc-ov','bl-editor-ov','bl-share-ov','bl-report-ov',
                   'sf-edit-ov','sf-cal-ov','sf-work-ov','sf-batch-ov',
                   'sf-overlap-ov','sf-templ-add-ov','sf-qsave-ov',
                   'sf-hometab-ov','sf-payhist-ov',
@@ -787,6 +787,7 @@ const App = (() => {
       return `<span class="dbdg ${DC[d]}">${d}</span>${ts?`<span class="dt-badge">${ts}</span>`:''}`;
     }).join('');
     const termStr=`${cls.termStart||'?'}~${cls.termEnd||'현재'}`;
+    const tuitionBadge=cls.tuition?`<span class="cls-term" style="background:rgba(34,197,94,.12);color:#16a34a">💰 ${Number(cls.tuition).toLocaleString()}원</span>`:'';
     // 같은 이름 다른 편성 목록
     const otherTerms=DB.getClasses()
       .filter(c=>c.name.trim()===cls.name.trim()&&c.id!==cls.id)
@@ -796,6 +797,7 @@ const App = (() => {
         <div class="cls-chdr-l">
           <div class="cls-nm">${_esc(cls.name)}</div>
           <span class="cls-term ${cls.termEnd?'ended':''}">${termStr}</span>
+          ${tuitionBadge}
           <div class="dbadges">${dayBadges}</div>
         </div>
         <div class="cls-chdr-r">
@@ -1075,6 +1077,7 @@ const App = (() => {
     S.editClsId=id; const cls=id?DB.getClassById(id):null;
     _q('mcls-t').textContent=id?'반 수정':'반 추가 / 재편성';
     _q('f-cname').value=cls?.name||'';
+    _q('f-ctuition').value=cls?.tuition??'';
     _q('f-cterm').value=id?DB.monthKey(new Date()):(cls?.termStart||DB.monthKey(new Date()));
     const sub=_q('mcls-sub');
     if(id){sub.style.display='';sub.style.color='var(--a)';sub.textContent=`현재: ${(cls?.days||[]).join(',')} (${cls?.termStart||'?'}~)\n요일 변경 시 재편성됩니다.`;}
@@ -1092,6 +1095,9 @@ const App = (() => {
     const termStart=_q('f-cterm').value||DB.monthKey(new Date());
     // ★ 요일별 수업 시간 수집
     const dayTimes=_readDayTimes();
+    // ★ 월 수업료 수집 (입력 안 하면 null → 기존값 유지)
+    const tuitionRaw=_q('f-ctuition').value;
+    const tuition=tuitionRaw!==''?Math.max(0,parseInt(tuitionRaw,10)||0):null;
     if(S.editClsId){
       const cls=DB.getClassById(S.editClsId);
       const oldDays=(cls?.days||[]).sort().join(',');
@@ -1099,15 +1105,18 @@ const App = (() => {
       if(oldDays!==newDays){
         const ok=confirm(`요일이 변경되었습니다.\n기존 (${oldDays}) 데이터 보존 후\n${termStart}부터 새 편성 (${newDays})으로 재편성합니다.\n계속하시겠습니까?`);
         if(!ok)return;
-        // 재편성: dayTimes 미입력 시 이전 편성 시간 참고
+        // 재편성: dayTimes/수업료 미입력 시 이전 편성 값 참고
         const prevDt=dayTimes||cls?.dayTimes||null;
+        const prevTuition=tuition!=null?tuition:(cls?.tuition??null);
         await DB.terminateClass(S.editClsId);
-        const r=await DB.addClassNew({name,days,termStart,dayTimes:prevDt});
+        const r=await DB.addClassNew({name,days,termStart,dayTimes:prevDt,tuition:prevTuition});
         if(!r){_toast('⚠️ 재편성 실패','error');return;}
         S.selCls=r; _toast(`✅ ${name}반 재편성 완료`,'success');
       } else {
-        // dayTimes가 null이면 기존값 유지, 있으면 교체
-        const updateData=dayTimes?{name,dayTimes}:{name};
+        // dayTimes/수업료가 null이면 기존값 유지, 있으면 교체
+        const updateData={name};
+        if(dayTimes)updateData.dayTimes=dayTimes;
+        if(tuition!=null)updateData.tuition=tuition;
         await DB.updateClass(S.editClsId,updateData);
         if(S.selCls?.id===S.editClsId)S.selCls=DB.getClassById(S.editClsId);
         _toast('✅ 반 수정 완료','success');
@@ -1118,7 +1127,7 @@ const App = (() => {
         const ok=confirm(`"${name}" 반이 이미 운용 중입니다.\n기존 (${(existing.days||[]).join(',')}) 데이터 보존 후\n${termStart}부터 새 편성 (${days.join(',')})으로 재편성합니다.\n계속하시겠습니까?`);
         if(!ok)return;
       }
-      const r=await DB.addClass({name,days,termStart,dayTimes});
+      const r=await DB.addClass({name,days,termStart,dayTimes,tuition});
       if(!r){_toast('⚠️ 반 추가 실패','error');return;}
       if(r.duplicate){_toast(`⚠️ "${name}" 반 ${termStart}월 편성이 이미 존재합니다.`,'error',4000);return;}
       _toast('✅ 반 추가 완료','success');
