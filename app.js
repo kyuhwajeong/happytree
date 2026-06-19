@@ -1426,20 +1426,36 @@ const App = (() => {
   }
 
   async function _feeRefresh(){
+    if(!FireDB.ready()){_toast('⚠️ Firebase에 연결되어 있지 않습니다','error',3000);return;}
     _toast('🔄 Firebase에서 최신 데이터를 불러오는 중...','',2000);
     try{
-      const snap=await FireDB.get(FireDB.P.classes);
-      if(snap){
-        const nd=Object.values(snap);
-        // _mergeClasses 없이 Firebase 데이터를 직접 반영
-        nd.forEach(fbCls=>{
-          const idx=DB.getClasses().findIndex(c=>c.id===fbCls.id);
-          if(idx!==-1) Object.assign(DB.getClasses()[idx],fbCls);
+      const snap=await FireDB.get(FireDB.P.root);
+      if(snap&&snap.classes){
+        // C.classes를 Firebase 데이터로 완전히 교체 (localStorage도 갱신)
+        const fbClasses=Object.values(snap.classes);
+        // monthBooks는 로컬이 더 최신일 수 있으므로 병합
+        const local=DB.getClasses();
+        fbClasses.forEach(fbCls=>{
+          const loc=local.find(c=>c.id===fbCls.id);
+          if(loc?.monthBooks){
+            Object.keys(loc.monthBooks).forEach(mk=>{
+              if(!fbCls.monthBooks) fbCls.monthBooks={};
+              if(!fbCls.monthBooks[mk]) fbCls.monthBooks[mk]=loc.monthBooks[mk];
+            });
+          }
+          // C.classes 내부 객체를 Firebase 데이터로 덮어쓰기
+          const idx=local.findIndex(c=>c.id===fbCls.id);
+          if(idx!==-1) Object.keys(fbCls).forEach(k=>{ local[idx][k]=fbCls[k]; });
         });
+        _renderFeePanel();
+        _toast('✅ Firebase 최신 데이터 반영 완료','success',2000);
+      } else {
+        _toast('⚠️ Firebase에 데이터가 없습니다','error',3000);
       }
-    }catch(e){console.warn('fee refresh',e);}
-    _renderFeePanel();
-    _toast('✅ 최신 데이터 반영 완료','success',2000);
+    }catch(e){
+      console.error('feeRefresh',e);
+      _toast('❌ 데이터 불러오기 실패: '+e.message,'error',4000);
+    }
   }
 
   function _renderFeePanel(){
@@ -1546,7 +1562,7 @@ const App = (() => {
   async function _feeSaveAll(){
     const rows=document.querySelectorAll('.fee-card');
     if(!rows.length)return;
-    let count=0;
+    let count=0; let fbFail=0;
     for(const row of rows){
       const id=row.dataset.id; if(!id)continue;
       const tuitionEl=_q(`fi-tu-${id}`);
@@ -1560,6 +1576,12 @@ const App = (() => {
       if(bookFee!=null)upd.bookFee=bookFee; else upd.bookFee=null;
       upd.exportMemo=exportMemo||null;
       await DB.updateClass(id,upd);
+      // Firebase에 전체 set으로 강제 기록
+      const freshCls=DB.getClassById(id);
+      if(FireDB.ready()&&freshCls){
+        const ok=await FireDB.set(`${FireDB.P.classes}/${id}`,freshCls);
+        if(!ok) fbFail++;
+      } else { fbFail++; }
       row.classList.remove('fee-dirty'); row.classList.add('fee-saved');
       setTimeout(()=>row.classList.remove('fee-saved'),1200);
       document.querySelectorAll('.fee-save-btn').forEach(b=>b.style.display='none');
@@ -1569,9 +1591,9 @@ const App = (() => {
     if(info) info.textContent=`✅ ${count}개 반 저장 완료`;
     setTimeout(()=>{if(info)info.textContent='모두 저장하려면 아래 버튼을 누르세요';},2500);
     _renderMgClsContent(_q('mg-classes')?.querySelector('.mg-cls-scroll'));
-    const fbOk=FireDB.isConnected();
-    if(!fbOk) _toast(`⚠️ 로컬 저장됨 (Firebase 오프라인 — 연결 후 자동 동기화)`,'',3500);
-    else _toast(`✅ 전체 ${count}개 반 저장 완료 (Firebase 동기화됨)`,'success');
+    if(!FireDB.ready()) _toast(`⚠️ 로컬 저장됨 (Firebase 미연결 — 재저장 필요)`,'',4000);
+    else if(fbFail>0) _toast(`❌ ${fbFail}개 반 Firebase 저장 실패 — 콘솔 확인 필요`,'error',4000);
+    else _toast(`✅ 전체 ${count}개 반 저장 완료`,'success');
   }
 
   function _renderMgIO(){const wrap=document.getElementById('mg-io');if(!wrap)return;wrap.innerHTML='';const isAdmin=DB.isAdmin();const card=document.createElement('div');card.className='io-card';const exRow=document.createElement('div');exRow.className='io-row';exRow.innerHTML='<div><div class="io-title">📤 엑셀 내보내기</div><div class="io-desc">반·교재·진도·메모 전체 백업</div></div>';const exBtn=document.createElement('button');exBtn.className='io-btn ex';exBtn.textContent='내보내기';exBtn.disabled=!isAdmin;exBtn.onclick=_exportExcel;exRow.appendChild(exBtn);card.appendChild(exRow);const imRow=document.createElement('div');imRow.className='io-row';imRow.innerHTML='<div><div class="io-title">📥 엑셀 불러오기</div><div class="io-desc">DB 초기화 후에도 복구 가능</div></div>';const imBtn=document.createElement('button');imBtn.className='io-btn im';imBtn.textContent='파일 선택';imBtn.disabled=!isAdmin;imBtn.onclick=()=>_q('xl-in').click();imRow.appendChild(imBtn);card.appendChild(imRow);wrap.appendChild(card);const drop=document.createElement('div');drop.className='drop-zone';drop.innerHTML='📂 엑셀 파일을 여기에 드래그하거나 탭하세요';drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('drag-over');});drop.addEventListener('dragleave',()=>drop.classList.remove('drag-over'));drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('drag-over');const f=e.dataTransfer.files[0];if(f)_processImport(f);});drop.addEventListener('click',()=>_q('xl-in').click());wrap.appendChild(drop);if(!isAdmin){const n=document.createElement('div');n.className='empty';n.textContent='⚠️ 관리자 로그인 후 사용 가능합니다';wrap.appendChild(n);}}
