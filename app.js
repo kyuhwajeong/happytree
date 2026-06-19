@@ -142,7 +142,7 @@ const App = (() => {
     if (typeof StaffApp    !== 'undefined') StaffApp.init().catch(e=>console.warn('[StaffApp]',e));
     if (typeof GradeApp    !== 'undefined') GradeApp.init().catch(e=>console.warn('[GradeApp]',e));
 
-    DB.on('classes',()=>{_renderChips();if(S.page==='operate')_renderDays();if(S.page==='manage'&&S.mgTab==='classes')_renderMgCls();});
+    DB.on('classes',()=>{_renderChips();if(S.page==='operate')_renderDays();if(S.page==='manage'&&S.mgTab==='classes'){_renderMgCls();if(_q('mg-fee-ov')&&!_q('mg-fee-ov').classList.contains('hidden'))_renderFeePanel();}});
     DB.on('progress',()=>{if(S.page==='operate')_renderDays();if(S.shareActive)_refreshShareProgress();});
     DB.on('theme',()=>{_applyTheme(DB.getTheme());if(S.page==='manage'&&S.mgTab==='theme')_renderMgTheme();});
 
