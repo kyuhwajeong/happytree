@@ -38,6 +38,8 @@ const DB = (() => {
     await _seed();
   }
 
+  let _fbLoadedOk = false; // ★ Firebase 데이터 정상 로드 여부 추적
+
   async function _loadFB() {
     // ★ LS에 이미 계정이 있으면 먼저 LS 로드 (빠른 시작)
     const lsAccs = lg(LS.accounts) || [];
@@ -45,7 +47,7 @@ const DB = (() => {
     try {
       const snap = await Promise.race([
         FireDB.get(FireDB.P.root),
-        new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),5000)), // ★ 3초→5초
+        new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),15000)), // ★ 5초→15초 (초기 재연결 대기)
       ]);
       if (snap) {
         C.classes  = snap.classes  ? Object.values(snap.classes)  : [];
@@ -56,8 +58,42 @@ const DB = (() => {
         ls(LS.accounts,C.accounts); ls(LS.theme,C.theme);
         // ★ Firebase에서 계정 정상 로드 시 초기화 플래그 설정
         if (C.accounts.length > 0) ls(LS.inited, true);
+        _fbLoadedOk = true;
       } else _loadLS();
-    } catch(e) { console.warn('FB→LS', e.message); _loadLS(); }
+    } catch(e) {
+      console.warn('FB→LS', e.message);
+      _loadLS();
+      // ★ 타임아웃 폴백 후 Firebase 재연결 시 자동 재로드
+      _scheduleRetryLoad();
+    }
+  }
+
+  // ★ Firebase 연결 후 데이터 재로드 (타임아웃 폴백 복구용)
+  function _scheduleRetryLoad() {
+    if (_fbLoadedOk) return;
+    const check = setInterval(async () => {
+      if (!FireDB.isConnected()) return;
+      clearInterval(check);
+      if (_fbLoadedOk) return;
+      console.log('[DB] 🔄 Firebase 재연결 감지 — 데이터 재로드');
+      try {
+        const snap = await FireDB.get(FireDB.P.root);
+        if (snap) {
+          C.classes  = snap.classes  ? Object.values(snap.classes)  : [];
+          C.progress = snap.progress || {};
+          C.accounts = snap.accounts ? Object.values(snap.accounts) : [];
+          C.theme    = snap.theme    || null;
+          ls(LS.classes,C.classes); ls(LS.progress,C.progress);
+          ls(LS.accounts,C.accounts); ls(LS.theme,C.theme);
+          if (C.accounts.length > 0) ls(LS.inited, true);
+          _fbLoadedOk = true;
+          _fire('classes'); _fire('progress'); _fire('theme');
+          console.log('[DB] ✅ 재로드 완료');
+        }
+      } catch(e) { console.warn('[DB] 재로드 실패', e.message); }
+    }, 1000);
+    // 30초 후 인터벌 자동 정리
+    setTimeout(() => clearInterval(check), 30000);
   }
 
   function _listenFB() {
