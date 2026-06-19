@@ -206,12 +206,16 @@ const FireDB = (() => {
       .catch(e => { console.error('get', path, e); return null; });
   }
   function set(path, v) {
-    if (!ready()) return Promise.resolve();
-    return _db.ref(path).set(v).catch(e => console.error('set', path, e));
+    if (!ready()) return Promise.resolve(false);
+    return _db.ref(path).set(v)
+      .then(() => true)
+      .catch(e => { console.error('set', path, e); return false; });
   }
   function update(path, v) {
-    if (!ready()) return Promise.resolve();
-    return _db.ref(path).update(v).catch(e => console.error('update', path, e));
+    if (!ready()) return Promise.resolve(false);
+    return _db.ref(path).update(v)
+      .then(() => true)
+      .catch(e => { console.error('update', path, e); return false; });
   }
   function remove(path) {
     if (!ready()) return Promise.resolve();
