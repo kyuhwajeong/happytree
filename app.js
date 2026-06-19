@@ -1425,6 +1425,23 @@ const App = (() => {
     _q('mg-fee-ov')?.classList.add('hidden');
   }
 
+  async function _feeRefresh(){
+    _toast('🔄 Firebase에서 최신 데이터를 불러오는 중...','',2000);
+    try{
+      const snap=await FireDB.get(FireDB.P.classes);
+      if(snap){
+        const nd=Object.values(snap);
+        // _mergeClasses 없이 Firebase 데이터를 직접 반영
+        nd.forEach(fbCls=>{
+          const idx=DB.getClasses().findIndex(c=>c.id===fbCls.id);
+          if(idx!==-1) Object.assign(DB.getClasses()[idx],fbCls);
+        });
+      }
+    }catch(e){console.warn('fee refresh',e);}
+    _renderFeePanel();
+    _toast('✅ 최신 데이터 반영 완료','success',2000);
+  }
+
   function _renderFeePanel(){
     const sh=_q('mg-fee-sh'); if(!sh)return;
     const mk=S.mgMk;
@@ -1477,7 +1494,10 @@ const App = (() => {
           <div class="sh-title" style="margin-bottom:0">💸 수업료 · 교재비 편집</div>
           <div class="sh-sub" style="margin-bottom:0">${y}년 ${mo}월 · ${classes.length}개 반</div>
         </div>
-        <button class="fee-close-btn" onclick="App.closeFeePanel()">✕</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="fee-close-btn" title="Firebase에서 최신 데이터 불러오기" onclick="App._feeRefresh()" style="font-size:13px">🔄</button>
+          <button class="fee-close-btn" onclick="App.closeFeePanel()">✕</button>
+        </div>
       </div>
 
       <div class="fee-hint">
@@ -1512,12 +1532,15 @@ const App = (() => {
     if(tuition!=null)upd.tuition=tuition; else upd.tuition=null;
     if(bookFee!=null)upd.bookFee=bookFee; else upd.bookFee=null;
     upd.exportMemo=exportMemo||null;
-    await DB.updateClass(id,upd);
+    // ★ Firebase 저장 결과를 직접 확인
+    const result=await DB.updateClass(id,upd);
+    const fbOk=FireDB.isConnected();
     const btn=_q(`fs-${id}`); if(btn) btn.style.display='none';
     const row=document.querySelector(`.fee-card[data-id="${id}"]`);
     if(row){row.classList.remove('fee-dirty');row.classList.add('fee-saved');setTimeout(()=>row.classList.remove('fee-saved'),1200);}
     _renderMgClsContent(_q('mg-classes')?.querySelector('.mg-cls-scroll'));
-    _toast(`✅ ${cls.name}반 저장 완료`,'success',1800);
+    if(!fbOk) _toast(`⚠️ ${cls.name}반: 로컬 저장됨 (Firebase 오프라인 — 연결 후 자동 동기화)`,'',3500);
+    else _toast(`✅ ${cls.name}반 저장 완료 (Firebase 동기화됨)`,'success',2000);
   }
 
   async function _feeSaveAll(){
@@ -1546,7 +1569,9 @@ const App = (() => {
     if(info) info.textContent=`✅ ${count}개 반 저장 완료`;
     setTimeout(()=>{if(info)info.textContent='모두 저장하려면 아래 버튼을 누르세요';},2500);
     _renderMgClsContent(_q('mg-classes')?.querySelector('.mg-cls-scroll'));
-    _toast(`✅ 전체 ${count}개 반 저장 완료`,'success');
+    const fbOk=FireDB.isConnected();
+    if(!fbOk) _toast(`⚠️ 로컬 저장됨 (Firebase 오프라인 — 연결 후 자동 동기화)`,'',3500);
+    else _toast(`✅ 전체 ${count}개 반 저장 완료 (Firebase 동기화됨)`,'success');
   }
 
   function _renderMgIO(){const wrap=document.getElementById('mg-io');if(!wrap)return;wrap.innerHTML='';const isAdmin=DB.isAdmin();const card=document.createElement('div');card.className='io-card';const exRow=document.createElement('div');exRow.className='io-row';exRow.innerHTML='<div><div class="io-title">📤 엑셀 내보내기</div><div class="io-desc">반·교재·진도·메모 전체 백업</div></div>';const exBtn=document.createElement('button');exBtn.className='io-btn ex';exBtn.textContent='내보내기';exBtn.disabled=!isAdmin;exBtn.onclick=_exportExcel;exRow.appendChild(exBtn);card.appendChild(exRow);const imRow=document.createElement('div');imRow.className='io-row';imRow.innerHTML='<div><div class="io-title">📥 엑셀 불러오기</div><div class="io-desc">DB 초기화 후에도 복구 가능</div></div>';const imBtn=document.createElement('button');imBtn.className='io-btn im';imBtn.textContent='파일 선택';imBtn.disabled=!isAdmin;imBtn.onclick=()=>_q('xl-in').click();imRow.appendChild(imBtn);card.appendChild(imRow);wrap.appendChild(card);const drop=document.createElement('div');drop.className='drop-zone';drop.innerHTML='📂 엑셀 파일을 여기에 드래그하거나 탭하세요';drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('drag-over');});drop.addEventListener('dragleave',()=>drop.classList.remove('drag-over'));drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('drag-over');const f=e.dataTransfer.files[0];if(f)_processImport(f);});drop.addEventListener('click',()=>_q('xl-in').click());wrap.appendChild(drop);if(!isAdmin){const n=document.createElement('div');n.className='empty';n.textContent='⚠️ 관리자 로그인 후 사용 가능합니다';wrap.appendChild(n);}}
@@ -1734,7 +1759,7 @@ const App = (() => {
     openClassModal,saveClass,delClass,_onDayCkChange,
     openCopyModal,doCopyBooks,
     mgPrev,mgNext,exportTuitionExcel,
-    openFeePanel,closeFeePanel,_feeMarkDirty,_feeSaveRow,_feeSaveAll,
+    openFeePanel,closeFeePanel,_feeMarkDirty,_feeSaveRow,_feeSaveAll,_feeRefresh,
     openAccModal,saveAccount,delAcc,delAccBulk,_cancelAccBulk,
     handleImport,shareUrl,sendSms,shareCurrentClass,
     closeModal,
