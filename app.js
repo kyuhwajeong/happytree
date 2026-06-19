@@ -220,7 +220,7 @@ const App = (() => {
   function _onBack(e){
     const state=e.state;
     if(!state){history.pushState({pg:S.page},'');return;}
-    const modals=['login-gate','modal-cls','modal-acc','modal-copy','cal-ov','mg-cal-ov',
+    const modals=['login-gate','modal-cls','modal-acc','modal-copy','cal-ov','mg-cal-ov','mg-fee-ov',
                   'st-detail-ov','st-tc-ov','bl-editor-ov','bl-share-ov','bl-report-ov',
                   'sf-edit-ov','sf-cal-ov','sf-work-ov','sf-batch-ov',
                   'sf-overlap-ov','sf-templ-add-ov','sf-qsave-ov',
@@ -757,7 +757,8 @@ const App = (() => {
       <button onclick="App.mgPrev()" title="이전 달">‹</button>
       <span class="mg-month-lbl">${mkY}년 ${mkM}월</span>
       <button onclick="App.mgNext()" title="다음 달">›</button>
-      ${isAdmin?`<button class="mg-cal-btn" onclick="App.exportTuitionExcel()" title="이 달 수업료 수납 엑셀 추출">📤</button>`:''}`;
+      ${isAdmin?`<button class="mg-cal-btn" onclick="App.openFeePanel()" title="수업료·교재비 일괄 편집">💸</button>`:''}
+      ${isAdmin?`<button class="mg-cal-btn" onclick="App.exportTuitionExcel()" title="교재 수납 엑셀 추출">📤</button>`:''}`;
     top.appendChild(bar);
     wrap.appendChild(top);
     // 스크롤 영역
@@ -1409,7 +1410,144 @@ const App = (() => {
   function _updateBkPreview(){const t=S.tmpTheme||DB.getTheme();['main','sub'].forEach(tp=>{const nm=document.getElementById(`bk-preview-nm-${tp}`);if(nm)nm.style.fontSize=tp==='main'?`${t.mainFontSize||t.fontSize||14}px`:`${t.subFontSize||Math.max((t.fontSize||14)-1,10)}px`;});document.querySelectorAll('.bk-preview-inp').forEach(el=>{el.style.fontSize=`${t.fontSize||14}px`;el.style.width=`${t.inputBoxWidth||140}px`;});}
   function _upPrev(c){const el=_q('th-prev');if(el)el.style.background=`linear-gradient(90deg,${c},#8b5cf6,#06b6d4)`;}
 
-  /* IO */
+  /* ════════════════════════════════════════════
+   * 💸 수업료 · 교재비 일괄 편집 패널
+   * ════════════════════════════════════════════ */
+  function openFeePanel(){
+    const ov=_q('mg-fee-ov'); if(!ov)return;
+    _renderFeePanel();
+    ov.classList.remove('hidden');
+    history.pushState({pg:'feepanel'},'');
+  }
+
+  function closeFeePanel(e){
+    if(e&&e.target&&e.target.id!=='mg-fee-ov')return;
+    _q('mg-fee-ov')?.classList.add('hidden');
+  }
+
+  function _renderFeePanel(){
+    const sh=_q('mg-fee-sh'); if(!sh)return;
+    const mk=S.mgMk;
+    const [y,mo]=mk.split('-').map(Number);
+    const classes=DB.getClassesForMonth(mk).slice().sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+
+    const rows=classes.map(cls=>`
+      <tr class="fee-row" data-id="${cls.id}">
+        <td class="fee-cls-nm">${_esc(cls.name)}</td>
+        <td class="fee-days-cell"><span class="fee-days">${(cls.days||[]).join('·')}</span></td>
+        <td class="fee-input-cell">
+          <div class="fee-inp-wrap">
+            <input class="fee-inp" id="fi-tu-${cls.id}" type="number" inputmode="numeric"
+              min="0" step="1000" placeholder="—"
+              value="${cls.tuition??''}"
+              onchange="App._feeMarkDirty('${cls.id}')">
+            <span class="fee-unit">원</span>
+          </div>
+        </td>
+        <td class="fee-input-cell">
+          <div class="fee-inp-wrap">
+            <input class="fee-inp" id="fi-bf-${cls.id}" type="number" inputmode="numeric"
+              min="0" step="1000" placeholder="—"
+              value="${cls.bookFee??''}"
+              onchange="App._feeMarkDirty('${cls.id}')">
+            <span class="fee-unit">원</span>
+          </div>
+        </td>
+        <td class="fee-save-cell">
+          <button class="fee-save-btn" id="fs-${cls.id}" style="display:none"
+            onclick="App._feeSaveRow('${cls.id}')">저장</button>
+        </td>
+      </tr>`).join('');
+
+    const emptyMsg=!classes.length
+      ?`<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--tx3)">이 월에 편성된 반이 없습니다</td></tr>`:'' ;
+
+    sh.innerHTML=`
+      <div class="sh-handle"></div>
+      <div class="fee-panel-hdr">
+        <div>
+          <div class="sh-title" style="margin-bottom:0">💸 수업료 · 교재비 편집</div>
+          <div class="sh-sub" style="margin-bottom:0">${y}년 ${mo}월 · ${classes.length}개 반</div>
+        </div>
+        <button class="fee-close-btn" onclick="App.closeFeePanel()">✕</button>
+      </div>
+
+      <div class="fee-hint">
+        <span>✏️ 셀을 직접 수정하면 <b>저장</b> 버튼이 나타납니다. 반별로 개별 저장됩니다.</span>
+      </div>
+
+      <div class="fee-table-wrap">
+        <table class="fee-table">
+          <thead>
+            <tr>
+              <th>반</th>
+              <th>요일</th>
+              <th><span class="fee-th-ic">💰</span>수업료</th>
+              <th><span class="fee-th-ic">📚</span>교재비</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${rows||emptyMsg}</tbody>
+        </table>
+      </div>
+
+      ${classes.length?`
+      <div class="fee-bulk-bar">
+        <div class="fee-bulk-info" id="fee-bulk-info">모두 저장하려면 아래 버튼을 누르세요</div>
+        <button class="btn-ok" onclick="App._feeSaveAll()">📋 전체 저장</button>
+      </div>`:''}
+    `;
+  }
+
+  function _feeMarkDirty(id){
+    const btn=_q(`fs-${id}`); if(btn) btn.style.display='';
+    const row=document.querySelector(`.fee-row[data-id="${id}"]`);
+    if(row) row.classList.add('fee-dirty');
+  }
+
+  async function _feeSaveRow(id){
+    const cls=DB.getClassById(id); if(!cls)return;
+    const tuitionEl=_q(`fi-tu-${id}`);
+    const bookFeeEl=_q(`fi-bf-${id}`);
+    const tuition=tuitionEl?.value!==''?Math.max(0,parseInt(tuitionEl.value,10)||0):null;
+    const bookFee=bookFeeEl?.value!==''?Math.max(0,parseInt(bookFeeEl.value,10)||0):null;
+    const upd={};
+    if(tuition!=null)upd.tuition=tuition; else upd.tuition=null;
+    if(bookFee!=null)upd.bookFee=bookFee; else upd.bookFee=null;
+    await DB.updateClass(id,upd);
+    const btn=_q(`fs-${id}`); if(btn) btn.style.display='none';
+    const row=document.querySelector(`.fee-row[data-id="${id}"]`);
+    if(row){row.classList.remove('fee-dirty');row.classList.add('fee-saved');setTimeout(()=>row.classList.remove('fee-saved'),1200);}
+    _renderMgClsContent(_q('mg-classes')?.querySelector('.mg-cls-scroll'));
+    _toast(`✅ ${cls.name}반 저장 완료`,'success',1800);
+  }
+
+  async function _feeSaveAll(){
+    const rows=document.querySelectorAll('.fee-row');
+    if(!rows.length)return;
+    let count=0;
+    for(const row of rows){
+      const id=row.dataset.id; if(!id)continue;
+      const tuitionEl=_q(`fi-tu-${id}`);
+      const bookFeeEl=_q(`fi-bf-${id}`);
+      const tuition=tuitionEl?.value!==''?Math.max(0,parseInt(tuitionEl.value,10)||0):null;
+      const bookFee=bookFeeEl?.value!==''?Math.max(0,parseInt(bookFeeEl.value,10)||0):null;
+      const upd={};
+      if(tuition!=null)upd.tuition=tuition; else upd.tuition=null;
+      if(bookFee!=null)upd.bookFee=bookFee; else upd.bookFee=null;
+      await DB.updateClass(id,upd);
+      row.classList.remove('fee-dirty'); row.classList.add('fee-saved');
+      setTimeout(()=>row.classList.remove('fee-saved'),1200);
+      document.querySelectorAll('.fee-save-btn').forEach(b=>b.style.display='none');
+      count++;
+    }
+    const info=_q('fee-bulk-info');
+    if(info) info.textContent=`✅ ${count}개 반 저장 완료`;
+    setTimeout(()=>{if(info)info.textContent='모두 저장하려면 아래 버튼을 누르세요';},2500);
+    _renderMgClsContent(_q('mg-classes')?.querySelector('.mg-cls-scroll'));
+    _toast(`✅ 전체 ${count}개 반 저장 완료`,'success');
+  }
+
   function _renderMgIO(){const wrap=document.getElementById('mg-io');if(!wrap)return;wrap.innerHTML='';const isAdmin=DB.isAdmin();const card=document.createElement('div');card.className='io-card';const exRow=document.createElement('div');exRow.className='io-row';exRow.innerHTML='<div><div class="io-title">📤 엑셀 내보내기</div><div class="io-desc">반·교재·진도·메모 전체 백업</div></div>';const exBtn=document.createElement('button');exBtn.className='io-btn ex';exBtn.textContent='내보내기';exBtn.disabled=!isAdmin;exBtn.onclick=_exportExcel;exRow.appendChild(exBtn);card.appendChild(exRow);const imRow=document.createElement('div');imRow.className='io-row';imRow.innerHTML='<div><div class="io-title">📥 엑셀 불러오기</div><div class="io-desc">DB 초기화 후에도 복구 가능</div></div>';const imBtn=document.createElement('button');imBtn.className='io-btn im';imBtn.textContent='파일 선택';imBtn.disabled=!isAdmin;imBtn.onclick=()=>_q('xl-in').click();imRow.appendChild(imBtn);card.appendChild(imRow);wrap.appendChild(card);const drop=document.createElement('div');drop.className='drop-zone';drop.innerHTML='📂 엑셀 파일을 여기에 드래그하거나 탭하세요';drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('drag-over');});drop.addEventListener('dragleave',()=>drop.classList.remove('drag-over'));drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('drag-over');const f=e.dataTransfer.files[0];if(f)_processImport(f);});drop.addEventListener('click',()=>_q('xl-in').click());wrap.appendChild(drop);if(!isAdmin){const n=document.createElement('div');n.className='empty';n.textContent='⚠️ 관리자 로그인 후 사용 가능합니다';wrap.appendChild(n);}}
   function _exportExcel(){const data=DB.exportAll();const wb=XLSX.utils.book_new();const clsRows=[];data.classes.forEach(cls=>{const mk=DB.monthKey(new Date());const bks=cls.monthBooks?.[mk]||{main:[],sub:[],pool:[]};clsRows.push({반:cls.name,상태:cls.termEnd?'종료':'운용중',편성시작:cls.termStart||'',편성종료:cls.termEnd||'',요일:(cls.days||[]).join(','),교재목록:(bks.pool||[]).map(b=>b.name).join('/'),주교재:(bks.main||[]).map(b=>b.name).join('/'),부교재:(bks.sub||[]).map(b=>b.name).join('/')});});XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(clsRows),'반목록');const pRows=[];Object.entries(data.progress||{}).forEach(([k,v])=>{if(v===null||v===undefined||v==='')return;const p=k.split('__');const cls=data.classes.find(c=>c.id===p[0]);const cn=cls?.name||p[0];const isMemo=p[3]==='MEMO';const row={반:cn,주차:p[1]||'',요일:p[2]||''};if(isMemo){row.구분='메모';row.교재='';row.값=v;}else{row.구분=p[4]==='savedAt'?'입력시간':'진도';row.교재=p[3]||'';row.값=v;}pRows.push(row);});if(!pRows.length)pRows.push({반:'데이터없음',주차:'',요일:'',구분:'',교재:'',값:''});XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(pRows),'진도메모데이터');XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet([{data:JSON.stringify({version:'10d',classes:data.classes,progress:data.progress,theme:data.theme})}]),'_restore');const n=new Date();XLSX.writeFile(wb,`진도관리백업_${n.getFullYear()}${String(n.getMonth()+1).padStart(2,'0')}${String(n.getDate()).padStart(2,'0')}.xlsx`);_toast('📤 백업 완료','success');}
   function handleImport(input){const f=input.files[0];if(!f)return;input.value='';_processImport(f);}
@@ -1595,6 +1733,7 @@ const App = (() => {
     openClassModal,saveClass,delClass,_onDayCkChange,
     openCopyModal,doCopyBooks,
     mgPrev,mgNext,exportTuitionExcel,
+    openFeePanel,closeFeePanel,_feeMarkDirty,_feeSaveRow,_feeSaveAll,
     openAccModal,saveAccount,delAcc,delAccBulk,_cancelAccBulk,
     handleImport,shareUrl,sendSms,shareCurrentClass,
     closeModal,
