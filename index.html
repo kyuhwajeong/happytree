@@ -234,15 +234,17 @@
       <label class="f-lbl">⏰ 요일별 수업 시간 <span style="font-weight:400;font-size:10px;color:var(--tx3)">(선택사항)</span></label>
       <div id="f-daytimes-list"></div>
     </div>
-    <div class="f-grp">
-      <label class="f-lbl">💰 월 수업료 (원) <span style="font-weight:400;font-size:10px;color:var(--tx3)">(선택사항)</span></label>
-      <input class="f-inp" id="f-ctuition" type="number" inputmode="numeric" min="0" step="1000" placeholder="예: 210000">
-      <div style="font-size:10px;color:var(--tx3);margin-top:4px">학생 관리 &gt; 수업료 계산기에서 이 금액을 기준으로 입학일 기준 수업료를 계산합니다.</div>
-    </div>
-    <div class="f-grp">
-      <label class="f-lbl">📚 월 교재비 (원) <span style="font-weight:400;font-size:10px;color:var(--tx3)">(선택사항)</span></label>
-      <input class="f-inp" id="f-cbookfee" type="number" inputmode="numeric" min="0" step="1000" placeholder="예: 35000">
-      <div style="font-size:10px;color:var(--tx3);margin-top:4px">관리 &gt; 반 관리 📤 버튼으로 교재 수납 등록 엑셀 추출 시 이 금액이 판매금액으로 반영됩니다.</div>
+    <div class="f-grp" style="display:flex;gap:12px;align-items:flex-start">
+      <div style="flex:1;min-width:0">
+        <label class="f-lbl">💰 수업료 (원)</label>
+        <input class="f-inp" id="f-ctuition" type="number" inputmode="numeric" min="0" step="1000" placeholder="예: 210000">
+        <div style="font-size:10px;color:var(--tx3);margin-top:3px;line-height:1.4">수업료 계산기 기준금액</div>
+      </div>
+      <div style="flex:1;min-width:0">
+        <label class="f-lbl">📚 교재비 (원)</label>
+        <input class="f-inp" id="f-cbookfee" type="number" inputmode="numeric" min="0" step="1000" placeholder="예: 35000">
+        <div style="font-size:10px;color:var(--tx3);margin-top:3px;line-height:1.4">엑셀 추출 판매금액</div>
+      </div>
     </div>
     <div class="f-grp">
       <label class="f-lbl">편성 시작 월 (선택)</label>
@@ -358,7 +360,7 @@
 .fee-panel-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px}
 .fee-close-btn{background:var(--card2);border:1px solid var(--bdr2);border-radius:50%;width:32px;height:32px;font-size:14px;color:var(--tx2);cursor:pointer;flex-shrink:0;margin-top:2px}
 .fee-hint{font-size:11px;color:var(--tx3);background:var(--surf2);border-radius:8px;padding:8px 12px;margin-bottom:14px;line-height:1.5}
-.fee-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:12px;border:1px solid var(--bdr)}
+.fee-table-wrap{overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;border-radius:12px 12px 0 0;border:1px solid var(--bdr)}
 .fee-table{width:100%;border-collapse:collapse;font-size:13px}
 .fee-table thead th{background:var(--surf2);font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:.8px;text-transform:uppercase;padding:10px 10px;text-align:center;white-space:nowrap;border-bottom:1px solid var(--bdr)}
 .fee-table thead th:first-child{text-align:left}
@@ -382,16 +384,20 @@
 .fee-bulk-bar{display:flex;align-items:center;gap:12px;margin-top:16px;padding-top:14px;border-top:1px solid var(--bdr)}
 .fee-bulk-info{flex:1;font-size:12px;color:var(--tx3)}
 .fee-bulk-bar .btn-ok{flex:none;padding:11px 22px;font-size:13px}
-.fee-memo-cell{padding:6px 6px;min-width:150px}
-.fee-memo-inp{width:100%;background:var(--card2);border:1.5px solid var(--bdr2);border-radius:8px;
-  outline:none;padding:7px 9px;font-size:12px;color:var(--tx);font-family:var(--font);
-  resize:vertical;line-height:1.5;transition:border-color .2s;min-height:42px}
+.fee-memo-row{background:var(--surf2)}
+.fee-memo-row:last-child .fee-memo-td{border-bottom:none}
+.fee-memo-td{padding:0 10px 10px;border-bottom:1px solid var(--bdr)}
+.fee-memo-label{font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:.6px;
+  text-transform:uppercase;padding:6px 0 4px}
+.fee-memo-inp{width:100%;background:var(--card);border:1.5px solid var(--bdr2);border-radius:8px;
+  outline:none;padding:8px 10px;font-size:12px;color:var(--tx);font-family:var(--font);
+  resize:vertical;line-height:1.5;transition:border-color .2s;min-height:40px;box-sizing:border-box}
 .fee-memo-inp:focus{border-color:var(--a)}
 .fee-memo-inp::placeholder{color:var(--tx3)}
 </style>
 
 <div id="mg-fee-ov" class="ov hidden" onclick="App.closeFeePanel(event)">
-  <div class="sh" id="mg-fee-sh" onclick="event.stopPropagation()" style="max-height:92vh"></div>
+  <div class="sh" id="mg-fee-sh" onclick="event.stopPropagation()" style="max-height:92vh;overflow-y:auto"></div>
 </div>
 
 <input type="file" id="xl-in" accept=".xlsx,.xls" style="display:none" onchange="App.handleImport(this)">
