@@ -1431,36 +1431,44 @@ const App = (() => {
     const [y,mo]=mk.split('-').map(Number);
     const classes=DB.getClassesForMonth(mk).slice().sort((a,b)=>a.name.localeCompare(b.name,'ko'));
 
-    const rows=classes.map(cls=>`
-      <tr class="fee-row" data-id="${cls.id}">
-        <td class="fee-cls-nm">${_esc(cls.name)}</td>
-        <td class="fee-days-cell"><span class="fee-days">${(cls.days||[]).join('·')}</span></td>
-        <td class="fee-input-cell">
-          <div class="fee-inp-wrap">
-            <input class="fee-inp" id="fi-tu-${cls.id}" type="number" inputmode="numeric"
-              min="0" step="1000" placeholder="—"
-              value="${cls.tuition??''}"
-              onchange="App._feeMarkDirty('${cls.id}')">
-            <span class="fee-unit">원</span>
-          </div>
-        </td>
-        <td class="fee-input-cell">
-          <div class="fee-inp-wrap">
-            <input class="fee-inp" id="fi-bf-${cls.id}" type="number" inputmode="numeric"
-              min="0" step="1000" placeholder="—"
-              value="${cls.bookFee??''}"
-              onchange="App._feeMarkDirty('${cls.id}')">
-            <span class="fee-unit">원</span>
-          </div>
-        </td>
-        <td class="fee-save-cell">
+    const cards=classes.length ? classes.map(cls=>`
+      <div class="fee-card" data-id="${cls.id}">
+        <div class="fee-card-hdr">
+          <div class="fee-card-nm">${_esc(cls.name)}</div>
+          <span class="fee-card-days">${(cls.days||[]).join(' · ')}</span>
           <button class="fee-save-btn" id="fs-${cls.id}" style="display:none"
             onclick="App._feeSaveRow('${cls.id}')">저장</button>
-        </td>
-      </tr>`).join('');
-
-    const emptyMsg=!classes.length
-      ?`<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--tx3)">이 월에 편성된 반이 없습니다</td></tr>`:'' ;
+        </div>
+        <div class="fee-card-body">
+          <div class="fee-field">
+            <label class="fee-field-lbl">💰 수업료</label>
+            <div class="fee-inp-wrap">
+              <input class="fee-inp" id="fi-tu-${cls.id}" type="number" inputmode="numeric"
+                min="0" step="1000" placeholder="미입력"
+                value="${cls.tuition??''}"
+                onchange="App._feeMarkDirty('${cls.id}')">
+              <span class="fee-unit">원</span>
+            </div>
+          </div>
+          <div class="fee-field">
+            <label class="fee-field-lbl">📚 교재비</label>
+            <div class="fee-inp-wrap">
+              <input class="fee-inp" id="fi-bf-${cls.id}" type="number" inputmode="numeric"
+                min="0" step="1000" placeholder="미입력"
+                value="${cls.bookFee??''}"
+                onchange="App._feeMarkDirty('${cls.id}')">
+              <span class="fee-unit">원</span>
+            </div>
+          </div>
+        </div>
+        <div class="fee-memo-area">
+          <label class="fee-field-lbl">📝 엑셀 메모 <span style="font-weight:400;color:var(--tx3)">(추출 시 반영)</span></label>
+          <textarea class="fee-memo-inp" id="fi-memo-${cls.id}" rows="2"
+            placeholder="엑셀 수납 등록 파일의 메모란에 들어갈 내용"
+            oninput="App._feeMarkDirty('${cls.id}')">${_esc(cls.exportMemo||'')}</textarea>
+        </div>
+      </div>`).join('')
+    : `<div style="text-align:center;padding:32px;color:var(--tx3)">이 월에 편성된 반이 없습니다</div>`;
 
     sh.innerHTML=`
       <div class="sh-handle"></div>
@@ -1473,23 +1481,10 @@ const App = (() => {
       </div>
 
       <div class="fee-hint">
-        <span>✏️ 셀을 직접 수정하면 <b>저장</b> 버튼이 나타납니다. 반별로 개별 저장됩니다.</span>
+        ✏️ 수정하면 반별 <b>저장</b> 버튼이 나타납니다. 메모는 📤 엑셀 추출 시에만 반영됩니다.
       </div>
 
-      <div class="fee-table-wrap">
-        <table class="fee-table">
-          <thead>
-            <tr>
-              <th>반</th>
-              <th>요일</th>
-              <th><span class="fee-th-ic">💰</span>수업료</th>
-              <th><span class="fee-th-ic">📚</span>교재비</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>${rows||emptyMsg}</tbody>
-        </table>
-      </div>
+      <div class="fee-cards">${cards}</div>
 
       ${classes.length?`
       <div class="fee-bulk-bar">
@@ -1501,7 +1496,7 @@ const App = (() => {
 
   function _feeMarkDirty(id){
     const btn=_q(`fs-${id}`); if(btn) btn.style.display='';
-    const row=document.querySelector(`.fee-row[data-id="${id}"]`);
+    const row=document.querySelector(`.fee-card[data-id="${id}"]`);
     if(row) row.classList.add('fee-dirty');
   }
 
@@ -1509,32 +1504,38 @@ const App = (() => {
     const cls=DB.getClassById(id); if(!cls)return;
     const tuitionEl=_q(`fi-tu-${id}`);
     const bookFeeEl=_q(`fi-bf-${id}`);
+    const memoEl=_q(`fi-memo-${id}`);
     const tuition=tuitionEl?.value!==''?Math.max(0,parseInt(tuitionEl.value,10)||0):null;
     const bookFee=bookFeeEl?.value!==''?Math.max(0,parseInt(bookFeeEl.value,10)||0):null;
+    const exportMemo=(memoEl?.value||'').trim();
     const upd={};
     if(tuition!=null)upd.tuition=tuition; else upd.tuition=null;
     if(bookFee!=null)upd.bookFee=bookFee; else upd.bookFee=null;
+    upd.exportMemo=exportMemo||null;
     await DB.updateClass(id,upd);
     const btn=_q(`fs-${id}`); if(btn) btn.style.display='none';
-    const row=document.querySelector(`.fee-row[data-id="${id}"]`);
+    const row=document.querySelector(`.fee-card[data-id="${id}"]`);
     if(row){row.classList.remove('fee-dirty');row.classList.add('fee-saved');setTimeout(()=>row.classList.remove('fee-saved'),1200);}
     _renderMgClsContent(_q('mg-classes')?.querySelector('.mg-cls-scroll'));
     _toast(`✅ ${cls.name}반 저장 완료`,'success',1800);
   }
 
   async function _feeSaveAll(){
-    const rows=document.querySelectorAll('.fee-row');
+    const rows=document.querySelectorAll('.fee-card');
     if(!rows.length)return;
     let count=0;
     for(const row of rows){
       const id=row.dataset.id; if(!id)continue;
       const tuitionEl=_q(`fi-tu-${id}`);
       const bookFeeEl=_q(`fi-bf-${id}`);
+      const memoEl=_q(`fi-memo-${id}`);
       const tuition=tuitionEl?.value!==''?Math.max(0,parseInt(tuitionEl.value,10)||0):null;
       const bookFee=bookFeeEl?.value!==''?Math.max(0,parseInt(bookFeeEl.value,10)||0):null;
+      const exportMemo=(memoEl?.value||'').trim();
       const upd={};
       if(tuition!=null)upd.tuition=tuition; else upd.tuition=null;
       if(bookFee!=null)upd.bookFee=bookFee; else upd.bookFee=null;
+      upd.exportMemo=exportMemo||null;
       await DB.updateClass(id,upd);
       row.classList.remove('fee-dirty'); row.classList.add('fee-saved');
       setTimeout(()=>row.classList.remove('fee-saved'),1200);
@@ -1573,7 +1574,7 @@ const App = (() => {
       "재고수량\n'숫자만입력'",'과세/면세','수납생성여부\n(Y/N)'];
     const rows=withFee.map(c=>[
       `[${mo}월] ${c.name} 교재`, '교재', String(Math.round(Number(c.bookFee))),
-      '', '', '', '', '', '', '면세', 'Y',
+      '', '', '', '', c.exportMemo||'', '', '면세', 'Y',
     ]);
     const ws=XLSX.utils.aoa_to_sheet([header,...rows]);
     ws['!cols']=[{wch:24},{wch:57},{wch:23},{wch:17},{wch:17},{wch:17},{wch:19},{wch:21},{wch:15},{wch:10},{wch:15}];

@@ -360,40 +360,33 @@
 .fee-panel-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px}
 .fee-close-btn{background:var(--card2);border:1px solid var(--bdr2);border-radius:50%;width:32px;height:32px;font-size:14px;color:var(--tx2);cursor:pointer;flex-shrink:0;margin-top:2px}
 .fee-hint{font-size:11px;color:var(--tx3);background:var(--surf2);border-radius:8px;padding:8px 12px;margin-bottom:14px;line-height:1.5}
-.fee-table-wrap{overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;border-radius:12px 12px 0 0;border:1px solid var(--bdr)}
-.fee-table{width:100%;border-collapse:collapse;font-size:13px}
-.fee-table thead th{background:var(--surf2);font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:.8px;text-transform:uppercase;padding:10px 10px;text-align:center;white-space:nowrap;border-bottom:1px solid var(--bdr)}
-.fee-table thead th:first-child{text-align:left}
-.fee-th-ic{margin-right:3px}
-.fee-row{border-bottom:1px solid var(--bdr);transition:background .2s}
-.fee-row:last-child{border-bottom:none}
-.fee-row.fee-dirty{background:rgba(var(--a-rgb,79,70,229),.05)}
-.fee-row.fee-saved{background:rgba(34,197,94,.08);animation:feeSv .5s ease}
-@keyframes feeSv{0%{background:rgba(34,197,94,.22)}100%{background:rgba(34,197,94,.08)}}
-.fee-cls-nm{font-weight:800;color:var(--tx);padding:10px 10px;min-width:42px;font-size:14px}
-.fee-days-cell{padding:10px 6px;text-align:center}
-.fee-days{font-size:10px;color:var(--tx3);white-space:nowrap}
-.fee-input-cell{padding:6px 6px;min-width:110px}
-.fee-inp-wrap{display:flex;align-items:center;background:var(--card2);border:1.5px solid var(--bdr2);border-radius:8px;overflow:hidden;transition:border-color .2s}
+/* 카드 레이아웃 */
+.fee-cards{display:flex;flex-direction:column;gap:10px;margin-bottom:4px}
+.fee-card{background:var(--card);border:1.5px solid var(--bdr2);border-radius:14px;overflow:hidden;transition:border-color .2s,box-shadow .2s}
+.fee-card.fee-dirty{border-color:var(--a);box-shadow:0 0 0 2px var(--a20,rgba(79,70,229,.12))}
+.fee-card.fee-saved{border-color:#16a34a;animation:feeSv .5s ease}
+@keyframes feeSv{0%{border-color:#16a34a;box-shadow:0 0 0 3px rgba(34,197,94,.25)}100%{border-color:#16a34a;box-shadow:none}}
+.fee-card-hdr{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surf2);border-bottom:1px solid var(--bdr)}
+.fee-card-nm{font-size:16px;font-weight:900;color:var(--tx)}
+.fee-card-days{font-size:11px;color:var(--tx3);flex:1}
+.fee-save-btn{background:var(--a);color:#fff;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);box-shadow:0 2px 6px var(--a40);white-space:nowrap}
+.fee-card-body{display:flex;gap:10px;padding:12px 14px 10px}
+.fee-field{flex:1;min-width:0}
+.fee-field-lbl{display:block;font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:.6px;text-transform:uppercase;margin-bottom:6px}
+.fee-inp-wrap{display:flex;align-items:center;background:var(--card2);border:1.5px solid var(--bdr2);border-radius:9px;overflow:hidden;transition:border-color .2s}
 .fee-inp-wrap:focus-within{border-color:var(--a)}
-.fee-inp{flex:1;background:transparent;border:none;outline:none;padding:8px 8px;font-size:13px;font-weight:700;color:var(--tx);font-family:var(--font);min-width:0;width:100%;text-align:right}
-.fee-inp::placeholder{color:var(--tx3);font-weight:400}
-.fee-unit{font-size:11px;color:var(--tx3);padding-right:8px;white-space:nowrap;flex-shrink:0}
-.fee-save-cell{padding:6px 8px;text-align:center;min-width:50px}
-.fee-save-btn{background:var(--a);color:#fff;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:700;white-space:nowrap;cursor:pointer;font-family:var(--font);box-shadow:0 2px 6px var(--a40)}
-.fee-bulk-bar{display:flex;align-items:center;gap:12px;margin-top:16px;padding-top:14px;border-top:1px solid var(--bdr)}
-.fee-bulk-info{flex:1;font-size:12px;color:var(--tx3)}
-.fee-bulk-bar .btn-ok{flex:none;padding:11px 22px;font-size:13px}
-.fee-memo-row{background:var(--surf2)}
-.fee-memo-row:last-child .fee-memo-td{border-bottom:none}
-.fee-memo-td{padding:0 10px 10px;border-bottom:1px solid var(--bdr)}
-.fee-memo-label{font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:.6px;
-  text-transform:uppercase;padding:6px 0 4px}
-.fee-memo-inp{width:100%;background:var(--card);border:1.5px solid var(--bdr2);border-radius:8px;
+.fee-inp{flex:1;background:transparent;border:none;outline:none;padding:9px 8px;font-size:14px;font-weight:700;color:var(--tx);font-family:var(--font);min-width:0;width:100%;text-align:right}
+.fee-inp::placeholder{color:var(--tx3);font-weight:400;font-size:12px}
+.fee-unit{font-size:11px;color:var(--tx3);padding-right:9px;white-space:nowrap;flex-shrink:0}
+.fee-memo-area{padding:0 14px 12px}
+.fee-memo-inp{width:100%;background:var(--card2);border:1.5px solid var(--bdr2);border-radius:9px;
   outline:none;padding:8px 10px;font-size:12px;color:var(--tx);font-family:var(--font);
-  resize:vertical;line-height:1.5;transition:border-color .2s;min-height:40px;box-sizing:border-box}
+  resize:vertical;line-height:1.5;transition:border-color .2s;min-height:44px;box-sizing:border-box;display:block}
 .fee-memo-inp:focus{border-color:var(--a)}
 .fee-memo-inp::placeholder{color:var(--tx3)}
+.fee-bulk-bar{display:flex;align-items:center;gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid var(--bdr)}
+.fee-bulk-info{flex:1;font-size:12px;color:var(--tx3)}
+.fee-bulk-bar .btn-ok{flex:none;padding:11px 22px;font-size:13px}
 </style>
 
 <div id="mg-fee-ov" class="ov hidden" onclick="App.closeFeePanel(event)">
