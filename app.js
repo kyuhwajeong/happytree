@@ -789,6 +789,7 @@ const App = (() => {
     }).join('');
     const termStr=`${cls.termStart||'?'}~${cls.termEnd||'현재'}`;
     const tuitionBadge=cls.tuition?`<span class="cls-term" style="background:rgba(34,197,94,.12);color:#16a34a">💰 ${Number(cls.tuition).toLocaleString()}원</span>`:'';
+    const bookFeeBadge=cls.bookFee?`<span class="cls-term" style="background:rgba(251,191,36,.15);color:#b45309">📚 ${Number(cls.bookFee).toLocaleString()}원</span>`:'';
     // 같은 이름 다른 편성 목록
     const otherTerms=DB.getClasses()
       .filter(c=>c.name.trim()===cls.name.trim()&&c.id!==cls.id)
@@ -799,6 +800,7 @@ const App = (() => {
           <div class="cls-nm">${_esc(cls.name)}</div>
           <span class="cls-term ${cls.termEnd?'ended':''}">${termStr}</span>
           ${tuitionBadge}
+          ${bookFeeBadge}
           <div class="dbadges">${dayBadges}</div>
         </div>
         <div class="cls-chdr-r">
@@ -1079,6 +1081,7 @@ const App = (() => {
     _q('mcls-t').textContent=id?'반 수정':'반 추가 / 재편성';
     _q('f-cname').value=cls?.name||'';
     _q('f-ctuition').value=cls?.tuition??'';
+    _q('f-cbookfee').value=cls?.bookFee??'';
     _q('f-cterm').value=id?DB.monthKey(new Date()):(cls?.termStart||DB.monthKey(new Date()));
     const sub=_q('mcls-sub');
     if(id){sub.style.display='';sub.style.color='var(--a)';sub.textContent=`현재: ${(cls?.days||[]).join(',')} (${cls?.termStart||'?'}~)\n요일 변경 시 재편성됩니다.`;}
@@ -1099,6 +1102,8 @@ const App = (() => {
     // ★ 월 수업료 수집 (입력 안 하면 null → 기존값 유지)
     const tuitionRaw=_q('f-ctuition').value;
     const tuition=tuitionRaw!==''?Math.max(0,parseInt(tuitionRaw,10)||0):null;
+    const bookFeeRaw=_q('f-cbookfee').value;
+    const bookFee=bookFeeRaw!==''?Math.max(0,parseInt(bookFeeRaw,10)||0):null;
     if(S.editClsId){
       const cls=DB.getClassById(S.editClsId);
       const oldDays=(cls?.days||[]).sort().join(',');
@@ -1109,8 +1114,9 @@ const App = (() => {
         // 재편성: dayTimes/수업료 미입력 시 이전 편성 값 참고
         const prevDt=dayTimes||cls?.dayTimes||null;
         const prevTuition=tuition!=null?tuition:(cls?.tuition??null);
+        const prevBookFee=bookFee!=null?bookFee:(cls?.bookFee??null);
         await DB.terminateClass(S.editClsId);
-        const r=await DB.addClassNew({name,days,termStart,dayTimes:prevDt,tuition:prevTuition});
+        const r=await DB.addClassNew({name,days,termStart,dayTimes:prevDt,tuition:prevTuition,bookFee:prevBookFee});
         if(!r){_toast('⚠️ 재편성 실패','error');return;}
         S.selCls=r; _toast(`✅ ${name}반 재편성 완료`,'success');
       } else {
@@ -1118,6 +1124,7 @@ const App = (() => {
         const updateData={name};
         if(dayTimes)updateData.dayTimes=dayTimes;
         if(tuition!=null)updateData.tuition=tuition;
+        if(bookFee!=null)updateData.bookFee=bookFee;
         await DB.updateClass(S.editClsId,updateData);
         if(S.selCls?.id===S.editClsId)S.selCls=DB.getClassById(S.editClsId);
         _toast('✅ 반 수정 완료','success');
@@ -1128,7 +1135,7 @@ const App = (() => {
         const ok=confirm(`"${name}" 반이 이미 운용 중입니다.\n기존 (${(existing.days||[]).join(',')}) 데이터 보존 후\n${termStart}부터 새 편성 (${days.join(',')})으로 재편성합니다.\n계속하시겠습니까?`);
         if(!ok)return;
       }
-      const r=await DB.addClass({name,days,termStart,dayTimes,tuition});
+      const r=await DB.addClass({name,days,termStart,dayTimes,tuition,bookFee});
       if(!r){_toast('⚠️ 반 추가 실패','error');return;}
       if(r.duplicate){_toast(`⚠️ "${name}" 반 ${termStart}월 편성이 이미 존재합니다.`,'error',4000);return;}
       _toast('✅ 반 추가 완료','success');
@@ -1417,32 +1424,31 @@ const App = (() => {
     const [y,mo]=mk.split('-').map(Number);
     const classes=DB.getClassesForMonth(mk).slice().sort((a,b)=>a.name.localeCompare(b.name,'ko'));
     if(!classes.length){_toast(`⚠️ ${y}년 ${mo}월에 편성된 반이 없습니다`,'error');return;}
-    const withTuition=classes.filter(c=>Number(c.tuition)>0);
-    const missing=classes.filter(c=>!(Number(c.tuition)>0)).map(c=>c.name);
-    if(!withTuition.length){_toast(`⚠️ ${y}년 ${mo}월 반 중 수업료가 등록된 반이 없습니다.\n관리>반 관리에서 월 수업료를 먼저 입력해주세요.`,'error',4500);return;}
+    const withFee=classes.filter(c=>Number(c.bookFee)>0);
+    const missing=classes.filter(c=>!(Number(c.bookFee)>0)).map(c=>c.name);
+    if(!withFee.length){_toast(`⚠️ ${y}년 ${mo}월 반 중 교재비가 등록된 반이 없습니다.\n관리>반 관리에서 월 교재비를 먼저 입력해주세요.`,'error',4500);return;}
 
     const header=['수납명\n(필수)',
       "수납구분\n'교재,유니폼,차량비,원복,식비,학용품,교구,신발,기타' 중 택일\n(필수)",
       "판매금액\n'숫자만입력(콤마허용)'\n(필수)",
       '매입단가\n\'숫자만입력\'','학년','제조사','거래처','메모',
       "재고수량\n'숫자만입력'",'과세/면세','수납생성여부\n(Y/N)'];
-    const rows=withTuition.map(c=>[
-      `[${mo}월] ${c.name} 교재`, '교재', String(Math.round(Number(c.tuition))),
+    const rows=withFee.map(c=>[
+      `[${mo}월] ${c.name} 교재`, '교재', String(Math.round(Number(c.bookFee))),
       '', '', '', '', '', '', '면세', 'Y',
     ]);
     const ws=XLSX.utils.aoa_to_sheet([header,...rows]);
     ws['!cols']=[{wch:24},{wch:57},{wch:23},{wch:17},{wch:17},{wch:17},{wch:19},{wch:21},{wch:15},{wch:10},{wch:15}];
     ws['!rows']=[{hpt:49.5}];
-    // 텍스트 서식 유지 컬럼(수납명/수납구분/판매금액/과세면세/수납생성여부): 숫자로 오인식 방지
     for(let r=1;r<=rows.length+1;r++){
       ['A','B','C','J','K'].forEach(col=>{const addr=`${col}${r}`;if(ws[addr])ws[addr].z='@';});
     }
     const wb=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb,ws,'Sheet1');
-    XLSX.writeFile(wb,`수납등록_${y}년${String(mo).padStart(2,'0')}월.xlsx`);
+    XLSX.writeFile(wb,`교재수납등록_${y}년${String(mo).padStart(2,'0')}월.xlsx`);
 
-    if(missing.length) _toast(`📤 ${withTuition.length}개 반 추출 완료 · ⚠️ 수업료 미등록 반: ${missing.join(', ')}`,'success',5000);
-    else _toast(`📤 ${y}년 ${mo}월 수납 등록 엑셀 추출 완료 (${withTuition.length}개 반)`,'success');
+    if(missing.length) _toast(`📤 ${withFee.length}개 반 추출 완료 · ⚠️ 교재비 미등록 반: ${missing.join(', ')}`,'success',5000);
+    else _toast(`📤 ${y}년 ${mo}월 교재 수납 등록 엑셀 추출 완료 (${withFee.length}개 반)`,'success');
   }
 
   async function _processImport(file){const reader=new FileReader();reader.onload=async(e)=>{try{const wb=XLSX.read(e.target.result,{type:'array'});const raw=wb.Sheets['_restore'];if(!raw){_toast('⚠️ 올바른 백업 파일이 아닙니다','error');return;}const rows=XLSX.utils.sheet_to_json(raw);if(!rows[0]?.data){_toast('⚠️ 데이터 없음','error');return;}const data=JSON.parse(rows[0].data);const result=await DB.importAll(data);_renderMgCls();_renderChips();_renderDays();_toast('📥 복원 완료!','success');}catch(err){_toast('⚠️ 파일 오류: '+err.message,'error');}};reader.readAsArrayBuffer(file);}
