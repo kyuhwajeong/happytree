@@ -15,7 +15,7 @@ const BooklibApp = (() => {
   const LS_CH_W    = 'hk10b_chw';
   const DEF_CH_W   = 220;
   const MIN_CH_W   = 70;
-  const MAX_CH_W   = 420;
+  const MAX_CH_W   = 600;
   const STU_W      = 72;
   const DOW_KO = ['일','월','화','수','목','금','토'];
 
@@ -141,7 +141,12 @@ const BooklibApp = (() => {
 .bl-mwrap::-webkit-scrollbar{width:4px;height:4px;}
 .bl-mwrap::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:2px;}
 .bl-mtbl{border-collapse:collapse;font-size:12px;width:100%;--ch-w:30%;--stu-w:auto;}
-.bl-ch-hdr{position:sticky;top:0;left:0;z-index:5;width:30%;min-width:140px;background:var(--surf);border:1px solid var(--bdr);padding:7px 8px;font-size:10px;font-weight:800;color:var(--tx3);min-width:var(--ch-w);width:var(--ch-w);max-width:var(--ch-w);white-space:nowrap;display:flex;align-items:center;justify-content:space-between;gap:6px;}
+.bl-ch-hdr{position:sticky;top:0;left:0;z-index:5;width:30%;min-width:140px;background:var(--surf);border:1px solid var(--bdr);padding:7px 8px;font-size:10px;font-weight:800;color:var(--tx3);min-width:var(--ch-w);width:var(--ch-w);max-width:var(--ch-w);white-space:nowrap;display:flex;align-items:center;justify-content:space-between;gap:6px;position:relative;overflow:visible;}
+.bl-ch-resizer{position:absolute;top:0;right:-5px;width:10px;height:100%;cursor:col-resize;z-index:20;display:flex;align-items:center;justify-content:center;touch-action:none;}
+.bl-ch-resizer-bar{width:3px;height:55%;background:var(--a);border-radius:2px;opacity:0;transition:opacity .15s;pointer-events:none;}
+.bl-ch-resizer:hover .bl-ch-resizer-bar,.bl-ch-resizer.active .bl-ch-resizer-bar{opacity:.8;}
+.bl-ch-resizer-tip{position:absolute;bottom:-22px;left:50%;transform:translateX(-50%);background:var(--a);color:#fff;font-size:9px;font-weight:800;border-radius:4px;padding:2px 5px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s;}
+.bl-ch-resizer.active .bl-ch-resizer-tip{opacity:1;}
 .bl-collapse-btn{width:22px;height:22px;border-radius:5px;background:var(--card2);border:1px solid var(--bdr2);color:var(--tx3);font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--font);transition:all .12s;}
 .bl-shdr{position:sticky;top:0;z-index:7;background:var(--surf);border:1px solid var(--bdr);padding:7px 4px;text-align:center;min-width:var(--stu-w);width:var(--stu-w);cursor:pointer;transition:background .12s;user-select:none;-webkit-user-select:none;}
 .bl-shdr:hover{background:var(--a10)!important;}
@@ -1971,6 +1976,7 @@ const BooklibApp = (() => {
     } else {
       const maxChLen = chs.reduce((max, ch) => Math.max(max, (ch.title||'').length), 0);
       const autoW = Math.max(MIN_CH_W, Math.min(MAX_CH_W, maxChLen * 7 + 52));
+      localStorage.setItem('bl_ch_auto_w', autoW); // 더블클릭 초기화용
       // 사용자가 수동 조절한 경우(localStorage에 저장됨) vs 자동
       const savedW = parseInt(localStorage.getItem(LS_CH_W));
       // 학생이 1명일 때는 자동 너비 우선 적용, 여러 명이면 저장값 사용
@@ -2051,6 +2057,10 @@ const BooklibApp = (() => {
                 <span>챕터</span><span style="font-size:10px;color:var(--tx3)">/</span><span>학생</span>
               </span>
               <button class="bl-collapse-btn" id="bl-collapse-btn" onclick="BooklibApp._toggleCollapse()" title="${_st.chCollapsed?'챕터 펼치기':'챕터 접기'}" style="width:26px;height:26px;font-size:11px">${_st.chCollapsed?'▶':'◀'}</button>
+              <div class="bl-ch-resizer" id="bl-ch-resizer" title="드래그하여 너비 조정">
+                <div class="bl-ch-resizer-bar"></div>
+                <div class="bl-ch-resizer-tip" id="bl-ch-resizer-tip">${_st.chColWidth}px</div>
+              </div>
             </th>
             ${students.map((s,i)=>{const uc=doneByS[s.id];return`<th class="bl-shdr" draggable="true" data-idx="${i}" data-sid="${s.id}" onclick="BooklibApp.openShare('${s.id}','${_st.matrixClassId}','${_st.matrixBookId}')">
               <div class="bl-shdr-name">${_e(s.name)}${s.nickname?`<span style="font-size:9px;font-weight:600;color:var(--tx3);display:block">(${_e(s.nickname)})</span>`:''}</div>
@@ -2137,7 +2147,7 @@ const BooklibApp = (() => {
     const scrollTop=tbl?tbl.scrollTop:0;
     const scrollLeft=tbl?tbl.scrollLeft:0;
     mb.innerHTML=_matrixHTML();
-    _setupDrag();_bindCsvDrop();
+    _setupDrag();_bindCsvDrop();_initChResize();
     // ★ 교재 목록 재필터링
     const _bsel2=document.getElementById('bl-bsel');
     if(_bsel2) _fillBookSel(_bsel2);
@@ -2531,6 +2541,74 @@ const BooklibApp = (() => {
     _updWLbl();
   }
   function _updWLbl(){const lbl=document.querySelector('.bl-mstats span[style*="font-size:10px"]');if(lbl)lbl.textContent=_st.chCollapsed?'접힘':_st.chColWidth+'px';}
+
+  function _initChResize(){
+    const handle=document.getElementById('bl-ch-resizer');
+    if(!handle||_st.chCollapsed)return;
+    const tip=document.getElementById('bl-ch-resizer-tip');
+    let startX=0,startW=0,moving=false;
+
+    const onMove=e=>{
+      if(!moving)return;
+      if(e.cancelable)e.preventDefault();
+      const x=e.clientX!==undefined?e.clientX:(e.touches?.[0]?.clientX??startX);
+      const newW=Math.max(MIN_CH_W,Math.min(MAX_CH_W,startW+(x-startX)));
+      _applyChWidth(newW);
+      _st.chColWidth=newW;
+      if(tip)tip.textContent=Math.round(newW)+'px';
+    };
+
+    const onEnd=()=>{
+      if(!moving)return;
+      moving=false;
+      handle.classList.remove('active');
+      document.body.style.cursor='';
+      document.body.style.userSelect='';
+      document.body.style.webkitUserSelect='';
+      localStorage.setItem(LS_CH_W,Math.round(_st.chColWidth));
+      _updWLbl();
+      document.removeEventListener('mousemove',onMove);
+      document.removeEventListener('mouseup',onEnd);
+      document.removeEventListener('touchmove',onMove);
+      document.removeEventListener('touchend',onEnd);
+    };
+
+    handle.addEventListener('mousedown',e=>{
+      e.preventDefault();e.stopPropagation();
+      moving=true;
+      startX=e.clientX;
+      startW=_st.chColWidth;
+      handle.classList.add('active');
+      document.body.style.cursor='col-resize';
+      document.body.style.userSelect='none';
+      document.body.style.webkitUserSelect='none';
+      if(tip)tip.textContent=Math.round(startW)+'px';
+      document.addEventListener('mousemove',onMove);
+      document.addEventListener('mouseup',onEnd);
+    });
+
+    handle.addEventListener('touchstart',e=>{
+      e.stopPropagation();
+      moving=true;
+      startX=e.touches[0].clientX;
+      startW=_st.chColWidth;
+      handle.classList.add('active');
+      if(tip)tip.textContent=Math.round(startW)+'px';
+      document.addEventListener('touchmove',onMove,{passive:false});
+      document.addEventListener('touchend',onEnd);
+    },{passive:false});
+
+    // 더블클릭: 자동 너비 복원
+    handle.addEventListener('dblclick',e=>{
+      e.stopPropagation();
+      const autoW=parseInt(localStorage.getItem('bl_ch_auto_w'))||DEF_CH_W;
+      _st.chColWidth=autoW;
+      _applyChWidth(autoW);
+      localStorage.setItem(LS_CH_W,autoW);
+      _updWLbl();
+      if(tip){tip.textContent=autoW+'px';tip.style.opacity='1';setTimeout(()=>{tip.style.opacity='';},800);}
+    });
+  }
 
   function _setupDrag(){
     const ths=document.querySelectorAll('.bl-shdr');let srcIdx=null;
@@ -4860,7 +4938,7 @@ const BooklibApp = (() => {
     _onClsChange,_onBkChange,
     _toggleStamp,_toggleCheck,_batchToggle,
     _saveSubTasks,_closeSubPopup,
-    _chWider,_chNarrow,_applyChWidth,_mtblFontSize,_applyFontSize,_toggleMemo,_saveMemo,_restoreMemoState,_toggleCollapse,
+    _chWider,_chNarrow,_applyChWidth,_initChResize,_mtblFontSize,_applyFontSize,_toggleMemo,_saveMemo,_restoreMemoState,_toggleCollapse,
     openShare,closeShare,_copyText,_getShareText,_printShare,_adjSharePrintFs,_adjReportPrintFs,
     openClassReport,closeReport,_getReportText,_webShare,_printReport,
     importCsv, openCsvImportModal, _confirmCsvImport, _syncChaptersFromXlsx, _applyClassCardData, _exportDebugData,
