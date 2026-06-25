@@ -216,6 +216,16 @@ const StudentApp = (() => {
 .tc-row.tc-total{ padding-top:12px; }
 .tc-row.tc-total b{ font-size:19px; color:var(--a); }
 .tc-row.tc-sub b{ font-size:13px; color:var(--tx3); font-weight:600; }
+
+/* 수업료/환불 탭 */
+.tc-tabs{ display:flex; background:var(--surf2); border-radius:10px; padding:3px; margin-bottom:16px; gap:3px; }
+.tc-tab{ flex:1; padding:9px; border-radius:8px; font-size:13px; font-weight:700;
+  color:var(--tx3); background:transparent; cursor:pointer; font-family:var(--font);
+  transition:all .18s; border:none; }
+.tc-tab.active{ background:var(--card); color:var(--a); box-shadow:0 1px 4px rgba(0,0,0,.08); }
+.tc-row.tc-refund b{ font-size:19px; color:#e85d04; }
+.tc-row.tc-attended{ color:var(--tx3); }
+.tc-row.tc-attended b{ font-size:13px; color:var(--tx2); font-weight:600; }
 `;
     document.head.appendChild(style);
   }
@@ -686,7 +696,8 @@ const StudentApp = (() => {
         `).join('')}
       </div>
 
-      <button class="tc-detail-btn" onclick="StudentApp.openTuitionCalc('${s.id}')">💰 수업료 계산</button>
+      <button class="tc-detail-btn" onclick="StudentApp.openTuitionCalc('${s.id}','enroll')">💰 입학 수업료 계산</button>
+      <button class="tc-detail-btn" style="margin-top:6px;border-color:#e85d04;background:rgba(232,93,4,.07);color:#e85d04" onclick="StudentApp.openTuitionCalc('${s.id}','refund')">💸 퇴원 환불금 계산</button>
 
       <div class="sh-acts" style="margin-top:10px;flex-wrap:wrap">
         <button class="btn-x" onclick="StudentApp.closeDetail()">닫기</button>
@@ -974,16 +985,25 @@ const StudentApp = (() => {
     return [...new Set(DB.getActiveClasses().map(c => c.name))].filter(Boolean).sort();
   }
 
-  /** 계산기 모달 내부 HTML */
-  function _tcModalHTML(prefill) {
+  /** 계산기 모달 내부 HTML — mode: 'enroll'(입학) | 'refund'(퇴원 환불) */
+  function _tcModalHTML(prefill, mode='enroll') {
     const names = _tcClassOptions();
     const today = new Date().toISOString().slice(0, 10);
     const selClass   = prefill.classCode || '';
     const enrollDate = prefill.enrollDate || today;
+    const isRefund = mode === 'refund';
     return `
       <div class="sh-handle"></div>
       <div class="sh-title">💰 수업료 계산기</div>
-      <div class="sh-sub">${prefill.studentName ? _e(prefill.studentName) + ' 학생 · ' : ''}반의 수업 요일을 기준으로 입학일 이후 남은 수업료를 계산합니다.</div>
+      <div class="sh-sub">${prefill.studentName ? _e(prefill.studentName) + ' 학생 · ' : ''}반 수업일 기준으로 수업료를 계산합니다.</div>
+
+      <div class="tc-tabs">
+        <button class="tc-tab ${!isRefund?'active':''}"
+          onclick="StudentApp._tcSwitchMode('enroll')">📥 입학 수업료</button>
+        <button class="tc-tab ${isRefund?'active':''}"
+          onclick="StudentApp._tcSwitchMode('refund')">💸 퇴원 환불금</button>
+      </div>
+
       <div class="f-grp">
         <label class="f-lbl">반 선택</label>
         <select class="f-sel" id="tc-cls" onchange="StudentApp._tcOnChange()">
@@ -992,79 +1012,159 @@ const StudentApp = (() => {
         </select>
         ${!names.length ? '<div class="tc-warn">⚠️ 운용 중인 반이 없습니다. 관리 &gt; 반 관리에서 반을 먼저 등록해주세요.</div>' : ''}
       </div>
+
+      ${isRefund ? `
+      <div class="f-grp">
+        <label class="f-lbl">마지막 출석일 <span style="font-size:10px;font-weight:400;color:var(--tx3)">(이 날까지 수업함)</span></label>
+        <input class="f-inp" id="tc-date" type="date" value="${_e(today)}" onchange="StudentApp._tcOnChange()">
+      </div>` : `
       <div class="f-grp">
         <label class="f-lbl">입학일</label>
         <input class="f-inp" id="tc-date" type="date" value="${_e(enrollDate)}" onchange="StudentApp._tcOnChange()">
-      </div>
+      </div>`}
+
       <div id="tc-result"></div>
       <div class="sh-acts">
         <button class="btn-x" onclick="StudentApp.closeTuitionCalc()">닫기</button>
-        ${prefill.studentId ? `<button class="btn-ok" id="tc-apply-btn" style="display:none" onclick="StudentApp._tcApplyMemo('${prefill.studentId}')">📝 메모에 저장</button>` : ''}
+        ${prefill.studentId ? `<button class="btn-ok" id="tc-apply-btn" style="display:none"
+          onclick="StudentApp._tcApplyMemo('${prefill.studentId}')">📝 메모에 저장</button>` : ''}
       </div>
     `;
   }
 
-  /** 계산 결과 렌더 */
-  function _tcRenderResult(cls, calc) {
+  /** 탭 전환 (모드 재렌더) */
+  function _tcSwitchMode(mode) {
+    const prefill = _TC_PREFILL || {};
+    const sh = document.getElementById('st-tc-sh');
+    if (!sh) return;
+    sh.innerHTML = _tcModalHTML(prefill, mode);
+    _tcOnChange();
+  }
+  let _TC_PREFILL = null; // 현재 열린 계산기의 prefill 저장
+
+  /** 계산 결과 렌더 — enrollCalc(입학) 또는 refundCalc(퇴원 환불) 중 하나만 전달 */
+  function _tcRenderResult(cls, enrollCalc, refundCalc) {
     const el = document.getElementById('tc-result');
     if (!el) return;
     const applyBtn = document.getElementById('tc-apply-btn');
-    if (!cls) {
-      el.innerHTML = '';
-      if (applyBtn) applyBtn.style.display = 'none';
-      return;
-    }
+    if (!cls) { el.innerHTML = ''; if (applyBtn) applyBtn.style.display = 'none'; return; }
+
     if (!cls.tuition) {
-      el.innerHTML = `<div class="tc-warn">⚠️ "${_e(cls.name)}" 반에 수업료가 설정되어 있지 않습니다.<br>관리 &gt; 반 관리에서 월 수업료를 먼저 입력해주세요.</div>`;
+      el.innerHTML = `<div class="tc-warn">⚠️ "${_e(cls.name)}" 반에 수업료가 설정되어 있지 않습니다.<br>관리 &gt; 반 관리 💸 버튼에서 월 수업료를 먼저 입력해주세요.</div>`;
       if (applyBtn) applyBtn.style.display = 'none';
       return;
     }
-    if (!calc) { el.innerHTML = ''; if (applyBtn) applyBtn.style.display = 'none'; return; }
-    if (!calc.totalCount) {
-      el.innerHTML = `<div class="tc-warn">⚠️ ${calc.year}년 ${calc.month}월에는 "${_e(cls.name)}" 반의 수업 요일(${(cls.days||[]).join(', ')})에 해당하는 날짜가 없습니다.</div>`;
+
+    // ── 환불 모드 ─────────────────────────────────────
+    if (refundCalc) {
+      const c = refundCalc;
+      if (!c.totalCount) {
+        el.innerHTML = `<div class="tc-warn">⚠️ ${c.year}년 ${c.month}월에 "${_e(cls.name)}" 반 수업일이 없습니다.</div>`;
+        if (applyBtn) applyBtn.style.display = 'none';
+        return;
+      }
+      const attendedList = c.attendedDays.map(d => `${c.month}/${d}`).join(', ') || '없음';
+      const refundList   = c.refundDays.map(d => `${c.month}/${d}`).join(', ') || '없음';
+      const noRefund = c.refundCount === 0;
+      el.innerHTML = `
+        <div class="tc-card">
+          <div class="tc-row"><span>수업 요일</span><b>${_e((cls.days||[]).join(', '))}</b></div>
+          <div class="tc-row"><span>월 수업료</span><b>${c.tuition.toLocaleString()}원</b></div>
+          <div class="tc-row"><span>${c.year}년 ${c.month}월 전체 수업일</span><b>${c.totalCount}일</b></div>
+          <div class="tc-row tc-attended"><span>마지막 출석일(${c.month}/${c.lastDay})까지 수업</span><b>${c.attendedCount}일</b></div>
+          <div class="tc-row tc-dates tc-attended"><span>수업 완료 일자</span><span class="tc-dates-val">${_e(attendedList)}</span></div>
+          <div class="tc-row"><span>환불 대상 수업일</span><b style="color:#e85d04">${c.refundCount}일</b></div>
+          ${c.refundCount ? `<div class="tc-row tc-dates"><span>환불 일자</span><span class="tc-dates-val">${_e(refundList)}</span></div>` : ''}
+          <div class="tc-row"><span>1회당 수업료</span><b>${Math.round(c.perDay).toLocaleString()}원</b></div>
+          <div class="tc-row"><span>수업 완료분 금액</span><b style="color:var(--tx2)">${c.paidAmount.toLocaleString()}원</b></div>
+          ${noRefund
+            ? `<div class="tc-warn" style="margin-top:8px">이미 모든 수업을 완료하여 환불 대상 수업일이 없습니다.</div>`
+            : `<div class="tc-row tc-refund"><span>환불금</span><b>${c.refundExact.toLocaleString()}원</b></div>
+               <div class="tc-row tc-sub"><span>100원 단위 환불 권장액</span><b>${c.refundRounded.toLocaleString()}원</b></div>`
+          }
+        </div>`;
+      if (applyBtn) applyBtn.style.display = noRefund ? 'none' : '';
+      return;
+    }
+
+    // ── 입학 수업료 모드 ───────────────────────────────
+    const c = enrollCalc;
+    if (!c) { el.innerHTML = ''; if (applyBtn) applyBtn.style.display = 'none'; return; }
+    if (!c.totalCount) {
+      el.innerHTML = `<div class="tc-warn">⚠️ ${c.year}년 ${c.month}월에 "${_e(cls.name)}" 반 수업일이 없습니다.</div>`;
       if (applyBtn) applyBtn.style.display = 'none';
       return;
     }
-    const dateList = calc.remainDays.map(d => `${calc.month}/${d}`).join(', ') || '없음';
+    const dateList = c.remainDays.map(d => `${c.month}/${d}`).join(', ') || '없음';
     el.innerHTML = `
       <div class="tc-card">
-        <div class="tc-row"><span>수업 요일</span><b>${_e((cls.days || []).join(', '))}</b></div>
-        <div class="tc-row"><span>월 수업료</span><b>${calc.tuition.toLocaleString()}원</b></div>
-        <div class="tc-row"><span>${calc.year}년 ${calc.month}월 전체 수업일</span><b>${calc.totalCount}일</b></div>
-        <div class="tc-row"><span>입학일 이후 남은 수업일</span><b style="color:var(--a)">${calc.remainCount}일</b></div>
-        <div class="tc-row tc-dates"><span>남은 수업일자</span><span class="tc-dates-val">${_e(dateList)}</span></div>
-        <div class="tc-row"><span>1회당 수업료</span><b>${Math.round(calc.perDay).toLocaleString()}원</b></div>
-        <div class="tc-row tc-total"><span>계산된 수업료</span><b>${calc.amountExact.toLocaleString()}원</b></div>
-        <div class="tc-row tc-sub"><span>100원 단위 청구 권장액</span><b>${calc.amountRounded.toLocaleString()}원</b></div>
-      </div>
-    `;
+        <div class="tc-row"><span>수업 요일</span><b>${_e((cls.days||[]).join(', '))}</b></div>
+        <div class="tc-row"><span>월 수업료</span><b>${c.tuition.toLocaleString()}원</b></div>
+        <div class="tc-row"><span>${c.year}년 ${c.month}월 전체 수업일</span><b>${c.totalCount}일</b></div>
+        <div class="tc-row"><span>입학일 이후 남은 수업일</span><b style="color:var(--a)">${c.remainCount}일</b></div>
+        <div class="tc-row tc-dates"><span>수업 예정일자</span><span class="tc-dates-val">${_e(dateList)}</span></div>
+        <div class="tc-row"><span>1회당 수업료</span><b>${Math.round(c.perDay).toLocaleString()}원</b></div>
+        <div class="tc-row tc-total"><span>계산된 수업료</span><b>${c.amountExact.toLocaleString()}원</b></div>
+        <div class="tc-row tc-sub"><span>100원 단위 청구 권장액</span><b>${c.amountRounded.toLocaleString()}원</b></div>
+      </div>`;
     if (applyBtn) applyBtn.style.display = '';
   }
 
-  /** 반/입학일 입력 변경 시 재계산 */
+  /** 마지막 출석일 기준 환불금 계산 */
+  function _tcCalcRefund(cls, lastAttendDateStr) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(lastAttendDateStr || '');
+    if (!cls || !m) return null;
+    const year = +m[1], month = +m[2], lastDay = +m[3];
+    const allDays      = _tcMeetDays(cls.days, year, month);
+    const totalCount   = allDays.length;
+    // 마지막 출석일까지 수업일 (이미 수업한 날)
+    const attendedDays = allDays.filter(d => d <= lastDay);
+    const attendedCount = attendedDays.length;
+    // 환불 대상: 마지막 출석일 이후 수업일
+    const refundDays   = allDays.filter(d => d > lastDay);
+    const refundCount  = refundDays.length;
+    const tuition   = Number(cls.tuition) || 0;
+    const perDay    = totalCount ? tuition / totalCount : 0;
+    const paidAmount     = Math.round(perDay * attendedCount); // 이미 수업한 금액
+    const refundExact    = Math.round(perDay * refundCount);   // 환불액
+    const refundRounded  = Math.round(refundExact / 100) * 100;
+    return { year, month, lastDay, allDays, attendedDays, attendedCount,
+             refundDays, refundCount, totalCount, tuition, perDay,
+             paidAmount, refundExact, refundRounded };
+  }
+
+  /** 반/날짜 입력 변경 시 재계산 */
   function _tcOnChange() {
-    const clsName     = document.getElementById('tc-cls')?.value || '';
-    const enrollDate  = document.getElementById('tc-date')?.value || '';
-    if (!clsName || !enrollDate) { _tcRenderResult(null, null); return; }
-    const cls  = _tcFindClass(clsName, enrollDate);
-    const calc = cls ? _tcCalc(cls, enrollDate) : null;
-    _tcRenderResult(cls, calc);
+    const clsName  = document.getElementById('tc-cls')?.value || '';
+    const dateVal  = document.getElementById('tc-date')?.value || '';
+    if (!clsName || !dateVal) { _tcRenderResult(null, null, null); return; }
+    // 현재 탭 모드 감지
+    const activeTab = document.querySelector('.tc-tab.active');
+    const isRefund = activeTab && activeTab.textContent.includes('퇴원');
+    const cls  = _tcFindClass(clsName, dateVal);
+    if (isRefund) {
+      const calc = cls ? _tcCalcRefund(cls, dateVal) : null;
+      _tcRenderResult(cls, null, calc);
+    } else {
+      const calc = cls ? _tcCalc(cls, dateVal) : null;
+      _tcRenderResult(cls, calc, null);
+    }
   }
 
   /** 계산기 열기 (studentId 전달 시 해당 학생 정보로 미리 채움) */
-  function openTuitionCalc(studentId = null) {
+  function openTuitionCalc(studentId = null, mode = 'enroll') {
     const s = studentId ? StudentDB.getAll().find(x => x.id === studentId) : null;
-    const prefill = {
+    _TC_PREFILL = {
       studentId:   s?.id   || null,
       studentName: s?.name || '',
       classCode:   s?.classCode || '',
-      enrollDate:  (s?.enrollDate && /^\d{4}-\d{2}-\d{2}$/.test(s.enrollDate))
+      enrollDate:  (s?.enrollDate && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(s.enrollDate))
         ? s.enrollDate : new Date().toISOString().slice(0, 10),
     };
     const ov = document.getElementById('st-tc-ov');
     const sh = document.getElementById('st-tc-sh');
     if (!ov || !sh) return;
-    sh.innerHTML = _tcModalHTML(prefill);
+    sh.innerHTML = _tcModalHTML(_TC_PREFILL, mode);
     ov.classList.remove('hidden');
     history.pushState({ pg: 'students', modal: 'tuitioncalc' }, '');
     _tcOnChange();
@@ -1078,23 +1178,31 @@ const StudentApp = (() => {
     if (e.target.id === 'st-tc-ov') closeTuitionCalc();
   }
 
-  /** 계산 결과를 학생 메모에 추가 저장 (기존 메모는 보존) */
+  /** 계산 결과를 학생 메모에 추가 저장 (입학/환불 모드 모두 처리) */
   async function _tcApplyMemo(studentId) {
     const s = StudentDB.getAll().find(x => x.id === studentId);
     if (!s) return;
-    const clsName    = document.getElementById('tc-cls')?.value || '';
-    const enrollDate = document.getElementById('tc-date')?.value || '';
-    const cls  = clsName ? _tcFindClass(clsName, enrollDate) : null;
-    const calc = cls ? _tcCalc(cls, enrollDate) : null;
-    if (!cls || !calc || !cls.tuition || !calc.totalCount) {
-      _toast('⚠️ 저장할 계산 결과가 없습니다'); return;
+    const clsName = document.getElementById('tc-cls')?.value || '';
+    const dateVal = document.getElementById('tc-date')?.value || '';
+    const activeTab = document.querySelector('.tc-tab.active');
+    const isRefund = activeTab && activeTab.textContent.includes('퇴원');
+    const cls = clsName ? _tcFindClass(clsName, dateVal) : null;
+    if (!cls || !cls.tuition) { _toast('⚠️ 저장할 계산 결과가 없습니다'); return; }
+
+    let note;
+    if (isRefund) {
+      const calc = _tcCalcRefund(cls, dateVal);
+      if (!calc || !calc.totalCount || !calc.refundCount) { _toast('⚠️ 환불 대상 수업일이 없습니다'); return; }
+      note = `[환불] ${calc.year}-${String(calc.month).padStart(2,'0')} 마지막출석(${dateVal}) · ${cls.name}반 · 환불 ${calc.refundCount}일 · ${calc.refundExact.toLocaleString()}원(권장 ${calc.refundRounded.toLocaleString()}원)`;
+    } else {
+      const calc = _tcCalc(cls, dateVal);
+      if (!calc || !calc.totalCount) { _toast('⚠️ 저장할 계산 결과가 없습니다'); return; }
+      note = `[수업료] ${calc.year}-${String(calc.month).padStart(2,'0')} 입학(${dateVal}) · ${cls.name}반 · ${calc.remainCount}/${calc.totalCount}일 · ${calc.amountExact.toLocaleString()}원`;
     }
-    const note = `[수업료] ${calc.year}-${String(calc.month).padStart(2,'0')} 입학(${enrollDate}) · ${cls.name}반 · 남은 ${calc.remainCount}/${calc.totalCount}일 · ${calc.amountExact.toLocaleString()}원`;
     const memo = s.memo ? `${s.memo}\n${note}` : note;
     await StudentDB.updateStudent(studentId, { memo });
     _toast('✅ 학생 메모에 저장되었습니다', 'success');
     closeTuitionCalc();
-    // 상세 모달이 열려 있다면 내용 갱신
     const detailOv = document.getElementById('st-detail-ov');
     if (detailOv && !detailOv.classList.contains('hidden')) {
       const updated = StudentDB.getAll().find(x => x.id === studentId);
@@ -1133,6 +1241,6 @@ const StudentApp = (() => {
     quickStatus, confirmDelete,
     openEditForm, saveEdit, _cancelEdit, _onEditStatusChange,
     _onSearch, _onFilter, _onDetailOvClick,
-    openTuitionCalc, closeTuitionCalc, _onTcOvClick, _tcOnChange, _tcApplyMemo,
+    openTuitionCalc, closeTuitionCalc, _onTcOvClick, _tcOnChange, _tcApplyMemo, _tcSwitchMode,
   };
 })();
