@@ -23,6 +23,10 @@ const DB = (() => {
 
   let C = { classes:[], progress:{}, accounts:[], theme:null };
 
+  // ★ Pending 쓰기 키 추적: Firebase 리스너가 debounce 대기 중인 로컬 값을 덮어쓰지 않도록 보호
+  const _pendingKeys = new Set();
+  const _progressDebounce = {};
+
   const _ev = {};
   function _fire(t) {
     (_ev[t]||[]).forEach(f=>{ try{f();}catch(e){} });
@@ -80,7 +84,13 @@ const DB = (() => {
         const snap = await FireDB.get(FireDB.P.root);
         if (snap) {
           C.classes  = snap.classes  ? Object.values(snap.classes)  : [];
-          C.progress = snap.progress || {};
+          // ★ 재로드 시에도 pending 키 보호
+          const retryIncoming = snap.progress || {};
+          _pendingKeys.forEach(k => {
+            if (C.progress[k] !== undefined) retryIncoming[k] = C.progress[k];
+            else delete retryIncoming[k];
+          });
+          C.progress = retryIncoming;
           C.accounts = snap.accounts ? Object.values(snap.accounts) : [];
           C.theme    = snap.theme    || null;
           ls(LS.classes,C.classes); ls(LS.progress,C.progress);
@@ -105,7 +115,17 @@ const DB = (() => {
       }
     });
     FireDB.listen(FireDB.P.progress, v => {
-      C.progress = v||{}; ls(LS.progress,C.progress); _fire('progress');
+      // ★ 핵심 수정: pending 키(debounce 대기 중)는 로컬 값 보호
+      //   Firebase가 보낸 서버 스냅샷이 아직 쓰지 않은 입력값을 덮어쓰는 버그 방지
+      const incoming = v || {};
+      _pendingKeys.forEach(k => {
+        // 로컬에 값이 있으면 서버 값 대신 로컬 값 유지
+        if (C.progress[k] !== undefined) incoming[k] = C.progress[k];
+        else delete incoming[k];
+      });
+      C.progress = incoming;
+      ls(LS.progress, C.progress);
+      _fire('progress');
     });
     FireDB.listen(FireDB.P.accounts, async v => {
       const nd=v?Object.values(v):[];
@@ -542,6 +562,26 @@ const DB = (() => {
     return res;
   }
 
+  // ★ progress 개별 키 debounce 쓰기 — 완료 시 _pendingKeys에서 제거
+  //   Firebase 리스너보다 늦게 도착한 서버 데이터가 로컬 입력을 덮어쓰는 버그 방지
+  function _writeProgress(key, value) {
+    _pendingKeys.add(key);
+    clearTimeout(_progressDebounce[key]);
+    _progressDebounce[key] = setTimeout(async () => {
+      delete _progressDebounce[key];
+      if (FireDB.ready()) {
+        const path = `${FireDB.P.progress}/${key}`;
+        try {
+          if (!value && value !== 0) await FireDB.remove(path);
+          else await FireDB.set(path, value);
+        } catch(e) {
+          console.warn('[DB] progress 쓰기 실패:', key, e);
+        }
+      }
+      _pendingKeys.delete(key);
+    }, 800);
+  }
+
   function autoSave(classId, weekKey, dayName, field, value, bookId=null) {
     let key;
     if (field==='memo') {
@@ -559,8 +599,8 @@ const DB = (() => {
     }
     if (!value) delete C.progress[key]; else C.progress[key] = value;
     ls(LS.progress, C.progress);
-    // 진도값/메모는 debounce(800ms)
-    if (FireDB.ready()) FireDB.debounced(`${FireDB.P.progress}/${key}`, value||null, 800);
+    // ★ 전용 debounce — 완료 후 _pendingKeys 자동 해제
+    _writeProgress(key, value||null);
   }
 
   /* ═══ THEME ═══ */
