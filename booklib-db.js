@@ -116,6 +116,22 @@ const BookLibDB = (() => {
       _fire('checks');
     });
 
+    // ★ FB_STAMPS 전역 리스너: 다른 기기 스탬프 변경을 항상 반영
+    //   스탬프는 평가 범위 기준점(어느 챕터까지 수업했는지)으로
+    //   listenStamps()가 없는 상태에서 다른 PC가 스탬프를 찍으면
+    //   이쪽 PC의 미수행 통계·평가 범위 계산이 틀린 값을 냄
+    FireDB.listen(FB_STAMPS, v => {
+      if (!v) return;
+      // 활성 listenStamps 경로는 그쪽 리스너가 담당하므로 merge 방식으로 적용
+      Object.keys(v).forEach(ck => {
+        if (JSON.stringify(v[ck]) !== JSON.stringify(_stamps[ck])) {
+          _stamps[ck] = v[ck];
+        }
+      });
+      _ls(LS_STAMPS, _stamps);
+      _fire('stamps');
+    });
+
     console.log('[BookLibDB] ✅ v3.1, books:', _books.length);
   }
 
