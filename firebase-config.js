@@ -45,25 +45,17 @@ const FireDB = (() => {
   let _offlineShowTimer = null;   // 8초 디바운스 타이머
 
   function _scheduleRetry() {
+    // ★ Firebase RTDB SDK가 WebSocket 재연결을 자동으로 관리함
+    //   수동 goOffline/goOnline은 진행 중인 쓰기와 활성 리스너를 강제 중단시켜
+    //   데이터 손실·입력 사라짐 버그를 유발하므로 제거
     if (_retryTimer || _retryCount >= MAX_RETRY) return;
-    _retryTimer = setTimeout(async () => {
+    _retryTimer = setTimeout(() => {
       _retryTimer = null;
-      if (_connected) return; // 이미 복구됨
+      if (_connected) return;
       _retryCount++;
-      console.log(`[FireDB] 🔄 재연결 시도 ${_retryCount}/${MAX_RETRY}`);
-      try {
-        // Firebase SDK가 내부적으로 재연결 관리하므로
-        // goOffline → goOnline 사이클로 WebSocket 강제 재협상
-        if (_db) {
-          _db.goOffline();
-          await new Promise(r => setTimeout(r, 500));
-          _db.goOnline();
-          // .info/connected 리스너가 재연결 결과를 자동 수신함
-        }
-      } catch(e) {
-        console.warn('[FireDB] 재연결 오류:', e);
-        _scheduleRetry();
-      }
+      console.log(`[FireDB] ⏳ 재연결 대기 ${_retryCount}/${MAX_RETRY} — SDK 자동 복구 중`);
+      // SDK가 알아서 재연결: 추가 조작 불필요
+      _scheduleRetry(); // 다음 체크 예약
     }, RETRY_INTERVAL);
   }
 
@@ -152,18 +144,7 @@ const FireDB = (() => {
       if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
       _db = firebase.database();
 
-      /* 오프라인 퍼시스턴스 — SDK 내장 캐시 활성화 */
-      try {
-        await _db.enablePersistence({ synchronizeTabs: true });
-        console.log('[FireDB] ✅ 오프라인 퍼시스턴스 활성화');
-      } catch (e) {
-        if (e.code === 'failed-precondition') {
-          console.warn('[FireDB] 퍼시스턴스: 다중 탭 — 첫 탭만 적용');
-        } else if (e.code === 'unimplemented') {
-          console.warn('[FireDB] 퍼시스턴스: 브라우저 미지원');
-        }
-      }
-
+      // ★ RTDB는 SDK가 인메모리 캐시 자동 관리 (enablePersistence는 Firestore 전용)
       _ok = true;
       console.log('[FireDB] ✅ connected');
 

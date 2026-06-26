@@ -99,6 +99,23 @@ const BookLibDB = (() => {
         _books = nd; _ls(LS_BOOKS,_books); _fire('books');
       }
     });
+
+    // ★ FB_CHECKS 전역 리스너: 다른 기기 체크 변경을 항상 반영
+    //   listenMatrix()는 특정 반+교재 조합에만 구독하므로
+    //   다른 반/교재 체크나 앱 최초 로드 직후 변경 사항이 누락될 수 있음
+    //   전역 리스너가 _checks 전체를 최신 상태로 유지
+    FireDB.listen(FB_CHECKS, v => {
+      if (!v) return;
+      // 활성 listenMatrix 경로는 그쪽 리스너가 담당하므로 merge 방식으로 적용
+      Object.keys(v).forEach(ck => {
+        if (JSON.stringify(v[ck]) !== JSON.stringify(_checks[ck])) {
+          _checks[ck] = v[ck];
+        }
+      });
+      _ls(LS_CHECKS, _checks);
+      _fire('checks');
+    });
+
     console.log('[BookLibDB] ✅ v3.1, books:', _books.length);
   }
 
@@ -277,9 +294,11 @@ const BookLibDB = (() => {
     else         delete _checks[ck][sk];
     _ls(LS_CHECKS,_checks);
     const path = `${FB_CHECKS}/${ck}/${sk}`;
+    // ★ await 추가: 쓰기 완료 후 리스너 이벤트가 확정된 값을 받도록 보장
+    //   (fire-and-forget이면 에러 무시 + 리스너 이벤트 순서 불확실)
     if (_fb()) {
-      if (checked) FireDB.set(path, _checks[ck][sk]).catch(console.warn);
-      else         FireDB.remove(path).catch(console.warn);
+      if (checked) await FireDB.set(path, _checks[ck][sk]).catch(console.warn);
+      else         await FireDB.remove(path).catch(console.warn);
     }
   }
 
