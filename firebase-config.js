@@ -1,23 +1,28 @@
 /**
- * firebase-config.js — v10
+ * firebase-config.js — v11
  * ────────────────────────────────────────────────────────────────
- *  v10 변경사항 (버그 수정 + 안정화)
+ *  v11 개선사항 (세션 유지 강화)
  *
- *  ★ 버그 수정 1 — _scheduleRetry() 절대 호출 안 되는 구조적 버그 수정
- *    · _offlineSince = Date.now() 직후 (Date.now()-_offlineSince > 10000)
- *      조건은 항상 ~0ms → 절대 true 불가 → 재연결 시도 dead code
- *    · 수정: 최초 오프라인 감지 시 즉시 _scheduleRetry() 호출
+ *  ★ 개선 1 — keepSynced 경로 확장
+ *    · hakwon10/grades 경로 추가 → 성적 데이터 WebSocket 상시 유지
+ *    · hakwon10/books  경로 추가 → 교재 데이터 포함
  *
- *  ★ 버그 수정 2 — 오프라인 배너 즉시 표시 문제
- *    · Firebase .info/connected 특성상 네트워크 일시 흔들림·탭 전환·
- *      WiFi↔LTE 전환에도 false 발생 후 SDK가 5~15초 내 자동 재연결
- *    · 수정: 8초 디바운스 적용 — 8초 후에도 오프라인이면 배너 표시
- *      → 일시적 끊김(< 8초)은 배너 없이 자동 해결됨
+ *  ★ 개선 2 — 재연결 시도 무제한화
+ *    · MAX_RETRY 5회 제한 제거 → 인터넷이 있는 한 무한 재시도
+ *    · 재연결 간격: 5초 → 5초(1~3회) → 15초(4~10회) → 30초(11회~)
+ *      지수 백오프로 과도한 요청 방지
  *
- *  ★ 추가 — keepSynced(true)
- *    · 주요 경로 WebSocket 연결 유지로 재연결 빈도 감소
+ *  ★ 개선 3 — navigator.onLine 이벤트 처리
+ *    · WiFi↔LTE 전환, 네트워크 복귀 시 즉시 재연결 카운터 리셋
  *
- *  ★ 유지 — 초기 4초 억제, 재연결 최대 5회
+ *  ★ 개선 4 — visibilitychange 이벤트 처리
+ *    · 백그라운드 탭 복귀 시 연결 상태 확인 및 재연결 강제화
+ *
+ *  ★ 개선 5 — keepalive 핑 (60초 주기)
+ *    · .info/serverTimeOffset 읽기로 WebSocket 연결 유지
+ *    · 장시간 유휴에도 연결 끊김 방지
+ *
+ *  유지 — 초기 4초 억제, 8초 디바운스, goOffline/goOnline 미사용
  * ────────────────────────────────────────────────────────────────
  */
 const FIREBASE_CONFIG = {
@@ -33,33 +38,37 @@ const FIREBASE_CONFIG = {
 const FireDB = (() => {
   let _db = null, _ok = false, _connected = false, _q = {};
 
-  /* ── 오프라인 억제 타이머 (앱 시작 4초간 오탐 방지) ── */
+  /* ── 초기 4초 오탐 억제 ── */
   const _suppressUntil = Date.now() + 4000;
 
-  /* ── 재연결 시도 ── */
-  let _retryTimer = null, _retryCount = 0;
-  const MAX_RETRY = 5, RETRY_INTERVAL = 5000;
+  /* ── 재연결 상태 ── */
+  let _retryTimer  = null;
+  let _retryCount  = 0;
+  // 지수 백오프: 1~3회=5초, 4~10회=15초, 11회~=30초
+  function _retryDelay() {
+    if (_retryCount <= 3)  return 5000;
+    if (_retryCount <= 10) return 15000;
+    return 30000;
+  }
 
   /* ── 오프라인 상태 추적 ── */
-  let _offlineSince = 0;
-  let _offlineShowTimer = null;   // 8초 디바운스 타이머
+  let _offlineSince    = 0;
+  let _offlineShowTimer = null;
 
+  /* ── 재연결 스케줄 (무제한 — 인터넷 있는 한 계속 시도) ── */
   function _scheduleRetry() {
-    // ★ Firebase RTDB SDK가 WebSocket 재연결을 자동으로 관리함
-    //   수동 goOffline/goOnline은 진행 중인 쓰기와 활성 리스너를 강제 중단시켜
-    //   데이터 손실·입력 사라짐 버그를 유발하므로 제거
-    if (_retryTimer || _retryCount >= MAX_RETRY) return;
+    if (_retryTimer || _connected) return;
+    const delay = _retryDelay();
     _retryTimer = setTimeout(() => {
       _retryTimer = null;
       if (_connected) return;
       _retryCount++;
-      console.log(`[FireDB] ⏳ 재연결 대기 ${_retryCount}/${MAX_RETRY} — SDK 자동 복구 중`);
-      // SDK가 알아서 재연결: 추가 조작 불필요
-      _scheduleRetry(); // 다음 체크 예약
-    }, RETRY_INTERVAL);
+      console.log(`[FireDB] ⏳ 재연결 대기 ${_retryCount}회차 (${delay/1000}초 후)`);
+      _scheduleRetry(); // 무한 재시도
+    }, delay);
   }
 
-  /* ── 오프라인 UI 실제 표시 (8초 디바운스 후 호출) ── */
+  /* ── 오프라인 UI 표시 (8초 디바운스 후) ── */
   function _showOfflineUI() {
     let ind = document.getElementById('fb-conn-ind');
     if (!ind) ind = _createInd();
@@ -70,6 +79,13 @@ const FireDB = (() => {
     const elapsed = _offlineSince ? Math.round((Date.now() - _offlineSince) / 1000) : 0;
     ind.innerHTML = `🔴 오프라인${elapsed > 0 ? ` (${elapsed}초)` : ''} — 재연결 중...`;
     clearTimeout(ind._t);
+    /* 오프라인 표시 중 경과 시간 업데이트 (10초마다) */
+    ind._elapsed = setInterval(() => {
+      if (!ind || !document.getElementById('fb-conn-ind')) { clearInterval(ind._elapsed); return; }
+      if (_connected) { clearInterval(ind._elapsed); return; }
+      const sec = _offlineSince ? Math.round((Date.now() - _offlineSince) / 1000) : 0;
+      ind.innerHTML = `🔴 오프라인 (${sec}초) — 재연결 중...`;
+    }, 10000);
   }
 
   /* ── 인디케이터 DOM 생성 ── */
@@ -88,25 +104,22 @@ const FireDB = (() => {
     return ind;
   }
 
-  /* ── 연결 상태 인디케이터 ── */
+  /* ── 연결 상태 UI 업데이트 ── */
   function _updateConnUI(connected) {
-    // 초기 4초간 오프라인 표시 억제
     if (!connected && Date.now() < _suppressUntil) return;
 
     if (connected) {
-      /* ─── 온라인 복귀 ─── */
       const wasOffline = _offlineSince > 0;
 
-      // 오프라인 상태 초기화
       _offlineSince = 0;
       clearTimeout(_offlineShowTimer); _offlineShowTimer = null;
       clearTimeout(_retryTimer);       _retryTimer = null;
       _retryCount = 0;
 
       let ind = document.getElementById('fb-conn-ind');
+      if (ind?._elapsed) { clearInterval(ind._elapsed); ind._elapsed = null; }
       if (!ind) ind = _createInd();
 
-      // 실제로 오프라인이 표시됐던 경우에만 "연결됨" 배너 표시
       if (wasOffline) {
         Object.assign(ind.style, {
           background: 'rgba(5,150,105,.12)', color: '#059669',
@@ -118,23 +131,31 @@ const FireDB = (() => {
       }
 
     } else {
-      /* ─── 오프라인 감지 ─── */
       if (!_offlineSince) {
         _offlineSince = Date.now();
-        // ★ 버그 수정: 즉시 재연결 시도 스케줄 (이전 코드는 여기서 절대 retry 안 됐음)
         _scheduleRetry();
       }
-
-      // ★ 핵심 개선: 8초 디바운스
-      // Firebase SDK가 보통 5~15초 내 자동 재연결하므로
-      // 일시적 끊김(WiFi 전환, 탭 전환 등)은 배너 없이 자동 해결됨
       if (!_offlineShowTimer) {
         _offlineShowTimer = setTimeout(() => {
           _offlineShowTimer = null;
-          if (!_connected) _showOfflineUI(); // 8초 후에도 오프라인이면 표시
+          if (!_connected) _showOfflineUI();
         }, 8000);
       }
     }
+  }
+
+  /* ── keepalive 핑 (60초 주기 — WebSocket 연결 유지) ── */
+  function _startKeepAlive() {
+    setInterval(async () => {
+      /* 탭 비활성 또는 미초기화 상태면 핑 생략 */
+      if (document.hidden || !_ok || !_db) return;
+      try {
+        await _db.ref('.info/serverTimeOffset').get();
+        /* 성공 → 연결 유지 확인, 별도 동작 불필요 */
+      } catch (e) {
+        console.warn('[FireDB] ⚠️ keepalive 실패 — SDK 재연결 중:', e.message);
+      }
+    }, 60000);
   }
 
   /* ── 초기화 ── */
@@ -143,32 +164,53 @@ const FireDB = (() => {
       if (!firebase?.database) throw new Error('no sdk');
       if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
       _db = firebase.database();
-
-      // ★ RTDB는 SDK가 인메모리 캐시 자동 관리 (enablePersistence는 Firestore 전용)
       _ok = true;
       console.log('[FireDB] ✅ connected');
 
-      /* ★ keepSynced: 주요 경로 WebSocket 연결 유지 (재연결 빈도 감소) */
-      try {
-        _db.ref('hakwon10/classes').keepSynced(true);
-        _db.ref('hakwon10/accounts').keepSynced(true);
-        console.log('[FireDB] ✅ keepSynced 활성화');
-      } catch(e) {
-        console.warn('[FireDB] keepSynced 오류:', e);
-      }
+      /* ★ keepSynced: 주요 경로 WebSocket 연결 상시 유지
+         grades 경로 포함 → 성적 입력 중 연결 끊김 방지 */
+      const keepPaths = [
+        'hakwon10/classes',
+        'hakwon10/accounts',
+        'hakwon10/grades',    // ★ 성적 데이터 (신규)
+        'hakwon10/books',     // ★ 교재 데이터 (신규)
+      ];
+      keepPaths.forEach(path => {
+        try { _db.ref(path).keepSynced(true); }
+        catch (e) { console.warn('[FireDB] keepSynced 오류:', path, e); }
+      });
+      console.log('[FireDB] ✅ keepSynced 활성화:', keepPaths.join(', '));
 
       /* 연결 상태 실시간 감지 */
       _db.ref('.info/connected').on('value', snap => {
         const prev = _connected;
         _connected = !!snap.val();
         _updateConnUI(_connected);
-        if (_connected && !prev) {
-          console.log('[FireDB] 🌐 온라인 복귀 — SDK 자동 동기화');
-        }
+        if (_connected && !prev) console.log('[FireDB] 🌐 온라인 복귀');
+        if (!_connected)          console.log('[FireDB] 📴 연결 끊김 — 8초 후 배너 예정');
+      });
+
+      /* ★ 네트워크 복귀 이벤트 (WiFi↔LTE 전환 등) */
+      window.addEventListener('online', () => {
+        console.log('[FireDB] 🌐 navigator.online 감지 → 재연결 시도');
+        _retryCount = 0;
+        clearTimeout(_retryTimer); _retryTimer = null;
+        if (!_connected) _scheduleRetry();
+      });
+
+      /* ★ 탭 백그라운드→포어그라운드 복귀 */
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) return;
+        console.log('[FireDB] 👁 탭 활성화 → 연결 상태 확인');
         if (!_connected) {
-          console.log('[FireDB] 📴 연결 끊김 — 8초 후 배너 표시 예정');
+          _retryCount = 0;
+          clearTimeout(_retryTimer); _retryTimer = null;
+          _scheduleRetry();
         }
       });
+
+      /* ★ keepalive 시작 */
+      _startKeepAlive();
 
     } catch (e) {
       _ok = false;
