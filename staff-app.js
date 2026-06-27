@@ -1427,8 +1427,6 @@ const StaffApp = (() => {
 
     const s  = StaffDB.getById(_st.calStaffId);
     const mw = StaffDB.getMinWage();
-    // 수업/일반 타입에 맞는 시급 결정
-    // 우선순위: 수동 입력 > 타입별 시급(수업/일반) > 기본시급 > 최저시급
     const typeRate = _st.workType === 'class'
       ? (s?.classRate   || s?.baseHourlyRate || mw)
       : (s?.generalRate || s?.baseHourlyRate || mw);
@@ -1440,14 +1438,54 @@ const StaffApp = (() => {
     };
 
     if (_st.editingEntryId) {
+      /* ── 수정 모드 ── */
       await StaffDB.updateWorkEntry(_st.calStaffId, _st.workDate, _st.editingEntryId, patch);
       _st.editingEntryId = null;
       _drawWork();
       _toast(`💾 ${_st.workType==='class'?'수업':'일반'} ${_fmtHrs(hours)}h 수정 완료`, 'success');
+
     } else {
+      /* ── 등록 모드 — 중복 검사 먼저 ── */
+      const existing = StaffDB.getWorkDay(_st.calStaffId, _st.workDate);
+      const isDup = existing.some(e =>
+        e.type === _st.workType &&
+        e.start === start &&
+        e.end   === end
+      );
+      if (isDup) {
+        _toast('⚠️ 같은 시간·같은 유형 근무가 이미 등록되어 있습니다', 'error');
+        return;
+      }
+
       await StaffDB.addWorkEntry(_st.calStaffId, _st.workDate, patch);
+
+      /* ── 등록 성공 피드백 ── */
+      const typeLabel = _st.workType === 'class' ? '수업' : '일반';
+
+      // 1) 버튼 시각 피드백 (초록 체크)
+      const btn = document.querySelector('#sf-work-sh .btn-ok');
+      if (btn) {
+        const orig = btn.textContent;
+        btn.textContent = '✅ 등록 완료!';
+        btn.style.background = '#059669';
+        btn.disabled = true;
+        setTimeout(() => {
+          btn.textContent = orig;
+          btn.style.background = '';
+          btn.disabled = false;
+        }, 1200);
+      }
+
+      // 2) 입력폼 초기화 (다음 등록 대비)
+      const ws = document.getElementById('sf-ws'); if (ws) ws.value = '09:00';
+      const we = document.getElementById('sf-we'); if (we) we.value = '18:00';
+      const wn = document.getElementById('sf-wn'); if (wn) wn.value = '';
+      const wm = document.getElementById('sf-wh-manual'); if (wm) wm.value = '';
+      _manualHrsVal = null;
+
+      // 3) 근무 목록 새로고침 (추가된 항목 표시)
       _drawWork();
-      _toast(`✅ ${_st.workType==='class'?'수업':'일반'} ${_fmtHrs(hours)}h 등록`, 'success');
+      _toast(`✅ ${typeLabel} ${_fmtHrs(hours)}h 등록 완료`, 'success');
     }
   }
 
