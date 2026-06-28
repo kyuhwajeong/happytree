@@ -862,15 +862,20 @@ const StaffApp = (() => {
   /* ══════════════════════════════════════════
    * 달력 (근무 + 주휴수당 프로그레스 + 배치 등록)
    * ══════════════════════════════════════════ */
-  function openCal(sid) {
+  async function openCal(sid) {
     _st.calStaffId  = sid;
     _st.copyMode    = false;
     _st.selectMode  = false;
     _st.selected    = new Set();
     _st.copyTargets = new Set();
-    _drawCal();
     document.getElementById('sf-cal-ov')?.classList.remove('hidden');
     history.pushState({ pg: 'staff', modal: 'cal' }, '');
+    _drawCal();
+    // Firebase에서 최신 근무 데이터 강제 동기화 (멀티기기 일관성 보장)
+    try {
+      await StaffDB.syncWorkData(sid);
+      _drawCal();
+    } catch(e) { console.warn('[openCal] sync', e); }
   }
   function closeCal() {
     document.getElementById('sf-cal-ov')?.classList.add('hidden');
@@ -909,11 +914,7 @@ const StaffApp = (() => {
         <button class="sf-copy-confirm" onclick="StaffApp._confirmCopy()">복사 (${_st.copyTargets.size})</button>
         <button class="sf-copy-cancel"  onclick="StaffApp._cancelCopy()">취소</button>
       </div>` : ''}
-      ${_st.selectMode ? `<div class="sf-sel-banner">
-        <span class="sf-sel-banner-txt">☑️ ${_st.selected.size}개 선택됨 — 삭제할 항목을 탭하세요</span>
-        <button class="sf-sel-del"    onclick="StaffApp._deleteSelected()">삭제 (${_st.selected.size})</button>
-        <button class="sf-sel-cancel" onclick="StaffApp._cancelSelect()">취소</button>
-      </div>` : ''}
+
       ${_st.lastBatchId && !_st.copyMode && !_st.selectMode ? `<div class="sf-undo-banner">
         <span class="sf-undo-txt">✅ ${_st.lastBatchCount}일 일괄 등록 완료</span>
         <button class="sf-undo-btn" onclick="StaffApp._undoBatch()">↩️ 전체 취소</button>
@@ -961,18 +962,38 @@ const StaffApp = (() => {
           }).join('')}
         </div>
       </div>
+      <!-- 하단 버튼: 일반 모드 / 선택 모드 전환 -->
+      ${_st.selectMode ? `
+      <div style="padding:8px 14px 10px;border-top:2px solid #ef4444;flex-shrink:0;background:#fff5f5">
+        <div style="font-size:11px;font-weight:800;color:#991b1b;text-align:center;margin-bottom:8px">
+          ☑️ ${_st.selected.size}개 선택됨 — 항목을 탭하여 선택/해제
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button class="sf-cal-act-btn danger" style="padding:12px 4px;font-size:14px"
+            onclick="StaffApp._deleteSelected()"
+            ${_st.selected.size===0?'disabled style="opacity:.4;pointer-events:none"':''}>
+            🗑️<br><span>${_st.selected.size > 0 ? `${_st.selected.size}개 삭제` : '항목 선택'}</span>
+          </button>
+          <button class="sf-cal-act-btn close" style="padding:12px 4px;font-size:14px"
+            onclick="StaffApp._cancelSelect()">
+            ✕<br><span>선택 취소</span>
+          </button>
+        </div>
+      </div>
+      ` : `
       <div style="padding:10px 14px;border-top:1px solid var(--bdr);flex-shrink:0;display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
         <button class="sf-cal-act-btn primary" onclick="StaffApp.openBatch()">📦<br><span>일괄등록</span></button>
         ${hasTempl
           ? `<button class="sf-cal-act-btn sub" onclick="StaffApp._applyTemplModal()">📋<br><span>템플릿</span></button>`
           : `<button class="sf-cal-act-btn sub" onclick="StaffApp._calToSalary()">💰<br><span>급여확인</span></button>`}
-        <button class="sf-cal-act-btn ${_st.selectMode?'danger':'sub'}" onclick="StaffApp._toggleSelectMode()">☑️<br><span>${_st.selectMode?'선택중':'선택삭제'}</span></button>
+        <button class="sf-cal-act-btn sub" onclick="StaffApp._toggleSelectMode()">☑️<br><span>선택삭제</span></button>
         <button class="sf-cal-act-btn close" onclick="StaffApp.closeCal()">✕<br><span>닫기</span></button>
       </div>
       ${hasTempl ? `<div style="padding:0 14px 10px;flex-shrink:0;display:grid;grid-template-columns:1fr 1fr;gap:6px">
         <button class="sf-cal-act-btn sub" onclick="StaffApp._calToSalary()">💰<br><span>급여확인</span></button>
         <div></div>
-      </div>` : ''}`;
+      </div>` : ''}
+      `}`;
 
     _bindLongPress();
   }
@@ -1037,6 +1058,9 @@ const StaffApp = (() => {
     if (_st.selectMode) {
       const key = `${date}::${eid}`;
       if (_st.selected.has(key)) _st.selected.delete(key); else _st.selected.add(key);
+      // 전체 재렌더 대신 선택 상태와 하단 카운트만 빠르게 갱신
+      const el = document.querySelector(`[data-eid="${eid}"]`);
+      if (el) el.classList.toggle('selected-entry', _st.selected.has(key));
       _drawCal(); return;
     }
     openWork(date);     // 해당 날짜 근무 모달 오픈
@@ -1052,7 +1076,8 @@ const StaffApp = (() => {
   }
 
   async function _deleteSelected() {
-    if (!_st.selected.size) { _toast('⚠️ 선택된 항목이 없습니다'); return; }
+    if (!_st.selected.size) { _toast('⚠️ 삭제할 항목을 먼저 탭하여 선택하세요'); return; }
+    if (!confirm(`${_st.selected.size}개 근무 항목을 삭제할까요?`)) return;
     const list = [..._st.selected].map(key => {
       const [date, entryId] = key.split('::');
       return { date, entryId };

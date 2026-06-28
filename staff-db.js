@@ -801,6 +801,23 @@ const StaffDB = (() => {
     }
   }
 
+
+  /**
+   * 특정 직원의 근무 데이터를 Firebase에서 강제 재로드
+   * 멀티기기 사용 시 최신 데이터 보장용
+   */
+  async function syncWorkData(sid) {
+    if (!_fb()) return;
+    const data = await FireDB.get(`${FB_WORK}/${sid}`).catch(() => null);
+    if (!data) { _work[sid] = {}; return; }
+    // Firebase 키 변환: 2026_06_24 → 2026-06-24
+    _work[sid] = {};
+    Object.entries(data).forEach(([dayKey, entries]) => {
+      _work[sid][dayKey.replace(/_/g, '-')] = entries;
+    });
+    console.log(`[StaffDB] syncWorkData(${sid}): ${Object.keys(_work[sid]).length}일`);
+  }
+
   /* ════════════════════════════════════════
    * 엑셀 출력 데이터 생성 (SheetJS 용)
    * ════════════════════════════════════════ */
@@ -872,6 +889,7 @@ const StaffDB = (() => {
     /* 근무 */
     getWorkDay, getWorkMonth, getWorkRange,
     setWorkDay, addWorkEntry, deleteWorkEntry, updateWorkEntry,
+    syncWorkData,
     deleteWorkEntries, copyEntries,
     /* 일괄 등록 */
     checkOverlap, batchInsert, batchDelete,
