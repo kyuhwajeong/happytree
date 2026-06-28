@@ -1077,17 +1077,24 @@ const StaffApp = (() => {
 
   async function _deleteSelected() {
     if (!_st.selected.size) { _toast('⚠️ 삭제할 항목을 먼저 탭하여 선택하세요'); return; }
-    if (!confirm(`${_st.selected.size}개 근무 항목을 삭제할까요?`)) return;
+    const cnt = _st.selected.size;
+    if (!confirm(`${cnt}개 근무 항목을 삭제할까요?`)) return;
+
     const list = [..._st.selected].map(key => {
       const [date, entryId] = key.split('::');
       return { date, entryId };
     });
+
     const n = await StaffDB.deleteWorkEntries(_st.calStaffId, list);
     _st.selectMode  = false;
     _st.selected    = new Set();
     _st.lastBatchId = null;
-    _drawCal();
-    _toast(`🗑 ${n}개 항목 삭제`, 'success');
+
+    // confirm 다이얼로그 이후 DOM 렌더 타이밍 확보
+    setTimeout(() => {
+      _drawCal();
+      _toast(`🗑 ${n}개 항목 삭제 완료`, 'success');
+    }, 50);
   }
 
   function _cancelSelect() { _st.selectMode = false; _st.selected = new Set(); _drawCal(); }
@@ -1466,8 +1473,8 @@ const StaffApp = (() => {
       /* ── 수정 모드 ── */
       await StaffDB.updateWorkEntry(_st.calStaffId, _st.workDate, _st.editingEntryId, patch);
       _st.editingEntryId = null;
-      _drawWork();
       _toast(`💾 ${_st.workType==='class'?'수업':'일반'} ${_fmtHrs(hours)}h 수정 완료`, 'success');
+      setTimeout(() => closeWork(), 600);
 
     } else {
       /* ── 등록 모드 — 중복 검사 먼저 ── */
@@ -1487,30 +1494,18 @@ const StaffApp = (() => {
       /* ── 등록 성공 피드백 ── */
       const typeLabel = _st.workType === 'class' ? '수업' : '일반';
 
-      // 1) 버튼 시각 피드백 (초록 체크)
+      // 버튼 잠깐 초록으로 바꾸고 800ms 후 모달 자동 닫기 + 달력 갱신
       const btn = document.querySelector('#sf-work-sh .btn-ok');
       if (btn) {
-        const orig = btn.textContent;
-        btn.textContent = '✅ 등록 완료!';
+        btn.textContent     = '✅ 등록 완료!';
         btn.style.background = '#059669';
-        btn.disabled = true;
-        setTimeout(() => {
-          btn.textContent = orig;
-          btn.style.background = '';
-          btn.disabled = false;
-        }, 1200);
+        btn.disabled         = true;
       }
-
-      // 2) 입력폼 초기화 (다음 등록 대비)
-      const ws = document.getElementById('sf-ws'); if (ws) ws.value = '09:00';
-      const we = document.getElementById('sf-we'); if (we) we.value = '18:00';
-      const wn = document.getElementById('sf-wn'); if (wn) wn.value = '';
-      const wm = document.getElementById('sf-wh-manual'); if (wm) wm.value = '';
-      _manualHrsVal = null;
-
-      // 3) 근무 목록 새로고침 (추가된 항목 표시)
-      _drawWork();
       _toast(`✅ ${typeLabel} ${_fmtHrs(hours)}h 등록 완료`, 'success');
+
+      setTimeout(() => {
+        closeWork();   // 모달 닫기 + 달력 자동 갱신 (closeWork 내부에서 _drawCal 호출)
+      }, 700);
     }
   }
 
