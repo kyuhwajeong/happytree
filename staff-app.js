@@ -1616,7 +1616,7 @@ const StaffApp = (() => {
 
       // 일별 금액: 항목별 타입 시급 적용 (수업/일반 구분)
       const amt = Math.round(entries.reduce((sum, e) => {
-        const h = Number(e.baseHours || e.hours || 0);
+        const h = Number(e.hours || e.baseHours || 0);
         let rate;
         if (isPt) {
           const typeRate = e.type === 'class'
@@ -1632,7 +1632,7 @@ const StaffApp = (() => {
       // 항목별 시간대 칩 (출근~퇴근 시각 + 근무시간 + 수업/일반 라벨)
       // 칩을 직접 탭하면 해당 항목이 즉시 "근무 수정" 모드로 진입
       const entryChips = entries.map(e => {
-        const hrs   = Number(e.baseHours || e.hours || 0);
+        const hrs   = Number(e.hours || e.baseHours || 0);
         const icon  = e.type === 'class' ? '📚' : '🏢';
         const label = e.type === 'class' ? '수업' : '일반';
         const time  = (e.start && e.end) ? `${e.start}~${e.end}` : '';
@@ -2251,7 +2251,7 @@ const StaffApp = (() => {
         const dow = StaffDB.DOW_KO[new Date(date).getDay()];
         const amt = isPt
           ? Math.round(d.entries.reduce((sum, e) => {
-              const h  = Number(e.baseHours || e.hours || 0);
+              const h  = Number(e.hours || e.baseHours || 0);
               const tr = e.type === 'class'
                 ? (r.classRate   || r.defaultRate || StaffDB.getMinWage())
                 : (r.generalRate || r.defaultRate || StaffDB.getMinWage());
