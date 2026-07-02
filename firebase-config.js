@@ -244,6 +244,16 @@ const FireDB = (() => {
     if (!ready()) return Promise.resolve();
     return _db.ref(path).remove().catch(e => console.error('remove', path, e));
   }
+  /* ── 트랜잭션: 여러 기기가 동시에 같은 경로에 쓸 때 원자적으로 처리 ──
+   *   updateFn(currentVal) → 반환값이 undefined면 트랜잭션 중단(abort, 내 값을 버림)
+   *   결과: { committed: 내가 이겼는지, snapshot: 최종적으로 서버에 반영된 값 }
+   */
+  function transaction(path, updateFn) {
+    if (!ready()) return Promise.resolve({ committed:false, snapshot:null });
+    return _db.ref(path).transaction(updateFn)
+      .then(r => ({ committed: r.committed, snapshot: r.snapshot ? r.snapshot.val() : null }))
+      .catch(e => { console.error('transaction', path, e); return { committed:false, snapshot:null }; });
+  }
   function listen(path, cb) {
     if (!ready()) return () => {};
     const ref = _db.ref(path);
@@ -264,5 +274,5 @@ const FireDB = (() => {
     progress:'hakwon10/progress', accounts:'hakwon10/accounts', theme:'hakwon10/theme',
   };
 
-  return { init, ready, isConnected, get, set, update, remove, listen, debounced, P };
+  return { init, ready, isConnected, get, set, update, remove, listen, debounced, transaction, P };
 })();

@@ -145,6 +145,8 @@ const App = (() => {
     DB.on('classes',()=>{_renderChips();if(S.page==='operate')_renderDays();if(S.page==='manage'&&S.mgTab==='classes'){_renderMgCls();if(_q('mg-fee-ov')&&!_q('mg-fee-ov').classList.contains('hidden'))_renderFeePanel();}});
     DB.on('progress',()=>{if(S.page==='operate')_renderDays();if(S.shareActive)_refreshShareProgress();});
     DB.on('theme',()=>{_applyTheme(DB.getTheme());if(S.page==='manage'&&S.mgTab==='theme')_renderMgTheme();});
+    // ★ 반(교재배정 등) 동기화 충돌 감지 → 사용자에게 선택 요청
+    if(typeof DB.onConflict==='function') DB.onConflict(_showSyncConflict);
 
     const t=DB.getTheme();
     S.viewMode=t.viewMode||'grid'; S.operateView=t.operateView||'grid';
@@ -1767,6 +1769,49 @@ const App = (() => {
   function _esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
   function _hrgb(h){const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(h);return m?{r:parseInt(m[1],16),g:parseInt(m[2],16),b:parseInt(m[3],16)}:{r:79,g:70,b:229};}
   let _tt;function _toast(msg,type='',dur=2600){const el=_q('toast');if(!el)return;el.textContent=msg;el.className='toast'+(type?` ${type}`:'');el.classList.remove('hidden');clearTimeout(_tt);_tt=setTimeout(()=>el.classList.add('hidden'),dur);}
+
+  /* ══ 동기화 충돌 알림 (다른 기기가 같은 반을 그 사이 먼저 저장한 경우) ══ */
+  function _classBookSummary(cls){
+    try{
+      const mk=DB.monthKey(new Date());
+      const mb=(cls&&cls.monthBooks&&cls.monthBooks[mk])||{pool:[],main:[],sub:[]};
+      const nm=arr=>(arr&&arr.length)?arr.map(b=>_esc(b.name)).join(', '):'(없음)';
+      return `반 이름: ${_esc(cls?.name||'-')}\n주교재: ${nm(mb.main)}\n부교재: ${nm(mb.sub)}`;
+    }catch(e){ return '(요약 불가)'; }
+  }
+  function _showSyncConflict(info){
+    const {classId,mine,server}=info||{};
+    if(!classId) return;
+    document.getElementById('sync-conflict-modal')?.remove();
+    const modal=document.createElement('div');
+    modal.id='sync-conflict-modal';
+    modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:center;justify-content:center;padding:16px';
+    modal.innerHTML=`
+      <div style="background:var(--card,#fff);border-radius:16px;padding:22px;max-width:420px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.28)">
+        <div style="font-size:16px;font-weight:800;margin-bottom:6px">⚠️ 동기화 충돌 감지</div>
+        <div style="font-size:12.5px;color:var(--tx3,#6b7280);margin-bottom:14px;line-height:1.55">
+          다른 기기(폰·PC 등)에서 같은 반 데이터를 방금 먼저 저장했습니다.<br>
+          어느 값을 최종으로 반영할지 선택해주세요.
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+          <div style="border:1.5px solid var(--bdr,#e5e7eb);border-radius:10px;padding:10px 12px">
+            <div style="font-size:12px;font-weight:700;color:var(--a,#4f46e5);margin-bottom:4px">📱 이 화면(나)의 값</div>
+            <div style="font-size:12.5px;color:var(--tx2,#374151);white-space:pre-line">${_classBookSummary(mine)}</div>
+          </div>
+          <div style="border:1.5px solid var(--bdr,#e5e7eb);border-radius:10px;padding:10px 12px">
+            <div style="font-size:12px;font-weight:700;color:#059669;margin-bottom:4px">☁️ 서버(먼저 저장된) 값</div>
+            <div style="font-size:12.5px;color:var(--tx2,#374151);white-space:pre-line">${_classBookSummary(server)}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button id="sc-use-server" style="flex:1;padding:11px;border-radius:10px;border:1px solid var(--bdr,#e5e7eb);background:var(--surf2,#f3f4f6);font-weight:700;font-size:13px;cursor:pointer">☁️ 서버 값 사용</button>
+          <button id="sc-use-mine" style="flex:1;padding:11px;border-radius:10px;border:none;background:var(--a,#4f46e5);color:#fff;font-weight:700;font-size:13px;cursor:pointer">📱 내 값 유지</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    document.getElementById('sc-use-server').onclick=()=>{DB.resolveConflict(classId,'server');modal.remove();_toast('☁️ 서버 값으로 동기화됨','success');};
+    document.getElementById('sc-use-mine').onclick=()=>{DB.resolveConflict(classId,'mine');modal.remove();_toast('📱 내 값으로 동기화됨','success');};
+  }
 
   function _applyNavOrder(listEl){const rows=listEl?[...listEl.children]:[];const order=rows.map(r=>r.dataset.pg).filter(Boolean);if(order.length){_saveNavOrder(order);_renderNav();_toast('✅ 탭 순서 저장됨','success',2500);}}
   function _resetNavOrder(){const def=NAV_DEF.map(d=>d.pg);_saveNavOrder(def);_renderNav();_renderMgTheme();_toast('🔄 탭 순서 초기화됨','success',2500);}

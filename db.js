@@ -27,6 +27,22 @@ const DB = (() => {
   const _pendingKeys = new Set();
   const _progressDebounce = {};
 
+  // ★★★ 반(classes) 동기화 충돌 감지 ★★★
+  //  각 반 객체에 _rev(정수) 필드를 두고, 쓰기 직전 서버의 현재 _rev와
+  //  "내가 마지막으로 확인한 서버 _rev(baseline)"를 비교한다.
+  //  - 같으면: 그 사이 아무도 안 건드림 → 안전하게 덮어쓰기, rev+1
+  //  - 다르면: 다른 기기가 그 사이 먼저 저장함 → 즉시 덮어쓰지 않고
+  //            _conflictCb 로 알려서 사용자가 "내 값 유지 / 서버 값 사용"을 고르게 함
+  const _classBaseRev = {};          // classId -> 마지막으로 확인한 서버 _rev
+  const _pendingConflicts = {};      // classId -> resolve(choice) 콜백
+  let _conflictCb = null;            // UI(app.js)가 등록하는 충돌 알림 핸들러
+  function onConflict(cb) { _conflictCb = cb; }
+  function resolveConflict(classId, choice) {
+    const fn = _pendingConflicts[classId];
+    if (fn) fn(choice);
+  }
+  function _trackRev(cls) { if (cls && cls.id) _classBaseRev[cls.id] = cls._rev || 0; }
+
   const _ev = {};
   function _fire(t) {
     (_ev[t]||[]).forEach(f=>{ try{f();}catch(e){} });
@@ -58,6 +74,7 @@ const DB = (() => {
         C.progress = snap.progress || {};
         C.accounts = snap.accounts ? Object.values(snap.accounts) : [];
         C.theme    = snap.theme    || null;
+        C.classes.forEach(_trackRev); // ★ 서버 rev baseline 기록 (충돌감지용)
         ls(LS.classes,C.classes); ls(LS.progress,C.progress);
         ls(LS.accounts,C.accounts); ls(LS.theme,C.theme);
         // ★ Firebase에서 계정 정상 로드 시 초기화 플래그 설정
@@ -84,6 +101,7 @@ const DB = (() => {
         const snap = await FireDB.get(FireDB.P.root);
         if (snap) {
           C.classes  = snap.classes  ? Object.values(snap.classes)  : [];
+          C.classes.forEach(_trackRev); // ★ 서버 rev baseline 기록 (충돌감지용)
           // ★ 재로드 시에도 pending 키 보호
           const retryIncoming = snap.progress || {};
           _pendingKeys.forEach(k => {
@@ -109,6 +127,7 @@ const DB = (() => {
   function _listenFB() {
     FireDB.listen(FireDB.P.classes, v => {
       const nd = v ? Object.values(v) : [];
+      nd.forEach(_trackRev); // ★ 서버가 보낸 원본 rev를 baseline으로 기록 (merge 이전 원본 기준)
       const merged = _mergeClasses(nd, C.classes);
       if (JSON.stringify(merged) !== JSON.stringify(C.classes)) {
         C.classes = merged; ls(LS.classes, C.classes); _fire('classes');
@@ -396,19 +415,97 @@ const DB = (() => {
     } else {
       newBooks = _emptyBooks();
     }
-    cls.monthBooks[mk] = newBooks;
-    _syncClsQuiet(cls);
+    cls.monthBooks[mk] = newBooks; // 낙관적 반영 — 화면엔 즉시 표시
+    _createMonthSafely(classId, mk, newBooks); // ★ 서버엔 트랜잭션으로 "최초 1회만" 반영
     return JSON.parse(JSON.stringify(newBooks));
   }
 
+  // ★★★ 신규 월 데이터 최초 생성 — Firebase 트랜잭션으로 동시 생성 경쟁(race) 원천 차단 ★★★
+  //  버그 재현 조건: 폰/PC가 거의 동시에 새 달(예: 7월) 진도화면을 처음 열면
+  //  각자 이전달 데이터를 복사해 "다른 랜덤 ID"로 새 데이터를 만들고, 나중에 쓰는 쪽이
+  //  먼저 쓴 쪽을 통째로 덮어써서 교재가 사라지거나 뒤바뀌는 문제가 있었음(2026-07 T1반 사례).
+  //  → monthBooks/{mk} 경로에 트랜잭션을 걸어 "이미 값이 있으면 포기(abort)"하게 하여
+  //    실제로 서버에 반영되는 건 딱 하나뿐이고, 진 기기는 그 결과를 자동으로 되받아 화면을 맞춘다.
+  async function _createMonthSafely(classId, mk, myBooks) {
+    if (!FireDB.ready() || typeof FireDB.transaction !== 'function') return; // 오프라인 → 로컬 유지, 재접속 시 리스너가 정리
+    const path = `${FireDB.P.classes}/${classId}/monthBooks/${mk}`;
+    try {
+      const result = await FireDB.transaction(path, current => {
+        if (current !== null && current !== undefined) return; // 이미 누가 먼저 만들었음 → 포기
+        return myBooks; // 최초 생성자만 반영됨
+      });
+      if (!result.committed && result.snapshot) {
+        // 다른 기기가 먼저 만듦 → 내 로컬을 서버의 승자 데이터로 교체
+        const cls = getClassById(classId);
+        if (cls) {
+          cls.monthBooks[mk] = result.snapshot;
+          ls(LS.classes, C.classes);
+          _fire('classes');
+        }
+      }
+    } catch(e) { console.warn('[DB] _createMonthSafely 실패:', e.message); }
+  }
+
+  // ★★★ 반 데이터 저장 — rev 충돌 감지 포함 ★★★
+  //  기존: 항상 FireDB.set()으로 반 객체 전체를 무조건 덮어씀 (다른 기기 편집을 소리없이 삭제할 위험)
+  //  변경: 쓰기 직전 서버의 현재 _rev를 확인 → 내가 마지막으로 본 값(baseline)과 같으면 안전하게 저장.
+  //        다르면(그 사이 다른 기기가 먼저 저장함) 즉시 쓰지 않고 사용자에게 선택을 묻는다.
   async function _syncClsQuiet(cls) {
     const idx = C.classes.findIndex(c=>c.id===cls.id);
-    if (idx!==-1) C.classes[idx] = cls;
-    ls(LS.classes, C.classes);
-    if (FireDB.ready()) {
-      try { await FireDB.set(`${FireDB.P.classes}/${cls.id}`, cls); }
-      catch(e) { console.error('syncCls', e); }
+    if (!FireDB.ready()) {
+      // 오프라인: 로컬만 반영 (재연결 시 실시간 리스너가 서버와 정리)
+      if (idx!==-1) C.classes[idx] = cls; else C.classes.push(cls);
+      ls(LS.classes, C.classes);
+      return;
     }
+    const path = `${FireDB.P.classes}/${cls.id}`;
+    let server = null;
+    try { server = await FireDB.get(path); } catch(e) {}
+    const baseline  = _classBaseRev[cls.id] || 0;
+    const serverRev = server?._rev || 0;
+
+    if (!server || serverRev === baseline) {
+      // ★ 충돌 없음 — 안전하게 저장
+      cls._rev = serverRev + 1;
+      cls._updatedAt = now();
+      if (idx!==-1) C.classes[idx] = cls; else C.classes.push(cls);
+      ls(LS.classes, C.classes);
+      try { await FireDB.set(path, cls); _trackRev(cls); }
+      catch(e) { console.error('syncCls', e); }
+      return;
+    }
+
+    // ★ 충돌 발생 — 다른 기기가 그 사이 먼저 저장함. 무조건 덮어쓰지 않고 사용자에게 묻는다.
+    return new Promise(resolve => {
+      _pendingConflicts[cls.id] = async (choice) => {
+        delete _pendingConflicts[cls.id];
+        if (choice === 'server') {
+          // 서버 값을 최종으로 채택 — 내 로컬 편집은 버림
+          if (idx!==-1) C.classes[idx] = server; else C.classes.push(server);
+          ls(LS.classes, C.classes);
+          _trackRev(server);
+          _fire('classes');
+        } else {
+          // 내 값을 최종으로 채택 — 서버를 내 값으로 덮어씀
+          cls._rev = serverRev + 1;
+          cls._updatedAt = now();
+          if (idx!==-1) C.classes[idx] = cls; else C.classes.push(cls);
+          ls(LS.classes, C.classes);
+          try { await FireDB.set(path, cls); _trackRev(cls); }
+          catch(e) { console.error('syncCls(conflict-mine)', e); }
+          _fire('classes');
+        }
+        resolve();
+      };
+      if (_conflictCb) {
+        try { _conflictCb({ classId: cls.id, mine: cls, server }); }
+        catch(e) { console.error('conflictCb', e); }
+      } else {
+        // UI가 핸들러를 등록 안 했으면(구버전 등) 안전한 기본값: 서버값 우선 채택
+        console.warn('[DB] 충돌 핸들러 미등록 — 서버 값 우선 적용');
+        _pendingConflicts[cls.id]('server');
+      }
+    });
   }
 
   async function _syncCls(cls) { await _syncClsQuiet(cls); _fire('classes'); }
@@ -679,5 +776,6 @@ const DB = (() => {
     getMonthBooks, addToPool, moveBook, copyBooksToClass, renameBook, deleteBook, clearZone,
     getWeekProgress, autoSave,
     getTheme, saveTheme, exportAll, importAll,
+    onConflict, resolveConflict,
   };
 })();
