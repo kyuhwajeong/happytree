@@ -224,8 +224,21 @@ const StaffApp = (() => {
 .sf-wbtn.on.class{border-color:var(--a);background:var(--a10);color:var(--a)}
 .sf-wbtn.on.general{border-color:var(--green);background:rgba(5,150,105,.1);color:var(--green)}
 .sf-wbtn:active{transform:scale(.94)}
-.sf-time-row{display:flex;gap:8px;align-items:flex-end;margin-bottom:8px}
+.sf-time-row{display:flex;flex-direction:column;gap:10px;margin-bottom:10px}
 .sf-time-row label{flex:1}
+/* ── 커스텀 시간 피커 ── */
+.sf-tp-wrap{display:flex;flex-direction:column;gap:4px}
+.sf-tp-lbl{font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:.5px}
+.sf-tp-row{display:flex;align-items:center;gap:8px}
+.sf-tp-ampm{display:flex;border-radius:10px;overflow:hidden;border:1.5px solid var(--bdr);flex-shrink:0}
+.sf-tp-ampm button{padding:9px 13px;font-size:12px;font-weight:800;background:var(--surf2);border:none;cursor:pointer;font-family:var(--font);color:var(--tx3);transition:all .15s;line-height:1}
+.sf-tp-ampm button.active{background:var(--a);color:#fff}
+.sf-tp-ampm button.active.pm{background:#7c3aed;color:#fff}
+.sf-tp-selects{display:flex;align-items:center;gap:4px;flex:1}
+.sf-tp-sel{padding:9px 4px;border-radius:10px;border:1.5px solid var(--bdr);background:var(--surf);font-size:18px;font-weight:800;color:var(--tx);font-family:var(--font);text-align:center;flex:1;outline:none;cursor:pointer;-webkit-appearance:none;appearance:none}
+.sf-tp-sel:focus{border-color:var(--a)}
+.sf-tp-colon{font-size:22px;font-weight:900;color:var(--tx);flex-shrink:0}
+.sf-tp-preview-time{font-size:22px;font-weight:900;color:var(--a);font-variant-numeric:tabular-nums}
 .sf-tl{font-size:10px;color:var(--tx3);font-weight:700;margin-bottom:3px;display:block}
 .sf-ti{width:100%;padding:9px 10px;border-radius:9px;box-sizing:border-box;background:var(--surf);border:1.5px solid var(--bdr);font-size:13px;color:var(--tx);outline:none;font-family:var(--font)}
 .sf-ti:focus{border-color:var(--a)}
@@ -1346,9 +1359,14 @@ const StaffApp = (() => {
           <button class="sf-wbtn ${_st.workType==='general'?'on general':''}" id="sf-wb-gen" onclick="StaffApp._wtype('general')">🏢 일반<br><small>${_fmt(s?.generalRate||mw)}원/h</small></button>
         </div>
         <div class="sf-time-row">
-          <label><span class="sf-tl">시작 시간</span><input class="sf-ti" id="sf-ws" type="time" value="09:00" oninput="StaffApp._chrs()"></label>
-          <label><span class="sf-tl">종료 시간</span><input class="sf-ti" id="sf-we" type="time" value="18:00" oninput="StaffApp._chrs()"></label>
-          <div class="sf-hrs" id="sf-whrs">—</div>
+          ${_timePicker('sf-ws', '🕐 출근 시간', '09:00')}
+          ${_timePicker('sf-we', '🕑 퇴근 시간', '18:00')}
+          <div class="sf-tp-preview" id="sf-whrs-preview" style="display:none">
+            <div>
+              <div class="sf-tp-preview-lbl">총 근무시간</div>
+              <div class="sf-hrs" id="sf-whrs">—</div>
+            </div>
+          </div>
         </div>
         ${isPt ? `<div class="sf-fg" style="margin-bottom:8px">
           <div><span class="sf-fl">무급 휴게(분)</span><input class="sf-fi" id="sf-wbrk" type="number" min="0" placeholder="0" value="0" oninput="StaffApp._chrs()"></div>
@@ -1392,8 +1410,9 @@ const StaffApp = (() => {
     _drawWork();
     // 입력값 채우기 (drawWork 직후 DOM 갱신됨)
     setTimeout(() => {
-      const ws = document.getElementById('sf-ws'); if (ws) ws.value = e.start || '09:00';
-      const we = document.getElementById('sf-we'); if (we) we.value = e.end   || '18:00';
+      // 커스텀 시간 피커 값 설정
+      _setTimePicker('sf-ws', e.start || '09:00');
+      _setTimePicker('sf-we', e.end   || '18:00');
       const brk = document.getElementById('sf-wbrk'); if (brk) brk.value = e.breakMin || 0;
       const rateInp = document.getElementById('sf-wrate'); if (rateInp) rateInp.value = e.appliedRate || 0;
       const noteInp = document.getElementById('sf-wn'); if (noteInp) noteInp.value = e.note || '';
@@ -1404,6 +1423,30 @@ const StaffApp = (() => {
   function _cancelEditEntry() {
     _st.editingEntryId = null;
     _drawWork();
+  }
+
+  function _setTimePicker(id, val24) {
+    if (!val24) return;
+    const [h24, m] = val24.split(':').map(Number);
+    const isAM = h24 < 12;
+    const h12  = h24 % 12 || 12;
+
+    const hSel = document.getElementById(`${id}-h`);
+    const mSel = document.getElementById(`${id}-m`);
+    const amBtn = document.getElementById(`${id}-am`);
+    const pmBtn = document.getElementById(`${id}-pm`);
+    const inp   = document.getElementById(id);
+    const prev  = document.getElementById(`${id}-preview`);
+
+    if (hSel) hSel.value = h12;
+    if (mSel) mSel.value = String(m).padStart(2,'0');
+    if (amBtn) amBtn.classList.toggle('active', isAM);
+    if (pmBtn) pmBtn.classList.toggle('active', !isAM);
+    if (inp)  inp.value = val24;
+    if (prev) {
+      prev.style.color = isAM ? 'var(--a)' : '#7c3aed';
+      prev.textContent = `${isAM?'오전':'오후'} ${h12}:${String(m).padStart(2,'0')}`;
+    }
   }
 
   function _wtype(t) {
@@ -1423,9 +1466,90 @@ const StaffApp = (() => {
   }
 
   let _manualHrsVal = null;
+  /* ── 커스텀 시간 피커 헬퍼 ── */
+  function _timePicker(id, label, def) {
+    const [dh, dm] = (def || '09:00').split(':').map(Number);
+    const isAM  = dh < 12;
+    const h12   = dh % 12 || 12;
+    const HOURS = Array.from({length:12},(_,i)=>i+1);
+    const MINS  = ['00','05','10','15','20','25','30','35','40','45','50','55'];
+    return `
+      <div class="sf-tp-wrap">
+        <div class="sf-tp-lbl">${label}</div>
+        <div class="sf-tp-row">
+          <div class="sf-tp-ampm">
+            <button id="${id}-am" class="${isAM?'active':''}"
+              onclick="StaffApp._tpAmPm('${id}','am')">오전</button>
+            <button id="${id}-pm" class="pm ${!isAM?'active':''}"
+              onclick="StaffApp._tpAmPm('${id}','pm')">오후</button>
+          </div>
+          <div class="sf-tp-selects">
+            <select class="sf-tp-sel" id="${id}-h" onchange="StaffApp._tpChange('${id}')">
+              ${HOURS.map(h=>`<option value="${h}" ${h===h12?'selected':''}>${h}</option>`).join('')}
+            </select>
+            <span class="sf-tp-colon">:</span>
+            <select class="sf-tp-sel" id="${id}-m" onchange="StaffApp._tpChange('${id}')">
+              ${MINS.map(m=>`<option value="${m}" ${m===String(dm).padStart(2,'0')?'selected':''}>${m}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <!-- 숨겨진 실제 value 저장 필드 -->
+        <input type="hidden" id="${id}" value="${def||'09:00'}">
+        <!-- 선택 결과 미리보기 -->
+        <div id="${id}-preview" style="font-size:13px;font-weight:800;padding:4px 2px;color:${isAM?'var(--a)':'#7c3aed'}">
+          ${isAM?'오전':'오후'} ${h12}:${String(dm).padStart(2,'0')}
+        </div>
+      </div>`;
+  }
+
+  function _tpAmPm(id, ampm) {
+    const hSel = document.getElementById(`${id}-h`);
+    const mSel = document.getElementById(`${id}-m`);
+    if (!hSel || !mSel) return;
+
+    // 버튼 활성화 토글
+    const amBtn = document.getElementById(`${id}-am`);
+    const pmBtn = document.getElementById(`${id}-pm`);
+    if (amBtn) amBtn.classList.toggle('active', ampm === 'am');
+    if (pmBtn) pmBtn.classList.toggle('active', ampm === 'pm');
+
+    _tpChange(id);
+  }
+
+  function _tpChange(id) {
+    const hSel  = document.getElementById(`${id}-h`);
+    const mSel  = document.getElementById(`${id}-m`);
+    const amBtn = document.getElementById(`${id}-am`);
+    if (!hSel || !mSel) return;
+
+    const isAM  = amBtn?.classList.contains('active');
+    let h       = parseInt(hSel.value);
+    const m     = mSel.value;
+
+    // 12h → 24h 변환
+    if (isAM) { if (h === 12) h = 0; }
+    else       { if (h !== 12) h += 12; }
+
+    const val = `${String(h).padStart(2,'0')}:${m}`;
+    const inp = document.getElementById(id);
+    if (inp) inp.value = val;
+
+    // 미리보기 갱신
+    const prev = document.getElementById(`${id}-preview`);
+    const disp12 = hSel.value;
+    if (prev) {
+      prev.style.color = isAM ? 'var(--a)' : '#7c3aed';
+      prev.textContent = `${isAM?'오전':'오후'} ${disp12}:${m}`;
+    }
+
+    _chrs();
+  }
+
   function _chrs() {
     _manualHrsVal = null;
     const sv = document.getElementById('sf-ws')?.value, ev = document.getElementById('sf-we')?.value;
+    // 총 근무시간 미리보기 패널 표시
+    const prevPanel = document.getElementById('sf-whrs-preview');
     const brk = Number(document.getElementById('sf-wbrk')?.value) || 0;
     const b   = document.getElementById('sf-whrs');
     const m   = document.getElementById('sf-wh-manual'); if (m) m.value = '';
@@ -3260,6 +3384,7 @@ const StaffApp = (() => {
     openBatch, closeBatch, _toggleDow, _batchHrs, _batchRateHint, _doBatch,
     _closeOverlap, _confirmOverlap,
     openWork, closeWork, _wtype, _chrs, _manualHrs, _addEntry, _delEntry,
+    _timePicker, _tpAmPm, _tpChange, _setTimePicker,
     _editEntry, _cancelEditEntry, _openWorkFromPay,
     openTemplAdd, closeTemplAdd, _taWtype, _taHrs, _addTemplEntry, _templDel,
     _onSel, _onSelChange, _calcAndRender, _saveAcad,
