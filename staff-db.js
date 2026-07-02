@@ -418,14 +418,15 @@ const StaffDB = (() => {
     const s  = getById(sid);
     const mw = getMinWage(year || new Date().getFullYear());
     if (!s) return mw;
-    // type별 시급이 있으면 우선 사용
+    // type 선택 시: 해당 시급 우선
     if (type === 'class'   && s.classRate   > 0) return s.classRate;
     if (type === 'general' && s.generalRate > 0) return s.generalRate;
-    // 기본 시급
+    // 공통 기본 시급
     if (s.baseHourlyRate > 0) return s.baseHourlyRate;
-    // type별 시급이라도 있으면 사용
+    // type 있는데 해당 시급 없으면 다른 type 시급 참조
     if (type === 'class'   && s.generalRate > 0) return s.generalRate;
     if (type === 'general' && s.classRate   > 0) return s.classRate;
+    // type=null (미선택) or 모두 0 → 최저시급
     return mw;
   }
 

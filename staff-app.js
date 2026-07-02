@@ -53,7 +53,7 @@ const StaffApp = (() => {
     payYear:      new Date().getFullYear(),
     payMonth:     new Date().getMonth() + 1,
     payResult:    null,
-    workType:     'class',
+    workType:     null,   // null = 미선택(기본 최저시급)
     workDate:     '',
     editingEntryId: null,  // 근무 항목 수정 중인 entry id
     /* 복사 모드 */
@@ -1096,7 +1096,7 @@ const StaffApp = (() => {
     // 수정 모드: openWork의 타입 리셋 없이 직접 설정
     const _clickEntry = StaffDB.getWorkDay(_st.calStaffId, date).find(e => e.id === eid);
     _st.workDate      = date;
-    _st.workType      = _clickEntry?.type || 'class';
+    _st.workType      = _clickEntry?.type || null;  // 저장된 type 그대로 (null=미선택)
     _st.editingEntryId = eid;
     _drawWork();
     document.getElementById('sf-work-ov')?.classList.remove('hidden');
@@ -1359,7 +1359,7 @@ const StaffApp = (() => {
   /* ══════════════════════════════════════════
    * 근무 입력 모달 (단일 날짜)
    * ══════════════════════════════════════════ */
-  function openWork(date) { _st.workDate = date; _st.workType = 'class'; _st.editingEntryId = null; _drawWork(); document.getElementById('sf-work-ov')?.classList.remove('hidden'); history.pushState({ pg:'staff', modal:'work' }, ''); }
+  function openWork(date) { _st.workDate = date; _st.workType = null; _st.editingEntryId = null; _drawWork(); document.getElementById('sf-work-ov')?.classList.remove('hidden'); history.pushState({ pg:'staff', modal:'work' }, ''); }
   function closeWork() {
     document.getElementById('sf-work-ov')?.classList.add('hidden');
     _st.editingEntryId = null;
@@ -1388,6 +1388,9 @@ const StaffApp = (() => {
         <div class="sf-wtype-row">
           <button class="sf-wbtn ${_st.workType==='class'?'on class':''}"   id="sf-wb-class" onclick="StaffApp._wtype('class')">📚 수업<br><small>${_fmt(StaffDB.resolveRate(_st.calStaffId,0,new Date().getFullYear(),'class'))}원/h</small></button>
           <button class="sf-wbtn ${_st.workType==='general'?'on general':''}" id="sf-wb-gen" onclick="StaffApp._wtype('general')">🏢 일반<br><small>${_fmt(StaffDB.resolveRate(_st.calStaffId,0,new Date().getFullYear(),'general'))}원/h</small></button>
+          <div id="sf-wtype-hint" style="width:100%;text-align:center;font-size:11px;padding:4px 0;border-radius:8px;transition:all .2s;${_st.workType?'color:var(--tx3)':'color:#d97706;background:rgba(245,158,11,.08);padding:6px;border:1px dashed rgba(245,158,11,.4)'}">
+            ${_st.workType?(_st.workType==='class'?'📚 수업 시급 적용':'🏢 일반 시급 적용'):'⚠️ 미선택 — 기본 최저시급 적용 (다시 탭하면 해제)'}
+          </div>
         </div>
         <div class="sf-time-row">
           ${_timePicker('sf-ws', '🕐 출근 시간', '09:00')}
@@ -1420,7 +1423,11 @@ const StaffApp = (() => {
   }
 
   function _entryHTML(e, s) {
-    const c     = e.type === 'class' ? { tx: 'var(--a)', l: '수업' } : { tx: 'var(--green)', l: '일반' };
+    const c = e.type === 'class'
+      ? { tx: 'var(--a)',     l: '수업' }
+      : e.type === 'general'
+        ? { tx: 'var(--green)', l: '일반' }
+        : { tx: 'var(--tx3)',   l: '기본' };
     const night = e.nightHours > 0 ? ` 🌙야간 ${_fmtHrs(e.nightHours)}h` : '';
     const rateInfo = e.appliedRate ? ` (시급 ${_fmt(e.appliedRate)}원)` : '';
     const isEditing = _st.editingEntryId === e.id;
@@ -1481,19 +1488,35 @@ const StaffApp = (() => {
   }
 
   function _wtype(t) {
-    _st.workType = t;
-    document.getElementById('sf-wb-class')?.classList.toggle('on',      t === 'class');
-    document.getElementById('sf-wb-class')?.classList.toggle('class',   t === 'class');
-    document.getElementById('sf-wb-gen')?.classList.toggle('on',      t === 'general');
-    document.getElementById('sf-wb-gen')?.classList.toggle('general', t === 'general');
+    // 이미 선택된 버튼 재탭 → 토글 해제 (null = 기본 최저시급)
+    _st.workType = (_st.workType === t) ? null : t;
+    const wt = _st.workType;
+
+    document.getElementById('sf-wb-class')?.classList.toggle('on',      wt === 'class');
+    document.getElementById('sf-wb-class')?.classList.toggle('class',   wt === 'class');
+    document.getElementById('sf-wb-gen')?.classList.toggle('on',      wt === 'general');
+    document.getElementById('sf-wb-gen')?.classList.toggle('general', wt === 'general');
+
+    // 힌트 문구 갱신
+    const hint = document.getElementById('sf-wtype-hint');
+    if (hint) {
+      if (!wt) {
+        hint.style.cssText = 'width:100%;text-align:center;font-size:11px;padding:6px;border-radius:8px;color:#d97706;background:rgba(245,158,11,.08);border:1px dashed rgba(245,158,11,.4)';
+        hint.textContent = '⚠️ 미선택 — 기본 최저시급 적용 (다시 탭하면 해제)';
+      } else {
+        hint.style.cssText = 'width:100%;text-align:center;font-size:11px;padding:4px 0;color:var(--tx3)';
+        hint.textContent = wt === 'class' ? '📚 수업 시급 적용' : '🏢 일반 시급 적용';
+      }
+    }
+
     // 시급 힌트 갱신
-    const s  = StaffDB.getById(_st.calStaffId);
-    const mw = StaffDB.getMinWage();
-    const autoRate = StaffDB.resolveRate(_st.calStaffId, 0, new Date().getFullYear(), t);
+    const autoRate = StaffDB.resolveRate(_st.calStaffId, 0, new Date().getFullYear(), wt);
     const rateInp  = document.getElementById('sf-wrate');
     const rateLbl  = document.getElementById('sf-wrate-lbl');
     if (rateInp) rateInp.placeholder = autoRate;
-    if (rateLbl) rateLbl.textContent = `시급 (0=자동: ${t==='class'?'수업':'일반'} ${_fmt(autoRate)}원)`;
+    if (rateLbl) rateLbl.textContent = wt
+      ? `시급 (0=자동: ${wt==='class'?'수업':'일반'} ${_fmt(autoRate)}원)`
+      : `시급 (0=자동: 기본 최저시급 ${_fmt(autoRate)}원)`;
   }
 
   let _manualHrsVal = null;
