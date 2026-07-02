@@ -207,8 +207,8 @@ const StaffDB = (() => {
       overtimeRate:   Number(data.overtimeRate)    || 1.5,   // 야근 배율 (기본 1.5배)
       overtimeStart:  data.overtimeStart || '22:00',         // 야근 시작 시각
       baseHourlyRate: Number(data.baseHourlyRate) || 0,
-      classRate:      Number(data.classRate)       || mw,
-      generalRate:    Number(data.generalRate)     || mw,
+      classRate:      Number(data.classRate)       || 0,   // 0 = 타입 미사용
+      generalRate:    Number(data.generalRate)     || 0,   // 0 = baseHourlyRate 사용
       payDay:         Number(data.payDay)          || 0,
       memo:           (data.memo || '').trim(),
       createdAt:      _now(),
@@ -405,11 +405,28 @@ const StaffDB = (() => {
   }
 
   /* 시급 결정 */
-  function resolveRate(sid, manualRate, year) {
+  /**
+   * 시급 결정 (우선순위)
+   * manualRate > type별 시급(classRate/generalRate) > baseHourlyRate > 최저시급
+   * @param {string} sid
+   * @param {number} manualRate  수동 입력 시급 (0=자동)
+   * @param {number} year
+   * @param {string} [type]  'class' | 'general' | undefined
+   */
+  function resolveRate(sid, manualRate, year, type) {
     if (manualRate && manualRate > 0) return manualRate;
-    const s = getById(sid);
-    if (s?.baseHourlyRate > 0) return s.baseHourlyRate;
-    return getMinWage(year || new Date().getFullYear());
+    const s  = getById(sid);
+    const mw = getMinWage(year || new Date().getFullYear());
+    if (!s) return mw;
+    // type별 시급이 있으면 우선 사용
+    if (type === 'class'   && s.classRate   > 0) return s.classRate;
+    if (type === 'general' && s.generalRate > 0) return s.generalRate;
+    // 기본 시급
+    if (s.baseHourlyRate > 0) return s.baseHourlyRate;
+    // type별 시급이라도 있으면 사용
+    if (type === 'class'   && s.generalRate > 0) return s.generalRate;
+    if (type === 'general' && s.classRate   > 0) return s.classRate;
+    return mw;
   }
 
   /* ════════════════════════════════════════
@@ -453,7 +470,7 @@ const StaffDB = (() => {
     }
 
     const year = new Date(startDate).getFullYear();
-    const appliedRate      = resolveRate(sid, hourlyRate, year);
+    const appliedRate      = resolveRate(sid, hourlyRate, year, type);
     const { baseHours, nightHours } = splitNightHours(startTime, endTime, breakMin);
     const hours = baseHours + nightHours;
 
