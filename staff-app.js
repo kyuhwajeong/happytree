@@ -1386,8 +1386,8 @@ const StaffApp = (() => {
       <div class="sh-sub">${_st.workDate} (${dow}) · ${_e(s?.name || '')}</div>
       <div style="flex:1;overflow-y:auto;padding:4px 0 8px">
         <div class="sf-wtype-row">
-          <button class="sf-wbtn ${_st.workType==='class'?'on class':''}"   id="sf-wb-class" onclick="StaffApp._wtype('class')">📚 수업<br><small>${_fmt(s?.classRate||mw)}원/h</small></button>
-          <button class="sf-wbtn ${_st.workType==='general'?'on general':''}" id="sf-wb-gen" onclick="StaffApp._wtype('general')">🏢 일반<br><small>${_fmt(s?.generalRate||mw)}원/h</small></button>
+          <button class="sf-wbtn ${_st.workType==='class'?'on class':''}"   id="sf-wb-class" onclick="StaffApp._wtype('class')">📚 수업<br><small>${_fmt(StaffDB.resolveRate(_st.calStaffId,0,new Date().getFullYear(),'class'))}원/h</small></button>
+          <button class="sf-wbtn ${_st.workType==='general'?'on general':''}" id="sf-wb-gen" onclick="StaffApp._wtype('general')">🏢 일반<br><small>${_fmt(StaffDB.resolveRate(_st.calStaffId,0,new Date().getFullYear(),'general'))}원/h</small></button>
         </div>
         <div class="sf-time-row">
           ${_timePicker('sf-ws', '🕐 출근 시간', '09:00')}
@@ -1489,11 +1489,11 @@ const StaffApp = (() => {
     // 시급 힌트 갱신
     const s  = StaffDB.getById(_st.calStaffId);
     const mw = StaffDB.getMinWage();
-    const autoRate = t === 'class' ? (s?.classRate || mw) : (s?.generalRate || mw);
+    const autoRate = StaffDB.resolveRate(_st.calStaffId, 0, new Date().getFullYear(), t);
     const rateInp  = document.getElementById('sf-wrate');
     const rateLbl  = document.getElementById('sf-wrate-lbl');
     if (rateInp) rateInp.placeholder = autoRate;
-    if (rateLbl) rateLbl.textContent = `시급 (0=자동: ${t==='class'?`수업 ${_fmt(autoRate)}원`:`일반 ${_fmt(autoRate)}원`})`;
+    if (rateLbl) rateLbl.textContent = `시급 (0=자동: ${t==='class'?'수업':'일반'} ${_fmt(autoRate)}원)`;
   }
 
   let _manualHrsVal = null;
@@ -1613,11 +1613,8 @@ const StaffApp = (() => {
     if (hours <= 0) { _toast('⚠️ 근무 시간이 0입니다'); return; }
 
     const s  = StaffDB.getById(_st.calStaffId);
-    const mw = StaffDB.getMinWage();
-    const typeRate = _st.workType === 'class'
-      ? (s?.classRate   || s?.baseHourlyRate || mw)
-      : (s?.generalRate || s?.baseHourlyRate || mw);
-    const appliedRate = manualRate > 0 ? manualRate : typeRate;
+    // resolveRate: manualRate > type별 시급 > baseHourlyRate > 최저시급 순서 보장
+    const appliedRate = StaffDB.resolveRate(_st.calStaffId, manualRate, _st.payYear || new Date().getFullYear(), _st.workType);
 
     const patch = {
       type: _st.workType, start, end, hours, baseHours, nightHours,
