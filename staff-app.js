@@ -504,6 +504,22 @@ const StaffApp = (() => {
       if (!pg?.classList.contains('on')) return;
       if (_st.subTab === 'list') _renderList();
     });
+
+    /* 근무 데이터 실시간 갱신 이벤트 → 달력/급여 탭 자동 반영 */
+    StaffDB.on('work', () => {
+      const pg = document.getElementById('page-staff');
+      if (!pg?.classList.contains('on')) return;
+      // 달력이 열려 있으면 달력 갱신
+      const calOv = document.getElementById('sf-cal-ov');
+      if (calOv && !calOv.classList.contains('hidden') && _st.calStaffId) {
+        _drawCal();
+      }
+      // 급여 탭이 열려 있으면 재계산
+      if (_st.subTab === 'salary' && _st.payStaffId) {
+        _calcAndRender();
+      }
+      console.log('[StaffApp] 🔄 근무 데이터 실시간 갱신');
+    });
     console.log('[StaffApp v3.2] ✅ homeTab:', _st.subTab);
   }
 
@@ -1077,8 +1093,22 @@ const StaffApp = (() => {
       if (el) el.classList.toggle('selected-entry', _st.selected.has(key));
       _drawCal(); return;
     }
-    openWork(date);     // 해당 날짜 근무 모달 오픈
-    _editEntry(eid);    // 클릭한 항목을 즉시 수정모드로 진입
+    // 수정 모드: openWork의 타입 리셋 없이 직접 설정
+    const _clickEntry = StaffDB.getWorkDay(_st.calStaffId, date).find(e => e.id === eid);
+    _st.workDate      = date;
+    _st.workType      = _clickEntry?.type || 'class';
+    _st.editingEntryId = eid;
+    _drawWork();
+    document.getElementById('sf-work-ov')?.classList.remove('hidden');
+    history.pushState({ pg:'staff', modal:'work' }, '');
+    setTimeout(() => {
+      _setTimePicker('sf-ws', _clickEntry?.start || '09:00');
+      _setTimePicker('sf-we', _clickEntry?.end   || '18:00');
+      const brk = document.getElementById('sf-wbrk'); if (brk) brk.value = _clickEntry?.breakMin || 0;
+      const rt  = document.getElementById('sf-wrate'); if (rt) rt.value  = _clickEntry?.appliedRate || 0;
+      const nt  = document.getElementById('sf-wn'); if (nt) nt.value     = _clickEntry?.note || '';
+      _chrs();
+    }, 0);
   }
 
   /* ── 선택 삭제 ── */
@@ -1352,7 +1382,7 @@ const StaffApp = (() => {
 
     sh.innerHTML = `
       <div class="sh-handle"></div>
-      <div class="sh-title">📅 근무 입력</div>
+      <div class="sh-title">${_st.editingEntryId ? '✏️ 근무 수정' : '📅 근무 입력'}</div>
       <div class="sh-sub">${_st.workDate} (${dow}) · ${_e(s?.name || '')}</div>
       <div style="flex:1;overflow-y:auto;padding:4px 0 8px">
         <div class="sf-wtype-row">
@@ -1763,8 +1793,26 @@ const StaffApp = (() => {
     _st.calStaffId = r.staff.id;
     _st.calYear    = r.year;
     _st.calMonth   = r.month;
-    openWork(date);
-    if (entryId) _editEntry(entryId);
+    if (entryId) {
+      // 특정 항목 수정: 타입을 먼저 맞추고 모달 오픈
+      const entry = StaffDB.getWorkDay(r.staff.id, date).find(e => e.id === entryId);
+      _st.workDate       = date;
+      _st.workType       = entry?.type || 'class';
+      _st.editingEntryId = entryId;
+      _drawWork();
+      document.getElementById('sf-work-ov')?.classList.remove('hidden');
+      history.pushState({ pg:'staff', modal:'work' }, '');
+      setTimeout(() => {
+        _setTimePicker('sf-ws', entry?.start || '09:00');
+        _setTimePicker('sf-we', entry?.end   || '18:00');
+        const brk = document.getElementById('sf-wbrk'); if (brk) brk.value = entry?.breakMin || 0;
+        const rt  = document.getElementById('sf-wrate'); if (rt) rt.value  = entry?.appliedRate || 0;
+        const nt  = document.getElementById('sf-wn'); if (nt) nt.value     = entry?.note || '';
+        _chrs();
+      }, 0);
+    } else {
+      openWork(date);
+    }
   }
 
   function _saveAcad() { const name = document.getElementById('sf-acad-inp')?.value?.trim(); if (!name) return; StaffDB.setAcad({ name }); _toast(`🏫 "${name}" 저장`, 'success'); }

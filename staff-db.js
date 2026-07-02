@@ -144,14 +144,40 @@ const StaffDB = (() => {
       if (tS) { _templ = tS; _ls(LS_TEMPL, _templ); }
     } catch(e) { console.warn('[StaffDB v3] init', e); }
 
+    /* ─ 직원 정보 실시간 리스너 ─ */
     FireDB.listen(FB_STAFF, v => {
       const nd = v ? Object.values(v).map(s => ({
-        employType: 'fulltime', monthlySalary: 0, baseHourlyRate: 0, ...s,
+        employType: 'fulltime', monthlySalary: 0, baseHourlyRate: 0,
+        overtimeEnabled: false, overtimeRate: 1.5, overtimeStart: '22:00',
+        ...s,
       })) : [];
       if (JSON.stringify(nd) !== JSON.stringify(_staff)) {
         _staff = nd; _ls(LS_STAFF, _staff); _fire('staff');
       }
     });
+
+    /* ─ 근무 데이터 실시간 리스너 (핵심: 멀티기기 동기화) ─
+     * FB_WORK 전체를 구독 → 타 기기에서 변경 즉시 반영
+     * 키 변환: 2026_06_24 → 2026-06-24
+     */
+    FireDB.listen(FB_WORK, v => {
+      if (!v) { _work = {}; _ls(LS_WORK, _work); return; }
+      const newWork = {};
+      Object.entries(v).forEach(([sid, days]) => {
+        newWork[sid] = {};
+        Object.entries(days || {}).forEach(([dayKey, entries]) => {
+          newWork[sid][dayKey.replace(/_/g, '-')] = entries;
+        });
+      });
+      // 변경된 경우에만 갱신
+      if (JSON.stringify(newWork) !== JSON.stringify(_work)) {
+        _work = newWork;
+        _ls(LS_WORK, _work);
+        _fire('work');   // UI 갱신 이벤트 발생
+        console.log('[StaffDB] 🔄 근무 데이터 실시간 갱신');
+      }
+    });
+
     console.log('[StaffDB v3] ✅ staff:', _staff.length);
   }
 
