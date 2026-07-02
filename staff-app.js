@@ -342,6 +342,7 @@ const StaffApp = (() => {
 /* ── 시작화면 설정 ── */
 /* ── spin 애니메이션 ── */
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes scaleIn{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
 
 /* ── 급여 이력 ── */
 .ph-month-card{background:var(--card);border:1px solid var(--bdr);border-radius:12px;margin-bottom:10px;overflow:hidden;box-shadow:var(--sh);animation:cardIn .2s ease both}
@@ -1597,8 +1598,33 @@ const StaffApp = (() => {
       /* ── 수정 모드 ── */
       await StaffDB.updateWorkEntry(_st.calStaffId, _st.workDate, _st.editingEntryId, patch);
       _st.editingEntryId = null;
-      _toast(`💾 ${_st.workType==='class'?'수업':'일반'} ${_fmtHrs(hours)}h 수정 완료`, 'success');
-      setTimeout(() => closeWork(), 600);
+
+      const typeLabel2 = _st.workType === 'class' ? '수업' : '일반';
+      const typeColor2 = _st.workType === 'class' ? 'var(--a)' : 'var(--green)';
+      const sh2 = document.getElementById('sf-work-sh');
+      if (sh2) {
+        sh2.innerHTML = `
+          <div style="
+            flex:1;display:flex;flex-direction:column;
+            align-items:center;justify-content:center;
+            gap:14px;padding:32px 24px;text-align:center
+          ">
+            <div style="
+              width:72px;height:72px;border-radius:50%;
+              background:rgba(217,119,6,.1);border:3px solid #d97706;
+              display:flex;align-items:center;justify-content:center;
+              font-size:36px;animation:scaleIn .3s cubic-bezier(.34,1.56,.64,1)
+            ">💾</div>
+            <div style="font-size:20px;font-weight:900;color:#d97706">수정 완료!</div>
+            <div style="font-size:14px;color:var(--tx2);font-weight:700">
+              ${_e(_st.workDate)} (${DOW[new Date(_st.workDate).getDay()]})<br>
+              <span style="color:${typeColor2}">${typeLabel2}</span>
+              ${_fmtHrs(hours)}h 저장되었습니다
+            </div>
+          </div>`;
+      }
+      _toast(`💾 ${typeLabel2} ${_fmtHrs(hours)}h 수정 완료`, 'success');
+      setTimeout(() => closeWork(), 900);
 
     } else {
       /* ── 등록 모드 — 중복 검사 먼저 ── */
@@ -1615,21 +1641,37 @@ const StaffApp = (() => {
 
       await StaffDB.addWorkEntry(_st.calStaffId, _st.workDate, patch);
 
-      /* ── 등록 성공 피드백 ── */
+      /* ── 등록 성공 피드백: 모달 전체를 완료 화면으로 즉시 전환 ── */
       const typeLabel = _st.workType === 'class' ? '수업' : '일반';
-
-      // 버튼 잠깐 초록으로 바꾸고 800ms 후 모달 자동 닫기 + 달력 갱신
-      const btn = document.querySelector('#sf-work-sh .btn-ok');
-      if (btn) {
-        btn.textContent     = '✅ 등록 완료!';
-        btn.style.background = '#059669';
-        btn.disabled         = true;
+      const typeColor = _st.workType === 'class' ? 'var(--a)' : 'var(--green)';
+      const sh = document.getElementById('sf-work-sh');
+      if (sh) {
+        sh.innerHTML = `
+          <div style="
+            flex:1;display:flex;flex-direction:column;
+            align-items:center;justify-content:center;
+            gap:14px;padding:32px 24px;text-align:center
+          ">
+            <div style="
+              width:72px;height:72px;border-radius:50%;
+              background:rgba(5,150,105,.12);border:3px solid #059669;
+              display:flex;align-items:center;justify-content:center;
+              font-size:36px;animation:scaleIn .3s cubic-bezier(.34,1.56,.64,1)
+            ">✅</div>
+            <div style="font-size:20px;font-weight:900;color:#059669">등록 완료!</div>
+            <div style="font-size:14px;color:var(--tx2);font-weight:700">
+              ${_e(_st.workDate)} (${DOW[new Date(_st.workDate).getDay()]})<br>
+              <span style="color:${typeColor}">${typeLabel}</span>
+              ${_fmtHrs(hours)}h 저장되었습니다
+            </div>
+            <div style="font-size:11px;color:var(--tx3)">잠시 후 달력으로 돌아갑니다...</div>
+          </div>`;
       }
       _toast(`✅ ${typeLabel} ${_fmtHrs(hours)}h 등록 완료`, 'success');
 
       setTimeout(() => {
-        closeWork();   // 모달 닫기 + 달력 자동 갱신 (closeWork 내부에서 _drawCal 호출)
-      }, 700);
+        closeWork();  // 달력 자동 갱신
+      }, 1100);
     }
   }
 
