@@ -704,7 +704,8 @@ const DB = (() => {
   const getTheme = () => C.theme || {
     palette:'light1', fontFamily:'Noto Sans KR', fontSize:14,
     mainFontSize:14, subFontSize:13,
-    viewMode:'grid', operateView:'grid', inputBoxWidth:140
+    viewMode:'grid', operateView:'grid', inputBoxWidth:140,
+    progressViewMode:'timeline', // ★ 신규: 진도 탭 표시 방식 ('timeline' | 'weekly'), 기본값 타임라인
   };
   async function saveTheme(t) {
     C.theme=t; ls(LS.theme,t);

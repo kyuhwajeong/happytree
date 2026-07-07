@@ -63,6 +63,7 @@ const App = (() => {
     mgMk:DB.monthKey(new Date()),
     editClsId:null, editAccId:null, copyFromClsId:null, copyToClsId:null,
     tmpTheme:null, viewMode:'grid', operateView:'grid',
+    progressViewMode:'timeline', // ★ 신규: 'timeline' | 'weekly'
     calY:new Date().getFullYear(), calM:new Date().getMonth(),
     // 관리화면 달력
     mgCalY:new Date().getFullYear(), mgCalM:new Date().getMonth(),
@@ -142,14 +143,15 @@ const App = (() => {
     if (typeof StaffApp    !== 'undefined') StaffApp.init().catch(e=>console.warn('[StaffApp]',e));
     if (typeof GradeApp    !== 'undefined') GradeApp.init().catch(e=>console.warn('[GradeApp]',e));
 
-    DB.on('classes',()=>{_renderChips();if(S.page==='operate')_renderDays();if(S.page==='manage'&&S.mgTab==='classes'){_renderMgCls();if(_q('mg-fee-ov')&&!_q('mg-fee-ov').classList.contains('hidden'))_renderFeePanel();}});
-    DB.on('progress',()=>{if(S.page==='operate')_renderDays();if(S.shareActive)_refreshShareProgress();});
-    DB.on('theme',()=>{_applyTheme(DB.getTheme());if(S.page==='manage'&&S.mgTab==='theme')_renderMgTheme();});
+    DB.on('classes',()=>{_renderChips();if(S.page==='operate')_renderOperateBody();if(S.page==='manage'&&S.mgTab==='classes'){_renderMgCls();if(_q('mg-fee-ov')&&!_q('mg-fee-ov').classList.contains('hidden'))_renderFeePanel();}});
+    DB.on('progress',()=>{if(S.page==='operate')_renderOperateBody();if(S.shareActive)_refreshShareProgress();});
+    DB.on('theme',()=>{_applyTheme(DB.getTheme());S.progressViewMode=DB.getTheme().progressViewMode||'timeline';if(S.page==='operate')_renderOperateBody();if(S.page==='manage'&&S.mgTab==='theme')_renderMgTheme();});
     // ★ 반(교재배정 등) 동기화 충돌 감지 → 사용자에게 선택 요청
     if(typeof DB.onConflict==='function') DB.onConflict(_showSyncConflict);
 
     const t=DB.getTheme();
     S.viewMode=t.viewMode||'grid'; S.operateView=t.operateView||'grid';
+    S.progressViewMode=t.progressViewMode||'timeline'; // ★ 신규
     _applyTheme(t); _syncDot(FireDB.ready()?'on':'off');
     mq?.addEventListener('change',()=>{if(DB.getTheme().palette==='system')_applyTheme(DB.getTheme());});
     ['touchstart','mousedown','keydown'].forEach(ev=>document.addEventListener(ev,_resetAutoLogout,{passive:true}));
@@ -209,7 +211,7 @@ const App = (() => {
     document.getElementById('page-'+page)?.classList.add('on');
     document.querySelector(`[data-pg="${page}"]`)?.classList.add('on');
     history.pushState({pg:page},'');
-    if(page==='operate') {_renderChips();_renderWeekNav();_renderDays();}
+    if(page==='operate') {_renderChips();_renderWeekNav();_renderOperateBody();}
     if(page==='manage')  _renderManage();
     if(page==='students'&&typeof StudentApp!=='undefined') StudentApp.render();
     if(page==='booklib' &&typeof BooklibApp!=='undefined') BooklibApp.render();
@@ -448,7 +450,7 @@ const App = (() => {
       b.onclick=()=>{
         S.selCls=cls;
         _renderChips();
-        _renderDays();
+        _renderOperateBody();
         // ★ 풍선글 tooltip 표시
         _showChipTooltip(b, `${cls.termStart||'?'} ~ ${cls.termEnd||'현재'}`);
       };
@@ -524,6 +526,265 @@ const App = (() => {
     _scrollToFocusDay(container);
   }
 
+  /* ══════════════════════════════════════════════════════════════
+     타임라인 뷰 (신규, 2026-07 추가)
+     - _renderDays()/_mkBookRow() 등 기존 함수는 단 한 글자도 수정하지 않음
+     - 새 Firebase 경로 없음: DB.autoSave/getWeekProgress/getMonthBooks 그대로 재사용
+     - 월경계 조기확정 방지: 아직 오지 않은 달은 절대 커밋하지 않고 미리보기만 표시
+     ══════════════════════════════════════════════════════════════ */
+
+  const DOW_KO_ALL = ['일','월','화','수','목','금','토'];
+  const TL_MAX_DAYS = 5;        // ★ 요청사항: 최대 5일, 과거·현재·미래 공존
+  const TL_SEARCH_RANGE = 25;   // 후보 탐색 범위(달력일 기준 ±) — 주 1회 수업 반도 커버
+  let _tlClip = null;           // 복사 클립보드 (탭 세션 메모리, 별도 저장소 없음)
+
+  // ★ 뷰 모드 디스패처 — 기존 _renderDays()는 그대로 두고, 모드에 따라 분기만 함
+  function _renderOperateBody(){
+    const mode = S.progressViewMode || 'timeline';
+    const wknav = _q('op-wknav');
+    const calBtn = document.querySelector('.cal-inline-btn');
+    // 타임라인 모드에선 "특정 주로 이동" 개념이 없으므로 관련 UI를 숨김(데이터 로직엔 영향 없음)
+    if(wknav)  wknav.style.display  = (mode==='timeline') ? 'none' : '';
+    if(calBtn) calBtn.style.display = (mode==='timeline') ? 'none' : '';
+    if(mode==='timeline') _renderDaysTimeline();
+    else _renderDays();
+  }
+
+  // ★ 오늘 기준으로 반의 수업요일 중 가장 가까운 5개를, 과거/현재/미래가 섞이도록 균형 있게 추출
+  function _getTimelineDates(cls, today){
+    const candidates=[];
+    for(let i=-TL_SEARCH_RANGE;i<=TL_SEARCH_RANGE;i++){
+      const d=_addDays(today,i);
+      const dow=DOW_KO_ALL[d.getDay()];
+      if((cls.days||[]).includes(dow)) candidates.push(d);
+    }
+    candidates.sort((a,b)=>a-b);
+    if(!candidates.length) return [];
+
+    let idx = candidates.findIndex(d=>d.getTime()>=today.getTime());
+    if(idx===-1) idx = candidates.length-1;
+
+    const half = Math.floor((TL_MAX_DAYS-1)/2); // 2
+    let start = idx-half;
+    let end   = start+TL_MAX_DAYS-1;
+    if(start<0){ end += -start; start=0; }
+    if(end>candidates.length-1){ start -= (end-(candidates.length-1)); end=candidates.length-1; }
+    start=Math.max(0,start);
+
+    return candidates.slice(start,end+1);
+  }
+
+  function _renderDaysTimeline(){
+    const wrap=_q('days-scroll'); if(!wrap)return; wrap.innerHTML='';
+    const cls=S.selCls;
+    if(!cls){ wrap.innerHTML='<div class="empty">반을 선택해주세요</div>'; return; }
+    if(!(cls.days||[]).some(d=>DAYS.includes(d))){
+      wrap.innerHTML='<div class="empty">수업 요일이 설정되지 않았습니다.</div>'; return;
+    }
+
+    const canEdit = DB.canOperate(); // ★ 과거·현재·미래 구분 없이 동일 권한
+    const today = new Date(); today.setHours(0,0,0,0);
+    const todayMk = DB.monthKey(today);
+
+    const targetDates = _getTimelineDates(cls, today);
+    if(!targetDates.length){ wrap.innerHTML='<div class="empty">표시할 수업일이 없습니다.</div>'; return; }
+
+    const container=document.createElement('div');
+    container.className = (S.operateView==='grid' ? 'op-grid' : 'op-list') + ' tl-mode tl-list';
+
+    targetDates.forEach(date=>{
+      const dayName = DOW_KO_ALL[date.getDay()];
+      const weekKey = DB.toWeekKey(date);
+      const dateMk  = DB.monthKey(date);
+      const saved   = DB.getWeekProgress(cls.id,weekKey);
+      const dc = DC[dayName];
+      const isToday = date.toDateString()===today.toDateString();
+      const status = date < today ? 'past' : isToday ? 'today' : 'future';
+
+      // ★★★ 핵심 안전장치: 아직 오지 않은 달은 절대 getMonthBooks()로 새로 커밋하지 않음.
+      //     이번 달(todayMk)의 "현재" 구성을 커밋 없이 미리보기로만 읽는다.
+      const crossesFutureMonth = dateMk > todayMk;
+      const books = crossesFutureMonth
+        ? DB.getMonthBooks(cls.id, todayMk)  // 이미 존재 보장된 이번 달 데이터 재사용 (신규 커밋 없음)
+        : DB.getMonthBooks(cls.id, dateMk);  // 과거·현재 달은 기존과 완전히 동일하게 동작
+
+      const mainBooks=books.main||[], subBooks=books.sub||[];
+
+      const card=document.createElement('div');
+      card.className = `day-card tl-card tl-${status}` + (isToday?' is-today':'');
+      card.dataset.date = _localDate(date);
+
+      const badge = status==='past' ? '지난 수업' : status==='today' ? '오늘' : '예정';
+      const hdr=document.createElement('div'); hdr.className='day-hdr';
+      hdr.innerHTML = `<div class="day-stripe bg-${dc}"></div>
+        <div class="day-info">
+          <div class="day-name col-${dc}">${dayName}요일</div>
+          <div class="day-date-row">
+            <span class="day-date">${date.getMonth()+1}월 ${date.getDate()}일</span>
+            <span class="tl-badge tl-badge-${status}">${badge}</span>
+          </div>
+        </div>`;
+      card.appendChild(hdr);
+
+      if(!mainBooks.length && !subBooks.length){
+        card.innerHTML += '<div class="no-bk">이 월에 배정된 교재가 없습니다</div>';
+      } else {
+        const rows=document.createElement('div'); rows.className='bk-rows';
+
+        if(crossesFutureMonth){
+          // ★ 다음 달로 넘어가는 날짜: 진도 입력칸 없이 "예정 교재" 이름만 읽기전용 표시
+          const note=document.createElement('div'); note.className='tl-future-note';
+          note.innerHTML='🔜 예정 교재 · 이번 달이 끝나면 자동으로 확정됩니다 (그 전까지 진도 입력 불가)';
+          rows.appendChild(note);
+          if(mainBooks.length){
+            const sl=document.createElement('div'); sl.className='bk-section-lbl'; sl.textContent='📘 주교재(예정)';
+            rows.appendChild(sl);
+            mainBooks.forEach(b=>{
+              const r=document.createElement('div'); r.className='bk-row tl-preview-row';
+              r.innerHTML=`<span class="bk-tag main">주</span><span class="bk-nm main-nm">${_esc(b.name)}</span>`;
+              rows.appendChild(r);
+            });
+          }
+          if(subBooks.length){
+            const sl=document.createElement('div'); sl.className='bk-section-lbl'; sl.style.marginTop='4px'; sl.textContent='📗 부교재(예정)';
+            rows.appendChild(sl);
+            subBooks.forEach(b=>{
+              const r=document.createElement('div'); r.className='bk-row tl-preview-row';
+              r.innerHTML=`<span class="bk-tag sub">부</span><span class="bk-nm sub-nm">${_esc(b.name)}</span>`;
+              rows.appendChild(r);
+            });
+          }
+        } else {
+          // ★ 과거·이번 달: 기존 _mkBookRow를 100% 그대로 재사용 (동일 함수, 동일 저장 경로)
+          if(mainBooks.length){
+            const sl=document.createElement('div'); sl.className='bk-section-lbl'; sl.textContent='📘 주교재';
+            rows.appendChild(sl);
+            mainBooks.forEach(b=>rows.appendChild(_mkBookRow(b,'main',cls.id,weekKey,dayName,saved,canEdit)));
+          }
+          if(subBooks.length){
+            const sl=document.createElement('div'); sl.className='bk-section-lbl'; sl.style.marginTop='4px'; sl.textContent='📗 부교재';
+            rows.appendChild(sl);
+            subBooks.forEach(b=>rows.appendChild(_mkBookRow(b,'sub',cls.id,weekKey,dayName,saved,canEdit)));
+          }
+        }
+        card.appendChild(rows);
+
+        // ★ 메모: 월/교재 구성과 무관한 독립 키(dayName__MEMO) → 미래여도 항상 안전하게 편집 가능
+        const ms=document.createElement('div'); ms.className='memo-section';
+        const memoKey=`${dayName}__MEMO`; const memoVal=saved[memoKey]||'';
+        ms.innerHTML='<span class="memo-lbl">✏️ 메모</span>';
+        const ta=document.createElement('textarea'); ta.className='memo-inp';
+        ta.placeholder='이 날 메모 입력...'; ta.value=memoVal;
+        if(!canEdit){ ta.readOnly=true; if(memoVal) ta.classList.add('has-val'); }
+        if(canEdit){
+          const resize=()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,128)+'px';};
+          let _lm=memoVal; resize();
+          const _doSave=()=>{ if(ta.value!==_lm){ DB.autoSave(cls.id,weekKey,dayName,'memo',ta.value.trim()); _lm=ta.value; } };
+          ta.addEventListener('input',()=>{resize();clearTimeout(ta._st);ta._st=setTimeout(_doSave,1500);});
+          ta.addEventListener('blur',()=>{clearTimeout(ta._st);_doSave();});
+        }
+        ms.appendChild(ta); card.appendChild(ms);
+
+        // ★ Copy & Paste 툴바 — 진도값+메모만 대상(교재명 매칭, id 아님). 교재 배정 로직엔 관여 안 함.
+        if(canEdit && !crossesFutureMonth){
+          card.appendChild(_mkTlCopyBar(cls.id, weekKey, dayName, mainBooks, subBooks, saved, memoVal));
+        } else if(canEdit && crossesFutureMonth && (mainBooks.length||subBooks.length)){
+          card.appendChild(_mkTlMemoOnlyPasteBar(cls.id, weekKey, dayName));
+        }
+      }
+      container.appendChild(card);
+    });
+
+    wrap.appendChild(container);
+    wrap.appendChild(_mkTlTodayFab(container)); // ★ "오늘로 이동" 플로팅 버튼
+
+    setTimeout(()=>{
+      const todayCard = container.querySelector('.tl-today');
+      if(todayCard) todayCard.scrollIntoView({behavior:'smooth', block:'center'});
+    }, 80);
+  }
+
+  // ★ 복사&붙여넣기 — "진도 입력값 + 메모"만 대상. 교재명은 절대 옮기지 않음.
+  //   교재 id 대신 "이름(name)"으로 매칭 → 월 경계를 넘어도(id가 바뀌어도) 안전.
+  function _mkTlCopyBar(clsId, weekKey, dayName, mainBooks, subBooks, saved, memoVal){
+    const bar=document.createElement('div'); bar.className='tl-copybar';
+
+    const copyBtn=document.createElement('button');
+    copyBtn.className='tl-cp-btn tl-cp-copy'; copyBtn.textContent='📋 이 날 진도·메모 복사';
+    copyBtn.onclick=()=>{
+      _tlClip = {
+        main: mainBooks.map(b=>({name:b.name, val:saved[`${dayName}__${b.id}__progress`]||''})).filter(x=>x.val),
+        sub:  subBooks.map(b=>({name:b.name, val:saved[`${dayName}__${b.id}__progress`]||''})).filter(x=>x.val),
+        memo: memoVal||'',
+      };
+      if(!_tlClip.main.length && !_tlClip.sub.length && !_tlClip.memo){
+        _toast('⚠️ 복사할 진도/메모 내용이 없습니다','error'); _tlClip=null; return;
+      }
+      _toast('📋 복사되었습니다 · 붙여넣을 날짜에서 [붙여넣기]를 누르세요','success');
+    };
+
+    const pasteBtn=document.createElement('button');
+    pasteBtn.className='tl-cp-btn tl-cp-paste'; pasteBtn.textContent='📌 붙여넣기';
+    pasteBtn.disabled = !_tlClip;
+    pasteBtn.onclick=()=>{
+      if(!_tlClip) return;
+      const matched=[]; const unmatched=[];
+      for(const item of [..._tlClip.main, ..._tlClip.sub]){
+        const targetBook=[...mainBooks,...subBooks].find(b=>b.name===item.name);
+        if(targetBook) matched.push({book:targetBook, val:item.val});
+        else unmatched.push(item.name);
+      }
+      if(!matched.length && !_tlClip.memo){
+        _toast('⚠️ 이 날짜에 같은 이름의 주/부교재가 없어 붙여넣을 항목이 없습니다','error');
+        return;
+      }
+      let msg='다음 항목을 이 날짜에 붙여넣습니다(기존 입력값은 덮어써짐):\n';
+      msg += matched.map(m=>`· ${m.book.name}: "${m.val}"`).join('\n');
+      if(_tlClip.memo) msg += `\n· 메모: "${_tlClip.memo}"`;
+      if(unmatched.length) msg += `\n\n⚠️ 이 날짜에 없는 교재라 건너뜀: ${unmatched.join(', ')}`;
+      if(!confirm(msg)) return;
+
+      for(const m of matched){
+        DB.autoSave(clsId, weekKey, dayName, 'progress', m.val, m.book.id);
+      }
+      if(_tlClip.memo) DB.autoSave(clsId, weekKey, dayName, 'memo', _tlClip.memo);
+
+      _toast(`✅ 붙여넣기 완료 (${matched.length}건)`,'success');
+      _renderOperateBody(); // 즉시 반영(다른 기기에도 기존 실시간 리스너를 타고 전파됨)
+    };
+
+    bar.appendChild(copyBtn); bar.appendChild(pasteBtn);
+    return bar;
+  }
+
+  // 미래달(진도입력 비활성) 카드용 — 메모만 붙여넣기 가능
+  function _mkTlMemoOnlyPasteBar(clsId, weekKey, dayName){
+    const bar=document.createElement('div'); bar.className='tl-copybar';
+    const pasteBtn=document.createElement('button');
+    pasteBtn.className='tl-cp-btn tl-cp-paste'; pasteBtn.textContent='📌 메모만 붙여넣기';
+    pasteBtn.disabled = !_tlClip || !_tlClip.memo;
+    pasteBtn.onclick=()=>{
+      if(!_tlClip?.memo) return;
+      if(!confirm(`메모를 이 날짜에 붙여넣으시겠습니까?\n"${_tlClip.memo}"`)) return;
+      DB.autoSave(clsId, weekKey, dayName, 'memo', _tlClip.memo);
+      _toast('✅ 메모 붙여넣기 완료','success');
+      _renderOperateBody();
+    };
+    bar.appendChild(pasteBtn);
+    return bar;
+  }
+
+  // "오늘로 이동" 플로팅 버튼
+  function _mkTlTodayFab(container){
+    const fab=document.createElement('button');
+    fab.className='tl-today-fab'; fab.innerHTML='📍 오늘';
+    fab.onclick=()=>{
+      const todayCard=container.querySelector('.tl-today');
+      if(todayCard) todayCard.scrollIntoView({behavior:'smooth',block:'center'});
+    };
+    return fab;
+  }
+
   function _mkBookRow(b,btype,clsId,weekKey,dayName,saved,canEdit){
     const progKey=`${dayName}__${b.id}__progress`;
     const dateKey=`${dayName}__${b.id}__savedAt`;
@@ -575,8 +836,8 @@ const App = (() => {
 
   function _fmtDateTime(d){try{if(!d)return'';const dt=d instanceof Date?d:new Date(d);if(isNaN(dt.getTime()))return'';return`${dt.getMonth()+1}/${dt.getDate()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;}catch{return'';}}
 
-  function prevWeek(){S.monday=_addDays(S.monday,-7);_renderWeekNav();_renderChips();_renderDays();}
-  function nextWeek(){S.monday=_addDays(S.monday, 7);_renderWeekNav();_renderChips();_renderDays();}
+  function prevWeek(){S.monday=_addDays(S.monday,-7);_renderWeekNav();_renderChips();_renderOperateBody();}
+  function nextWeek(){S.monday=_addDays(S.monday, 7);_renderWeekNav();_renderChips();_renderOperateBody();}
 
   async function shareCurrentClass(){
     const cls=S.selCls; if(!cls){_toast('⚠️ 반을 선택해주세요','error');return;}
@@ -656,7 +917,7 @@ const App = (() => {
         else if(dow===5)d.classList.add('week-end');
         else if(dow>=2&&dow<=4)d.classList.add('in-week');
       }
-      d.onclick=()=>{S.monday=_mon(date);_renderWeekNav();_renderChips();_renderDays();_renderCal();setTimeout(()=>_q('cal-ov').classList.add('hidden'),280);};
+      d.onclick=()=>{S.monday=_mon(date);_renderWeekNav();_renderChips();_renderOperateBody();_renderCal();setTimeout(()=>_q('cal-ov').classList.add('hidden'),280);};
       grid.appendChild(d);
     }
     const rem=(firstDow+lastDay)%7;
@@ -1341,7 +1602,7 @@ const App = (() => {
   async function delAcc(id,u){if(DB.getSession()?.id===id){_toast('⚠️ 현재 계정은 삭제 불가','error');return;}if(!confirm(`"${u}" 계정을 삭제하시겠습니까?`))return;await DB.deleteAccount(id);_renderMgAcc();_toast('🗑 삭제 완료');}
 
   /* 테마 */
-  function _renderMgTheme(){const wrap=document.getElementById('mg-theme');if(!wrap)return;wrap.innerHTML='';const t=DB.getTheme();S.tmpTheme={...t};const isAdmin=DB.isAdmin();const card=document.createElement('div');card.className='th-card';const prev=document.createElement('div');prev.className='th-row';prev.innerHTML='<div class="th-preview" id="th-prev"></div>';card.appendChild(prev);_upPrev(PALETTES.find(p=>p.id===(t.palette||'light1'))?.accent||'#4f46e5');const pr=document.createElement('div');pr.className='th-row';pr.innerHTML='<div class="th-lbl">🎨 테마</div>';const palRow=document.createElement('div');palRow.className='pal-row';PALETTES.forEach(pal=>{const item=document.createElement('div');item.className='pal-item'+(pal.id===(t.palette||'light1')?' on':'');const swBg=pal.id==='system'?'linear-gradient(135deg,#f8f9fc 50%,#0b0b14 50%)':pal.bg;item.innerHTML=`<div class="pal-swatch" style="background:${swBg}">${pal.emoji}</div><div class="pal-name">${pal.name}</div>`;if(!isAdmin){item.style.pointerEvents='none';item.style.opacity='.5';}item.onclick=()=>{S.tmpTheme.palette=pal.id;if(pal.id!=='system')S.tmpTheme.accent=pal.accent;_applyTheme(S.tmpTheme);_upPrev(pal.accent||'#4f46e5');palRow.querySelectorAll('.pal-item').forEach((el,i)=>el.classList.toggle('on',PALETTES[i].id===pal.id));};palRow.appendChild(item);});pr.appendChild(palRow);card.appendChild(pr);const fr=document.createElement('div');fr.className='th-row';fr.innerHTML='<div class="th-lbl">🔤 폰트</div>';const ffList=document.createElement('div');ffList.className='ff-list';FONTS.forEach(f=>{const item=document.createElement('div');item.className='ff-item'+(f.key===(t.fontFamily||'Noto Sans KR')?' on':'');item.style.fontFamily=`'${f.key}',sans-serif`;item.innerHTML=`<span class="ff-name">${f.label}</span><span class="ff-sample">${f.sample}</span>`;if(!isAdmin){item.style.pointerEvents='none';item.style.opacity='.45';}item.onclick=()=>{S.tmpTheme.fontFamily=f.key;_applyTheme(S.tmpTheme);ffList.querySelectorAll('.ff-item').forEach((el,i)=>el.classList.toggle('on',FONTS[i].key===f.key));};ffList.appendChild(item);});fr.appendChild(ffList);card.appendChild(fr);const szr=document.createElement('div');szr.className='th-row';szr.innerHTML='<div class="th-lbl">📐 전체 글자 크기</div>';const szW=document.createElement('div');szW.className='sl-row';const sl=document.createElement('input');sl.type='range';sl.className='sl';sl.min=11;sl.max=22;sl.step=1;sl.value=t.fontSize||14;sl.disabled=!isAdmin;const fzv=document.createElement('div');fzv.className='sl-val';fzv.textContent=`${t.fontSize||14}px`;sl.addEventListener('input',()=>{S.tmpTheme.fontSize=+sl.value;fzv.textContent=`${sl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});szW.appendChild(sl);szW.appendChild(fzv);szr.appendChild(szW);card.appendChild(szr);const mfr=document.createElement('div');mfr.className='th-row';mfr.innerHTML='<div class="th-lbl">📘 주교재명 글자 크기</div>';const mfW=document.createElement('div');mfW.className='sl-row';const msl=document.createElement('input');msl.type='range';msl.className='sl';msl.min=10;msl.max=22;msl.step=1;msl.value=t.mainFontSize||t.fontSize||14;msl.disabled=!isAdmin;const mfv=document.createElement('div');mfv.className='sl-val';mfv.style.color='var(--a)';mfv.textContent=`${t.mainFontSize||t.fontSize||14}px`;msl.addEventListener('input',()=>{S.tmpTheme.mainFontSize=+msl.value;mfv.textContent=`${msl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});mfW.appendChild(msl);mfW.appendChild(mfv);mfr.appendChild(mfW);card.appendChild(mfr);const sfr=document.createElement('div');sfr.className='th-row';sfr.innerHTML='<div class="th-lbl">📗 부교재명 글자 크기</div>';const sfW=document.createElement('div');sfW.className='sl-row';const ssl=document.createElement('input');ssl.type='range';ssl.className='sl';ssl.min=10;ssl.max=22;ssl.step=1;ssl.value=t.subFontSize||Math.max((t.fontSize||14)-1,10);ssl.disabled=!isAdmin;const sfv=document.createElement('div');sfv.className='sl-val';sfv.style.color='var(--green)';sfv.textContent=`${t.subFontSize||Math.max((t.fontSize||14)-1,10)}px`;ssl.addEventListener('input',()=>{S.tmpTheme.subFontSize=+ssl.value;sfv.textContent=`${ssl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});sfW.appendChild(ssl);sfW.appendChild(sfv);sfr.appendChild(sfW);card.appendChild(sfr);const bpRow=document.createElement('div');bpRow.className='th-row';bpRow.innerHTML='<div class="th-lbl">👁 교재 미리보기</div>';const bpBox=document.createElement('div');bpBox.className='bk-preview-box';bpBox.id='bk-preview-box';['main','sub'].forEach(type=>{const row=document.createElement('div');row.className='bk-preview-row';const tag=document.createElement('span');tag.className=`bk-tag ${type}`;tag.textContent=type==='main'?'주':'부';const nm=document.createElement('span');nm.className='bk-preview-nm';nm.id=`bk-preview-nm-${type}`;nm.textContent=type==='main'?'수학의 정석(상)':'쎈 수학';nm.style.fontSize=type==='main'?`${S.tmpTheme.mainFontSize||t.mainFontSize||t.fontSize||14}px`:`${S.tmpTheme.subFontSize||t.subFontSize||Math.max((t.fontSize||14)-1,10)}px`;const inp2=document.createElement('div');inp2.className='bk-preview-inp';inp2.textContent='p.123~130';inp2.style.fontSize=`${S.tmpTheme.fontSize||t.fontSize||14}px`;inp2.style.width=`${S.tmpTheme.inputBoxWidth||t.inputBoxWidth||140}px`;row.appendChild(tag);row.appendChild(nm);row.appendChild(inp2);bpBox.appendChild(row);});bpRow.appendChild(bpBox);card.appendChild(bpRow);const iwr=document.createElement('div');iwr.className='th-row';iwr.innerHTML='<div class="th-lbl">📏 진도 입력칸 너비</div>';const iwW=document.createElement('div');iwW.className='sl-row';const isl=document.createElement('input');isl.type='range';isl.className='sl';isl.min=80;isl.max=260;isl.step=10;isl.value=t.inputBoxWidth||140;isl.disabled=!isAdmin;const iwv=document.createElement('div');iwv.className='sl-val';iwv.textContent=`${t.inputBoxWidth||140}px`;isl.addEventListener('input',()=>{S.tmpTheme.inputBoxWidth=+isl.value;iwv.textContent=`${isl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});iwW.appendChild(isl);iwW.appendChild(iwv);iwr.appendChild(iwW);card.appendChild(iwr);const ovr=document.createElement('div');ovr.className='th-row';ovr.innerHTML='<div class="th-lbl">📱 운용화면 기본 보기</div>';const vrow=document.createElement('div');vrow.className='view-sel-row';[{v:'grid',l:'⊞ 그리드'},{v:'list',l:'☰ 리스트'}].forEach(({v,l})=>{const btn=document.createElement('button');btn.className='view-sel-btn'+(v===(t.operateView||'grid')?' on':'');btn.textContent=l;if(!isAdmin){btn.disabled=true;btn.style.opacity='.45';}btn.onclick=()=>{S.tmpTheme.operateView=v;S.operateView=v;vrow.querySelectorAll('.view-sel-btn').forEach((b,i)=>b.classList.toggle('on',['grid','list'][i]===v));};vrow.appendChild(btn);});ovr.appendChild(vrow);card.appendChild(ovr);if(isAdmin){const sr=document.createElement('div');sr.className='th-row';const sb=document.createElement('button');sb.className='th-save-btn';sb.textContent='💾 테마 저장 · 적용';sb.onclick=async()=>{sb.textContent='저장 중...';sb.disabled=true;await DB.saveTheme(S.tmpTheme);_applyTheme(S.tmpTheme);S.operateView=S.tmpTheme.operateView||'grid';S.viewMode=S.tmpTheme.viewMode||'grid';_updateToggleBtn();sb.textContent='💾 테마 저장 · 적용';sb.disabled=false;_toast('🎨 테마 저장 완료!','success',3500);_renderMgTheme();};sr.appendChild(sb);card.appendChild(sr);}else{const nr=document.createElement('div');nr.className='th-row';nr.innerHTML='<div style="font-size:11px;color:var(--tx3)">⚠️ 테마 변경은 관리자 로그인 후 가능합니다</div>';card.appendChild(nr);}wrap.appendChild(card);
+  function _renderMgTheme(){const wrap=document.getElementById('mg-theme');if(!wrap)return;wrap.innerHTML='';const t=DB.getTheme();S.tmpTheme={...t};const isAdmin=DB.isAdmin();const card=document.createElement('div');card.className='th-card';const prev=document.createElement('div');prev.className='th-row';prev.innerHTML='<div class="th-preview" id="th-prev"></div>';card.appendChild(prev);_upPrev(PALETTES.find(p=>p.id===(t.palette||'light1'))?.accent||'#4f46e5');const pr=document.createElement('div');pr.className='th-row';pr.innerHTML='<div class="th-lbl">🎨 테마</div>';const palRow=document.createElement('div');palRow.className='pal-row';PALETTES.forEach(pal=>{const item=document.createElement('div');item.className='pal-item'+(pal.id===(t.palette||'light1')?' on':'');const swBg=pal.id==='system'?'linear-gradient(135deg,#f8f9fc 50%,#0b0b14 50%)':pal.bg;item.innerHTML=`<div class="pal-swatch" style="background:${swBg}">${pal.emoji}</div><div class="pal-name">${pal.name}</div>`;if(!isAdmin){item.style.pointerEvents='none';item.style.opacity='.5';}item.onclick=()=>{S.tmpTheme.palette=pal.id;if(pal.id!=='system')S.tmpTheme.accent=pal.accent;_applyTheme(S.tmpTheme);_upPrev(pal.accent||'#4f46e5');palRow.querySelectorAll('.pal-item').forEach((el,i)=>el.classList.toggle('on',PALETTES[i].id===pal.id));};palRow.appendChild(item);});pr.appendChild(palRow);card.appendChild(pr);const fr=document.createElement('div');fr.className='th-row';fr.innerHTML='<div class="th-lbl">🔤 폰트</div>';const ffList=document.createElement('div');ffList.className='ff-list';FONTS.forEach(f=>{const item=document.createElement('div');item.className='ff-item'+(f.key===(t.fontFamily||'Noto Sans KR')?' on':'');item.style.fontFamily=`'${f.key}',sans-serif`;item.innerHTML=`<span class="ff-name">${f.label}</span><span class="ff-sample">${f.sample}</span>`;if(!isAdmin){item.style.pointerEvents='none';item.style.opacity='.45';}item.onclick=()=>{S.tmpTheme.fontFamily=f.key;_applyTheme(S.tmpTheme);ffList.querySelectorAll('.ff-item').forEach((el,i)=>el.classList.toggle('on',FONTS[i].key===f.key));};ffList.appendChild(item);});fr.appendChild(ffList);card.appendChild(fr);const szr=document.createElement('div');szr.className='th-row';szr.innerHTML='<div class="th-lbl">📐 전체 글자 크기</div>';const szW=document.createElement('div');szW.className='sl-row';const sl=document.createElement('input');sl.type='range';sl.className='sl';sl.min=11;sl.max=22;sl.step=1;sl.value=t.fontSize||14;sl.disabled=!isAdmin;const fzv=document.createElement('div');fzv.className='sl-val';fzv.textContent=`${t.fontSize||14}px`;sl.addEventListener('input',()=>{S.tmpTheme.fontSize=+sl.value;fzv.textContent=`${sl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});szW.appendChild(sl);szW.appendChild(fzv);szr.appendChild(szW);card.appendChild(szr);const mfr=document.createElement('div');mfr.className='th-row';mfr.innerHTML='<div class="th-lbl">📘 주교재명 글자 크기</div>';const mfW=document.createElement('div');mfW.className='sl-row';const msl=document.createElement('input');msl.type='range';msl.className='sl';msl.min=10;msl.max=22;msl.step=1;msl.value=t.mainFontSize||t.fontSize||14;msl.disabled=!isAdmin;const mfv=document.createElement('div');mfv.className='sl-val';mfv.style.color='var(--a)';mfv.textContent=`${t.mainFontSize||t.fontSize||14}px`;msl.addEventListener('input',()=>{S.tmpTheme.mainFontSize=+msl.value;mfv.textContent=`${msl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});mfW.appendChild(msl);mfW.appendChild(mfv);mfr.appendChild(mfW);card.appendChild(mfr);const sfr=document.createElement('div');sfr.className='th-row';sfr.innerHTML='<div class="th-lbl">📗 부교재명 글자 크기</div>';const sfW=document.createElement('div');sfW.className='sl-row';const ssl=document.createElement('input');ssl.type='range';ssl.className='sl';ssl.min=10;ssl.max=22;ssl.step=1;ssl.value=t.subFontSize||Math.max((t.fontSize||14)-1,10);ssl.disabled=!isAdmin;const sfv=document.createElement('div');sfv.className='sl-val';sfv.style.color='var(--green)';sfv.textContent=`${t.subFontSize||Math.max((t.fontSize||14)-1,10)}px`;ssl.addEventListener('input',()=>{S.tmpTheme.subFontSize=+ssl.value;sfv.textContent=`${ssl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});sfW.appendChild(ssl);sfW.appendChild(sfv);sfr.appendChild(sfW);card.appendChild(sfr);const bpRow=document.createElement('div');bpRow.className='th-row';bpRow.innerHTML='<div class="th-lbl">👁 교재 미리보기</div>';const bpBox=document.createElement('div');bpBox.className='bk-preview-box';bpBox.id='bk-preview-box';['main','sub'].forEach(type=>{const row=document.createElement('div');row.className='bk-preview-row';const tag=document.createElement('span');tag.className=`bk-tag ${type}`;tag.textContent=type==='main'?'주':'부';const nm=document.createElement('span');nm.className='bk-preview-nm';nm.id=`bk-preview-nm-${type}`;nm.textContent=type==='main'?'수학의 정석(상)':'쎈 수학';nm.style.fontSize=type==='main'?`${S.tmpTheme.mainFontSize||t.mainFontSize||t.fontSize||14}px`:`${S.tmpTheme.subFontSize||t.subFontSize||Math.max((t.fontSize||14)-1,10)}px`;const inp2=document.createElement('div');inp2.className='bk-preview-inp';inp2.textContent='p.123~130';inp2.style.fontSize=`${S.tmpTheme.fontSize||t.fontSize||14}px`;inp2.style.width=`${S.tmpTheme.inputBoxWidth||t.inputBoxWidth||140}px`;row.appendChild(tag);row.appendChild(nm);row.appendChild(inp2);bpBox.appendChild(row);});bpRow.appendChild(bpBox);card.appendChild(bpRow);const iwr=document.createElement('div');iwr.className='th-row';iwr.innerHTML='<div class="th-lbl">📏 진도 입력칸 너비</div>';const iwW=document.createElement('div');iwW.className='sl-row';const isl=document.createElement('input');isl.type='range';isl.className='sl';isl.min=80;isl.max=260;isl.step=10;isl.value=t.inputBoxWidth||140;isl.disabled=!isAdmin;const iwv=document.createElement('div');iwv.className='sl-val';iwv.textContent=`${t.inputBoxWidth||140}px`;isl.addEventListener('input',()=>{S.tmpTheme.inputBoxWidth=+isl.value;iwv.textContent=`${isl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});iwW.appendChild(isl);iwW.appendChild(iwv);iwr.appendChild(iwW);card.appendChild(iwr);const ovr=document.createElement('div');ovr.className='th-row';ovr.innerHTML='<div class="th-lbl">📱 운용화면 기본 보기</div>';const vrow=document.createElement('div');vrow.className='view-sel-row';[{v:'grid',l:'⊞ 그리드'},{v:'list',l:'☰ 리스트'}].forEach(({v,l})=>{const btn=document.createElement('button');btn.className='view-sel-btn'+(v===(t.operateView||'grid')?' on':'');btn.textContent=l;if(!isAdmin){btn.disabled=true;btn.style.opacity='.45';}btn.onclick=()=>{S.tmpTheme.operateView=v;S.operateView=v;vrow.querySelectorAll('.view-sel-btn').forEach((b,i)=>b.classList.toggle('on',['grid','list'][i]===v));};vrow.appendChild(btn);});ovr.appendChild(vrow);card.appendChild(ovr);const pvr=document.createElement('div');pvr.className='th-row';pvr.innerHTML='<div class="th-lbl">📅 진도 탭 표시 방식</div>';const pvRow=document.createElement('div');pvRow.className='view-sel-row';[{v:'timeline',l:'📅 타임라인(권장)'},{v:'weekly',l:'🗓️ 주간(기존)'}].forEach(({v,l})=>{const btn=document.createElement('button');btn.className='view-sel-btn'+(v===(t.progressViewMode||'timeline')?' on':'');btn.textContent=l;if(!isAdmin){btn.disabled=true;btn.style.opacity='.45';}btn.onclick=()=>{S.tmpTheme.progressViewMode=v;pvRow.querySelectorAll('.view-sel-btn').forEach((b,i)=>b.classList.toggle('on',['timeline','weekly'][i]===v));};pvRow.appendChild(btn);});pvr.appendChild(pvRow);card.appendChild(pvr);if(isAdmin){const sr=document.createElement('div');sr.className='th-row';const sb=document.createElement('button');sb.className='th-save-btn';sb.textContent='💾 테마 저장 · 적용';sb.onclick=async()=>{sb.textContent='저장 중...';sb.disabled=true;await DB.saveTheme(S.tmpTheme);_applyTheme(S.tmpTheme);S.operateView=S.tmpTheme.operateView||'grid';S.viewMode=S.tmpTheme.viewMode||'grid';S.progressViewMode=S.tmpTheme.progressViewMode||'timeline';_updateToggleBtn();sb.textContent='💾 테마 저장 · 적용';sb.disabled=false;_toast('🎨 테마 저장 완료!','success',3500);_renderMgTheme();};sr.appendChild(sb);card.appendChild(sr);}else{const nr=document.createElement('div');nr.className='th-row';nr.innerHTML='<div style="font-size:11px;color:var(--tx3)">⚠️ 테마 변경은 관리자 로그인 후 가능합니다</div>';card.appendChild(nr);}wrap.appendChild(card);
 
   // ★ 탭 순서 설정 카드 (관리자 전용)
   if(isAdmin){
@@ -1639,7 +1900,7 @@ const App = (() => {
     else _toast(`📤 ${y}년 ${mo}월 교재 수납 등록 엑셀 추출 완료 (${withFee.length}개 반)`,'success');
   }
 
-  async function _processImport(file){const reader=new FileReader();reader.onload=async(e)=>{try{const wb=XLSX.read(e.target.result,{type:'array'});const raw=wb.Sheets['_restore'];if(!raw){_toast('⚠️ 올바른 백업 파일이 아닙니다','error');return;}const rows=XLSX.utils.sheet_to_json(raw);if(!rows[0]?.data){_toast('⚠️ 데이터 없음','error');return;}const data=JSON.parse(rows[0].data);const result=await DB.importAll(data);_renderMgCls();_renderChips();_renderDays();_toast('📥 복원 완료!','success');}catch(err){_toast('⚠️ 파일 오류: '+err.message,'error');}};reader.readAsArrayBuffer(file);}
+  async function _processImport(file){const reader=new FileReader();reader.onload=async(e)=>{try{const wb=XLSX.read(e.target.result,{type:'array'});const raw=wb.Sheets['_restore'];if(!raw){_toast('⚠️ 올바른 백업 파일이 아닙니다','error');return;}const rows=XLSX.utils.sheet_to_json(raw);if(!rows[0]?.data){_toast('⚠️ 데이터 없음','error');return;}const data=JSON.parse(rows[0].data);const result=await DB.importAll(data);_renderMgCls();_renderChips();_renderOperateBody();_toast('📥 복원 완료!','success');}catch(err){_toast('⚠️ 파일 오류: '+err.message,'error');}};reader.readAsArrayBuffer(file);}
 
   function _renderMgShare(){
     const wrap=document.getElementById('mg-share');if(!wrap)return;wrap.innerHTML='';
