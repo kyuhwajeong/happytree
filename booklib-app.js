@@ -1036,10 +1036,48 @@ const BooklibApp = (() => {
     console.log('[BooklibApp] inp 요소:', inp, '값:', inp?.value);
     if (!inp || !inp.value.trim()) { console.log('[BooklibApp] 교재명 비어있음 → 중단'); inp?.focus(); _toast('⚠️ 교재명을 입력해주세요','error'); return; }
     const name = inp.value.trim();
-    if (BookLibDB.getBooks().some(b=>b.name===name)) {
-      console.log('[BooklibApp] 중복 교재명 → 중단:', name);
+
+    const modal = document.getElementById('bl-reg-modal');
+    const selCls  = modal?._selCls  || new Set();
+    const selStus = modal?._selStus || new Map();
+
+    // ★ 버튼 중복 클릭 방지 + 진행 중 표시
+    const btn = modal?.querySelector('button[onclick*="_modalAddBook"]');
+
+    // ★ 중복 검사: 반을 지정한 경우 "이름+반" 조합 기준, 반 미지정 시엔 "반 없는 교재" 기준
+    //   → 같은 이름이라도 반이 다르면 별도 교재로 생성 가능해야 하므로 전역 이름 중복은 더 이상 막지 않는다.
+    if (selCls.size > 0) {
+      const clsArr = [...selCls];
+      const already = clsArr.filter(cid => BookLibDB.getBooks().some(b => b.name===name && (b.classIds||[]).includes(cid)));
+      const toCreate = clsArr.filter(cid => !already.includes(cid));
+
+      if (toCreate.length === 0) {
+        _toast(`⚠️ 선택한 반에는 이미 "${name}" 교재가 있습니다`,'error');
+        return;
+      }
+
+      if (btn) { if(btn.disabled) return; btn.disabled = true; btn.textContent = '등록 중...'; }
+      const allCls = typeof DB!=='undefined' ? DB.getActiveClasses() : [];
+      let created = 0, failCnt = 0;
+      for (const cid of toCreate) {
+        try { await BookLibDB.createForClass(name, cid); created++; }
+        catch(e) { failCnt++; console.error('[BooklibApp] createForClass 실패', cid, e); }
+      }
+
+      document.getElementById('bl-reg-modal')?.remove();
+      _renderLibrary();
+
+      const skippedNames = already.map(cid => allCls.find(c=>c.id===cid)?.name || cid).join(', ');
+      let msg = `📖 "${name}" ${created}개 반에 독립 교재로 생성 완료`;
+      if (already.length) msg += ` (이미 있던 반 건너뜀: ${skippedNames})`;
+      _toast(msg, failCnt ? 'error' : 'success');
+      return;
+    }
+
+    // ── 반 미지정: 기존 방식(단일 교재, 학생 개별 배정 가능) ──
+    if (BookLibDB.getBooks().some(b => b.name===name && !(b.classIds||[]).length)) {
+      console.log('[BooklibApp] 중복 교재명(반 미지정) → 중단:', name);
       _toast(`⚠️ "${name}" 은 이미 등록된 교재명입니다`,'error');
-      // ★ 입력창에 시각적으로 명확하게 표시 (모달이 토스트를 가릴 수 있어 보강)
       inp.style.borderColor = '#ef4444';
       inp.style.background = 'rgba(239,68,68,.06)';
       inp.focus();
@@ -1066,31 +1104,17 @@ const BooklibApp = (() => {
     inp.style.background = '';
     console.log('[BooklibApp] 등록 진행:', name);
 
-    const modal = document.getElementById('bl-reg-modal');
-    const selCls  = modal?._selCls  || new Set();
-    const selStus = modal?._selStus || new Map();
-
-    // ★ 버튼 중복 클릭 방지 + 진행 중 표시
-    const btn = modal?.querySelector('button[onclick*="_modalAddBook"]');
     if (btn) { if(btn.disabled) return; btn.disabled = true; btn.textContent = '등록 중...'; }
 
     let book = null;
-    let clsFailCnt = 0, stuFail = false;
+    let stuFail = false;
 
     try {
-      // 1. 교재 생성 (필수 — 실패 시 전체 중단)
       book = await BookLibDB.addBook(name);
       console.log('[BooklibApp] addBook 결과:', book);
       if (!book || !book.id) throw new Error('addBook 결과가 비정상입니다');
-      console.log('[BooklibApp] 선택된 반:', [...selCls], '선택된 학생:', [...selStus.keys()]);
+      console.log('[BooklibApp] 선택된 학생:', [...selStus.keys()]);
 
-      // 2. 반 배정 (개별 실패는 무시하고 계속 진행)
-      for (const cid of selCls) {
-        try { await BookLibDB.assignBook(book.id, cid); }
-        catch(e) { clsFailCnt++; console.error('[BooklibApp] assignBook 실패', cid, e); }
-      }
-
-      // 3. 학생 배정 (실패해도 계속 진행)
       if (selStus.size) {
         try { await BookLibDB.batchAddStudents(book.id, [...selStus.keys()]); }
         catch(e) { stuFail = true; console.error('[BooklibApp] batchAddStudents 실패', e); }
@@ -1102,13 +1126,12 @@ const BooklibApp = (() => {
       return;
     }
 
-    console.log('[BooklibApp] 등록 완료. classFail:', clsFailCnt, 'stuFail:', stuFail, '최종 books 수:', BookLibDB.getBooks().length);
-    // ★ 성공/부분실패 여부와 무관하게 항상 모달 닫고 목록 갱신
+    console.log('[BooklibApp] 등록 완료. stuFail:', stuFail, '최종 books 수:', BookLibDB.getBooks().length);
     document.getElementById('bl-reg-modal')?.remove();
     _renderLibrary();
 
-    if (clsFailCnt || stuFail) {
-      _toast(`⚠️ "${name}" 등록됨 (일부 배정 실패: ${clsFailCnt?'반':''}${clsFailCnt&&stuFail?'·':''}${stuFail?'학생':''})`,'error');
+    if (stuFail) {
+      _toast(`⚠️ "${name}" 등록됨 (일부 학생 배정 실패)`,'error');
     } else {
       _toast(`📖 "${name}" 등록 완료`,'success');
     }
@@ -1119,7 +1142,8 @@ const BooklibApp = (() => {
     const inp=document.getElementById('bl-book-inp');
     const name=(typeof nameArg==='string'&&nameArg.trim() ? nameArg.trim() : (inp?.value||'').trim());
     if(!name){_toast('⚠️ 교재명을 입력해주세요');return;}
-    if(BookLibDB.getBooks().some(b=>b.name===name)){_toast('⚠️ 이미 존재하는 교재명입니다');return;}
+    // ★ 반 미지정 교재 범위에서만 중복 체크 (반이 다르면 같은 이름 허용)
+    if(BookLibDB.getBooks().some(b=>b.name===name && !(b.classIds||[]).length)){_toast('⚠️ 이미 존재하는 교재명입니다');return;}
     await BookLibDB.addBook(name);
     if(inp)inp.value='';
     _renderLibrary();
@@ -1817,10 +1841,39 @@ const BooklibApp = (() => {
 
   async function _toggleAssign(bookId,classId,el){
     const isOn=el.classList.contains('on');
-    if(isOn)await BookLibDB.unassignBook(bookId,classId);
-    else await BookLibDB.assignBook(bookId,classId);
-    el.classList.toggle('on',!isOn);
-    _toast(isOn?'반 배정 해제':'✅ 반 배정','success');
+    if(isOn){
+      await BookLibDB.unassignBook(bookId,classId);
+      el.classList.remove('on');
+      _toast('반 배정 해제','success');
+    } else {
+      const book = BookLibDB.getBookById(bookId);
+      const otherClasses = (book?.classIds||[]).filter(id=>id!==classId);
+      if (otherClasses.length === 0) {
+        // 아직 다른 반에 배정 안 됨 → 그대로 이 교재에 배정
+        await BookLibDB.assignBook(bookId,classId);
+        el.classList.add('on');
+        _toast('✅ 반 배정','success');
+      } else {
+        // ★ 이미 다른 반에 배정된 교재 → 같은 이름의 독립 교재를 새로 만들어 그 반에 배정한다.
+        //   (한 레코드를 여러 반이 공유하면, 한 반만 완결/삭제해도 다른 반 데이터까지 사라지는 문제가 있었음)
+        const dupExists = BookLibDB.getBooks().some(b=>b.name===book.name && (b.classIds||[]).includes(classId));
+        if (dupExists) {
+          _toast(`⚠️ "${book.name}" 은 해당 반에 이미 존재합니다`,'error');
+          return; // 체크박스는 원래 꺼진 상태 그대로 (이 레코드 소속 아님)
+        }
+        try {
+          const nb = await BookLibDB.createForClass(book.name, classId, book.chapters);
+          _toast(`📖 "${book.name}" 이(가) 별도 교재로 생성되어 해당 반에 배정되었습니다`,'success');
+        } catch(e) {
+          console.error('[BooklibApp] 독립 교재 생성 실패', e);
+          _toast('❌ 반 배정 실패: '+(e.message||e),'error');
+          return;
+        }
+        // 이 칩은 새로 만들어진 다른 레코드 소속이므로 현재 편집 중인 교재의 체크 표시는 켜지 않음
+        _renderLibrary();
+        return;
+      }
+    }
     /* ★ 반 배정 여부에 따라 학생 배정 섹션 활성/비활성 토글 */
     const bookNow=BookLibDB.getBookById(bookId);
     const hasClass=(bookNow?.classIds||[]).length>0;
