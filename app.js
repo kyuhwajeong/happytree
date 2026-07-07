@@ -64,6 +64,7 @@ const App = (() => {
     editClsId:null, editAccId:null, copyFromClsId:null, copyToClsId:null,
     tmpTheme:null, viewMode:'grid', operateView:'grid',
     progressViewMode:'timeline', // ★ 신규: 'timeline' | 'weekly'
+    tlLayout: (localStorage.getItem('bl_tl_layout')||'grid'), // ★ 신규: 타임라인 카드 좌우(grid)/세로(list) 배치, 기기별 개인 설정
     calY:new Date().getFullYear(), calM:new Date().getMonth(),
     // 관리화면 달력
     mgCalY:new Date().getFullYear(), mgCalM:new Date().getMonth(),
@@ -589,8 +590,22 @@ const App = (() => {
     const targetDates = _getTimelineDates(cls, today);
     if(!targetDates.length){ wrap.innerHTML='<div class="empty">표시할 수업일이 없습니다.</div>'; return; }
 
+    // ★ 타임라인 전용 Grid/List 토글 (권한 무관, 기기별 개인 설정, 기본값 Grid)
+    const tlHdr=document.createElement('div'); tlHdr.className='tl-hdr';
+    const layoutBtn=document.createElement('button');
+    layoutBtn.className='tl-layout-toggle';
+    layoutBtn.innerHTML = S.tlLayout==='grid' ? '⊞ 좌우보기 · ☰ 목록으로' : '☰ 목록보기 · ⊞ 좌우로';
+    layoutBtn.title='좌우(Grid) / 세로(List) 배치 전환';
+    layoutBtn.onclick=()=>{
+      S.tlLayout = (S.tlLayout==='grid') ? 'list' : 'grid';
+      try{ localStorage.setItem('bl_tl_layout', S.tlLayout); }catch(e){}
+      _renderDaysTimeline();
+    };
+    tlHdr.appendChild(layoutBtn);
+    wrap.appendChild(tlHdr);
+
     const container=document.createElement('div');
-    container.className = (S.operateView==='grid' ? 'op-grid' : 'op-list') + ' tl-mode tl-list';
+    container.className = 'tl-mode ' + (S.tlLayout==='grid' ? 'tl-layout-grid' : 'tl-layout-list');
 
     targetDates.forEach(date=>{
       const dayName = DOW_KO_ALL[date.getDay()];

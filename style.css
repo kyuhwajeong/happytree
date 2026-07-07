@@ -622,20 +622,59 @@ body.dark .bk-inp.filled{color:#4ade80}
    - 기존 클래스는 전혀 수정하지 않음(추가만)
    ══════════════════════════════════════════════════════════════ */
 
-/* 컨테이너: 타임라인 모드는 항상 세로 스택 */
-.op-grid.tl-mode, .op-list.tl-mode{display:flex;flex-direction:column;gap:14px;}
+/* 컨테이너: 타임라인은 Grid(좌우)/List(세로) 토글 가능. 기본은 Grid. */
+.tl-mode{position:relative;}
 
-/* 8-1. 궤적선(track line) — 카드 좌측 세로선 + 점 */
-.tl-list{position:relative;padding-left:22px;}
-.tl-list::before{
+/* ★ Grid 배치: 4일 기준 폭으로 좌우 배열, 5번째는 자연스럽게 가로 스크롤(스냅) */
+.tl-mode.tl-layout-grid{
+  display:grid;
+  grid-auto-flow:column;
+  grid-auto-columns:calc((100% - 3*12px)/4); /* 4일 기준 폭 */
+  gap:12px;
+  overflow-x:auto;
+  overflow-y:hidden;
+  padding:16px 4px 12px;
+  scroll-snap-type:x proximity;
+  -webkit-overflow-scrolling:touch;
+}
+.tl-mode.tl-layout-grid .tl-card{min-width:190px;scroll-snap-align:start;}
+.tl-mode.tl-layout-grid::-webkit-scrollbar{height:6px;}
+.tl-mode.tl-layout-grid::-webkit-scrollbar-thumb{background:var(--a40);border-radius:3px;}
+
+/* ★ List 배치: 기존처럼 세로 스택(요청 시에만) */
+.tl-mode.tl-layout-list{display:flex;flex-direction:column;gap:14px;padding-left:22px;}
+
+/* 타임라인 헤더 (Grid/List 토글 버튼) */
+.tl-hdr{display:flex;justify-content:flex-end;padding:8px 4px 0;}
+.tl-layout-toggle{
+  padding:7px 12px;border-radius:9px;border:1.5px solid var(--bdr);
+  background:var(--card2);color:var(--tx2);font-size:12px;font-weight:700;
+  cursor:pointer;font-family:var(--font);transition:.15s;white-space:nowrap;
+}
+.tl-layout-toggle:hover{border-color:var(--a);color:var(--a);background:var(--a10);}
+.tl-layout-toggle:active{transform:scale(.96);}
+
+/* 8-1. 궤적선(track line) — List 모드에서는 세로선, Grid 모드에서는 가로선 */
+.tl-layout-list::before{
   content:'';position:absolute;left:9px;top:8px;bottom:8px;width:2px;
   background:linear-gradient(to bottom, var(--bdr2) 0%, var(--a40) 50%, var(--bdr2) 100%);
 }
-.tl-card{position:relative;}
-.tl-card::before{
+.tl-layout-list .tl-card::before{
   content:'';position:absolute;left:-19px;top:22px;width:10px;height:10px;border-radius:50%;
   background:var(--card);border:2px solid var(--bdr2);z-index:2;
 }
+
+.tl-layout-grid::before{
+  content:'';position:absolute;top:6px;left:8px;right:8px;height:2px;
+  background:linear-gradient(to right, var(--bdr2) 0%, var(--a40) 50%, var(--bdr2) 100%);
+}
+.tl-layout-grid .tl-card{position:relative;}
+.tl-layout-grid .tl-card::before{
+  content:'';position:absolute;top:-13px;left:50%;transform:translateX(-50%);
+  width:10px;height:10px;border-radius:50%;
+  background:var(--card);border:2px solid var(--bdr2);z-index:2;
+}
+
 .tl-card.tl-past::before{background:var(--bdr2);border-color:var(--bdr2);}
 .tl-card.tl-today::before{
   background:var(--a);border-color:var(--a);
