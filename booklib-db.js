@@ -233,6 +233,23 @@ const BookLibDB = (() => {
     _fire('books'); return copy;
   }
 
+  // ★ 반별 독립 교재 생성 — 같은 이름이라도 반이 다르면 완전히 별개의 레코드로 만든다.
+  //   이유: 교재 레코드가 여러 반에 공유되면(classIds 여러 개) 한 반만 완결/삭제해도
+  //   레코드 전체가 사라져 다른 반의 진행 중인 교재까지 함께 없어지는 문제가 있었음.
+  //   챕터 구성만 복사하고(재입력 방지) 학생 배정은 복사하지 않는다(반이 다르므로).
+  async function createForClass(name, classId, chapters) {
+    const b = {
+      id: _nid(),
+      name: name.trim(),
+      chapters: chapters ? JSON.parse(JSON.stringify(chapters)) : [],
+      classIds: classId ? [classId] : [],
+      createdAt: _now(),
+    };
+    _books.push(b); _ls(LS_BOOKS,_books);
+    if (_fb()) await FireDB.set(`${FB_BOOKS}/${b.id}`,b).catch(console.warn);
+    _fire('books'); return b;
+  }
+
   function assignStudents(bookId, studentIds) {
     const b=_books.find(x=>x.id===bookId); if(!b) return;
     b.studentIds = studentIds;
@@ -428,7 +445,7 @@ const BookLibDB = (() => {
     init, on,
     getBooks, getAllBooks, getArchivedBooks, getBookById,
     addBook, updateBook, deleteBook,
-    reorderBooks, archiveBook, unarchiveBook, copyBook, assignStudents, addStudentToBook, batchAddStudents, removeStudentFromBook,
+    reorderBooks, archiveBook, unarchiveBook, copyBook, createForClass, assignStudents, addStudentToBook, batchAddStudents, removeStudentFromBook,
     setChapters, deleteChapter,
     getBooksForClass, isBookInClass, assignBook, unassignBook,
     getMatrixChecks, getRawCheck, isChecked, getCheckParsed, getSubTasks,
