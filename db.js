@@ -407,10 +407,13 @@ const DB = (() => {
     let newBooks;
     if (mk <= nextMk && cls.monthBooks[prevMk]) {
       const base = _migrateBooks(cls.monthBooks[prevMk]);
+      // ★ firstRegisteredAt은 이월돼도 절대 덮어쓰지 않음(진짜 최초 등록일 보존).
+      //   이 필드가 아직 없는 옛 교재(과거에 만들어진 데이터)는 지금 이 순간을
+      //   "확인 가능한 가장 이른 시점"으로 1회에 한해 채워 넣어 자연스럽게 마이그레이션한다.
       newBooks = {
-        pool: base.pool.map(b=>({...b,id:nid(),createdAt:now()})),
-        main: base.main.map(b=>({...b,id:nid(),createdAt:now()})),
-        sub:  base.sub.map(b=>({...b,id:nid(),createdAt:now()})),
+        pool: base.pool.map(b=>({...b,id:nid(),createdAt:now(),firstRegisteredAt:b.firstRegisteredAt||b.createdAt||now()})),
+        main: base.main.map(b=>({...b,id:nid(),createdAt:now(),firstRegisteredAt:b.firstRegisteredAt||b.createdAt||now()})),
+        sub:  base.sub.map(b=>({...b,id:nid(),createdAt:now(),firstRegisteredAt:b.firstRegisteredAt||b.createdAt||now()})),
       };
     } else {
       newBooks = _emptyBooks();
@@ -515,7 +518,7 @@ const DB = (() => {
     if (!cls.monthBooks) cls.monthBooks = {};
     if (!cls.monthBooks[mk]) { getMonthBooks(classId, mk); }
     _migrateBooks(cls.monthBooks[mk]);
-    const b = {id:nid(), name, createdAt:now()};
+    const b = {id:nid(), name, createdAt:now(), firstRegisteredAt:now()}; // ★ firstRegisteredAt: 이월돼도 절대 안 바뀌는 "진짜 최초 등록일"
     cls.monthBooks[mk].pool.push(b);
     await _syncCls(cls); return b;
   }
@@ -587,6 +590,7 @@ const DB = (() => {
             id: nid(),
             name: b.name,
             createdAt: now(),
+            firstRegisteredAt: now(), // ★ 이 반 입장에선 지금이 최초 등록 시점
             copiedFrom: fromClsId
           });
           copied++;
@@ -704,7 +708,8 @@ const DB = (() => {
   const getTheme = () => C.theme || {
     palette:'light1', fontFamily:'Noto Sans KR', fontSize:14,
     mainFontSize:14, subFontSize:13,
-    viewMode:'grid', operateView:'grid', inputBoxWidth:140
+    viewMode:'grid', operateView:'grid', inputBoxWidth:140,
+    progressViewMode:'timeline', // ★ 신규: 진도 탭 표시 방식 ('timeline' | 'weekly'), 기본값 타임라인
   };
   async function saveTheme(t) {
     C.theme=t; ls(LS.theme,t);

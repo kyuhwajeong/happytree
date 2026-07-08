@@ -616,3 +616,136 @@ body.dark .bk-inp.filled{color:#4ade80}
   vertical-align:middle;
   flex-shrink:0;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   타임라인 뷰 스타일 (신규, 2026-07 추가)
+   - 기존 클래스는 전혀 수정하지 않음(추가만)
+   ══════════════════════════════════════════════════════════════ */
+
+/* 컨테이너: 타임라인은 Grid(좌우)/List(세로) 토글 가능. 기본은 Grid. */
+.tl-mode{position:relative;}
+
+/* ★ 반 선택 라벨 + Grid/List 토글 버튼을 한 줄에 배치(스크롤 영역 밖 = 항상 보임) */
+.chip-bar-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;}
+.chip-bar-top .chip-lbl{margin-bottom:0;}
+
+/* ★ 타임라인 이전/오늘/다음 네비게이션 바(#op-tlnav) 중앙의 "오늘" 버튼 */
+.tl-today-btn{
+  padding:5px 11px;border-radius:8px;border:1.5px solid var(--a40);
+  background:var(--a10);color:var(--a);font-size:12px;font-weight:800;
+  cursor:pointer;font-family:var(--font);transition:.15s;margin-top:2px;
+}
+.tl-today-btn:hover{background:var(--a);color:#fff;}
+.tl-today-btn:active{transform:scale(.95);}
+
+/* ★ Grid 배치: 4일 기준 폭으로 좌우 배열, 5번째는 자연스럽게 가로 스크롤(스냅) */
+.tl-mode.tl-layout-grid{
+  display:grid;
+  grid-auto-flow:column;
+  grid-auto-columns:calc((100% - 3*12px)/4); /* 4일 기준 폭 */
+  gap:12px;
+  overflow-x:auto;
+  overflow-y:hidden;
+  padding:16px 4px 12px;
+  scroll-snap-type:x proximity;
+  -webkit-overflow-scrolling:touch;
+}
+.tl-mode.tl-layout-grid .tl-card{min-width:190px;scroll-snap-align:start;}
+.tl-mode.tl-layout-grid::-webkit-scrollbar{height:6px;}
+.tl-mode.tl-layout-grid::-webkit-scrollbar-thumb{background:var(--a40);border-radius:3px;}
+
+/* ★ List 배치: 기존처럼 세로 스택(요청 시에만) */
+.tl-mode.tl-layout-list{display:flex;flex-direction:column;gap:14px;padding-left:22px;}
+
+/* 타임라인 헤더 (Grid/List 토글 버튼) — 반 선택 영역으로 이동했으나 클래스는 공용으로 재사용됨 */
+.tl-layout-toggle{
+  padding:7px 12px;border-radius:9px;border:1.5px solid var(--bdr);
+  background:var(--card2);color:var(--tx2);font-size:12px;font-weight:700;
+  cursor:pointer;font-family:var(--font);transition:.15s;white-space:nowrap;
+}
+.tl-layout-toggle:hover{border-color:var(--a);color:var(--a);background:var(--a10);}
+.tl-layout-toggle:active{transform:scale(.96);}
+
+/* 8-1. 궤적선(track line) — List 모드에서는 세로선, Grid 모드에서는 가로선 */
+.tl-layout-list::before{
+  content:'';position:absolute;left:9px;top:8px;bottom:8px;width:2px;
+  background:linear-gradient(to bottom, var(--bdr2) 0%, var(--a40) 50%, var(--bdr2) 100%);
+}
+.tl-layout-list .tl-card::before{
+  content:'';position:absolute;left:-19px;top:22px;width:10px;height:10px;border-radius:50%;
+  background:var(--card);border:2px solid var(--bdr2);z-index:2;
+}
+
+.tl-layout-grid::before{
+  content:'';position:absolute;top:6px;left:8px;right:8px;height:2px;
+  background:linear-gradient(to right, var(--bdr2) 0%, var(--a40) 50%, var(--bdr2) 100%);
+}
+.tl-layout-grid .tl-card{position:relative;}
+.tl-layout-grid .tl-card::before{
+  content:'';position:absolute;top:-13px;left:50%;transform:translateX(-50%);
+  width:10px;height:10px;border-radius:50%;
+  background:var(--card);border:2px solid var(--bdr2);z-index:2;
+}
+
+.tl-card.tl-past::before{background:var(--bdr2);border-color:var(--bdr2);}
+.tl-card.tl-today::before{
+  background:var(--a);border-color:var(--a);
+  box-shadow:0 0 0 4px var(--a20);
+  animation:tlPulse 1.8s ease-out infinite;
+}
+.tl-card.tl-future::before{background:var(--card);border-color:var(--green);}
+@keyframes tlPulse{
+  0%{box-shadow:0 0 0 0 var(--a40);}
+  70%{box-shadow:0 0 0 8px rgba(0,0,0,0);}
+  100%{box-shadow:0 0 0 0 rgba(0,0,0,0);}
+}
+
+/* 상태 배지 */
+.tl-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:800;margin-left:6px;}
+.tl-badge-past{background:var(--bdr2);color:var(--tx3);}
+.tl-badge-today{background:var(--a);color:#fff;}
+.tl-badge-future{background:rgba(5,150,105,.15);color:var(--green);}
+
+.day-card.tl-card.tl-past{opacity:.82;}
+.day-card.tl-card.tl-today{border:2px solid var(--a);box-shadow:0 0 10px var(--a20);}
+.day-card.tl-card.tl-future{border:1px dashed var(--bdr2);}
+
+/* 8-2. 저장 완료 체크마크 마이크로 인터랙션 (기존 .bk-row.saved 클래스에 CSS만 얹음) */
+.bk-row{position:relative;}
+.bk-row.saved::after{
+  content:'✓';position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  color:var(--green);font-weight:900;font-size:14px;
+  animation:tlCheckFade 1.5s ease forwards;pointer-events:none;
+}
+@keyframes tlCheckFade{
+  0%{opacity:0;transform:translateY(-50%) scale(.6);}
+  15%{opacity:1;transform:translateY(-50%) scale(1.1);}
+  25%{transform:translateY(-50%) scale(1);}
+  75%{opacity:1;}
+  100%{opacity:0;}
+}
+
+/* 8-3. "오늘로 이동"은 #op-tlnav 내 .tl-today-btn으로 통합됨(중복 플로팅 버튼 제거) */
+
+/* 8-4. 예정 교재(미확정) 카드 — 사선 패턴으로 "미확정" 시각적 은유 */
+.tl-future-note{font-size:11px;color:var(--tx3);background:var(--surf2);border-radius:8px;
+  padding:6px 10px;margin-bottom:6px;line-height:1.5;}
+.bk-row.tl-preview-row{
+  opacity:.65;pointer-events:none;position:relative;overflow:hidden;
+  background-image:repeating-linear-gradient(
+    45deg, transparent, transparent 8px, var(--bdr2) 8px, var(--bdr2) 9px
+  );
+  background-color:var(--surf2);
+}
+.bk-row.tl-preview-row .bk-nm{font-style:italic;}
+
+/* 8-5. 큰 글씨 모드에서도 안 깨지는 레이아웃 */
+.tl-card .day-date-row{flex-wrap:wrap;}
+.tl-card .bk-nm{white-space:normal;word-break:keep-all;}
+
+/* 복사&붙여넣기 툴바 */
+.tl-copybar{display:flex;gap:8px;padding:8px 10px 10px;}
+.tl-cp-btn{flex:1;padding:8px;border-radius:8px;border:1.5px solid var(--bdr);background:var(--card2);
+  font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);color:var(--tx2);transition:.15s;}
+.tl-cp-btn:hover{border-color:var(--a);color:var(--a);background:var(--a10);}
+.tl-cp-btn:disabled{opacity:.4;cursor:not-allowed;}
