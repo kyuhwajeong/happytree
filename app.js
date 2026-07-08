@@ -777,11 +777,12 @@ const App = (() => {
       if(!_tlClip.main.length && !_tlClip.sub.length && !_tlClip.memo){
         _toast('⚠️ 복사할 진도/메모 내용이 없습니다','error'); _tlClip=null; return;
       }
+      _refreshTlPasteButtons(); // ★ 이미 그려진 다른 날짜 카드들의 [붙여넣기] 버튼을 즉시 활성화
       _toast('📋 복사되었습니다 · 붙여넣을 날짜에서 [붙여넣기]를 누르세요','success');
     };
 
     const pasteBtn=document.createElement('button');
-    pasteBtn.className='tl-cp-btn tl-cp-paste'; pasteBtn.textContent='📌 붙여넣기';
+    pasteBtn.className='tl-cp-btn tl-cp-paste tl-cp-paste-full'; pasteBtn.textContent='📌 붙여넣기';
     pasteBtn.disabled = !_tlClip;
     pasteBtn.onclick=()=>{
       if(!_tlClip) return;
@@ -818,7 +819,7 @@ const App = (() => {
   function _mkTlMemoOnlyPasteBar(clsId, weekKey, dayName){
     const bar=document.createElement('div'); bar.className='tl-copybar';
     const pasteBtn=document.createElement('button');
-    pasteBtn.className='tl-cp-btn tl-cp-paste'; pasteBtn.textContent='📌 메모만 붙여넣기';
+    pasteBtn.className='tl-cp-btn tl-cp-paste tl-cp-paste-memo'; pasteBtn.textContent='📌 메모만 붙여넣기';
     pasteBtn.disabled = !_tlClip || !_tlClip.memo;
     pasteBtn.onclick=()=>{
       if(!_tlClip?.memo) return;
@@ -832,6 +833,13 @@ const App = (() => {
   }
 
   // "오늘로 이동" 플로팅 버튼
+  // ★ 복사 직후, 현재 화면에 이미 그려진 모든 [붙여넣기] 버튼의 활성/비활성 상태를 즉시 갱신
+  //   (전체 재렌더링 없이, 클립보드 상태만 반영 — 다른 카드의 입력 중인 내용을 건드리지 않기 위함)
+  function _refreshTlPasteButtons(){
+    document.querySelectorAll('.tl-cp-paste-full').forEach(btn=>{ btn.disabled = !_tlClip; });
+    document.querySelectorAll('.tl-cp-paste-memo').forEach(btn=>{ btn.disabled = !_tlClip || !_tlClip.memo; });
+  }
+
   function _mkBookRow(b,btype,clsId,weekKey,dayName,saved,canEdit){
     const progKey=`${dayName}__${b.id}__progress`;
     const dateKey=`${dayName}__${b.id}__savedAt`;
