@@ -625,6 +625,19 @@ body.dark .bk-inp.filled{color:#4ade80}
 /* 컨테이너: 타임라인은 Grid(좌우)/List(세로) 토글 가능. 기본은 Grid. */
 .tl-mode{position:relative;}
 
+/* ★ 반 선택 라벨 + Grid/List 토글 버튼을 한 줄에 배치(스크롤 영역 밖 = 항상 보임) */
+.chip-bar-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;}
+.chip-bar-top .chip-lbl{margin-bottom:0;}
+
+/* ★ 타임라인 이전/오늘/다음 네비게이션 바(#op-tlnav) 중앙의 "오늘" 버튼 */
+.tl-today-btn{
+  padding:5px 11px;border-radius:8px;border:1.5px solid var(--a40);
+  background:var(--a10);color:var(--a);font-size:12px;font-weight:800;
+  cursor:pointer;font-family:var(--font);transition:.15s;margin-top:2px;
+}
+.tl-today-btn:hover{background:var(--a);color:#fff;}
+.tl-today-btn:active{transform:scale(.95);}
+
 /* ★ Grid 배치: 4일 기준 폭으로 좌우 배열, 5번째는 자연스럽게 가로 스크롤(스냅) */
 .tl-mode.tl-layout-grid{
   display:grid;
@@ -644,8 +657,7 @@ body.dark .bk-inp.filled{color:#4ade80}
 /* ★ List 배치: 기존처럼 세로 스택(요청 시에만) */
 .tl-mode.tl-layout-list{display:flex;flex-direction:column;gap:14px;padding-left:22px;}
 
-/* 타임라인 헤더 (Grid/List 토글 버튼) */
-.tl-hdr{display:flex;justify-content:flex-end;padding:8px 4px 0;}
+/* 타임라인 헤더 (Grid/List 토글 버튼) — 반 선택 영역으로 이동했으나 클래스는 공용으로 재사용됨 */
 .tl-layout-toggle{
   padding:7px 12px;border-radius:9px;border:1.5px solid var(--bdr);
   background:var(--card2);color:var(--tx2);font-size:12px;font-weight:700;
@@ -713,15 +725,7 @@ body.dark .bk-inp.filled{color:#4ade80}
   100%{opacity:0;}
 }
 
-/* 8-3. "오늘로 이동" 플로팅 버튼 */
-.tl-today-fab{
-  position:sticky;bottom:16px;left:calc(100% - 88px);
-  width:72px;padding:10px 0;border-radius:20px;border:none;
-  background:var(--a);color:#fff;font-size:12px;font-weight:800;
-  box-shadow:0 4px 14px var(--a40);cursor:pointer;z-index:20;
-  font-family:var(--font);transition:transform .15s;
-}
-.tl-today-fab:active{transform:scale(.92);}
+/* 8-3. "오늘로 이동"은 #op-tlnav 내 .tl-today-btn으로 통합됨(중복 플로팅 버튼 제거) */
 
 /* 8-4. 예정 교재(미확정) 카드 — 사선 패턴으로 "미확정" 시각적 은유 */
 .tl-future-note{font-size:11px;color:var(--tx3);background:var(--surf2);border-radius:8px;

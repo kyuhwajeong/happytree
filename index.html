@@ -100,7 +100,10 @@
     </div>
 
     <div class="chip-bar">
-      <div class="chip-lbl">반 선택</div>
+      <div class="chip-bar-top">
+        <div class="chip-lbl">반 선택</div>
+        <button id="op-tl-layout-btn" class="tl-layout-toggle" style="display:none" onclick="App.toggleTlLayout()"></button>
+      </div>
       <div class="chip-row" id="op-chips"></div>
     </div>
 
@@ -113,6 +116,19 @@
         <div class="wk-mo"  id="op-wkmo"></div>
       </div>
       <button class="wk-btn" onclick="App.nextWeek()">
+        <span>다음</span><span class="wk-arr">›</span>
+      </button>
+    </div>
+
+    <div class="wk-nav" id="op-tlnav" style="display:none">
+      <button class="wk-btn" onclick="App.tlPrev()">
+        <span class="wk-arr">‹</span><span>이전</span>
+      </button>
+      <div class="wk-c">
+        <div class="wk-num" id="op-tlrange">—</div>
+        <button class="tl-today-btn" onclick="App.tlToday()">📍 오늘</button>
+      </div>
+      <button class="wk-btn" onclick="App.tlNext()">
         <span>다음</span><span class="wk-arr">›</span>
       </button>
     </div>

@@ -65,6 +65,7 @@ const App = (() => {
     tmpTheme:null, viewMode:'grid', operateView:'grid',
     progressViewMode:'timeline', // ★ 신규: 'timeline' | 'weekly'
     tlLayout: (localStorage.getItem('bl_tl_layout')||'grid'), // ★ 신규: 타임라인 카드 좌우(grid)/세로(list) 배치, 기기별 개인 설정
+    tlAnchor: null, // ★ 신규: 타임라인 이전/다음 탐색 기준일. null이면 "실제 오늘" 기준(항상 최신 상태로 계산)
     calY:new Date().getFullYear(), calM:new Date().getMonth(),
     // 관리화면 달력
     mgCalY:new Date().getFullYear(), mgCalM:new Date().getMonth(),
@@ -547,8 +548,51 @@ const App = (() => {
     // 타임라인 모드에선 "특정 주로 이동" 개념이 없으므로 관련 UI를 숨김(데이터 로직엔 영향 없음)
     if(wknav)  wknav.style.display  = (mode==='timeline') ? 'none' : '';
     if(calBtn) calBtn.style.display = (mode==='timeline') ? 'none' : '';
+    const tlnav = _q('op-tlnav');
+    if(tlnav) tlnav.style.display = (mode==='timeline') ? '' : 'none';
+    _updateTlLayoutBtn(); // ★ 반 선택 우측 Grid/List 버튼 표시 여부·라벨 갱신(스크롤과 무관한 고정 위치)
     if(mode==='timeline') _renderDaysTimeline();
     else _renderDays();
+  }
+
+  // ★ 반 선택 영역 우측에 고정된 Grid/List 토글 버튼 갱신 (스크롤 영역 밖에 있어 항상 보임)
+  function _updateTlLayoutBtn(){
+    const btn=_q('op-tl-layout-btn'); if(!btn) return;
+    const mode=S.progressViewMode||'timeline';
+    btn.style.display = (mode==='timeline') ? '' : 'none';
+    btn.innerHTML = S.tlLayout==='grid' ? '⊞ 좌우 · ☰ 목록' : '☰ 목록 · ⊞ 좌우';
+    btn.title='좌우(Grid) / 세로(List) 배치 전환';
+  }
+
+  // ★ Grid ↔ List 전환 (기기별 개인 설정, localStorage 저장, Firebase 없음)
+  function toggleTlLayout(){
+    S.tlLayout = (S.tlLayout==='grid') ? 'list' : 'grid';
+    try{ localStorage.setItem('bl_tl_layout', S.tlLayout); }catch(e){}
+    _updateTlLayoutBtn();
+    if(S.page==='operate') _renderOperateBody();
+  }
+
+  // ★ 타임라인 이전/다음/오늘 — 화면에 표시되는 "창(윈도우)"만 이동. 실제 오늘 날짜 기준
+  //   월경계 조기확정 방지 로직은 이 앵커와 무관하게 항상 "진짜 오늘"을 기준으로 동작(안전)
+  function tlPrev(){
+    const cls=S.selCls; if(!cls) return;
+    const anchor = S.tlAnchor || (()=>{const d=new Date();d.setHours(0,0,0,0);return d;})();
+    const cur = _getTimelineDates(cls, anchor);
+    if(!cur.length) return;
+    S.tlAnchor = _addDays(cur[0], -1); // 현재 창의 첫 날 바로 전날을 새 기준으로 → 겹침·공백 없이 이전 구간 표시
+    _renderDaysTimeline();
+  }
+  function tlNext(){
+    const cls=S.selCls; if(!cls) return;
+    const anchor = S.tlAnchor || (()=>{const d=new Date();d.setHours(0,0,0,0);return d;})();
+    const cur = _getTimelineDates(cls, anchor);
+    if(!cur.length) return;
+    S.tlAnchor = _addDays(cur[cur.length-1], 1); // 현재 창의 마지막 날 바로 다음날을 새 기준으로
+    _renderDaysTimeline();
+  }
+  function tlToday(){
+    S.tlAnchor = null; // ★ "실제 오늘" 기준으로 즉시 복귀
+    _renderDaysTimeline();
   }
 
   // ★ 오늘 기준으로 반의 수업요일 중 가장 가까운 5개를, 과거/현재/미래가 섞이도록 균형 있게 추출
@@ -584,25 +628,24 @@ const App = (() => {
     }
 
     const canEdit = DB.canOperate(); // ★ 과거·현재·미래 구분 없이 동일 권한
-    const today = new Date(); today.setHours(0,0,0,0);
-    const todayMk = DB.monthKey(today);
+    const realToday = new Date(); realToday.setHours(0,0,0,0); // ★ 상태배지/월경계안전판단은 항상 "진짜 오늘" 기준
+    const todayMk = DB.monthKey(realToday);
+    const anchor = S.tlAnchor ? new Date(S.tlAnchor) : new Date(realToday); // ★ 이전/다음으로 이동한 "탐색 기준일"
 
-    const targetDates = _getTimelineDates(cls, today);
+    const targetDates = _getTimelineDates(cls, anchor);
     if(!targetDates.length){ wrap.innerHTML='<div class="empty">표시할 수업일이 없습니다.</div>'; return; }
 
-    // ★ 타임라인 전용 Grid/List 토글 (권한 무관, 기기별 개인 설정, 기본값 Grid)
-    const tlHdr=document.createElement('div'); tlHdr.className='tl-hdr';
-    const layoutBtn=document.createElement('button');
-    layoutBtn.className='tl-layout-toggle';
-    layoutBtn.innerHTML = S.tlLayout==='grid' ? '⊞ 좌우보기 · ☰ 목록으로' : '☰ 목록보기 · ⊞ 좌우로';
-    layoutBtn.title='좌우(Grid) / 세로(List) 배치 전환';
-    layoutBtn.onclick=()=>{
-      S.tlLayout = (S.tlLayout==='grid') ? 'list' : 'grid';
-      try{ localStorage.setItem('bl_tl_layout', S.tlLayout); }catch(e){}
-      _renderDaysTimeline();
-    };
-    tlHdr.appendChild(layoutBtn);
-    wrap.appendChild(tlHdr);
+    // ★ Grid/List 토글 버튼은 반 선택 영역 우측(#op-tl-layout-btn, index.html)으로 이동했으므로 여기서 재생성하지 않음
+    _updateTlLayoutBtn();
+
+    // ★ 이전/오늘/다음 네비게이션 바(#op-tlnav)의 날짜 범위 라벨 갱신
+    const rangeEl=_q('op-tlrange');
+    if(rangeEl){
+      const f=targetDates[0], l=targetDates[targetDates.length-1];
+      rangeEl.textContent = (f.getMonth()===l.getMonth() && f.getDate()===l.getDate())
+        ? `${f.getMonth()+1}/${f.getDate()}`
+        : `${f.getMonth()+1}/${f.getDate()} ~ ${l.getMonth()+1}/${l.getDate()}`;
+    }
 
     const container=document.createElement('div');
     container.className = 'tl-mode ' + (S.tlLayout==='grid' ? 'tl-layout-grid' : 'tl-layout-list');
@@ -613,8 +656,8 @@ const App = (() => {
       const dateMk  = DB.monthKey(date);
       const saved   = DB.getWeekProgress(cls.id,weekKey);
       const dc = DC[dayName];
-      const isToday = date.toDateString()===today.toDateString();
-      const status = date < today ? 'past' : isToday ? 'today' : 'future';
+      const isToday = date.toDateString()===realToday.toDateString();
+      const status = date < realToday ? 'past' : isToday ? 'today' : 'future';
 
       // ★★★ 핵심 안전장치: 아직 오지 않은 달은 절대 getMonthBooks()로 새로 커밋하지 않음.
       //     이번 달(todayMk)의 "현재" 구성을 커밋 없이 미리보기로만 읽는다.
@@ -711,7 +754,6 @@ const App = (() => {
     });
 
     wrap.appendChild(container);
-    wrap.appendChild(_mkTlTodayFab(container)); // ★ "오늘로 이동" 플로팅 버튼
 
     setTimeout(()=>{
       const todayCard = container.querySelector('.tl-today');
@@ -790,16 +832,6 @@ const App = (() => {
   }
 
   // "오늘로 이동" 플로팅 버튼
-  function _mkTlTodayFab(container){
-    const fab=document.createElement('button');
-    fab.className='tl-today-fab'; fab.innerHTML='📍 오늘';
-    fab.onclick=()=>{
-      const todayCard=container.querySelector('.tl-today');
-      if(todayCard) todayCard.scrollIntoView({behavior:'smooth',block:'center'});
-    };
-    return fab;
-  }
-
   function _mkBookRow(b,btype,clsId,weekKey,dayName,saved,canEdit){
     const progKey=`${dayName}__${b.id}__progress`;
     const dateKey=`${dayName}__${b.id}__savedAt`;
@@ -1139,10 +1171,23 @@ const App = (() => {
     return zone;
   }
 
+  // ★ 교재 "최초 등록일" 포맷 — createdAt(매달 리셋)과 달리 firstRegisteredAt은 이월돼도 유지됨
+  function _fmtRegDate(ts){
+    if(!ts) return '';
+    const d=new Date(ts); if(isNaN(d)) return '';
+    const y=d.getFullYear(), m=d.getMonth()+1, day=d.getDate();
+    const now=new Date();
+    let months=(now.getFullYear()-y)*12+(now.getMonth()+1-m);
+    if(months<0) months=0;
+    const monthTxt = months<1 ? '이번 달' : `${months}개월째`;
+    return `최초 등록: ${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')} (${monthTxt})`;
+  }
+
   function _buildPoolItem(b,clsId,mk,isAdmin,listEl){
     const item=document.createElement('div'); item.className='bm-pool-item';
     item.dataset.bookid=b.id; item.dataset.name=b.name; item.dataset.clsid=clsId;
     const nm=document.createElement('span'); nm.className='bm-pool-name'; nm.textContent=b.name; item.appendChild(nm);
+    item.title=_fmtRegDate(b.firstRegisteredAt||b.createdAt); // ★ 최초 등록일(호버 시 툴팁, 레이아웃 영향 없음)
     if(isAdmin){
       // ★ 더블클릭 인라인 수정
       nm.addEventListener('dblclick',()=>_inlineEditBook(nm,b,clsId,mk));
@@ -1198,6 +1243,7 @@ const App = (() => {
       (books[zone]||[]).forEach(b=>{
         const item=document.createElement('div'); item.className='bm-zone-item';
         item.dataset.bookid=b.id; item.dataset.name=b.name;
+        item.title=_fmtRegDate(b.firstRegisteredAt||b.createdAt); // ★ 최초 등록일(호버 시 툴팁, 레이아웃 영향 없음)
         const dot=document.createElement('div'); dot.className=`bm-zone-dot ${zone}`;
         const nm=document.createElement('span'); nm.className='bm-zone-name'; nm.textContent=b.name;
         item.appendChild(dot); item.appendChild(nm);
@@ -2097,6 +2143,7 @@ const App = (() => {
     init,go,mgTab,toggleView,
     cancelLogin,doLogin,logout,
     prevWeek,nextWeek,
+    toggleTlLayout,tlPrev,tlNext,tlToday, // ★ 신규: 타임라인 Grid/List 토글 + 이전/오늘/다음 탐색
     openCal,closeCal,calPrev,calNext,calToday,
     openMgCal,closeMgCal,mgCalPrev,mgCalNext,
     openClassModal,saveClass,delClass,_onDayCkChange,
