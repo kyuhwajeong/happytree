@@ -161,21 +161,20 @@ const StaffDB = (() => {
      * 키 변환: 2026_06_24 → 2026-06-24
      */
     FireDB.listen(FB_WORK, v => {
-      if (!v) { _work = {}; _ls(LS_WORK, _work); return; }
       const newWork = {};
-      Object.entries(v).forEach(([sid, days]) => {
-        newWork[sid] = {};
-        Object.entries(days || {}).forEach(([dayKey, entries]) => {
-          newWork[sid][dayKey.replace(/_/g, '-')] = entries;
+      if (v) {
+        Object.entries(v).forEach(([sid, days]) => {
+          newWork[sid] = {};
+          Object.entries(days || {}).forEach(([dayKey, entries]) => {
+            newWork[sid][dayKey.replace(/_/g, '-')] = entries;
+          });
         });
-      });
-      // 변경된 경우에만 갱신
-      if (JSON.stringify(newWork) !== JSON.stringify(_work)) {
-        _work = newWork;
-        _ls(LS_WORK, _work);
-        _fire('work');   // UI 갱신 이벤트 발생
-        console.log('[StaffDB] 🔄 근무 데이터 실시간 갱신');
       }
+      // JSON 비교 없이 항상 갱신 — 키 순서 차이로 인한 오탐 방지
+      _work = newWork;
+      _ls(LS_WORK, _work);
+      _fire('work');
+      console.log('[StaffDB] 🔄 근무 실시간 갱신:', Object.keys(newWork).length, '명분');
     });
 
     console.log('[StaffDB v3] ✅ staff:', _staff.length);
@@ -852,14 +851,20 @@ const StaffDB = (() => {
    */
   async function syncWorkData(sid) {
     if (!_fb()) return;
-    const data = await FireDB.get(`${FB_WORK}/${sid}`).catch(() => null);
-    if (!data) { _work[sid] = {}; return; }
-    // Firebase 키 변환: 2026_06_24 → 2026-06-24
-    _work[sid] = {};
-    Object.entries(data).forEach(([dayKey, entries]) => {
-      _work[sid][dayKey.replace(/_/g, '-')] = entries;
-    });
-    console.log(`[StaffDB] syncWorkData(${sid}): ${Object.keys(_work[sid]).length}일`);
+    try {
+      // once('value')로 서버에서 직접 읽기 (캐시 우회)
+      const snap = await _db.ref(`${FB_WORK}/${sid}`).once('value');
+      _work[sid] = {};
+      if (snap.exists()) {
+        Object.entries(snap.val()).forEach(([dayKey, entries]) => {
+          _work[sid][dayKey.replace(/_/g, '-')] = entries;
+        });
+      }
+      _ls(LS_WORK, _work);
+      console.log(`[StaffDB] syncWorkData(${sid}): ${Object.keys(_work[sid]).length}일 (서버 직접 읽기)`);
+    } catch(e) {
+      console.warn('[StaffDB] syncWorkData 오류:', e);
+    }
   }
 
   /* ════════════════════════════════════════
