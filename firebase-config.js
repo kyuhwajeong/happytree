@@ -230,6 +230,14 @@ const FireDB = (() => {
       .then(s => s.exists() ? s.val() : null)
       .catch(e => { console.error('get', path, e); return null; });
   }
+
+  /* 서버에서 직접 강제 읽기 (캐시 우회, once 사용) */
+  function getFromServer(path) {
+    if (!ready()) return Promise.resolve(null);
+    return _db.ref(path).once('value')
+      .then(s => s.exists() ? s.val() : null)
+      .catch(e => { console.error('getFromServer', path, e); return null; });
+  }
   function set(path, v) {
     if (!ready()) return Promise.resolve(false);
     return _db.ref(path).set(v)
@@ -276,5 +284,5 @@ const FireDB = (() => {
     progress:'hakwon10/progress', accounts:'hakwon10/accounts', theme:'hakwon10/theme',
   };
 
-  return { init, ready, isConnected, get, set, update, remove, listen, debounced, transaction, P };
+  return { init, ready, isConnected, get, getFromServer, set, update, remove, listen, debounced, transaction, P };
 })();

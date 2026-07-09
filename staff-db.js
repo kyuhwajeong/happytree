@@ -858,18 +858,17 @@ const StaffDB = (() => {
     }
     try {
       console.log(`[StaffDB] syncWorkData 시작: ${FB_WORK}/${sid}`);
-      // once('value'): 서버에서 직접 강제 읽기
-      const snap = await _db.ref(`${FB_WORK}/${sid}`).once('value');
+      // getFromServer: 서버에서 직접 강제 읽기 (캐시 우회)
+      const data = await FireDB.getFromServer(`${FB_WORK}/${sid}`);
       _work[sid] = {};
-      if (snap.exists()) {
-        const raw = snap.val();
-        const days = Object.keys(raw);
+      if (data) {
+        const days = Object.keys(data);
         days.forEach(dayKey => {
-          _work[sid][dayKey.replace(/_/g, '-')] = raw[dayKey];
+          _work[sid][dayKey.replace(/_/g, '-')] = data[dayKey];
         });
         console.log(`[StaffDB] ✅ syncWorkData(${sid}): Firebase에서 ${days.length}일 로드`, days);
       } else {
-        console.warn(`[StaffDB] ⚠️ syncWorkData(${sid}): Firebase에 데이터 없음 (경로: ${FB_WORK}/${sid})`);
+        console.warn(`[StaffDB] ⚠️ syncWorkData(${sid}): Firebase에 데이터 없음`);
       }
       _ls(LS_WORK, _work);
     } catch(e) {
