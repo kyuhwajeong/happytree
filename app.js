@@ -673,12 +673,14 @@ const App = (() => {
       card.dataset.date = _localDate(date);
 
       const badge = status==='past' ? '지난 수업' : status==='today' ? '오늘' : '예정';
+      const dtStr = _fmtTime(cls.dayTimes?.[dayName]); // ★ 주간 뷰와 동일하게 요일별 수업시간 재사용
       const hdr=document.createElement('div'); hdr.className='day-hdr';
       hdr.innerHTML = `<div class="day-stripe bg-${dc}"></div>
         <div class="day-info">
           <div class="day-name col-${dc}">${dayName}요일</div>
           <div class="day-date-row">
             <span class="day-date">${date.getMonth()+1}월 ${date.getDate()}일</span>
+            ${dtStr?`<span class="day-time-chip">${dtStr}</span>`:''}
             <span class="tl-badge tl-badge-${status}">${badge}</span>
           </div>
         </div>`;
