@@ -918,12 +918,33 @@ const StaffApp = (() => {
     if (!_st.calStaffId) return;
     _toast('🔄 서버 데이터 확인 중...');
     try {
-      const before = Object.keys(StaffDB.getWorkMonth(_st.calStaffId, `${_st.calYear}-${String(_st.calMonth).padStart(2,'0')}`)).length;
+      const s = StaffDB.getById(_st.calStaffId);
+      const before = Object.keys(StaffDB.getWorkMonth(_st.calStaffId, `${_st.calYear}-${String(_st.calMonth).padStart(2,'0')}`));
       await StaffDB.syncWorkData(_st.calStaffId);
       _drawCal();
-      const after = Object.keys(StaffDB.getWorkMonth(_st.calStaffId, `${_st.calYear}-${String(_st.calMonth).padStart(2,'0')}`)).length;
-      if (before !== after) {
-        _toast(`✅ 서버 기준으로 갱신됨 (이번 달 ${before}일 → ${after}일)`, 'success');
+      const after = Object.keys(StaffDB.getWorkMonth(_st.calStaffId, `${_st.calYear}-${String(_st.calMonth).padStart(2,'0')}`));
+
+      // 진단용: 화면에 실제 서버 응답 날짜 목록을 직접 보여줌 (스크린샷으로 비교 가능)
+      console.log('[진단] 직원:', s?.name, '| 이번 달 이전:', before, '| 서버 동기화 후:', after);
+      const diagBox = document.createElement('div');
+      const connOk = typeof FireDB !== 'undefined' && FireDB.isConnected();
+      diagBox.style.cssText = 'position:fixed;bottom:80px;left:12px;right:12px;z-index:9999;background:#111;color:#0f0;font-family:monospace;font-size:11px;padding:10px 12px;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.4);max-height:40vh;overflow-y:auto';
+      diagBox.innerHTML = `
+        <div style="color:#fff;font-weight:800;margin-bottom:6px">🔍 서버 동기화 진단 (${s?.name || ''})</div>
+        <div>기기: ${/Mobi|Android/i.test(navigator.userAgent) ? '📱 모바일' : '💻 PC'}</div>
+        <div>Firebase 연결: ${connOk ? '🟢 온라인(신뢰 가능)' : '🔴 오프라인(캐시일 수 있음!)'}</div>
+        <div>시각: ${new Date().toLocaleTimeString('ko-KR')}</div>
+        <div style="margin-top:4px;color:#fbbf24">동기화 전 로컬: [${before.join(', ') || '없음'}]</div>
+        <div style="color:#4ade80">서버 실제 응답: [${after.join(', ') || '없음'}]</div>
+        <button onclick="this.parentElement.remove()" style="margin-top:8px;padding:5px 10px;border-radius:6px;background:#374151;color:#fff;border:none;font-size:11px">닫기</button>
+      `;
+      document.body.appendChild(diagBox);
+      setTimeout(() => diagBox.remove(), 15000);
+
+      const beforeStr = before.join(',');
+      const afterStr  = after.join(',');
+      if (beforeStr !== afterStr) {
+        _toast(`✅ 서버 기준으로 갱신됨 (${before.length}일 → ${after.length}일)`, 'success');
       } else {
         _toast('✅ 서버와 이미 일치합니다', 'success');
       }

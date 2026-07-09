@@ -268,10 +268,18 @@ const FireDB = (() => {
       .catch(e => { console.error('get', path, e); return null; });
   }
 
-  /* 서버에서 직접 강제 읽기 (캐시 우회, once 사용) */
+  /* 서버에서 직접 강제 읽기 —
+   * .once('value') 대신 .get() 사용: Firebase 공식 문서상 .get()은
+   * "항상 서버의 최신 데이터로 응답을 시도하고, 도달 불가능할 때만
+   * 캐시로 폴백"하도록 설계된 API. .once('value')는 레거시로 연결
+   * 상태에 따라 조용히 로컬 캐시를 반환할 수 있어 배제함.
+   */
   function getFromServer(path) {
     if (!ready()) return Promise.resolve(null);
-    return _db.ref(path).once('value')
+    if (!_connected) {
+      console.warn('[FireDB] getFromServer: 현재 오프라인 — 캐시값이 반환될 수 있음', path);
+    }
+    return _db.ref(path).get()
       .then(s => s.exists() ? s.val() : null)
       .catch(e => { console.error('getFromServer', path, e); return null; });
   }

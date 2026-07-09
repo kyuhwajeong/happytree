@@ -864,8 +864,9 @@ const StaffDB = (() => {
       return;
     }
     try {
-      console.log(`[StaffDB] syncWorkData 시작: ${FB_WORK}/${sid}`);
-      // getFromServer: 서버에서 직접 강제 읽기 (캐시 우회)
+      const connState = FireDB.isConnected() ? '🟢 온라인' : '🔴 오프라인(캐시 위험)';
+      console.log(`[StaffDB] syncWorkData 시작: ${FB_WORK}/${sid} | 연결상태: ${connState}`);
+      // getFromServer: 서버에서 직접 강제 읽기 (.get() — 캐시 우회)
       const data = await FireDB.getFromServer(`${FB_WORK}/${sid}`);
       _work[sid] = {};
       if (data) {
@@ -873,9 +874,9 @@ const StaffDB = (() => {
         days.forEach(dayKey => {
           _work[sid][dayKey.replace(/_/g, '-')] = data[dayKey];
         });
-        console.log(`[StaffDB] ✅ syncWorkData(${sid}): Firebase에서 ${days.length}일 로드`, days);
+        console.log(`[StaffDB] ✅ syncWorkData(${sid}) [${connState}]: ${days.length}일 로드`, days);
       } else {
-        console.warn(`[StaffDB] ⚠️ syncWorkData(${sid}): Firebase에 데이터 없음`);
+        console.warn(`[StaffDB] ⚠️ syncWorkData(${sid}) [${connState}]: 데이터 없음`);
       }
       _ls(LS_WORK, _work);
     } catch(e) {
