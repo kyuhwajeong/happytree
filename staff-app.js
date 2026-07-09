@@ -507,9 +507,10 @@ const StaffApp = (() => {
 
     /* 근무 데이터 실시간 갱신 이벤트 → 달력/급여 탭 자동 반영 */
     StaffDB.on('work', () => {
+      console.log('[StaffApp] 🔄 근무 데이터 실시간 갱신 수신');
       const pg = document.getElementById('page-staff');
       if (!pg?.classList.contains('on')) return;
-      // 달력이 열려 있으면 달력 갱신
+      // 달력이 열려 있으면 즉시 갱신
       const calOv = document.getElementById('sf-cal-ov');
       if (calOv && !calOv.classList.contains('hidden') && _st.calStaffId) {
         _drawCal();
@@ -518,7 +519,6 @@ const StaffApp = (() => {
       if (_st.subTab === 'salary' && _st.payStaffId) {
         _calcAndRender();
       }
-      console.log('[StaffApp] 🔄 근무 데이터 실시간 갱신');
     });
     console.log('[StaffApp v3.2] ✅ homeTab:', _st.subTab);
   }
@@ -900,11 +900,12 @@ const StaffApp = (() => {
     _st.copyTargets = new Set();
     document.getElementById('sf-cal-ov')?.classList.remove('hidden');
     history.pushState({ pg: 'staff', modal: 'cal' }, '');
+    // 1차: 메모리 캐시로 즉시 표시
     _drawCal();
-    // Firebase에서 최신 근무 데이터 강제 동기화 (멀티기기 일관성 보장)
+    // 2차: Firebase 서버에서 강제 읽기 후 갱신 (타기기 등록 반영)
     try {
       await StaffDB.syncWorkData(sid);
-      _drawCal();
+      _drawCal(); // 최신 데이터로 재렌더
     } catch(e) { console.warn('[openCal] sync', e); }
   }
   function closeCal() {

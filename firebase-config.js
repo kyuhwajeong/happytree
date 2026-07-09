@@ -172,8 +172,10 @@ const FireDB = (() => {
       const keepPaths = [
         'hakwon10/classes',
         'hakwon10/accounts',
-        'hakwon10/grades',    // ★ 성적 데이터 (신규)
-        'hakwon10/books',     // ★ 교재 데이터 (신규)
+        'hakwon10/grades',
+        'hakwon10/books',
+        'hakwon10/staff',       // ★ 직원 정보 (신규)
+        'hakwon10/staffwork',   // ★ 근무 데이터 (신규) — 멀티기기 동기화 핵심
       ];
       keepPaths.forEach(path => {
         try { _db.ref(path).keepSynced(true); }
