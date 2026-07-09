@@ -908,6 +908,31 @@ const StaffApp = (() => {
       _drawCal(); // 최신 데이터로 재렌더
     } catch(e) { console.warn('[openCal] sync', e); }
   }
+
+  /**
+   * 사용자가 직접 누르는 "서버와 동기화" — 로컬 캐시를 버리고
+   * Firebase에 실제로 저장된 값으로 100% 덮어써서 다시 그린다.
+   * 서버에 없는 값은 이 순간 화면에서도 사라진다(= 유령 데이터 정리).
+   */
+  async function _forceServerSync() {
+    if (!_st.calStaffId) return;
+    _toast('🔄 서버 데이터 확인 중...');
+    try {
+      const before = Object.keys(StaffDB.getWorkMonth(_st.calStaffId, `${_st.calYear}-${String(_st.calMonth).padStart(2,'0')}`)).length;
+      await StaffDB.syncWorkData(_st.calStaffId);
+      _drawCal();
+      const after = Object.keys(StaffDB.getWorkMonth(_st.calStaffId, `${_st.calYear}-${String(_st.calMonth).padStart(2,'0')}`)).length;
+      if (before !== after) {
+        _toast(`✅ 서버 기준으로 갱신됨 (이번 달 ${before}일 → ${after}일)`, 'success');
+      } else {
+        _toast('✅ 서버와 이미 일치합니다', 'success');
+      }
+    } catch(e) {
+      console.error('[_forceServerSync]', e);
+      _toast('⚠️ 동기화 실패 — 콘솔을 확인해주세요');
+    }
+  }
+
   function closeCal() {
     document.getElementById('sf-cal-ov')?.classList.add('hidden');
     _st.calStaffId = null; _cancelCopy(); _cancelSelect();
@@ -1020,10 +1045,10 @@ const StaffApp = (() => {
         <button class="sf-cal-act-btn sub" onclick="StaffApp._toggleSelectMode()">☑️<br><span>선택삭제</span></button>
         <button class="sf-cal-act-btn close" onclick="StaffApp.closeCal()">✕<br><span>닫기</span></button>
       </div>
-      ${hasTempl ? `<div style="padding:0 14px 10px;flex-shrink:0;display:grid;grid-template-columns:1fr 1fr;gap:6px">
-        <button class="sf-cal-act-btn sub" onclick="StaffApp._calToSalary()">💰<br><span>급여확인</span></button>
-        <div></div>
-      </div>` : ''}
+      <div style="padding:0 14px 10px;flex-shrink:0;display:grid;grid-template-columns:${hasTempl?'1fr 1fr':'1fr'};gap:6px">
+        ${hasTempl ? `<button class="sf-cal-act-btn sub" onclick="StaffApp._calToSalary()">💰<br><span>급여확인</span></button>` : ''}
+        <button class="sf-cal-act-btn sub" style="color:#2563eb;border-color:#93c5fd" onclick="StaffApp._forceServerSync()">🔄<br><span>서버와 동기화</span></button>
+      </div>
       `}`;
 
     _bindLongPress();
@@ -3497,7 +3522,7 @@ const StaffApp = (() => {
   return {
     init, render, switchTab,
     openAdd, openEdit, closeEdit, saveStaff, deleteStaff, _toggleEtype, _toggleOT,
-    openCal, closeCal, _calPrev, _calNext, _calToSalary,
+    openCal, closeCal, _forceServerSync, _calPrev, _calNext, _calToSalary,
     _calCellClick, _entryClick, _confirmCopy, _cancelCopy, _applyTemplModal,
     _toggleSelectMode, _deleteSelected, _cancelSelect,
     _undoBatch,
