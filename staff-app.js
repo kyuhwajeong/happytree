@@ -1384,6 +1384,8 @@ const StaffApp = (() => {
       <div class="sh-handle"></div>
       <div class="sh-title">${_st.editingEntryId ? '✏️ 근무 수정' : '📅 근무 입력'}</div>
       <div class="sh-sub">${_st.workDate} (${dow}) · ${_e(s?.name || '')}</div>
+
+      <!-- 스크롤 영역: 입력 폼 + 기존 근무 목록 -->
       <div style="flex:1;overflow-y:auto;padding:4px 0 8px">
         <div class="sf-wtype-row">
           <button class="sf-wbtn ${_st.workType==='class'?'on class':''}"   id="sf-wb-class" onclick="StaffApp._wtype('class')">📚 수업<br><small>${_fmt(StaffDB.resolveRate(_st.calStaffId,0,new Date().getFullYear(),'class'))}원/h</small></button>
@@ -1413,12 +1415,19 @@ const StaffApp = (() => {
                  oninput="StaffApp._manualHrs(this.value)">
         </div>
         <input class="sf-note" id="sf-wn" placeholder="메모 (선택사항)">
-        ${_st.editingEntryId ? `<button class="sf-edit-cancel" onclick="StaffApp._cancelEditEntry()">✕ 수정 취소</button>` : ''}
-        <button class="btn-ok" style="width:100%;margin-bottom:14px;${_st.editingEntryId?'background:#d97706;box-shadow:0 3px 10px rgba(217,119,6,.35)':''}" onclick="StaffApp._addEntry()">${_st.editingEntryId ? '💾 수정 저장' : '✅ 근무 등록'}</button>
-        <div style="font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:1px;margin-bottom:6px">이 날 근무 (${es.length}건) ${_st.editingEntryId?'<span style="color:#d97706">· 항목을 탭하면 수정됩니다</span>':'<span style="opacity:.6">· 항목 탭하여 수정</span>'}</div>
+        <div style="font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:1px;margin:10px 0 6px">이 날 근무 (${es.length}건) ${_st.editingEntryId?'<span style="color:#d97706">· 항목을 탭하면 수정됩니다</span>':'<span style="opacity:.6">· 항목 탭하여 수정</span>'}</div>
         <div id="sf-el">${es.length ? es.map(e => _entryHTML(e, s)).join('') : '<div style="font-size:12px;color:var(--tx3);padding:6px 4px">등록된 근무 없음</div>'}</div>
       </div>
-      <div class="sh-acts"><button class="btn-x" onclick="StaffApp.closeWork()">닫기</button></div>`;
+
+      <!-- 고정 하단: 등록/수정 버튼 + 닫기 (항상 보임) -->
+      <div style="flex-shrink:0;border-top:1px solid var(--bdr);padding:10px 14px 10px;display:flex;flex-direction:column;gap:7px;background:var(--card)">
+        ${_st.editingEntryId ? `<button class="sf-edit-cancel" onclick="StaffApp._cancelEditEntry()">✕ 수정 취소</button>` : ''}
+        <button class="btn-ok" style="width:100%;${_st.editingEntryId?'background:#d97706;box-shadow:0 3px 10px rgba(217,119,6,.35)':''}"
+          onclick="StaffApp._addEntry()">
+          ${_st.editingEntryId ? '💾 수정 저장' : '✅ 근무 등록'}
+        </button>
+        <button class="btn-x" onclick="StaffApp.closeWork()">닫기</button>
+      </div>`;
     _chrs();
   }
 
