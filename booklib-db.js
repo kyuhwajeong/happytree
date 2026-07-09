@@ -144,7 +144,7 @@ const BookLibDB = (() => {
   async function addBook(name) {
     const b = { id:_nid(), name:name.trim(), chapters:[], classIds:[], createdAt:_now() };
     _books.push(b); _ls(LS_BOOKS,_books);
-    if (_fb()) await FireDB.set(`${FB_BOOKS}/${b.id}`,b).catch(console.warn);
+    await FireDB.set(`${FB_BOOKS}/${b.id}`,b).catch(console.warn);
     _fire('books'); return b;
   }
 
@@ -152,7 +152,7 @@ const BookLibDB = (() => {
     const i = _books.findIndex(b=>b.id===id); if(i<0) return null;
     _books[i] = {..._books[i], ...data, updatedAt:_now()};
     _ls(LS_BOOKS,_books);
-    if (_fb()) await FireDB.set(`${FB_BOOKS}/${id}`,_books[i]).catch(console.warn);
+    await FireDB.set(`${FB_BOOKS}/${id}`,_books[i]).catch(console.warn);
     _fire('books'); return _books[i];
   }
 
@@ -163,29 +163,24 @@ const BookLibDB = (() => {
     ks.forEach(k=>{ delete _checks[k]; delete _stamps[k]; });
     _ls(LS_CHECKS,_checks); _ls(LS_STAMPS,_stamps);
 
-    if (_fb()) {
-      // 2. Firebase: 교재 본체
-      await FireDB.remove(`${FB_BOOKS}/${id}`).catch(console.warn);
-      // 3. Firebase: 학습현황 체크/스탬프
-      for(const k of ks) {
-        await FireDB.remove(`${FB_CHECKS}/${k}`).catch(console.warn);
-        await FireDB.remove(`${FB_STAMPS}/${k}`).catch(console.warn);
-      }
-      // 4. Firebase: 메모 (hakwon10/memos/{clsId}_{bookId})
-      // 클래스별 메모 키 삭제 (패턴: *_bookId)
-      try {
-        const memoPaths = await FireDB.get('hakwon10/memos');
-        if(memoPaths) {
-          for(const key of Object.keys(memoPaths)) {
-            if(key.endsWith('_'+id)) {
-              await FireDB.remove('hakwon10/memos/'+key).catch(console.warn);
-            }
+    // Firebase: 교재 본체 삭제 — 연결 여부 무관하게 시도(오프라인 시 자동 큐잉)
+    await FireDB.remove(`${FB_BOOKS}/${id}`).catch(console.warn);
+    // Firebase: 학습현황 체크/스탬프 삭제
+    for (const k of ks) {
+      await FireDB.remove(`${FB_CHECKS}/${k}`).catch(console.warn);
+      await FireDB.remove(`${FB_STAMPS}/${k}`).catch(console.warn);
+    }
+    // Firebase: 메모 정리 — 서버 조회가 필요해 오프라인 시 best-effort (연결 시에만 실행됨)
+    try {
+      const memoPaths = await FireDB.get('hakwon10/memos');
+      if (memoPaths) {
+        for (const key of Object.keys(memoPaths)) {
+          if (key.endsWith('_'+id)) {
+            await FireDB.remove('hakwon10/memos/'+key).catch(console.warn);
           }
         }
-      } catch(e) {}
-      // 5. Firebase: 예외 설정 내에서 해당 bookId 항목 제거
-      // (exempts는 classId 기준이라 개별 항목에서 bookId 필터 제거 필요)
-    }
+      }
+    } catch(e) {}
     // 6. localStorage 메모 정리
     Object.keys(localStorage).filter(k=>k.includes('bl_memo_')&&k.includes(id))
       .forEach(k=>localStorage.removeItem(k));
@@ -201,14 +196,14 @@ const BookLibDB = (() => {
   async function reorderBooks(ids) {
     ids.forEach((id,i)=>{ const b=_books.find(x=>x.id===id); if(b) b.sortOrder=i; });
     _ls(LS_BOOKS, _books);
-    if(_fb()) ids.forEach((id,i)=>FireDB.update(`${FB_BOOKS}/${id}`,{sortOrder:i}).catch(()=>{}));
+    ids.forEach((id,i)=>FireDB.update(`${FB_BOOKS}/${id}`,{sortOrder:i}).catch(()=>{}));
   }
 
   async function archiveBook(id) {
     const b=_books.find(x=>x.id===id); if(!b) return;
     b.archived=true; b.archivedAt=_now();
     _ls(LS_BOOKS, _books);
-    if(_fb()) FireDB.update(`${FB_BOOKS}/${id}`,{archived:true,archivedAt:b.archivedAt}).catch(()=>{});
+    FireDB.update(`${FB_BOOKS}/${id}`,{archived:true,archivedAt:b.archivedAt}).catch(()=>{});
     _fire('books');
   }
 
@@ -216,7 +211,7 @@ const BookLibDB = (() => {
     const b=_books.find(x=>x.id===id); if(!b) return;
     b.archived=false; delete b.archivedAt;
     _ls(LS_BOOKS, _books);
-    if(_fb()) FireDB.update(`${FB_BOOKS}/${id}`,{archived:false,archivedAt:null}).catch(()=>{});
+    FireDB.update(`${FB_BOOKS}/${id}`,{archived:false,archivedAt:null}).catch(()=>{});
     _fire('books');
   }
 
@@ -229,7 +224,7 @@ const BookLibDB = (() => {
     };
     delete copy.archivedAt;
     _books.push(copy); _ls(LS_BOOKS, _books);
-    if(_fb()) FireDB.set(`${FB_BOOKS}/${copy.id}`, copy).catch(()=>{});
+    FireDB.set(`${FB_BOOKS}/${copy.id}`, copy).catch(()=>{});
     _fire('books'); return copy;
   }
 
@@ -246,7 +241,7 @@ const BookLibDB = (() => {
       createdAt: _now(),
     };
     _books.push(b); _ls(LS_BOOKS,_books);
-    if (_fb()) await FireDB.set(`${FB_BOOKS}/${b.id}`,b).catch(console.warn);
+    await FireDB.set(`${FB_BOOKS}/${b.id}`,b).catch(console.warn);
     _fire('books'); return b;
   }
 
@@ -254,7 +249,7 @@ const BookLibDB = (() => {
     const b=_books.find(x=>x.id===bookId); if(!b) return;
     b.studentIds = studentIds;
     _ls(LS_BOOKS, _books);
-    if(_fb()) FireDB.update(`${FB_BOOKS}/${bookId}`,{studentIds:studentIds}).catch(()=>{});
+    FireDB.update(`${FB_BOOKS}/${bookId}`,{studentIds:studentIds}).catch(()=>{});
     _fire('books');
   }
   async function addStudentToBook(bookId, studentId){
@@ -327,12 +322,9 @@ const BookLibDB = (() => {
     else         delete _checks[ck][sk];
     _ls(LS_CHECKS,_checks);
     const path = `${FB_CHECKS}/${ck}/${sk}`;
-    // ★ await 추가: 쓰기 완료 후 리스너 이벤트가 확정된 값을 받도록 보장
-    //   (fire-and-forget이면 에러 무시 + 리스너 이벤트 순서 불확실)
-    if (_fb()) {
-      if (checked) await FireDB.set(path, _checks[ck][sk]).catch(console.warn);
-      else         await FireDB.remove(path).catch(console.warn);
-    }
+    // 연결 여부와 무관하게 항상 시도 — 오프라인이면 FireDB.set/remove가 자체 큐잉
+    if (checked) await FireDB.set(path, _checks[ck][sk]).catch(console.warn);
+    else         await FireDB.remove(path).catch(console.warn);
   }
 
   // ★ 확장 프로그램용: 특정 반+교재의 체크 데이터 전체 초기화
@@ -342,11 +334,9 @@ const BookLibDB = (() => {
       delete _checks[ck];
       _ls(LS_CHECKS, _checks);
     }
-    if (_fb()) {
-      try {
-        await FireDB.remove(`${FB_CHECKS}/${ck}`);
-      } catch(e) { console.warn('[BookLibDB] clearChecks Firebase 오류:', e); }
-    }
+    try {
+      await FireDB.remove(`${FB_CHECKS}/${ck}`);
+    } catch(e) { console.warn('[BookLibDB] clearChecks Firebase 오류:', e); }
   }
 
   async function setSubTasks(classId, bookId, studentId, chapterId, tasks) {
@@ -355,7 +345,7 @@ const BookLibDB = (() => {
     const existing = _parseCheck(_checks[ck][sk]);
     _checks[ck][sk] = _serCheck(existing.date || _today(), tasks);
     _ls(LS_CHECKS,_checks);
-    if (_fb()) FireDB.set(`${FB_CHECKS}/${ck}/${sk}`, _checks[ck][sk]).catch(console.warn);
+    FireDB.set(`${FB_CHECKS}/${ck}/${sk}`, _checks[ck][sk]).catch(console.warn);
   }
 
   function listenMatrix(classId, bookId, cb) {
@@ -376,13 +366,13 @@ const BookLibDB = (() => {
     if (!_stamps[ck]) _stamps[ck]={};
     _stamps[ck][chapterId] = ts;
     _ls(LS_STAMPS,_stamps);
-    if (_fb()) await FireDB.set(`${FB_STAMPS}/${ck}/${chapterId}`,ts).catch(console.warn);
+    await FireDB.set(`${FB_STAMPS}/${ck}/${chapterId}`,ts).catch(console.warn);
   }
 
   async function removeStamp(classId, bookId, chapterId) {
     const ck = _ck(classId,bookId);
     if (_stamps[ck]) { delete _stamps[ck][chapterId]; _ls(LS_STAMPS,_stamps); }
-    if (_fb()) await FireDB.remove(`${FB_STAMPS}/${ck}/${chapterId}`).catch(console.warn);
+    await FireDB.remove(`${FB_STAMPS}/${ck}/${chapterId}`).catch(console.warn);
   }
 
   function listenStamps(classId, bookId, cb) {

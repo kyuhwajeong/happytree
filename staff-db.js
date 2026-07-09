@@ -179,6 +179,16 @@ const StaffDB = (() => {
       });
     });
 
+    /* ─ 근무 템플릿 실시간 리스너 (기존엔 최초 1회 get()만 있었음) ─ */
+    FireDB.listen(FB_TEMPL, v => {
+      const nd = v || {};
+      if (JSON.stringify(nd) !== JSON.stringify(_templ)) {
+        _templ = nd;
+        _ls(LS_TEMPL, _templ);
+        _fire('templ');
+      }
+    });
+
     console.log('[StaffDB v3] ✅ staff:', _staff.length);
   }
 
@@ -215,7 +225,7 @@ const StaffDB = (() => {
       createdAt:      _now(),
     };
     _staff.push(s); _ls(LS_STAFF, _staff);
-    if (_fb()) await FireDB.set(`${FB_STAFF}/${s.id}`, s).catch(console.warn);
+    await FireDB.set(`${FB_STAFF}/${s.id}`, s).catch(console.warn);
     _fire('staff'); return s;
   }
 
@@ -224,19 +234,17 @@ const StaffDB = (() => {
     _staff[i] = { ..._staff[i], ...data, updatedAt: _now() };
     _staff[i].status = _staff[i].leaveDate ? '퇴직' : '재직';
     _ls(LS_STAFF, _staff);
-    if (_fb()) await FireDB.set(`${FB_STAFF}/${id}`, _staff[i]).catch(console.warn);
+    await FireDB.set(`${FB_STAFF}/${id}`, _staff[i]).catch(console.warn);
     _fire('staff'); return _staff[i];
   }
 
   async function deleteStaff(id) {
     _staff = _staff.filter(s => s.id !== id); _ls(LS_STAFF, _staff);
-    if (_fb()) await FireDB.remove(`${FB_STAFF}/${id}`).catch(console.warn);
+    await FireDB.remove(`${FB_STAFF}/${id}`).catch(console.warn);
     delete _work[id]; delete _templ[id];
     _ls(LS_WORK, _work); _ls(LS_TEMPL, _templ);
-    if (_fb()) {
-      await FireDB.remove(`${FB_WORK}/${id}`).catch(console.warn);
-      await FireDB.remove(`${FB_TEMPL}/${id}`).catch(console.warn);
-    }
+    await FireDB.remove(`${FB_WORK}/${id}`).catch(console.warn);
+    await FireDB.remove(`${FB_TEMPL}/${id}`).catch(console.warn);
     _fire('staff');
   }
 
@@ -261,10 +269,9 @@ const StaffDB = (() => {
     else                delete _work[sid][date];
     _ls(LS_WORK, _work);
     const path = `${FB_WORK}/${sid}/${date.replace(/-/g, '_')}`;
-    if (_fb()) {
-      if (entries.length) await FireDB.set(path, entries).catch(console.warn);
-      else                await FireDB.remove(path).catch(console.warn);
-    }
+    // 근무 등록/수정: 연결 여부와 무관하게 항상 시도 — 오프라인이면 FireDB.set/remove가 자체 큐잉
+    if (entries.length) await FireDB.set(path, entries).catch(console.warn);
+    else                await FireDB.remove(path).catch(console.warn);
   }
 
   async function addWorkEntry(sid, date, entry) {
@@ -333,7 +340,7 @@ const StaffDB = (() => {
   async function saveTemplate(sid, tpl) {
     _templ[sid] = tpl;
     _ls(LS_TEMPL, _templ);
-    if (_fb()) await FireDB.set(`${FB_TEMPL}/${sid}`, tpl).catch(console.warn);
+    await FireDB.set(`${FB_TEMPL}/${sid}`, tpl).catch(console.warn);
   }
 
   async function applyTemplate(sid, year, month, mode = 'replace') {
@@ -783,7 +790,7 @@ const StaffDB = (() => {
     };
     if (!_pay[key]) _pay[key] = {};
     _pay[key][sid] = snapshot;
-    if (_fb()) await FireDB.set(`${FB_PAY}/${key}/${sid}`, snapshot).catch(console.warn);
+    await FireDB.set(`${FB_PAY}/${key}/${sid}`, snapshot).catch(console.warn);
     return snapshot;
   }
 
@@ -803,7 +810,7 @@ const StaffDB = (() => {
       }),
     };
     _payAll[key] = summary;
-    if (_fb()) await FireDB.set(`${FB_PAYALL}/${key}`, summary).catch(console.warn);
+    await FireDB.set(`${FB_PAYALL}/${key}`, summary).catch(console.warn);
     return summary;
   }
 
@@ -842,7 +849,7 @@ const StaffDB = (() => {
     if (_pay[key]?.[sid]) {
       delete _pay[key][sid];
       if (!Object.keys(_pay[key]).length) delete _pay[key];
-      if (_fb()) await FireDB.remove(`${FB_PAY}/${key}/${sid}`).catch(console.warn);
+      await FireDB.remove(`${FB_PAY}/${key}/${sid}`).catch(console.warn);
     }
   }
 

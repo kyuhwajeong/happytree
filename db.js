@@ -216,7 +216,7 @@ const DB = (() => {
     if (existing) {
       existing.role = 'admin';
       ls(LS.accounts, C.accounts);
-      if (FireDB.ready()) await FireDB.set(`${FireDB.P.accounts}/${existing.id}`, existing);
+      await FireDB.set(`${FireDB.P.accounts}/${existing.id}`, existing);
     } else {
       await _addAcc('admin', '1234', 'admin');
     }
@@ -270,12 +270,9 @@ const DB = (() => {
   /* ═══ ACCOUNTS ═══ */
   const getAccounts = () => C.accounts||[];
 
-  // ★ Firebase 쓰기 헬퍼: 온라인 await / 오프라인 fire-and-forget
+  // ★ Firebase 쓰기 헬퍼: SDK 미준비여도 스킵하지 않음 — set/update/remove가 오프라인 시 자체 큐잉
   function _fbWrite(op, ...args) {
-    if (!FireDB.ready()) return Promise.resolve();
-    if (FireDB.isConnected()) return op(...args);
-    op(...args);
-    return Promise.resolve();
+    return op(...args);
   }
 
   async function _addAcc(username,pw,role) {
@@ -346,7 +343,7 @@ const DB = (() => {
     const mk = data.termStart || monthKey(new Date());
     const cls = {id:nid(),monthBooks:{},createdAt:now(),termStart:mk,termEnd:null,...data};
     C.classes = [...C.classes,cls]; ls(LS.classes,C.classes);
-    if(FireDB.ready()) await FireDB.set(`${FireDB.P.classes}/${cls.id}`,cls);
+    await FireDB.set(`${FireDB.P.classes}/${cls.id}`,cls);
     return cls;
   }
 
@@ -355,7 +352,7 @@ const DB = (() => {
     const mk = data.termStart || monthKey(new Date());
     const cls = {id:nid(),monthBooks:{},createdAt:now(),termStart:mk,termEnd:null,...data};
     C.classes = [...C.classes,cls]; ls(LS.classes,C.classes);
-    if(FireDB.ready()) await FireDB.set(`${FireDB.P.classes}/${cls.id}`,cls);
+    await FireDB.set(`${FireDB.P.classes}/${cls.id}`,cls);
     return cls;
   }
 
@@ -369,16 +366,16 @@ const DB = (() => {
   async function updateClass(id,data) {
     const idx=C.classes.findIndex(c=>c.id===id); if(idx===-1)return null;
     C.classes[idx]={...C.classes[idx],...data}; ls(LS.classes,C.classes);
-    if(FireDB.ready()) await FireDB.update(`${FireDB.P.classes}/${id}`,data);
+    await FireDB.update(`${FireDB.P.classes}/${id}`,data);
     return C.classes[idx];
   }
 
   async function deleteClass(id) {
     C.classes=C.classes.filter(c=>c.id!==id); ls(LS.classes,C.classes);
-    if(FireDB.ready()) await FireDB.remove(`${FireDB.P.classes}/${id}`);
+    await FireDB.remove(`${FireDB.P.classes}/${id}`);
     const keys=Object.keys(C.progress).filter(k=>k.startsWith(id+'__'));
     keys.forEach(k=>delete C.progress[k]); ls(LS.progress,C.progress);
-    if(FireDB.ready()&&keys.length){
+    if (keys.length) {
       const u={}; keys.forEach(k=>u[k]=null);
       await FireDB.update(FireDB.P.progress,u);
     }
@@ -456,9 +453,13 @@ const DB = (() => {
   async function _syncClsQuiet(cls) {
     const idx = C.classes.findIndex(c=>c.id===cls.id);
     if (!FireDB.ready()) {
-      // 오프라인: 로컬만 반영 (재연결 시 실시간 리스너가 서버와 정리)
+      // 오프라인/미준비: 서버 값을 읽을 수 없어 충돌검사는 불가하지만,
+      // 저장 자체는 포기하지 않는다 — FireDB.set()이 큐에 적재해 재연결 시 자동 재전송함.
+      // (기존: 여기서 그냥 return 해버려 오프라인 중 교재 등록/이동/삭제가 서버에 영원히 반영 안 됨)
       if (idx!==-1) C.classes[idx] = cls; else C.classes.push(cls);
       ls(LS.classes, C.classes);
+      const path = `${FireDB.P.classes}/${cls.id}`;
+      FireDB.set(path, cls).catch(e => console.error('syncCls(offline-queue)', e));
       return;
     }
     const path = `${FireDB.P.classes}/${cls.id}`;
@@ -631,7 +632,7 @@ const DB = (() => {
     const keys=Object.keys(C.progress).filter(k=>k.includes(`__${bookId}__`));
     if (keys.length) {
       keys.forEach(k=>delete C.progress[k]); ls(LS.progress,C.progress);
-      if(FireDB.ready()){const u={};keys.forEach(k=>u[k]=null);await FireDB.update(FireDB.P.progress,u);}
+      { const u={}; keys.forEach(k=>u[k]=null); await FireDB.update(FireDB.P.progress,u); }
     }
   }
 
@@ -648,7 +649,7 @@ const DB = (() => {
       const keys=Object.keys(C.progress).filter(k=>ids.some(id=>k.includes(`__${id}__`)));
       if (keys.length) {
         keys.forEach(k=>delete C.progress[k]); ls(LS.progress,C.progress);
-        if(FireDB.ready()){const u={};keys.forEach(k=>u[k]=null);await FireDB.update(FireDB.P.progress,u);}
+        { const u={}; keys.forEach(k=>u[k]=null); await FireDB.update(FireDB.P.progress,u); }
       }
     }
   }
@@ -670,14 +671,13 @@ const DB = (() => {
     clearTimeout(_progressDebounce[key]);
     _progressDebounce[key] = setTimeout(async () => {
       delete _progressDebounce[key];
-      if (FireDB.ready()) {
-        const path = `${FireDB.P.progress}/${key}`;
-        try {
-          if (!value && value !== 0) await FireDB.remove(path);
-          else await FireDB.set(path, value);
-        } catch(e) {
-          console.warn('[DB] progress 쓰기 실패:', key, e);
-        }
+      // 연결 여부와 무관하게 항상 저장 시도 — 오프라인이면 FireDB.set/remove가 자체 큐잉
+      const path = `${FireDB.P.progress}/${key}`;
+      try {
+        if (!value && value !== 0) await FireDB.remove(path);
+        else await FireDB.set(path, value);
+      } catch(e) {
+        console.warn('[DB] progress 쓰기 실패:', key, e);
       }
       _pendingKeys.delete(key);
     }, 800);
@@ -692,10 +692,8 @@ const DB = (() => {
       const dv = value ? now() : null;
       if (!dv) delete C.progress[dateKey]; else C.progress[dateKey] = dv;
       // ★ savedAt은 debounce 없이 즉시 저장 (날짜 표시 정확도)
-      if (FireDB.ready()) {
-        if (dv) FireDB.set(`${FireDB.P.progress}/${dateKey}`, dv);
-        else FireDB.remove(`${FireDB.P.progress}/${dateKey}`);
-      }
+      if (dv) FireDB.set(`${FireDB.P.progress}/${dateKey}`, dv);
+      else FireDB.remove(`${FireDB.P.progress}/${dateKey}`);
       key = `${classId}__${weekKey}__${dayName}__${bookId}__progress`;
     }
     if (!value) delete C.progress[key]; else C.progress[key] = value;
@@ -713,7 +711,7 @@ const DB = (() => {
   };
   async function saveTheme(t) {
     C.theme=t; ls(LS.theme,t);
-    if(FireDB.ready()) await FireDB.set(FireDB.P.theme,t);
+    await FireDB.set(FireDB.P.theme,t);
   }
 
   /* ═══ EXPORT / IMPORT (완전 백업) ═══ */
@@ -734,7 +732,7 @@ const DB = (() => {
         const ex=C.classes.find(c=>c.id===nc.id);
         if(!ex){C.classes.push({...nc,_new:true});result.added.push(nc.name);}
         else{Object.assign(ex,nc);result.updated.push(nc.name);}
-        if(FireDB.ready()) await FireDB.set(`${FireDB.P.classes}/${nc.id}`,nc);
+        await FireDB.set(`${FireDB.P.classes}/${nc.id}`,nc);
       }
       ls(LS.classes,C.classes);
     }
@@ -742,7 +740,7 @@ const DB = (() => {
       // 기존 진도 덮어쓰기 (복원)
       C.progress = {...C.progress, ...data.progress};
       ls(LS.progress,C.progress);
-      if(FireDB.ready()) await FireDB.update(FireDB.P.progress,data.progress);
+      await FireDB.update(FireDB.P.progress,data.progress);
     }
     if(data.theme) await saveTheme(data.theme);
     _fire('classes');_fire('progress');_fire('theme');

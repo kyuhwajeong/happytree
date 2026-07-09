@@ -76,6 +76,18 @@ const GradeDB = (() => {
         _ls(LS_GRADES, _grades);
       }
     } catch(e) { console.warn('[GradeDB] init', e); }
+
+    /* 실시간 리스너 — 기존엔 최초 1회 get()만 있어서 다른 기기가 입력한
+     * 성적이 새로고침 전까지 화면에 반영되지 않는 문제가 있었음 */
+    FireDB.listen(FB_GRADES, v => {
+      const nd = v ? _snapToGrades(v) : {};
+      if (JSON.stringify(nd) !== JSON.stringify(_grades)) {
+        _grades = nd;
+        _ls(LS_GRADES, _grades);
+        _fire('grades');
+      }
+    });
+
     console.log('[GradeDB] ✅ v2');
   }
 
@@ -159,13 +171,11 @@ const GradeDB = (() => {
       list.push(rec);
     }
     _ls(LS_GRADES, _grades);
-    if (_fb()) {
-      try {
-        await FireDB.set(`${FB_GRADES}/${classId}/${studentId}/${bookId}/${rec.id}`, rec);
-      } catch(e) {
-        console.error('[GradeDB] saveRecord Firebase 오류:', e);
-        // 로컬에는 저장됨, Firebase 실패 시 경고
-      }
+    // 연결 여부와 무관하게 항상 저장 시도 — 오프라인이면 FireDB.set이 자체 큐잉
+    try {
+      await FireDB.set(`${FB_GRADES}/${classId}/${studentId}/${bookId}/${rec.id}`, rec);
+    } catch(e) {
+      console.error('[GradeDB] saveRecord Firebase 오류:', e);
     }
     _fire('grades');
     return rec;
@@ -176,12 +186,10 @@ const GradeDB = (() => {
     const idx  = list.findIndex(r => r.id === recordId); if (idx<0) return;
     list.splice(idx, 1);
     _ls(LS_GRADES, _grades);
-    if (_fb()) {
-      try {
-        await FireDB.remove(`${FB_GRADES}/${cid}/${sid}/${bid}/${recordId}`);
-      } catch(e) {
-        console.error('[GradeDB] deleteRecord Firebase 오류:', e);
-      }
+    try {
+      await FireDB.remove(`${FB_GRADES}/${cid}/${sid}/${bid}/${recordId}`);
+    } catch(e) {
+      console.error('[GradeDB] deleteRecord Firebase 오류:', e);
     }
     _fire('grades');
   }
@@ -221,7 +229,7 @@ const GradeDB = (() => {
     }
     _ls(LS_GRADES, _grades);
     // Firebase에서 제거: hakwon10/grades/{cid}/{sid}/{bookId}
-    if(_fb()){
+    if (_fb()) { // 서버 목록 조회가 필요해 연결 시에만 실행(오프라인 시 조용히 스킵 — 로컬은 이미 삭제됨)
       try{
         const allCls=await FireDB.get(FB_GRADES);
         if(allCls){
