@@ -167,21 +167,15 @@ const FireDB = (() => {
       _ok = true;
       console.log('[FireDB] ✅ connected');
 
-      /* ★ keepSynced: 주요 경로 WebSocket 연결 상시 유지
-         grades 경로 포함 → 성적 입력 중 연결 끊김 방지 */
-      const keepPaths = [
-        'hakwon10/classes',
-        'hakwon10/accounts',
-        'hakwon10/grades',
-        'hakwon10/books',
-        'hakwon10/staff',       // ★ 직원 정보 (신규)
-        'hakwon10/staffwork',   // ★ 근무 데이터 (신규) — 멀티기기 동기화 핵심
-      ];
-      keepPaths.forEach(path => {
-        try { _db.ref(path).keepSynced(true); }
-        catch (e) { console.warn('[FireDB] keepSynced 오류:', path, e); }
-      });
-      console.log('[FireDB] ✅ keepSynced 활성화:', keepPaths.join(', '));
+      /* keepSynced 제거됨 (v12) — Firebase JS SDK v10 compat 빌드의 RTDB ref
+       * 객체에는 keepSynced가 구현되어 있지 않아 항상 TypeError 발생 (무의미한 코드였음).
+       * 연결 유지 및 로컬 캐시 워밍업은 각 모듈의 FireDB.listen()이 대체 수행:
+       *   - db.js      : classes / accounts / theme / progress
+       *   - staff-db.js: staff / staffwork
+       * (grades, books 경로는 애초에 실시간 listen을 쓰지 않거나 실제 저장 경로와
+       *  달라 keepSynced가 있었어도 효과가 없었음 — grades는 on-demand get만 사용,
+       *  books는 실제 경로가 'hakwon10/booklib'로 상이) */
+      console.log('[FireDB] ✅ 활성 리스너 기반 연결 유지 (keepSynced 미사용)');
 
       /* 연결 상태 실시간 감지 */
       _db.ref('.info/connected').on('value', snap => {
