@@ -170,11 +170,13 @@ const StaffDB = (() => {
           });
         });
       }
-      // JSON 비교 없이 항상 갱신 — 키 순서 차이로 인한 오탐 방지
       _work = newWork;
       _ls(LS_WORK, _work);
       _fire('work');
-      console.log('[StaffDB] 🔄 근무 실시간 갱신:', Object.keys(newWork).length, '명분');
+      // 각 직원별 날짜 목록 로그
+      Object.entries(newWork).forEach(([sid, days]) => {
+        console.log(`[StaffDB] 🔄 근무 갱신 sid=${sid}:`, Object.keys(days));
+      });
     });
 
     console.log('[StaffDB v3] ✅ staff:', _staff.length);
@@ -850,20 +852,28 @@ const StaffDB = (() => {
    * 멀티기기 사용 시 최신 데이터 보장용
    */
   async function syncWorkData(sid) {
-    if (!_fb()) return;
+    if (!_fb()) {
+      console.warn('[StaffDB] syncWorkData: Firebase 연결 안됨 — offline 상태');
+      return;
+    }
     try {
-      // once('value')로 서버에서 직접 읽기 (캐시 우회)
+      console.log(`[StaffDB] syncWorkData 시작: ${FB_WORK}/${sid}`);
+      // once('value'): 서버에서 직접 강제 읽기
       const snap = await _db.ref(`${FB_WORK}/${sid}`).once('value');
       _work[sid] = {};
       if (snap.exists()) {
-        Object.entries(snap.val()).forEach(([dayKey, entries]) => {
-          _work[sid][dayKey.replace(/_/g, '-')] = entries;
+        const raw = snap.val();
+        const days = Object.keys(raw);
+        days.forEach(dayKey => {
+          _work[sid][dayKey.replace(/_/g, '-')] = raw[dayKey];
         });
+        console.log(`[StaffDB] ✅ syncWorkData(${sid}): Firebase에서 ${days.length}일 로드`, days);
+      } else {
+        console.warn(`[StaffDB] ⚠️ syncWorkData(${sid}): Firebase에 데이터 없음 (경로: ${FB_WORK}/${sid})`);
       }
       _ls(LS_WORK, _work);
-      console.log(`[StaffDB] syncWorkData(${sid}): ${Object.keys(_work[sid]).length}일 (서버 직접 읽기)`);
     } catch(e) {
-      console.warn('[StaffDB] syncWorkData 오류:', e);
+      console.error('[StaffDB] syncWorkData 오류:', e);
     }
   }
 
