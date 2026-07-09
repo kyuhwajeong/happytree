@@ -38,6 +38,54 @@ const FIREBASE_CONFIG = {
 const FireDB = (() => {
   let _db = null, _ok = false, _connected = false, _q = {};
 
+  /* ══════════════════════════════════════════════════════
+   * 오프라인 쓰기 큐 (localStorage 영구 보관)
+   * 목적: set()/update()/remove() 호출 시점에 연결이 끊겨 있어도
+   *       "그냥 사라지는" 것을 막고, 재연결되는 순간 반드시 서버에 반영되게 함.
+   *       (교재/진도/직원/급여 등 모든 모듈이 이 큐를 공통으로 사용)
+   * ══════════════════════════════════════════════════════ */
+  const LS_QUEUE = 'hk10b_fbQueue';
+  function _loadQueue() {
+    try { return JSON.parse(localStorage.getItem(LS_QUEUE)) || []; } catch { return []; }
+  }
+  function _saveQueue(q) {
+    try { localStorage.setItem(LS_QUEUE, JSON.stringify(q)); } catch {}
+  }
+  function _enqueue(op, path, val) {
+    const q = _loadQueue();
+    const idx = q.findIndex(x => x.path === path);
+    const item = { op, path, val, ts: Date.now() };
+    if (idx >= 0) q[idx] = item; else q.push(item); // 같은 경로는 최신값으로 덮어씀
+    _saveQueue(q);
+    console.log(`[FireDB] 📥 오프라인 큐 적재 (${op}):`, path);
+  }
+  function _dequeue(path) { _saveQueue(_loadQueue().filter(x => x.path !== path)); }
+
+  let _flushing = false;
+  async function _flushQueue() {
+    if (_flushing || !_connected || !_db) return;
+    const q = _loadQueue();
+    if (!q.length) return;
+    _flushing = true;
+    console.log(`[FireDB] 🔄 오프라인 큐 전송 시작 (${q.length}건)`);
+    let ok = 0, fail = 0;
+    for (const item of q) {
+      try {
+        if (item.op === 'set')    await _db.ref(item.path).set(item.val);
+        if (item.op === 'update') await _db.ref(item.path).update(item.val);
+        if (item.op === 'remove') await _db.ref(item.path).remove();
+        _dequeue(item.path);
+        ok++;
+      } catch (e) {
+        console.warn('[FireDB] 큐 전송 실패:', item.path, e.message);
+        fail++;
+      }
+    }
+    _flushing = false;
+    if (ok > 0) console.log(`[FireDB] ✅ 오프라인 큐 전송 완료: 성공 ${ok}건, 실패 ${fail}건`);
+  }
+  function getPendingCount() { return _loadQueue().length; }
+
   /* ── 초기 4초 오탐 억제 ── */
   const _suppressUntil = Date.now() + 4000;
 
@@ -167,23 +215,18 @@ const FireDB = (() => {
       _ok = true;
       console.log('[FireDB] ✅ connected');
 
-      /* keepSynced 제거됨 (v12) — Firebase JS SDK v10 compat 빌드의 RTDB ref
-       * 객체에는 keepSynced가 구현되어 있지 않아 항상 TypeError 발생 (무의미한 코드였음).
-       * 연결 유지 및 로컬 캐시 워밍업은 각 모듈의 FireDB.listen()이 대체 수행:
-       *   - db.js      : classes / accounts / theme / progress
-       *   - staff-db.js: staff / staffwork
-       * (grades, books 경로는 애초에 실시간 listen을 쓰지 않거나 실제 저장 경로와
-       *  달라 keepSynced가 있었어도 효과가 없었음 — grades는 on-demand get만 사용,
-       *  books는 실제 경로가 'hakwon10/booklib'로 상이) */
-      console.log('[FireDB] ✅ 활성 리스너 기반 연결 유지 (keepSynced 미사용)');
+      // keepSynced 제거 (v10 compat 미지원) — 실시간 listen()이 연결 유지 대체
 
       /* 연결 상태 실시간 감지 */
       _db.ref('.info/connected').on('value', snap => {
         const prev = _connected;
         _connected = !!snap.val();
         _updateConnUI(_connected);
-        if (_connected && !prev) console.log('[FireDB] 🌐 온라인 복귀');
-        if (!_connected)          console.log('[FireDB] 📴 연결 끊김 — 8초 후 배너 예정');
+        if (_connected && !prev) {
+          console.log('[FireDB] 🌐 온라인 복귀');
+          setTimeout(_flushQueue, 500); // 재연결 안정화 후 큐 전송
+        }
+        if (!_connected) console.log('[FireDB] 📴 연결 끊김 — 8초 후 배너 예정');
       });
 
       /* ★ 네트워크 복귀 이벤트 (WiFi↔LTE 전환 등) */
@@ -233,20 +276,20 @@ const FireDB = (() => {
       .catch(e => { console.error('getFromServer', path, e); return null; });
   }
   function set(path, v) {
-    if (!ready()) return Promise.resolve(false);
+    if (!ready() || !_connected) { _enqueue('set', path, v); return Promise.resolve(false); }
     return _db.ref(path).set(v)
       .then(() => true)
-      .catch(e => { console.error('set', path, e); return false; });
+      .catch(e => { console.error('set', path, e); _enqueue('set', path, v); return false; });
   }
   function update(path, v) {
-    if (!ready()) return Promise.resolve(false);
+    if (!ready() || !_connected) { _enqueue('update', path, v); return Promise.resolve(false); }
     return _db.ref(path).update(v)
       .then(() => true)
-      .catch(e => { console.error('update', path, e); return false; });
+      .catch(e => { console.error('update', path, e); _enqueue('update', path, v); return false; });
   }
   function remove(path) {
-    if (!ready()) return Promise.resolve();
-    return _db.ref(path).remove().catch(e => console.error('remove', path, e));
+    if (!ready() || !_connected) { _enqueue('remove', path, null); return Promise.resolve(); }
+    return _db.ref(path).remove().catch(e => { console.error('remove', path, e); _enqueue('remove', path, null); });
   }
   /* ── 트랜잭션: 여러 기기가 동시에 같은 경로에 쓸 때 원자적으로 처리 ──
    *   updateFn(currentVal) → 반환값이 undefined면 트랜잭션 중단(abort, 내 값을 버림)
@@ -278,5 +321,8 @@ const FireDB = (() => {
     progress:'hakwon10/progress', accounts:'hakwon10/accounts', theme:'hakwon10/theme',
   };
 
-  return { init, ready, isConnected, get, getFromServer, set, update, remove, listen, debounced, transaction, P };
+  async function syncNow() { await _flushQueue(); return getPendingCount() === 0; }
+
+  return { init, ready, isConnected, get, getFromServer, set, update, remove, listen,
+           debounced, transaction, syncNow, getPendingCount, P };
 })();
