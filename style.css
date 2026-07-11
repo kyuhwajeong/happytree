@@ -654,6 +654,18 @@ body.dark .bk-inp.filled{color:#4ade80}
 .tl-mode.tl-layout-grid::-webkit-scrollbar{height:6px;}
 .tl-mode.tl-layout-grid::-webkit-scrollbar-thumb{background:var(--a40);border-radius:3px;}
 
+/* ★ 폰(좁은 화면)에서는 4개가 답답하게 보이므로, 카드 1개씩 꽉 차게 + 스와이프로 전환.
+   PC/태블릿(641px 이상)은 위의 4열 배치를 그대로 유지함. */
+@media(max-width:640px){
+  .tl-mode.tl-layout-grid{
+    grid-auto-columns:100%; /* 카드 1개 = 화면 폭 전체 */
+    scroll-snap-type:x mandatory; /* 스와이프 시 다음 카드에 딱 맞게 스냅 */
+    padding:14px 14px 12px;
+  }
+  .tl-mode.tl-layout-grid .tl-card{min-width:0;width:100%;scroll-snap-align:center;}
+  .tl-layout-grid::before{display:none;} /* 카드 5개 전체를 잇는 가로선은 1장씩 보는 화면에서 의미 없어 숨김 */
+}
+
 /* ★ List 배치: 기존처럼 세로 스택(요청 시에만) */
 .tl-mode.tl-layout-list{display:flex;flex-direction:column;gap:14px;padding-left:22px;}
 
