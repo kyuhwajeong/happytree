@@ -833,7 +833,7 @@ const DB = (() => {
 
   return {
     init, on,
-    flushPendingWrites, // ★ 신규: 대기 중인 진도/메모 저장을 즉시 강제 실행 (데이터 유실 방지)
+    flushPendingWrites: _flushPendingWrites, // ★ 신규: 대기 중인 진도/메모 저장을 즉시 강제 실행 (데이터 유실 방지)
     monthKey, prevMonthKey, nextMonthKey, toWeekKey,
     getSession, setSession, clearSession, isLoggedIn, isAdmin, canOperate, login, _forceAdminLogin,
     getAccounts, addAccount, updateAccount, deleteAccount,
