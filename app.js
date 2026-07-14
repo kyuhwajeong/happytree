@@ -57,6 +57,22 @@ const App = (() => {
   const LS_REM='hk10b_rem_id', LS_REM_PW='hk10b_rem_pw';
   const AUTO_LOGOUT_MS=3*60*60*1000; // 3시간
 
+  // ★★★ 데이터 유실 방지: 입력 후 최대 1500ms 동안은 DB.autoSave()조차 아직 호출 안 된 상태.
+  //   이 사이 반 전환·화면 이탈·앱 종료가 일어나면 값이 통째로 증발할 수 있어,
+  //   "저장 대기 중"인 입력요소를 추적해뒀다가 화면이 숨겨지는 순간 강제로 즉시 저장시킨다.
+  const _dirtyFields = new Set();
+  function _flushAllDirtyFields(){
+    _dirtyFields.forEach(el=>{
+      try{ clearTimeout(el._st); el.dispatchEvent(new Event('blur')); }catch(e){}
+    });
+    _dirtyFields.clear();
+    if(typeof DB!=='undefined' && DB.flushPendingWrites) DB.flushPendingWrites(); // db.js 쪽 800ms 대기분도 함께 즉시 반영
+  }
+  if(typeof document!=='undefined'){
+    document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') _flushAllDirtyFields(); });
+    window.addEventListener('pagehide', _flushAllDirtyFields);
+  }
+
   const S={
     page:'operate', mgTab:'classes',
     selCls:null, monday:_mon(new Date()),
@@ -516,8 +532,8 @@ const App = (() => {
         if(canEdit){
           const resize=()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,128)+'px';};
           let _lm=memoVal; resize();
-          ta.addEventListener('input',()=>{resize();_syncDot('saving');clearTimeout(ta._st);ta._st=setTimeout(()=>{if(ta.value!==_lm){DB.autoSave(cls.id,weekKey,dayName,'memo',ta.value.trim());_lm=ta.value;}_syncDot(FireDB.ready()?'on':'off');},1500);});
-          ta.addEventListener('blur',()=>{clearTimeout(ta._st);if(ta.value!==_lm){DB.autoSave(cls.id,weekKey,dayName,'memo',ta.value.trim());_lm=ta.value;_syncDot(FireDB.ready()?'on':'off');}});
+          ta.addEventListener('input',()=>{resize();_syncDot('saving');_dirtyFields.add(ta);clearTimeout(ta._st);ta._st=setTimeout(()=>{if(ta.value!==_lm){DB.autoSave(cls.id,weekKey,dayName,'memo',ta.value.trim());_lm=ta.value;}_dirtyFields.delete(ta);_syncDot(FireDB.ready()?'on':'off');},1500);});
+          ta.addEventListener('blur',()=>{clearTimeout(ta._st);if(ta.value!==_lm){DB.autoSave(cls.id,weekKey,dayName,'memo',ta.value.trim());_lm=ta.value;_syncDot(FireDB.ready()?'on':'off');}_dirtyFields.delete(ta);});
         }
         ms.appendChild(ta); card.appendChild(ms);
       }
@@ -739,8 +755,8 @@ const App = (() => {
         if(canEdit){
           const resize=()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,128)+'px';};
           let _lm=memoVal; resize();
-          const _doSave=()=>{ if(ta.value!==_lm){ DB.autoSave(cls.id,weekKey,dayName,'memo',ta.value.trim()); _lm=ta.value; } };
-          ta.addEventListener('input',()=>{resize();clearTimeout(ta._st);ta._st=setTimeout(_doSave,1500);});
+          const _doSave=()=>{ if(ta.value!==_lm){ DB.autoSave(cls.id,weekKey,dayName,'memo',ta.value.trim()); _lm=ta.value; } _dirtyFields.delete(ta); };
+          ta.addEventListener('input',()=>{resize();_dirtyFields.add(ta);clearTimeout(ta._st);ta._st=setTimeout(_doSave,1500);});
           ta.addEventListener('blur',()=>{clearTimeout(ta._st);_doSave();});
         }
         ms.appendChild(ta); card.appendChild(ms);
@@ -885,8 +901,8 @@ const App = (() => {
     row.appendChild(right);
     if(canEdit){
       let _lv=val;
-      inp.addEventListener('input',()=>{inp.classList.toggle('filled',inp.value.trim()!=='');row.classList.add('saving');row.classList.remove('saved');_syncDot('saving');clearTimeout(inp._st);inp._st=setTimeout(()=>{if(inp.value!==_lv){DB.autoSave(clsId,weekKey,dayName,'progress',inp.value.trim(),b.id);_lv=inp.value;if(inp.value)dt.textContent=_fmtDateTime(new Date());}row.classList.remove('saving');row.classList.add('saved');_syncDot(FireDB.ready()?'on':'off');setTimeout(()=>row.classList.remove('saved'),1500);},1500);});
-      inp.addEventListener('blur',()=>{clearTimeout(inp._st);if(inp.value!==_lv){DB.autoSave(clsId,weekKey,dayName,'progress',inp.value.trim(),b.id);_lv=inp.value;if(inp.value)dt.textContent=_fmtDateTime(new Date());row.classList.remove('saving');row.classList.add('saved');_syncDot(FireDB.ready()?'on':'off');setTimeout(()=>row.classList.remove('saved'),1500);}});
+      inp.addEventListener('input',()=>{inp.classList.toggle('filled',inp.value.trim()!=='');row.classList.add('saving');row.classList.remove('saved');_syncDot('saving');_dirtyFields.add(inp);clearTimeout(inp._st);inp._st=setTimeout(()=>{if(inp.value!==_lv){DB.autoSave(clsId,weekKey,dayName,'progress',inp.value.trim(),b.id);_lv=inp.value;if(inp.value)dt.textContent=_fmtDateTime(new Date());}_dirtyFields.delete(inp);row.classList.remove('saving');row.classList.add('saved');_syncDot(FireDB.ready()?'on':'off');setTimeout(()=>row.classList.remove('saved'),1500);},1500);});
+      inp.addEventListener('blur',()=>{clearTimeout(inp._st);if(inp.value!==_lv){DB.autoSave(clsId,weekKey,dayName,'progress',inp.value.trim(),b.id);_lv=inp.value;if(inp.value)dt.textContent=_fmtDateTime(new Date());row.classList.remove('saving');row.classList.add('saved');_syncDot(FireDB.ready()?'on':'off');setTimeout(()=>row.classList.remove('saved'),1500);}_dirtyFields.delete(inp);});
     }
     return row;
   }
