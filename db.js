@@ -15,6 +15,7 @@ const DB = (() => {
     classes:'hk10b_cls', progress:'hk10b_prog',
     accounts:'hk10b_acc', theme:'hk10b_theme', session:'hk10b_sess',
     inited:'hk10b_inited',  // ★ 최초 설치 완료 플래그
+    outbox:'hk10b_outbox',  // ★ 신규: 서버에 아직 확인 안 된 진도/메모 대기열(강제종료 대비)
   };
   const lg = k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
   const ls = (k,v) => { try { localStorage.setItem(k,JSON.stringify(v)); } catch {} };
@@ -26,6 +27,40 @@ const DB = (() => {
   // ★ Pending 쓰기 키 추적: Firebase 리스너가 debounce 대기 중인 로컬 값을 덮어쓰지 않도록 보호
   const _pendingKeys = new Set();
   const _progressDebounce = {};
+
+  // ★★★ 데이터 유실 방지 핵심 장치 ★★★
+  // 진도/메모는 "입력 → 최대 800ms 대기 → Firebase 전송" 구조라, 그 800ms 안에
+  // 반을 전환하거나 앱/탭을 닫으면 서버에 반영되기 전에 다음 로그인 시 통째로
+  // 덮어써져 사라질 수 있었다(_loadFB가 서버 스냅샷으로 C.progress를 무조건 교체하기 때문).
+  // → 화면이 보이지 않게 되는 "모든" 시점에 대기 중인 쓰기를 즉시(디바운스 무시) 강제 실행한다.
+  function _flushPendingWrites() {
+    Object.keys(_progressDebounce).forEach(key => {
+      clearTimeout(_progressDebounce[key]);
+      delete _progressDebounce[key];
+      const value = C.progress[key];
+      const path = `${FireDB.P.progress}/${key}`;
+      const p = (value === undefined || value === null || value === '')
+        ? FireDB.remove(path)
+        : FireDB.set(path, value);
+      Promise.resolve(p).then(()=>_outboxRemove(key)).catch(e => console.warn('[DB] flush 실패:', key, e));
+      _pendingKeys.delete(key);
+    });
+  }
+  if (typeof document !== 'undefined') {
+    // visibilitychange: 탭 전환/앱 백그라운드 전환을 모바일에서도 안정적으로 감지(권장 방식)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') _flushPendingWrites();
+    });
+    // pagehide: 실제 페이지 종료(탭 닫기/새로고침 포함) 시 마지막 안전망
+    window.addEventListener('pagehide', _flushPendingWrites);
+  }
+
+  // ★ 로컬 대기열(outbox): "예약됨"과 동시에 즉시 localStorage에 기록 →
+  //   visibilitychange/pagehide조차 못 뜨는 강제종료·크래시 상황에서도 다음 실행 때 재전송 가능
+  const _outboxGet = () => { try{ return JSON.parse(localStorage.getItem(LS.outbox))||{}; }catch{ return {}; } };
+  const _outboxSet = o => { try{ localStorage.setItem(LS.outbox, JSON.stringify(o)); }catch{} };
+  const _outboxPut = (key,value) => { const o=_outboxGet(); o[key]=value; _outboxSet(o); };
+  const _outboxRemove = key => { const o=_outboxGet(); delete o[key]; _outboxSet(o); };
 
   // ★★★ 반(classes) 동기화 충돌 감지 ★★★
   //  각 반 객체에 _rev(정수) 필드를 두고, 쓰기 직전 서버의 현재 _rev와
@@ -55,7 +90,33 @@ const DB = (() => {
     const fbOk = FireDB.init();
     if (fbOk) { await _loadFB(); _listenFB(); }
     else _loadLS();
+    await _drainOutbox(); // ★ 이전 세션에서 강제종료 등으로 못 보낸 진도/메모가 있으면 지금 재전송 + 화면에 즉시 복구
     await _seed();
+  }
+
+  // ★ 앱 시작 시, 이전 세션에서 서버 확인을 못 받고 남아있던 대기열을 재전송한다.
+  //   _loadFB()가 방금 서버 스냅샷으로 C.progress를 덮어썼더라도, 여기서 다시 얹어주므로
+  //   "입력했는데 다음 로그인 때 사라져 있는" 현상이 원천 차단된다.
+  async function _drainOutbox() {
+    const o = _outboxGet();
+    const keys = Object.keys(o);
+    if (!keys.length) return;
+    console.log(`[DB] 🔁 미전송 대기열 ${keys.length}건 복구·재전송`);
+    for (const key of keys) {
+      const value = o[key];
+      if (value === undefined || value === null || value === '') delete C.progress[key];
+      else C.progress[key] = value; // ★ 서버 확인 전이라도 화면엔 즉시 반영(유실처럼 보이지 않도록)
+      const path = `${FireDB.P.progress}/${key}`;
+      try {
+        if (value === undefined || value === null || value === '') await FireDB.remove(path);
+        else await FireDB.set(path, value);
+        _outboxRemove(key);
+      } catch(e) {
+        console.warn('[DB] outbox 재전송 실패(다음 세션에 재시도):', key, e);
+      }
+    }
+    ls(LS.progress, C.progress);
+    _fire('progress');
   }
 
   let _fbLoadedOk = false; // ★ Firebase 데이터 정상 로드 여부 추적
@@ -668,6 +729,7 @@ const DB = (() => {
   //   Firebase 리스너보다 늦게 도착한 서버 데이터가 로컬 입력을 덮어쓰는 버그 방지
   function _writeProgress(key, value) {
     _pendingKeys.add(key);
+    _outboxPut(key, value); // ★ 예약과 동시에 즉시 기록(디바운스 타이머가 못 돌아도 다음 세션에서 복구 가능)
     clearTimeout(_progressDebounce[key]);
     _progressDebounce[key] = setTimeout(async () => {
       delete _progressDebounce[key];
@@ -676,6 +738,7 @@ const DB = (() => {
       try {
         if (!value && value !== 0) await FireDB.remove(path);
         else await FireDB.set(path, value);
+        _outboxRemove(key); // ★ 서버 반영 확인 후에만 대기열에서 제거
       } catch(e) {
         console.warn('[DB] progress 쓰기 실패:', key, e);
       }
@@ -770,6 +833,7 @@ const DB = (() => {
 
   return {
     init, on,
+    flushPendingWrites, // ★ 신규: 대기 중인 진도/메모 저장을 즉시 강제 실행 (데이터 유실 방지)
     monthKey, prevMonthKey, nextMonthKey, toWeekKey,
     getSession, setSession, clearSession, isLoggedIn, isAdmin, canOperate, login, _forceAdminLogin,
     getAccounts, addAccount, updateAccount, deleteAccount,
