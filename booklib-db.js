@@ -391,7 +391,8 @@ const BookLibDB = (() => {
   async function saveClassExempts(classId, exempts) {
     try { localStorage.setItem(_EXEMPT_KEY(classId), JSON.stringify(exempts)); } catch(e) {}
     try {
-      if(typeof FireDB!=='undefined'&&FireDB.ready())
+      // ★ 연결 여부와 무관하게 항상 저장 시도 — 오프라인이면 FireDB.set이 자체 큐잉(데이터 유실 방지)
+      if(typeof FireDB!=='undefined')
         await FireDB.set('hakwon10/exempts/'+classId, exempts);
     } catch(e) {}
   }
@@ -410,7 +411,8 @@ const BookLibDB = (() => {
     const key=classId+'_'+bookId;
     const payload={...data, updatedAt:new Date().toISOString()};
     try{
-      if(typeof FireDB!=='undefined'&&FireDB.ready()){
+      // ★ 연결 여부와 무관하게 항상 저장 시도 — 오프라인이면 FireDB.set이 자체 큐잉(데이터 유실 방지)
+      if(typeof FireDB!=='undefined'){
         await FireDB.set('hakwon10/memos/'+key, payload);
       }
       localStorage.setItem('bl_memo_db_'+key, JSON.stringify(payload));
