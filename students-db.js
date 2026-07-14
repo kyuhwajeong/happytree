@@ -214,7 +214,8 @@ const StudentDB = (() => {
 
     _ls(LS_KEY, _students);
 
-    if (typeof FireDB !== 'undefined' && FireDB.ready()) {
+    // ★ 연결 여부와 무관하게 항상 저장 시도 — 오프라인이면 FireDB.set이 자체 큐잉(데이터 유실 방지)
+    if (typeof FireDB !== 'undefined') {
       await FireDB.set(`${FB_PATH}/${rec.id}`, rec).catch(e =>
         console.warn('[StudentDB] upsert FB error', e)
       );
@@ -253,7 +254,8 @@ const StudentDB = (() => {
     _students[idx] = { ..._students[idx], ...data, updatedAt: _now() };
     _ls(LS_KEY, _students);
 
-    if (typeof FireDB !== 'undefined' && FireDB.ready()) {
+    // ★ 연결 여부와 무관하게 항상 저장 시도 — 오프라인이면 FireDB.set이 자체 큐잉(데이터 유실 방지)
+    if (typeof FireDB !== 'undefined') {
       await FireDB.set(`${FB_PATH}/${id}`, _students[idx]).catch(e =>
         console.warn('[StudentDB] update FB error', e)
       );
@@ -267,7 +269,8 @@ const StudentDB = (() => {
     _students = _students.filter(s => s.id !== id);
     _ls(LS_KEY, _students);
 
-    if (typeof FireDB !== 'undefined' && FireDB.ready()) {
+    // ★ 연결 여부와 무관하게 항상 삭제 시도 — 오프라인이면 FireDB.remove가 자체 큐잉
+    if (typeof FireDB !== 'undefined') {
       await FireDB.remove(`${FB_PATH}/${id}`).catch(e =>
         console.warn('[StudentDB] delete FB error', e)
       );

@@ -1180,12 +1180,22 @@ const App = (() => {
       const inp=document.createElement('input'); inp.className='bm-add-inp'; inp.placeholder='교재명 입력';
       const btn=document.createElement('button'); btn.className='bm-add-btn'; btn.textContent='추가';
       const doAdd=async()=>{
+        if(btn.disabled) return; // ★ 이미 처리 중이면 무시 (연타 방어 2중 안전장치)
         const name=inp.value.trim(); if(!name){_toast('⚠️ 교재명을 입력해주세요','error');inp.focus();return;}
-        await DB.addToPool(clsId,mk,name);
-        inp.value='';
-        // ★ 포커스 유지 (비동기 후에도)
-        setTimeout(()=>inp.focus(),50);
-        _toast(`📚 "${name}" 추가`,'success');
+        // ★ 네트워크 왕복(충돌검사 포함) 도중에도 "눌렸다"는 걸 즉시 알 수 있게
+        //   버튼을 먼저 잠그고 입력칸도 먼저 비운다 → 응답이 늦어도 재클릭으로 중복 추가되지 않음
+        btn.disabled=true; const _origTxt=btn.textContent; btn.textContent='추가 중...';
+        inp.value=''; inp.disabled=true;
+        try{
+          await DB.addToPool(clsId,mk,name);
+          _toast(`📚 "${name}" 추가`,'success');
+        }catch(e){
+          _toast('⚠️ 추가 실패 — 다시 시도해주세요','error');
+          console.warn('[교재추가]',e);
+        }finally{
+          btn.disabled=false; btn.textContent=_origTxt; inp.disabled=false;
+          setTimeout(()=>inp.focus(),50);
+        }
       };
       btn.onclick=doAdd;
       inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();doAdd();}});
