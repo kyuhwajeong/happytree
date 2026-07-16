@@ -150,6 +150,11 @@ const BookLibDB = (() => {
 
   async function updateBook(id, data) {
     const i = _books.findIndex(b=>b.id===id); if(i<0) return null;
+    // ★ data가 Promise이면 차단 (await 누락 방어)
+    if (data && typeof data.then === 'function') {
+      console.error('[BookLibDB] updateBook 차단: data가 Promise — await 누락 의심 (bookId:', id, ')');
+      return null;
+    }
     _books[i] = {..._books[i], ...data, updatedAt:_now()};
     _ls(LS_BOOKS,_books);
     await FireDB.set(`${FB_BOOKS}/${id}`,_books[i]).catch(console.warn);
@@ -387,36 +392,99 @@ const BookLibDB = (() => {
 
 
   // ★ 면제 학생 저장/로드 (localStorage, classId 기준)
+
+  /* ── 데이터 무결성 헬퍼 ──────────────────────────────────────────
+   * async 함수를 await 없이 호출하면 Promise가 값으로 전달될 수 있음.
+   * JSON.stringify(Promise) → undefined → localStorage 에 "undefined" 저장 → 모든 데이터 소멸
+   * 이를 원천 차단하는 공통 방어 함수.
+   */
+  function _isPlainObject(v) {
+    if (v === null || v === undefined) return false;
+    if (typeof v !== 'object') return false;
+    if (typeof v.then === 'function') return false; // Promise 차단
+    return true;
+  }
+  function _safeJsonStringify(v) {
+    const s = JSON.stringify(v);
+    if (s === undefined) throw new Error('_safeJsonStringify: 직렬화 불가 값 (' + typeof v + ')');
+    return s;
+  }
+  // ■ 손상된 localStorage 캐시 감지 (예: "undefined", "null", "")
+  function _isCacheCorrupted(raw) {
+    return !raw || raw === 'undefined' || raw === 'null' || raw === '{}' && raw.length < 3;
+  }
+
   const _EXEMPT_KEY = classId => 'bl_class_exempt_' + classId;
   async function saveClassExempts(classId, exempts) {
-    try { localStorage.setItem(_EXEMPT_KEY(classId), JSON.stringify(exempts)); } catch(e) {}
+    // ★ 비정상 데이터(Promise·undefined·null) 원천 차단 — 이것이 전달되면 DB 전체 소멸
+    if (!_isPlainObject(exempts)) {
+      console.error('[BookLibDB] saveClassExempts 차단: 비정상 값 전달됨',
+        typeof exempts, exempts instanceof Promise ? '(Promise — await 누락 의심)' : '');
+      return; // 저장 거부
+    }
+    let jsonStr;
+    try { jsonStr = _safeJsonStringify(exempts); }
+    catch(e) { console.error('[BookLibDB] saveClassExempts: JSON 직렬화 실패', e); return; }
+
+    // localStorage 먼저 (즉각 반영)
+    try { localStorage.setItem(_EXEMPT_KEY(classId), jsonStr); }
+    catch(e) { console.warn('[BookLibDB] saveClassExempts: localStorage 쓰기 실패', e); }
+
+    // Firebase (오프라인이면 FireDB.set이 자체 큐잉 → 재연결 시 자동 전송)
     try {
-      // ★ 연결 여부와 무관하게 항상 저장 시도 — 오프라인이면 FireDB.set이 자체 큐잉(데이터 유실 방지)
-      if(typeof FireDB!=='undefined')
-        await FireDB.set('hakwon10/exempts/'+classId, exempts);
-    } catch(e) {}
+      if(typeof FireDB !== 'undefined')
+        await FireDB.set('hakwon10/exempts/' + classId, exempts);
+    } catch(e) {
+      console.error('[BookLibDB] saveClassExempts: Firebase 쓰기 실패 (큐잉됨)', e.message||e);
+    }
   }
   async function loadClassExempts(classId) {
+    // ① Firebase 우선 (항상 최신·정확 데이터)
     try {
-      if(typeof FireDB!=='undefined'&&FireDB.ready()){
-        const data = await FireDB.get('hakwon10/exempts/'+classId);
-        if(data){ localStorage.setItem(_EXEMPT_KEY(classId), JSON.stringify(data)); return data; }
+      if(typeof FireDB !== 'undefined' && FireDB.ready()) {
+        const data = await FireDB.get('hakwon10/exempts/' + classId);
+        if (_isPlainObject(data)) {
+          localStorage.setItem(_EXEMPT_KEY(classId), _safeJsonStringify(data)); // 캐시 동기화
+          return data;
+        }
       }
-    } catch(e) {}
-    try { return JSON.parse(localStorage.getItem(_EXEMPT_KEY(classId)) || '{}'); } catch(e) { return {}; }
+    } catch(e) { console.warn('[BookLibDB] loadClassExempts: Firebase 조회 실패, 로컬 캐시로 폴백', e.message||e); }
+
+    // ② 로컬 캐시 폴백
+    const key = _EXEMPT_KEY(classId);
+    const raw = localStorage.getItem(key);
+    if (_isCacheCorrupted(raw)) {
+      // ★ 손상된 캐시 자동 제거 ("undefined", "null", 빈값 등)
+      if (raw && raw !== '{}') {
+        console.warn('[BookLibDB] loadClassExempts: 손상된 캐시 감지, 자동 초기화 (classId:', classId, ')');
+        localStorage.removeItem(key);
+      }
+      return {};
+    }
+    try { return JSON.parse(raw); }
+    catch(e) {
+      console.warn('[BookLibDB] loadClassExempts: 캐시 파싱 실패, 초기화', e.message||e);
+      localStorage.removeItem(key);
+      return {};
+    }
   }
 
   // ★ 메모 DB 저장 (Firebase + localStorage 이중 저장)
   async function saveMemo(classId, bookId, data){
+    if (!_isPlainObject(data)) {
+      console.error('[BookLibDB] saveMemo 차단: 비정상 값', typeof data); return;
+    }
     const key=classId+'_'+bookId;
     const payload={...data, updatedAt:new Date().toISOString()};
-    try{
-      // ★ 연결 여부와 무관하게 항상 저장 시도 — 오프라인이면 FireDB.set이 자체 큐잉(데이터 유실 방지)
-      if(typeof FireDB!=='undefined'){
+    let jsonStr;
+    try { jsonStr = _safeJsonStringify(payload); }
+    catch(e) { console.error('[BookLibDB] saveMemo: 직렬화 실패', e); return; }
+
+    try { localStorage.setItem('bl_memo_db_'+key, jsonStr); } catch(e){}
+    try {
+      if(typeof FireDB!=='undefined')
         await FireDB.set('hakwon10/memos/'+key, payload);
-      }
-      localStorage.setItem('bl_memo_db_'+key, JSON.stringify(payload));
-    }catch(e){ localStorage.setItem('bl_memo_db_'+key, JSON.stringify(payload)); }
+    } catch(e) { console.error('[BookLibDB] saveMemo: Firebase 쓰기 실패', e.message||e); }
   }
   async function loadMemo(classId, bookId){
     const key=classId+'_'+bookId;

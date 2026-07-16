@@ -1815,9 +1815,28 @@ const BooklibApp = (() => {
   }
 
   async function _importChFile(file,bookId){try{const lines=await _fileToLines(file);if(!lines.length){_toast('⚠️ 유효한 챕터가 없습니다');return;}await BookLibDB.setChapters(bookId,lines,'replace');_toast(`✅ ${lines.length}개 챕터 등록`,'success');_drawEditor(document.getElementById('bl-editor-sh'));}catch(e){_toast('❌ '+e.message);}}
-  function _pasteChapters(mode){const ta=document.getElementById('bl-ch-ta');const text=(ta?.value||'').trim();if(!text){_toast('⚠️ 챕터 목록을 입력해주세요');return;}const titles=text.split(/[\r\n]+/).map(l=>l.trim()).filter(Boolean);if(!titles.length){_toast('⚠️ 유효한 챕터가 없습니다');return;}BookLibDB.setChapters(_st.editBookId,titles,mode).then(()=>{if(ta)ta.value='';_toast(`✅ ${titles.length}개 ${mode==='append'?'추가':'교체'}`,'success');_drawEditor(document.getElementById('bl-editor-sh'));});}
-  function _delCh(bid,chId){BookLibDB.deleteChapter(bid,chId).then(()=>_drawEditor(document.getElementById('bl-editor-sh')));}
-  function _clearChs(){if(!confirm('챕터를 전체 삭제하시겠습니까?'))return;BookLibDB.updateBook(_st.editBookId,{chapters:[]}).then(()=>_drawEditor(document.getElementById('bl-editor-sh')));}
+  async function _pasteChapters(mode){
+    const ta=document.getElementById('bl-ch-ta');
+    const text=(ta?.value||'').trim();
+    if(!text){_toast('⚠️ 챕터 목록을 입력해주세요');return;}
+    const titles=text.split(/[\r\n]+/).map(l=>l.trim()).filter(Boolean);
+    if(!titles.length){_toast('⚠️ 유효한 챕터가 없습니다');return;}
+    try{
+      await BookLibDB.setChapters(_st.editBookId,titles,mode);
+      if(ta)ta.value='';
+      _toast(`✅ ${titles.length}개 ${mode==='append'?'추가':'교체'}`,'success');
+      _drawEditor(document.getElementById('bl-editor-sh'));
+    }catch(e){console.error('[BooklibApp] _pasteChapters 오류',e);_toast('⚠️ 챕터 저장 실패','error');}
+  }
+  async function _delCh(bid,chId){
+    try{await BookLibDB.deleteChapter(bid,chId);_drawEditor(document.getElementById('bl-editor-sh'));}
+    catch(e){console.error('[BooklibApp] _delCh 오류',e);}
+  }
+  async function _clearChs(){
+    if(!confirm('챕터를 전체 삭제하시겠습니까?'))return;
+    try{await BookLibDB.updateBook(_st.editBookId,{chapters:[]});_drawEditor(document.getElementById('bl-editor-sh'));}
+    catch(e){console.error('[BooklibApp] _clearChs 오류',e);}
+  }
   async function _deleteBookFromPopup(bookId, bookName){
     const msg = [
       '"'+bookName+'" 교재를 삭제하시겠습니까?',
@@ -2506,10 +2525,8 @@ const BooklibApp = (() => {
     const ck=document.getElementById('bl-memo-ck');
     const checked=ck?ck.checked:false;
     const data={text:val, checked:checked, updatedAt:now};
-    // localStorage 즉시 저장
-    localStorage.setItem('bl_memo_'+clsId+'_'+bkId, val);
-    localStorage.setItem('bl_memo_ck_'+clsId+'_'+bkId, checked?'1':'0');
-    // ★ DB 비동기 저장 (text + checked + updatedAt)
+    // ★ DB 저장 (localStorage 캐시 포함) — booklib-db.saveMemo가 bl_memo_db_ 키로 관리
+    //    (구버전 bl_memo_ 키는 더 이상 사용하지 않음)
     if(typeof BookLibDB!=='undefined'&&BookLibDB.saveMemo){
       BookLibDB.saveMemo(clsId, bkId, data).catch(()=>{});
     }
@@ -3629,12 +3646,19 @@ const BooklibApp = (() => {
     // DB에서 더 상세한 정보(enabled 포함) 로드 — 신구조: {bookId:{studentName:{...}}}
     let _dbExcs = {};
     if (_st.matrixClassId && _st.matrixBookId && typeof BookLibDB!=='undefined' && BookLibDB.loadClassExempts) {
-      const rawEx = await BookLibDB.loadClassExempts(_st.matrixClassId) || {};
-      const exemptsByBook = _migrateExemptsIfNeeded(rawEx);
-      _dbExcs = exemptsByBook[_st.matrixBookId] || {};
-      if (Object.keys(_dbExcs).length) {
-        const simpleExcs = Object.fromEntries(Object.entries(_dbExcs).map(([n,v])=>[n, Array.isArray(v)?v:(v.items||[])]));
-        _csvImportState.exceptions = simpleExcs;
+      try {
+        const rawEx = await BookLibDB.loadClassExempts(_st.matrixClassId) || {};
+        const exemptsByBook = _migrateExemptsIfNeeded(rawEx);
+        _dbExcs = exemptsByBook[_st.matrixBookId] || {};
+        if (Object.keys(_dbExcs).length) {
+          const simpleExcs = Object.fromEntries(Object.entries(_dbExcs).map(([n,v])=>[n, Array.isArray(v)?v:(v.items||[])]));
+          _csvImportState.exceptions = simpleExcs;
+          console.log('[BooklibApp] 예외 설정 로드:', Object.keys(simpleExcs).length+'명', simpleExcs);
+        } else {
+          console.log('[BooklibApp] 예외 설정: 없음 (rawEx keys:', Object.keys(rawEx).length, ')');
+        }
+      } catch(e) {
+        console.error('[BooklibApp] 예외 설정 로드 오류:', e);
       }
     }
     // CSV에서 학생명 목록 추출 (모달 표시용)
@@ -3769,17 +3793,29 @@ const BooklibApp = (() => {
   }
 
   // ★ 면제 학생 행 삭제 (UI + DB)
-  function _deleteExcRow(rowId) {
+  // ★★★ 수정: async + await 추가, 신구조 {bookId:{studentName:{...}}} 올바르게 처리
+  async function _deleteExcRow(rowId) {
     const row = document.getElementById(rowId); if(!row) return;
-    const nameInput = document.getElementById(row.id+'-inp'); // ★ id로 정확히 지정
+    const nameInput = document.getElementById(row.id+'-inp');
     const name = (nameInput?.value || row._name || '').trim();
     if (!name) { row.remove(); return; }
     const gn = name.length>1 && /[가-힣]/.test(name[0]) ? name.slice(1) : name;
-    // DB에서 완전 삭제 (fullName + givenName 두 key 모두)
-    if (_st.matrixClassId && typeof BookLibDB!=='undefined' && BookLibDB.loadClassExempts && BookLibDB.saveClassExempts) {
-      const db = BookLibDB.loadClassExempts(_st.matrixClassId) || {};
-      delete db[name]; delete db[gn];
-      BookLibDB.saveClassExempts(_st.matrixClassId, db);
+    // ★ DB에서 삭제: 신구조 {bookId:{studentName:{...}}} 기준으로 올바르게 처리
+    if (_st.matrixClassId && _st.matrixBookId && typeof BookLibDB!=='undefined' &&
+        BookLibDB.loadClassExempts && BookLibDB.saveClassExempts) {
+      try {
+        const raw = await BookLibDB.loadClassExempts(_st.matrixClassId) || {}; // ★ await 추가
+        const existing = _migrateExemptsIfNeeded(raw);
+        const bkMap = existing[_st.matrixBookId];
+        if (bkMap) {
+          delete bkMap[name];   // fullName 삭제
+          delete bkMap[gn];     // givenName 삭제
+          if (!Object.keys(bkMap).length) delete existing[_st.matrixBookId]; // 빈 북 키 정리
+        }
+        await BookLibDB.saveClassExempts(_st.matrixClassId, existing); // ★ await 추가
+      } catch(e) {
+        console.error('[BooklibApp] _deleteExcRow DB 오류:', e);
+      }
     }
     if (_csvImportState.exceptions) {
       delete _csvImportState.exceptions[name];
@@ -4743,6 +4779,14 @@ const BooklibApp = (() => {
     // 빈 교재 키 정리
     if(!Object.keys(existing[bkId]).length) delete existing[bkId];
     await BookLibDB.saveClassExempts(clsId, existing);
+    // ★ 현재 열려있는 반/교재와 동일하면 _csvImportState 즉시 동기화
+    if(clsId===_st.matrixClassId && bkId===_st.matrixBookId){
+      const bkMap=existing[bkId]||{};
+      _csvImportState.exceptions=Object.fromEntries(
+        Object.entries(bkMap).map(([n,v])=>[n,Array.isArray(v)?v:(v.items||[])])
+      );
+      _csvImportState.exceptionOn=Object.keys(_csvImportState.exceptions).length>0;
+    }
     _toast('✅ 예외 설정 저장 완료','success');
     modal.remove();
   }
