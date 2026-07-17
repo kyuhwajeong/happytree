@@ -1776,6 +1776,7 @@ to{opacity:1;transform:none}}
     const config  = GradeDB.getReportConfig(_st.bookId);
     const totalWQ = config.word?.totalQ || 0;
     const actRevs = GradeDB.getActiveReviews(_st.bookId);
+    const hasWd   = config.word?.enabled !== false; // ★ 단어 표시 여부 (미설정 시 기본 true)
     const hasRd   = config.reading?.enabled && actRevs.length > 0;
     const totalRQ = config.reading?.totalQ || 0;
     const rvN     = actRevs.length;
@@ -1810,7 +1811,8 @@ to{opacity:1;transform:none}}
     /* colgroup */
     const _cw  = JSON.parse(localStorage.getItem('gr_col_widths') || '{}');
     const _cgs = (key, def) => `<col data-col-key="${key}" style="width:${_cw[key]||def}px">`;
-    let colHtml = _cgs('fix',100) + _cgs('wq',56) + _cgs('wr',48) + _cgs('wp',44) + _cgs('wa',56);
+    let colHtml = _cgs('fix', 100);
+    if (hasWd) colHtml += _cgs('wq',56) + _cgs('wr',48) + _cgs('wp',44) + _cgs('wa',56);
     if (hasRd) {
       colHtml += _cgs('rq',44);
       for (let i=0;i<rvN;i++) colHtml += _cgs(`rr${i}`,48);
@@ -1818,6 +1820,9 @@ to{opacity:1;transform:none}}
       colHtml += _cgs('ra',56);
     }
     colHtml += _cgs('cm', 200);
+
+    /* rowspan: 리딩 있을 때만 2행 헤더 필요 */
+    const rsAttr = hasRd ? 'rowspan="2"' : '';
 
     const html = `
       <div class="gr-sheet-wrap">
@@ -1827,30 +1832,32 @@ to{opacity:1;transform:none}}
             <!-- Row1: 얇은 섹션 라벨 띠 (rowspan 없음) -->
             <tr class="gs-band">
               <th class="gs-fix gs-th" style="border-bottom:none;background:var(--surf2)"></th>
-              <th class="gs-th sec-w" colspan="4" style="letter-spacing:.5px">🔤 단어 평가</th>
+              ${hasWd ? `<th class="gs-th sec-w" colspan="4" style="letter-spacing:.5px">🔤 단어 평가</th>` : ''}
               ${hasRd ? `<th class="gs-th sec-r" colspan="${rdH1span}">📖 리딩 평가</th>` : ''}
               <th class="gs-th sec-c" data-col-key="cm" style="border-bottom:none;background:rgba(5,150,105,.08)"></th>
             </tr>
             <!-- Row2: 실제 컬럼 헤더 -->
             <tr class="gs-cols">
               <th class="gs-fix gs-th sortable ${_st.sortCol==='name'?'sort-on':''}"
-                  onclick="GradeApp._toggleSort('name')" ${hasRd?'rowspan="2"':''}>학생 ${nmIcon}</th>
-              <th class="gs-th sec-w" data-col-key="wq" ${hasRd?'rowspan="2"':''}>총 테스트<br>(문제) 수</th>
-              <th class="gs-th sec-w" data-col-key="wr" ${hasRd?'rowspan="2"':''}>재시험</th>
-              <th class="gs-th sec-w" data-col-key="wp" ${hasRd?'rowspan="2"':''}>통과</th>
+                  onclick="GradeApp._toggleSort('name')" ${rsAttr}>학생 ${nmIcon}</th>
+              ${hasWd ? `
+              <th class="gs-th sec-w" data-col-key="wq" ${rsAttr}>총 테스트<br>(문제) 수</th>
+              <th class="gs-th sec-w" data-col-key="wr" ${rsAttr}>재시험</th>
+              <th class="gs-th sec-w" data-col-key="wp" ${rsAttr}>통과</th>
               <th class="gs-th sec-w sortable ${_st.sortCol==='wordAch'?'sort-on':''}" data-col-key="wa"
-                  onclick="GradeApp._toggleSort('wordAch')" ${hasRd?'rowspan="2"':''}>성취율 ${wIcon}</th>
+                  onclick="GradeApp._toggleSort('wordAch')" ${rsAttr}>성취율 ${wIcon}</th>
+              ` : ''}
               ${rdRow2Sub}
-              <th class="gs-th sec-c" data-col-key="cm" ${hasRd?'rowspan="2"':''}>💬 Teacher's Comment</th>
+              <th class="gs-th sec-c" data-col-key="cm" ${rsAttr}>💬 Teacher's Comment</th>
             </tr>
             <!-- Row3: 리딩 Review 서브컬럼 (리딩 활성화 시에만) -->
             ${hasRd ? `<tr class="gs-rd-cols">${rdRow3Sub}</tr>` : ''}
           </thead>
           <tbody>
-            ${students.map((s,ri) => _excelRow(s, ri, config, totalWQ, actRevs, totalRQ, hasRd)).join('')}
+            ${students.map((s,ri) => _excelRow(s, ri, config, totalWQ, actRevs, totalRQ, hasRd, hasWd)).join('')}
           </tbody>
           <tfoot>
-            ${_avgRow(students, config, totalWQ, actRevs, hasRd)}
+            ${_avgRow(students, config, totalWQ, actRevs, hasRd, hasWd)}
           </tfoot>
         </table>
       </div>`;
@@ -1868,7 +1875,7 @@ to{opacity:1;transform:none}}
     setTimeout(() => _renderChart(students, actRevs), 30);
   }
 
-  function _excelRow(s, ri, config, totalWQ, actRevs, totalRQ, hasRd) {
+  function _excelRow(s, ri, config, totalWQ, actRevs, totalRQ, hasRd, hasWd) {
     const d   = _st.data[s.id] || {};
     const wd  = d.word || {};
     const rd  = d.reading || {};
@@ -1878,6 +1885,23 @@ to{opacity:1;transform:none}}
     const pass   = retake !== '' ? Math.max(0, totalWQ - retake) : '';
     const achW   = pass !== '' && totalWQ > 0 ? Math.round(pass / totalWQ * 100) : '';
     const isGW   = achW !== '' && achW >= 80;
+
+    /* 단어 셀 — hasWd일 때만 렌더링 */
+    const wdCells = hasWd ? `
+        <td class="gs-td ro"><span class="gs-val score-c">${totalWQ||'—'}</span></td>
+        <td class="gs-td inp-cell">
+          <input class="gs-inp" type="number" min="0" max="${totalWQ}" step="1"
+            value="${retake}" placeholder="0"
+            id="gr-retake-${s.id}" data-sid="${s.id}" data-row="${ri}" data-col="word"
+            oninput="GradeApp._excelWordInput('${s.id}',this.value,'${totalWQ}')"
+            onkeydown="GradeApp._onKey(event,'${s.id}',${ri},'word')">
+        </td>
+        <td class="gs-td ro ${pass!==''?(isGW?'pass-c':'fail-c'):''}" id="gr-pass-${s.id}">
+          <span class="gs-val">${pass!==''?pass:'—'}</span>
+        </td>
+        <td class="gs-td ro ${achW!==''?(isGW?'pass-c':'fail-c'):''}" id="gr-achvw-${s.id}">
+          <span class="gs-val">${achW!==''?achW+'%':'—'}</span>
+        </td>` : '';
 
     const rdCells = hasRd ? `
       <td class="gs-td ro" style="background:rgba(139,92,246,.04)">
@@ -1909,20 +1933,7 @@ to{opacity:1;transform:none}}
             </div>
           </div>
         </td>
-        <td class="gs-td ro"><span class="gs-val score-c">${totalWQ||'—'}</span></td>
-        <td class="gs-td inp-cell">
-          <input class="gs-inp" type="number" min="0" max="${totalWQ}" step="1"
-            value="${retake}" placeholder="0"
-            id="gr-retake-${s.id}" data-sid="${s.id}" data-row="${ri}" data-col="word"
-            oninput="GradeApp._excelWordInput('${s.id}',this.value,'${totalWQ}')"
-            onkeydown="GradeApp._onKey(event,'${s.id}',${ri},'word')">
-        </td>
-        <td class="gs-td ro ${pass!==''?(isGW?'pass-c':'fail-c'):''}" id="gr-pass-${s.id}">
-          <span class="gs-val">${pass!==''?pass:'—'}</span>
-        </td>
-        <td class="gs-td ro ${achW!==''?(isGW?'pass-c':'fail-c'):''}" id="gr-achvw-${s.id}">
-          <span class="gs-val">${achW!==''?achW+'%':'—'}</span>
-        </td>
+        ${wdCells}
         ${rdCells}
         <td class="gs-td gs-cm-cell" style="padding:0;">
           <div class="gs-cm-wrap">
@@ -1943,8 +1954,8 @@ to{opacity:1;transform:none}}
   }
 
   /* 평균 행 */
-  function _avgRow(students, config, totalWQ, actRevs, hasRd) {
-    const achWs = students.map(s => {
+  function _avgRow(students, config, totalWQ, actRevs, hasRd, hasWd) {
+    const achWs = !hasWd ? [] : students.map(s => {
       const d = _st.data[s.id];
       if (d?.word?.pass != null && d?.word?.totalQ > 0) return Math.round(d.word.pass / d.word.totalQ * 100);
       const rec = GradeDB.getLatest(_st.classId||'__noclass__', s.id, _st.bookId);
@@ -1969,16 +1980,17 @@ to{opacity:1;transform:none}}
         <td class="gs-td ro"><span class="gs-val achv-c" id="gr-avg-rd">${avgRd!=null?avgRd+'%':'—'}</span></td>`;
     }
 
-    // ★ 단어평가 그룹: gs-fix(학생)+총테스트+재시험+통과 = 4컬럼 병합
+    // ★ 단어 비활성 시 학생 고정셀 colspan=1, 활성 시 4컬럼 병합
     const graphBtn = `<button id="gr-graph-toggle" onclick="GradeApp._toggleGraph()"
       title="${_st.showGraph?'그래프 숨기기':'그래프 표시'}"
       style="background:${_st.showGraph?'var(--a)':'transparent'};border:${_st.showGraph?'none':'1.5px solid var(--bdr2)'};border-radius:6px;cursor:pointer;font-size:12px;padding:2px 6px;color:${_st.showGraph?'#fff':'var(--tx3)'};transition:all .15s;margin-left:6px">📊</button>`;
+    const fixColspan = hasWd ? 4 : 1;
     return `<tr class="gr-avg-row">
-      <td class="gs-fix" colspan="4"
+      <td class="gs-fix" colspan="${fixColspan}"
         style="text-align:center;font-weight:800;color:var(--a);font-size:12px">
         평균${graphBtn}
       </td>
-      <td class="gs-td ro"><span class="gs-val achv-c" id="gr-avg-w">${avgW!=null?avgW+'%':'—'}</span></td>
+      ${hasWd ? `<td class="gs-td ro"><span class="gs-val achv-c" id="gr-avg-w">${avgW!=null?avgW+'%':'—'}</span></td>` : ''}
       ${rdAvgCells}
       <td class="gs-td ro" style="min-width:36px;width:36px"></td>
     </tr>`;
@@ -2216,6 +2228,7 @@ to{opacity:1;transform:none}}
     const config  = GradeDB.getReportConfig(_st.bookId);
     const totalWQ = config.word?.totalQ || 0;
     const actRevs = GradeDB.getActiveReviews(_st.bookId);
+    const hasWd   = config.word?.enabled !== false; // ★ 단어 표시 여부
     const hasRd   = config.reading?.enabled && actRevs.length > 0;
     const totalRQ = config.reading?.totalQ || 0;
     const d  = _st.data[s.id] || {};
@@ -2256,13 +2269,13 @@ to{opacity:1;transform:none}}
           <div class="gr-hero-nm">${_e(s.name)}${s.nickname?` <span style="font-size:11px;color:var(--tx3)">(${_e(s.nickname)})</span>`:''}</div>
           <div class="gr-hero-sub">${_getCls(_st.classId)?.name||'학생전용'}반</div>
         </div>
-        ${achW!==''?`<div class="gr-hero-score">
+        ${hasWd && achW!==''?`<div class="gr-hero-score">
           <div class="gr-hero-pct" style="color:${isGW?'#16a34a':'#f97316'}">${achW}%</div>
           <div class="gr-hero-lbl">단어 성취율</div>
         </div>`:''}
       </div>
-      <!-- 단어 -->
-      <div class="gr-csec">
+      <!-- 단어 (enabled일 때만) -->
+      ${hasWd ? `<div class="gr-csec">
         <div class="gr-csec-head">
           <div class="gr-csec-title">🔤 단어</div>
           <div class="gr-csec-badge">총 ${totalWQ}문제</div>
@@ -2287,7 +2300,7 @@ to{opacity:1;transform:none}}
             <div class="gr-cval"><div class="gr-cdisp ${achW!==''?(isGW?'pass':'fail'):''}" id="gr-cd-achw-${s.id}">${achW!==''?achW+'%':'—'}</div></div>
           </div>
         </div>
-      </div>
+      </div>` : ''}
       <!-- 리딩 -->
       ${hasRd?`<div class="gr-csec">
         <div class="gr-csec-head">
@@ -2390,6 +2403,7 @@ to{opacity:1;transform:none}}
 
   function _buildReport(s) {
     const config=GradeDB.getReportConfig(_st.bookId),actRevs=GradeDB.getActiveReviews(_st.bookId);
+    const hasWd=config.word?.enabled !== false; // ★ 단어 표시 여부
     const hasRd=config.reading?.enabled&&actRevs.length>0;
     const book=typeof BookLibDB!=='undefined'?BookLibDB.getBookById(_st.bookId):null;
     const cls=_st.classId?_getCls(_st.classId):null;
@@ -2416,7 +2430,7 @@ to{opacity:1;transform:none}}
       ? wordRec.retake
       : (wPass != null ? Math.max(0, wTotalQ - wPass) : null);
 
-    const wordTbl=rec?`<div class="rpt-sec-title">단어 Test Result</div><table class="rpt-tbl"><thead><tr><th>총 테스트수</th><th style="color:#4f46e5">통과</th><th style="color:#ea580c">재시</th><th style="color:#8b5cf6">성취율</th></tr></thead><tbody><tr><td>${wTotalQ||'—'}</td><td class="rpt-pass">${wPass??'—'}</td><td class="rpt-fail">${wRetake??'—'}</td><td class="rpt-achv">${achW!=null?achW+'%':'—'}</td></tr><tr class="rpt-avg"><td colspan="3" style="text-align:center">평균</td><td class="rpt-achv">${avgW!=null?avgW+'%':'—'}</td></tr></tbody></table>`:'';
+    const wordTbl=hasWd&&rec?`<div class="rpt-sec-title">단어 Test Result</div><table class="rpt-tbl"><thead><tr><th>총 테스트수</th><th style="color:#4f46e5">통과</th><th style="color:#ea580c">재시</th><th style="color:#8b5cf6">성취율</th></tr></thead><tbody><tr><td>${wTotalQ||'—'}</td><td class="rpt-pass">${wPass??'—'}</td><td class="rpt-fail">${wRetake??'—'}</td><td class="rpt-achv">${achW!=null?achW+'%':'—'}</td></tr><tr class="rpt-avg"><td colspan="3" style="text-align:center">평균</td><td class="rpt-achv">${avgW!=null?avgW+'%':'—'}</td></tr></tbody></table>`:'';
     const rdTbl=hasRd&&rec?`<div class="rpt-sec-title">리딩 Test Result</div><table class="rpt-tbl"><thead><tr>${actRevs.map(rv=>`<th>${_e(rv.name)}</th>`).join('')}<th style="color:#8b5cf6">성취율</th></tr></thead><tbody><tr>${actRevs.map((_,i)=>{const sc=rec.reading?.[`R${i}`]?.score;return`<td class="rpt-pass">${sc!=null?sc+'점':'—'}</td>`;}).join('')}<td class="rpt-achv">${achRd!=null?Math.round(achRd)+'%':'—'}</td></tr><tr class="rpt-avg"><td colspan="${actRevs.length}" style="text-align:center">평균</td><td class="rpt-achv">${avgRd!=null?avgRd+'%':'—'}</td></tr></tbody></table>`:'';
     const graph=_st.reportGraph&&achW!=null?_canvasGraph(achW,hasRd&&achRd!=null?Math.round(achRd):null,avgW,hasRd&&avgRd!=null?Math.round(avgRd):null):'';
     const comment=`<div style="margin-top:14px"><div class="rpt-sec-title">Teacher's comment</div><div class="rpt-comment-box">${_e(rec?.comment||'')}</div></div>`;
@@ -5221,12 +5235,34 @@ to{opacity:1;transform:none}}
     // ── 단어 테스트 ──
     const wSec = document.createElement('div');
     wSec.style.cssText = 'background:#f9fafb;border-radius:12px;padding:14px;border:1px solid #e5e7eb';
-    wSec.innerHTML = '<div style="font-size:13px;font-weight:800;margin-bottom:10px;color:#1f2937">🔤 단어 테스트</div>'
-      +'<div style="display:flex;align-items:center;gap:10px">'
-      +'<label style="font-size:12px;color:#6b7280;flex:1">총 테스트(문제) 수</label>'
-      +'<input id="gep-wq" type="number" min="0" value="'+(cfg.word?.totalQ||'')+'" placeholder="0"'
-      +' style="width:80px;padding:6px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:14px;text-align:center;outline:none">'
-      +'</div>';
+
+    const wHdr = document.createElement('div');
+    wHdr.style.cssText = 'display:flex;align-items:center;margin-bottom:10px';
+    wHdr.innerHTML = '<span style="font-size:13px;font-weight:800;color:#1f2937">🔤 단어 테스트</span>';
+
+    const wToggleLabel = document.createElement('label');
+    wToggleLabel.style.cssText = 'display:flex;align-items:center;gap:6px;cursor:pointer;margin-left:auto';
+    const wCk = document.createElement('input');
+    wCk.type = 'checkbox'; wCk.id = 'gep-wd-on';
+    wCk.style.cssText = 'width:17px;height:17px;accent-color:#6366f1;cursor:pointer';
+    wCk.checked = cfg.word?.enabled !== false; // 미설정 시 기본 true (하위 호환)
+    wToggleLabel.appendChild(wCk);
+    wToggleLabel.appendChild(Object.assign(document.createElement('span'), {
+      textContent: '단어 포함', style: 'font-size:13px;font-weight:700;color:#374151'
+    }));
+    wHdr.appendChild(wToggleLabel);
+    wSec.appendChild(wHdr);
+
+    const wBody = document.createElement('div');
+    wBody.id = 'gep-wd-body';
+    wBody.style.display = cfg.word?.enabled !== false ? '' : 'none';
+    wBody.innerHTML = '<div style="display:flex;align-items:center;gap:10px">'
+      + '<label style="font-size:12px;color:#6b7280;flex:1">총 테스트(문제) 수</label>'
+      + '<input id="gep-wq" type="number" min="0" value="' + (cfg.word?.totalQ || '') + '" placeholder="0"'
+      + ' style="width:80px;padding:6px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:14px;text-align:center;outline:none">'
+      + '</div>';
+    wSec.appendChild(wBody);
+    wCk.addEventListener('change', () => { wBody.style.display = wCk.checked ? '' : 'none'; });
     body.appendChild(wSec);
 
     // ── 리딩 테스트 ──
@@ -5322,6 +5358,7 @@ to{opacity:1;transform:none}}
     const doSave=async(e)=>{
       e.preventDefault();
       saveBtn.disabled=true; saveBtn.textContent='저장 중...';
+      const wdOn= box.querySelector('#gep-wd-on')?.checked !== false;
       const wq  = Number(box.querySelector('#gep-wq')?.value||0);
       const rdOn= box.querySelector('#gep-rd-on')?.checked||false;
       const rdQ = Number(box.querySelector('#gep-rdq')?.value||0);
@@ -5329,7 +5366,7 @@ to{opacity:1;transform:none}}
         enabled: r.querySelector('.gep-rv-ck')?.checked||false,
         name:    r.querySelector('.gep-rv-nm')?.value||('Review '+(i+1))
       }));
-      const newCfg={word:{totalQ:wq}, reading:{enabled:rdOn,totalQ:rdQ,reviews}};
+      const newCfg={word:{enabled:wdOn,totalQ:wq}, reading:{enabled:rdOn,totalQ:rdQ,reviews}};
       await GradeDB.saveReportConfig(_st.bookId, newCfg);
       ov.remove();
       _renderContent();
