@@ -82,9 +82,25 @@ const FireDB = (() => {
       }
     }
     _flushing = false;
-    if (ok > 0) console.log(`[FireDB] ✅ 오프라인 큐 전송 완료: 성공 ${ok}건, 실패 ${fail}건`);
+    if (ok > 0) {
+      console.log(`[FireDB] ✅ 오프라인 큐 전송 완료: 성공 ${ok}건, 실패 ${fail}건`);
+      _showFlushedBadge(ok);
+    }
   }
   function getPendingCount() { return _loadQueue().length; }
+
+  /* ★ 큐 전송 완료 알림 배지 (사용자가 자동 동기화를 인지할 수 있도록) */
+  function _showFlushedBadge(count) {
+    let ind = document.getElementById('fb-conn-ind');
+    if (!ind) ind = _createInd();
+    Object.assign(ind.style, {
+      background: 'rgba(5,150,105,.12)', color: '#059669',
+      border: '1px solid rgba(5,150,105,.3)', opacity: '1',
+    });
+    ind.innerHTML = `✅ 대기 데이터 ${count}건 서버 전송 완료`;
+    clearTimeout(ind._t);
+    ind._t = setTimeout(() => { ind.style.opacity = '0'; }, 3500);
+  }
 
   /* ── 초기 4초 오탐 억제 ── */
   const _suppressUntil = Date.now() + 4000;
@@ -206,6 +222,22 @@ const FireDB = (() => {
     }, 60000);
   }
 
+  /* ★ 주기적 큐 자동 전송 (레벨 기반 — 재연결 "이벤트"에 의존하지 않음)
+   *   문제: 기존엔 disconnected→connected "전환 순간"에만 큐를 비웠기 때문에,
+   *         연결이 끊김 없이 계속 유지되는데도 어떤 이유로 큐에만 쌓인 채
+   *         남아있는 데이터는 브라우저를 완전히 새로고침(=새 연결 이벤트 발생)
+   *         하기 전까지 서버로 전송되지 않는 문제가 있었음.
+   *   해결: 15초마다 "현재 연결되어 있고 대기 항목이 있으면" 무조건 재전송 시도.
+   *         네이티브 새로고침/캐시삭제 없이도 자동으로 서버 동기화가 보장됨. */
+  function _startQueueWatcher() {
+    setInterval(() => {
+      if (_connected && getPendingCount() > 0) {
+        console.log(`[FireDB] 🔁 주기적 큐 점검 — 대기 ${getPendingCount()}건 재전송 시도`);
+        _flushQueue();
+      }
+    }, 15000);
+  }
+
   /* ── 초기화 ── */
   async function init() {
     try {
@@ -250,6 +282,8 @@ const FireDB = (() => {
 
       /* ★ keepalive 시작 */
       _startKeepAlive();
+      /* ★ 주기적 큐 자동 전송 시작 */
+      _startQueueWatcher();
 
     } catch (e) {
       _ok = false;
