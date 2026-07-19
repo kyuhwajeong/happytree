@@ -94,7 +94,7 @@ const GradeDB = (() => {
   /* ══ 교재 리포트 설정 ══ */
   function defaultConfig() {
     return {
-      word: { totalQ: 0 },
+      word: { enabled: true, totalQ: 0 }, // ★ enabled 기본값 명시
       reading: {
         enabled: false,
         totalQ:  0,
@@ -171,14 +171,16 @@ const GradeDB = (() => {
       list.push(rec);
     }
     _ls(LS_GRADES, _grades);
-    // 연결 여부와 무관하게 항상 저장 시도 — 오프라인이면 FireDB.set이 자체 큐잉
+
+    // ★ 서버 저장 성공 여부를 반환값에 포함 (오프라인 큐 여부 확인용)
+    let savedToServer = false;
     try {
-      await FireDB.set(`${FB_GRADES}/${classId}/${studentId}/${bookId}/${rec.id}`, rec);
+      savedToServer = await FireDB.set(`${FB_GRADES}/${classId}/${studentId}/${bookId}/${rec.id}`, rec);
     } catch(e) {
       console.error('[GradeDB] saveRecord Firebase 오류:', e);
     }
     _fire('grades');
-    return rec;
+    return { rec, savedToServer: !!savedToServer };
   }
 
   async function deleteRecord(cid, sid, bid, recordId) {
@@ -216,6 +218,18 @@ const GradeDB = (() => {
     const cls = _grades[cid] || {};
     return Object.keys(cls).map(sid => getLatest(cid, sid, bid)).filter(Boolean);
   }
+
+  // ★ 외부에서 서버 스냅을 직접 적용 (pull 동기화용)
+  function applyServerSnap(snap) {
+    if (!snap) return;
+    const nd = _snapToGrades(snap);
+    _grades = nd;
+    _ls(LS_GRADES, _grades);
+    _fire('grades');
+  }
+
+  // ★ 내부 데이터 참조 노출 (변경 감지용)
+  function _getRawGrades() { return _grades; }
 
   async function deleteAllForBook(bookId){
     // 특정 교재의 성적 데이터 전체 삭제
@@ -319,5 +333,6 @@ const GradeDB = (() => {
     calcScore, calcAchievement, getClassSummary,
     getAllTeacherComments,
     getStudentTrend,
+    applyServerSnap, _getRawGrades,
   };
 })();

@@ -1011,7 +1011,43 @@ to{opacity:1;transform:none}}
     if(typeof GeminiAI!=='undefined'){if(GeminiAI.loadPinsFromDB)GeminiAI.loadPinsFromDB();if(GeminiAI.listenPinsFromDB)GeminiAI.listenPinsFromDB();}
     if (typeof GradeDB === 'undefined') { console.warn('[GradeApp] GradeDB not loaded'); return; }
     await GradeDB.init();
-    window.addEventListener('beforeunload', e => { if (_st.dirty.size > 0) { e.preventDefault(); e.returnValue = ''; } });
+
+    // ★ 다른 기기에서 성적 수정 시 실시간으로 화면 갱신 (핵심 동기화)
+    GradeDB.on('grades', () => {
+      // ★ dirty 중 또는 자동저장 타이머 대기 중이면 렌더 스킵 (입력 중 덮어쓰기 방지)
+      if (_st.bookId && !_st.dirty.size && !Object.keys(_autoSaveTimers).length && !_syncInProgress) {
+        console.log('[GradeApp] 📡 서버 성적 변경 감지 → 화면 갱신');
+        _renderContent();
+        _renderStudents();
+      }
+    });
+
+    // ★ 10초 주기로 동기화 버튼 상태 갱신 (미전송 큐 표시)
+    setInterval(_updateSyncBtn, 10000);
+
+    // ★ 페이지 이탈 전 방어: 자동저장 타이머 즉시 실행 (best-effort)
+    window.addEventListener('beforeunload', e => {
+      // 타이머 대기 중인 학생 동기 flush (async 기다릴 수 없으므로 fire-and-forget)
+      const pendingSids = Object.keys(_autoSaveTimers);
+      pendingSids.forEach(sid => {
+        clearTimeout(_autoSaveTimers[sid]);
+        delete _autoSaveTimers[sid];
+        if (_st.dirty.has(sid) && _st.bookId && _st.classId) {
+          // 동기 저장 불가 → localStorage는 이미 최신, Firebase만 큐에 적재
+          GradeDB.saveRecord({
+            classId: _st.classId||'__noclass__', studentId: sid, bookId: _st.bookId,
+            word: _st.data[sid]?.word||null, reading: _st.data[sid]?.reading||null,
+            comment: _st.data[sid]?.comment||'',
+            savedAt: new Date().toISOString().slice(0,16).replace('T',' '),
+          }).catch(()=>{});
+        }
+      });
+      // dirty가 있으면 이탈 경고
+      if (_st.dirty.size > 0 || pendingSids.length > 0) {
+        e.preventDefault();
+        e.returnValue = '저장되지 않은 성적 데이터가 있습니다. 페이지를 떠나시겠습니까?';
+      }
+    });
     document.addEventListener('click', _closeCtxMenu);
     console.log('[GradeApp] ✅ v4.1');
   }
@@ -1077,8 +1113,8 @@ to{opacity:1;transform:none}}
             title="헤더 글자 크기 설정"
             style="display:none;font-size:11px;padding:3px 8px;border-radius:7px;border:1px solid var(--bdr2);background:var(--surf2);color:var(--tx3);cursor:pointer;font-weight:700">Aa</button>
           <button id="gr-bulk-cmt-btn" onclick="GradeApp._openBulkComment()" style="display:none;padding:6px 14px;border-radius:8px;background:rgba(99,102,241,.1);border:1.5px solid rgba(99,102,241,.3);color:var(--a);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:var(--font)">✨ AI 일괄 코멘트</button>
-          <button id="gr-save-btn" class="gr-save-all-btn" onclick="GradeApp.saveAll()" style="display:none">
-            💾 저장<span class="gr-dirty-count" id="gr-dirty-cnt"></span>
+          <button id="gr-save-btn" class="gr-save-all-btn" onclick="GradeApp.saveAndSync()" style="display:none">
+            <span id="gr-save-ico">💾</span> <span id="gr-save-lbl">저장·동기화</span><span class="gr-dirty-count" id="gr-dirty-cnt"></span>
           </button>
           <button onclick="GradeApp._exportAllGrades()" style="display:none;padding:6px 11px;border-radius:9px;background:rgba(5,150,105,.1);border:1.5px solid rgba(5,150,105,.3);color:#059669;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">📥 전체내보내기</button>
           <label style="display:none;padding:6px 11px;border-radius:9px;background:rgba(99,102,241,.1);border:1.5px solid rgba(99,102,241,.3);color:var(--a);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">📤 전체불러오기<input type="file" accept=".xlsx" style="display:none" onchange="GradeApp._importAllGrades(this.files[0]);this.value=''"></label>
@@ -1541,7 +1577,7 @@ to{opacity:1;transform:none}}
       if (!records.length) continue;
       const config  = GradeDB.getReportConfig(bookId);
       const actRevs = GradeDB.getActiveReviews(bookId);
-      const hasWord = (config?.word?.totalQ || 0) > 0;
+      const hasWord = config?.word?.enabled !== false && (config?.word?.totalQ || 0) > 0; // ★ enabled 체크
       const hasRd   = config?.reading?.enabled && actRevs.length > 0;
       const bookObj = typeof BookLibDB !== 'undefined' ? BookLibDB.getBookById(bookId) : null;
       const bookName = bookObj?.name || bookId;
@@ -2001,9 +2037,10 @@ to{opacity:1;transform:none}}
     const students = _getSorted();
     const config   = GradeDB.getReportConfig(_st.bookId);
     const actRevs  = GradeDB.getActiveReviews(_st.bookId);
+    const hasWd    = config.word?.enabled !== false; // ★ 단어 표시 여부
     const hasRd    = config.reading?.enabled && actRevs.length > 0;
 
-    const achWs = students.map(s => {
+    const achWs = !hasWd ? [] : students.map(s => {
       const d = _st.data[s.id];
       if (!d?.word?.totalQ) return null;
       const p = d.word.pass !== '' ? d.word.pass : null;
@@ -2037,6 +2074,7 @@ to{opacity:1;transform:none}}
     if (passEl) { passEl.querySelector('.gs-val').textContent = pass!==''?pass:'—'; passEl.className=`gs-td ro ${pass!==''?(isGW?'pass-c':'fail-c'):''}`; }
     if (achEl)  { achEl.querySelector('.gs-val').textContent  = achW!==''?achW+'%':'—'; achEl.className =`gs-td ro ${achW!==''?(isGW?'pass-c':'fail-c'):''}`; }
     _updateAvg(); _updateChart();
+    _scheduleAutoSave(sid); // ★ 실시간 자동저장
   }
 
   function _excelRdInput(sid, key, val, totalRQ) {
@@ -2054,6 +2092,7 @@ to{opacity:1;transform:none}}
     if (scEl) scEl.querySelector('.gs-val').textContent = score !== '' ? score : '—';
     if (achvEl) achvEl.querySelector('.gs-val').textContent = _calcRdStr(_st.data[sid].reading, actRevs) || '—';
     _updateAvg();
+    _scheduleAutoSave(sid); // ★ 실시간 자동저장
   }
 
   function _excelComment(sid, val) {
@@ -2131,6 +2170,7 @@ to{opacity:1;transform:none}}
   function _renderChart(students, actRevs) {
     const canvas = document.getElementById('gr-chart'); if (!canvas) return;
     const config  = GradeDB.getReportConfig(_st.bookId||'');
+    const hasWd   = config.word?.enabled !== false;  // ★ 단어 표시 여부
     const hasRd   = config.reading?.enabled && actRevs.length > 0;
     const W = canvas.offsetWidth || 300, H = 72;
     canvas.width = W * window.devicePixelRatio; canvas.height = H * window.devicePixelRatio;
@@ -2141,7 +2181,8 @@ to{opacity:1;transform:none}}
 
     if (!students.length) return;
     const n = students.length;
-    const bw = Math.max(8, Math.min(24, (W / n / (hasRd?2:1)) - 3));
+    // 단어+리딩 둘 다 있을 때만 너비 반분
+    const bw = Math.max(8, Math.min(24, (W / n / ((hasWd && hasRd) ? 2 : 1)) - 3));
     const gapX = W / n;
 
     students.forEach((s, i) => {
@@ -2149,25 +2190,38 @@ to{opacity:1;transform:none}}
       const rec  = GradeDB.getLatest(_st.classId||'__noclass__', s.id, _st.bookId);
       const wd   = d.word || rec?.word || {};
       const rdD  = d.reading || rec?.reading || {};
-      const achW = wd.totalQ > 0 && wd.pass != null ? Math.round(wd.pass / wd.totalQ * 100) : 0;
-      const achR = hasRd ? (_calcRdN(rdD, actRevs) ?? 0) : 0;
+      const achW = hasWd && wd.totalQ > 0 && wd.pass != null ? Math.round(wd.pass / wd.totalQ * 100) : null;
+      const achR = hasRd ? (_calcRdN(rdD, actRevs) ?? 0) : null;
       const isHL = _st.studentId === s.id;
       const x    = i * gapX + gapX / 2;
       const maxH = H - 18;
 
-      if (hasRd) {
-        ctx.fillStyle = isHL ? '#6366f1' : '#a5b4fc';
-        ctx.globalAlpha = isHL ? 1 : .8;
-        const hw = Math.round(achW / 100 * maxH);
-        ctx.fillRect(x - bw - 1, maxH - hw, bw, hw);
-        const rw = Math.round(achR / 100 * maxH);
-        ctx.fillStyle = isHL ? '#8b5cf6' : '#c4b5fd';
-        ctx.fillRect(x + 1, maxH - rw, bw, rw);
-      } else {
+      if (hasWd && hasRd) {
+        // 단어 + 리딩 모두 표시
+        if (achW != null) {
+          ctx.fillStyle = isHL ? '#6366f1' : '#a5b4fc';
+          ctx.globalAlpha = isHL ? 1 : .8;
+          const hw = Math.round(achW / 100 * maxH);
+          ctx.fillRect(x - bw - 1, maxH - hw, bw, hw);
+        }
+        if (achR != null) {
+          const rw = Math.round(achR / 100 * maxH);
+          ctx.fillStyle = isHL ? '#8b5cf6' : '#c4b5fd';
+          ctx.globalAlpha = isHL ? 1 : .8;
+          ctx.fillRect(x + 1, maxH - rw, bw, rw);
+        }
+      } else if (hasWd && achW != null) {
+        // 단어만
         const hw = Math.round(achW / 100 * maxH);
         ctx.fillStyle = isHL ? '#6366f1' : (achW >= 80 ? '#10b981' : '#f97316');
         ctx.globalAlpha = isHL ? 1 : .75;
         ctx.fillRect(x - bw/2, maxH - hw, bw, hw);
+      } else if (hasRd && achR != null) {
+        // 리딩만
+        const rw = Math.round(achR / 100 * maxH);
+        ctx.fillStyle = isHL ? '#8b5cf6' : '#c4b5fd';
+        ctx.globalAlpha = isHL ? 1 : .8;
+        ctx.fillRect(x - bw/2, maxH - rw, bw, rw);
       }
       ctx.globalAlpha = 1;
       ctx.font = `${isHL?'bold ':''} 9px sans-serif`;
@@ -2187,7 +2241,12 @@ to{opacity:1;transform:none}}
       const hasData = !!(_st.bookId);
       const hasScore = sts.some(s => {
         const r = GradeDB.getLatest(_st.classId||'__noclass__', s.id, _st.bookId);
-        return r?.word?.pass != null && r?.word?.totalQ > 0;
+        const cfg = GradeDB.getReportConfig(_st.bookId);
+        const wdOn = cfg.word?.enabled !== false;
+        const rdOn = cfg.reading?.enabled && revs.length > 0;
+        const wordOk = wdOn && r?.word?.pass != null && r?.word?.totalQ > 0;
+        const rdOk   = rdOn && _calcRdN(r?.reading||{}, revs) != null;
+        return wordOk || rdOk;  // ★ 단어 또는 리딩 중 하나라도 있으면 표시
       });
       // 엑셀 뷰 + 데이터 있을 때만 표시, 리포트·카드 뷰에서는 항상 숨김
       chartWrap.style.display = (isExcel && hasData && hasScore) ? '' : 'none';
@@ -2411,11 +2470,11 @@ to{opacity:1;transform:none}}
     const students=_getStudents();
     const today=new Date().toLocaleDateString('ko-KR');
 
-    const achWs=students.map(st=>{const r=GradeDB.getLatest(_st.classId||'__noclass__',st.id,_st.bookId);return r?.word?.totalQ>0?Math.round(r.word.pass/r.word.totalQ*100):null;}).filter(v=>v!=null);
+    const achWs=!hasWd?[]:students.map(st=>{const r=GradeDB.getLatest(_st.classId||'__noclass__',st.id,_st.bookId);return r?.word?.totalQ>0?Math.round(r.word.pass/r.word.totalQ*100):null;}).filter(v=>v!=null);
     const avgW=achWs.length?Math.round(achWs.reduce((a,b)=>a+b,0)/achWs.length):null;
     const achRds=hasRd?students.map(st=>{const r=GradeDB.getLatest(_st.classId||'__noclass__',st.id,_st.bookId);return _calcRdN(r?.reading||{},actRevs);}).filter(v=>v!=null):[];
     const avgRd=achRds.length?Math.round(achRds.reduce((a,b)=>a+b,0)/achRds.length):null;
-    const achW=rec?.word?.totalQ>0?Math.round(rec.word.pass/rec.word.totalQ*100):null;
+    const achW=hasWd&&rec?.word?.totalQ>0?Math.round(rec.word.pass/rec.word.totalQ*100):null;
     const achRd=hasRd?_calcRdN(rec?.reading||{},actRevs):null;
     const isGW=achW!=null&&achW>=80;
 
@@ -2432,7 +2491,7 @@ to{opacity:1;transform:none}}
 
     const wordTbl=hasWd&&rec?`<div class="rpt-sec-title">단어 Test Result</div><table class="rpt-tbl"><thead><tr><th>총 테스트수</th><th style="color:#4f46e5">통과</th><th style="color:#ea580c">재시</th><th style="color:#8b5cf6">성취율</th></tr></thead><tbody><tr><td>${wTotalQ||'—'}</td><td class="rpt-pass">${wPass??'—'}</td><td class="rpt-fail">${wRetake??'—'}</td><td class="rpt-achv">${achW!=null?achW+'%':'—'}</td></tr><tr class="rpt-avg"><td colspan="3" style="text-align:center">평균</td><td class="rpt-achv">${avgW!=null?avgW+'%':'—'}</td></tr></tbody></table>`:'';
     const rdTbl=hasRd&&rec?`<div class="rpt-sec-title">리딩 Test Result</div><table class="rpt-tbl"><thead><tr>${actRevs.map(rv=>`<th>${_e(rv.name)}</th>`).join('')}<th style="color:#8b5cf6">성취율</th></tr></thead><tbody><tr>${actRevs.map((_,i)=>{const sc=rec.reading?.[`R${i}`]?.score;return`<td class="rpt-pass">${sc!=null?sc+'점':'—'}</td>`;}).join('')}<td class="rpt-achv">${achRd!=null?Math.round(achRd)+'%':'—'}</td></tr><tr class="rpt-avg"><td colspan="${actRevs.length}" style="text-align:center">평균</td><td class="rpt-achv">${avgRd!=null?avgRd+'%':'—'}</td></tr></tbody></table>`:'';
-    const graph=_st.reportGraph&&achW!=null?_canvasGraph(achW,hasRd&&achRd!=null?Math.round(achRd):null,avgW,hasRd&&avgRd!=null?Math.round(avgRd):null):'';
+    const graph=_st.reportGraph&&(achW!=null||(hasRd&&achRd!=null))?_canvasGraph(achW,hasRd&&achRd!=null?Math.round(achRd):null,avgW,hasRd&&avgRd!=null?Math.round(avgRd):null):'';
     const comment=`<div style="margin-top:14px"><div class="rpt-sec-title">Teacher's comment</div><div class="rpt-comment-box">${_e(rec?.comment||'')}</div></div>`;
     const L=_st.reportLayout;
 
@@ -2446,7 +2505,7 @@ to{opacity:1;transform:none}}
         ${content}
       </div>`;
 
-    const wordCardContent = rec ? (() => {
+    const wordCardContent = hasWd && rec ? (() => {
       const wd=rec.word||{};
       const achW2=wd.totalQ>0?Math.round(wd.pass/wd.totalQ*100):null;
       return `<div style="display:flex;flex-direction:column;gap:6px">
@@ -2500,13 +2559,18 @@ to{opacity:1;transform:none}}
     </div>`;
 
     // ★ L7: 미니 대시보드 레이아웃 (성취율 큰 숫자 + 카드 그리드)
-    const achWBig = rec?.word?.totalQ>0?Math.round((rec?.word?.pass??0)/rec.word.totalQ*100):null;
+    const achWBig = hasWd&&rec?.word?.totalQ>0?Math.round((rec?.word?.pass??0)/rec.word.totalQ*100):null;
     const achRdBig = achRd!=null?Math.round(achRd):null;
+    /* 종합 성취율: 단어 있으면 단어, 없으면 리딩 */
+    const mainBig = achWBig!=null ? achWBig : achRdBig;
+    const subLabel = hasWd && hasRd ? `단어 · ${achRdBig!=null?achRdBig+'%':'—'} 리딩`
+                   : hasWd ? '단어 성취율'
+                   : hasRd ? '리딩 성취율' : '—';
     const dashBanner = `<div style="background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:14px;padding:20px;margin-bottom:14px;color:#fff;display:flex;align-items:center;justify-content:space-between">
       <div>
         <div style="font-size:11px;opacity:.8;margin-bottom:4px">종합 성취율</div>
-        <div style="font-size:36px;font-weight:900">${achWBig!=null?achWBig+'%':'—'}</div>
-        <div style="font-size:11px;opacity:.8;margin-top:2px">단어 · ${achRdBig!=null?achRdBig+'%':'리딩없음'} 리딩</div>
+        <div style="font-size:36px;font-weight:900">${mainBig!=null?mainBig+'%':'—'}</div>
+        <div style="font-size:11px;opacity:.8;margin-top:2px">${subLabel}</div>
       </div>
       <div style="text-align:right">
         <div style="font-size:28px">🏆</div>
@@ -2516,7 +2580,7 @@ to{opacity:1;transform:none}}
     const dashL7 = `${dashBanner}<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">${wordCard}${rdCard}</div>${cmtCard}`;
 
     // ★ infoCard 정의
-    const achWInfo2=rec&&rec.word&&rec.word.totalQ>0?Math.round((rec.word.pass||0)/rec.word.totalQ*100):null;
+    const achWInfo2=hasWd&&rec&&rec.word&&rec.word.totalQ>0?Math.round((rec.word.pass||0)/rec.word.totalQ*100):null;
     const _clsName=(_getCls(_st.classId)||{}).name||'';
     const _bookName=(book&&book.name)||_st.bookId||'';
     const infoCard='<div style="background:linear-gradient(135deg,#e8f5e9,#f0f7ff);border-radius:14px;padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;border:1.5px solid #d1fae5">'
@@ -3970,7 +4034,296 @@ to{opacity:1;transform:none}}
     localStorage.setItem('gr_graph', v);
     _setLayout(_st.reportLayout);
   }
+  // ★ 저장+동기화 통합 (버튼 클릭 시)
+  async function saveAndSync() {
+    const btn  = document.getElementById('gr-save-btn');
+    const ico  = document.getElementById('gr-save-ico');
+    const lbl  = document.getElementById('gr-save-lbl');
+    if (btn) { btn.disabled = true; }
+    if (ico) ico.textContent = '⏳';
+    if (lbl) lbl.textContent = '저장 중...';
+
+    try {
+      // 1단계: dirty 있으면 서버에 저장
+      const sids = [..._st.dirty].filter(sid => _getSorted().some(s => s.id === sid));
+      let ok = 0, fail = 0, serverOk = 0;
+      for (const sid of sids) {
+        _ensureData(sid);
+        try {
+          const result = await _saveOneQuiet(sid);
+          ok++;
+          if (result?.savedToServer) serverOk++;
+        } catch(e) { console.error('[saveAndSync]', sid, e); fail++; }
+      }
+      _st.dirty.clear();
+      _refreshDirtyUI();
+
+      // 2단계: 서버에서 최신 데이터 pull
+      if (ico) ico.textContent = '🔄';
+      if (lbl) lbl.textContent = '서버 동기화 중...';
+      const updated = await _syncFromServer(true); // true = 알림 표시 여부
+
+      // 3단계: 결과 표시
+      if (fail > 0) {
+        _toast(`⚠️ ${ok}명 저장 / ${fail}명 실패`, 'error');
+      } else if (!FireDB.isConnected()) {
+        _toast(`💾 ${ok}명 로컬 저장 완료 · 인터넷 연결 시 자동 동기화`, 'info', 3000);
+      } else if (ok > 0 && updated) {
+        _toast(`✅ ${ok}명 저장 · 서버 업데이트 ${updated}건 반영`, 'success');
+      } else if (ok > 0) {
+        _toast(`✅ ${ok}명 서버 저장 완료`, 'success');
+      } else if (updated) {
+        _toast(`📡 서버에서 ${updated}건 업데이트`, 'success');
+      } else {
+        _toast('✅ 최신 데이터 확인 완료', 'success');
+      }
+      if (!_viewBusy) _renderContent();
+      _renderStudents();
+    } finally {
+      if (btn) btn.disabled = false;
+      if (ico) ico.textContent = '💾';
+      if (lbl) lbl.textContent = '저장·동기화';
+      _updateSyncBtn();
+    }
+  }
+
+  // ★ 서버에서 최신 성적 데이터 pull — 변경 건수 반환
+  let _syncInProgress = false;
+  async function _syncFromServer(notify = false) {
+    if (!FireDB.isConnected()) return 0;
+    if (_syncInProgress) return 0; // 중복 호출 방지
+    _syncInProgress = true;
+    try {
+      const FB_GRADES = 'hakwon10/grades';
+      const snap = await FireDB.getFromServer(FB_GRADES);
+      if (!snap) return 0;
+
+      // ★ 변경 전 스냅샷 저장 (현재 클래스/교재 범위만 비교)
+      const classId = _st.classId || '__noclass__';
+      const bookId  = _st.bookId;
+      const beforeKey = bookId
+        ? JSON.stringify((GradeDB._getRawGrades()?.[classId])||{})
+        : JSON.stringify(GradeDB._getRawGrades()||{});
+
+      // ★ _fire('grades') 일시 억제 (applyServerSnap 내 중복 렌더 방지)
+      GradeDB.applyServerSnap(snap);
+
+      const afterKey = bookId
+        ? JSON.stringify((GradeDB._getRawGrades()?.[classId])||{})
+        : JSON.stringify(GradeDB._getRawGrades()||{});
+
+      const changed = beforeKey !== afterKey;
+      if (changed) {
+        console.log('[GradeApp] 📡 서버 데이터 변경 감지');
+        if (notify) _toast('📡 서버 최신 데이터 반영됨', 'success', 2000);
+        // dirty 없을 때만 화면 갱신 (입력 중 데이터 덮어쓰기 방지)
+        if (!_st.dirty.size && !Object.keys(_autoSaveTimers).length) {
+          _renderContent();
+          _renderStudents();
+        }
+        return 1;
+      }
+      return 0;
+    } catch(e) {
+      console.warn('[GradeApp] _syncFromServer 오류:', e);
+      return 0;
+    } finally {
+      _syncInProgress = false;
+    }
+  }
+
+  // ★ 개별 저장 (토스트 없이 조용히) — 실시간 자동저장용
+  async function _saveOneQuiet(sid) {
+    if (!_st.bookId || !_st.classId) return null;  // ★ 반/교재 미선택 시 스킵
+    _ensureData(sid);
+
+    // ★ 데이터가 완전히 비어있으면 저장 스킵 (뷰 전환 타이밍 보호)
+    const d = _st.data[sid];
+    const hasAnyData = d.word || d.reading || d.comment || d.savedAt;
+    if (!hasAnyData) {
+      // Firebase 기존 저장값 유지를 위해 최신 저장본 복원 시도
+      const existRec = GradeDB.getLatest(_st.classId||'__noclass__', sid, _st.bookId);
+      if (existRec) {
+        _st.data[sid] = { ...existRec };
+      } else {
+        console.warn('[saveOneQuiet] 저장할 데이터 없음, 스킵:', sid);
+        return null;
+      }
+    }
+
+    // ★ DOM 최신값 수집 — viewMode 무관하게 항상 시도 (탭 전환 타이밍 데이터 손실 방지)
+    const cfg = GradeDB.getReportConfig(_st.bookId);
+    const tq  = cfg.word?.totalQ || 0;
+
+    const retEl = document.getElementById(`gr-retake-${sid}`);
+    if (retEl && retEl.value !== '') {
+      const rt = Number(retEl.value);
+      _st.data[sid].word = { totalQ:tq, retake:rt, pass:Math.max(0,tq-rt) };
+    }
+    const cmtEl = document.getElementById(`gr-cmta-${sid}`);
+    if (cmtEl) _st.data[sid].comment = cmtEl.value;
+
+    const actRevs = GradeDB.getActiveReviews(_st.bookId);
+    const totalRQ = cfg.reading?.totalQ || 0;
+    actRevs.forEach((_, i) => {
+      const key = `R${i}`;
+      const inp = document.querySelector(`[data-sid="${sid}"][data-rkey="${key}"]`);
+      if (inp && inp.value !== '') {
+        const corr  = Math.max(0, Math.min(totalRQ, Number(inp.value)));
+        const score = corr !== '' ? Math.round(corr / totalRQ * 100 * 10) / 10 : '';
+        if (!_st.data[sid].reading) _st.data[sid].reading = {};
+        _st.data[sid].reading[key] = { correct:corr, score };
+      }
+    });
+
+    // 카드 뷰: 카드 DOM에서도 수집
+    const cdRetEl = document.getElementById(`gr-cd-retake-${sid}`);
+    if (cdRetEl && cdRetEl.value !== '') {
+      const rt = Number(cdRetEl.value);
+      _st.data[sid].word = { totalQ:tq, retake:rt, pass:Math.max(0,tq-rt) };
+    }
+    const cdCmtEl = document.getElementById(`gr-cd-cmt-${sid}`);
+    if (cdCmtEl) _st.data[sid].comment = cdCmtEl.value;
+
+    const now     = new Date();
+    const savedAt = `${now.toISOString().slice(0,10)} ${now.toTimeString().slice(0,5)}`;
+    _st.data[sid].savedAt = savedAt;
+
+    const result = await GradeDB.saveRecord({
+      classId:   _st.classId||'__noclass__',
+      studentId: sid,
+      bookId:    _st.bookId,
+      word:      _st.data[sid].word    || null,
+      reading:   _st.data[sid].reading || null,
+      comment:   _st.data[sid].comment || '',
+      savedAt,
+    });
+
+    _st.dirty.delete(sid);
+    _refreshDirtyUI();
+
+    /* savedAt 표시 갱신 */
+    const fixCell = document.querySelector(`#gr-row-${sid} .gs-fix`);
+    if (fixCell) {
+      const savedEl = fixCell.querySelector('[data-savedat]') || (() => {
+        const d = document.createElement('div');
+        d.dataset.savedat = '1'; d.style.cssText = 'font-size:8px;color:var(--tx3)';
+        fixCell.appendChild(d); return d;
+      })();
+      savedEl.textContent = savedAt.slice(5,16);
+    }
+    return result;
+  }
+
+  /* ── 실시간 자동저장 타이머 (학생별 1.5초 디바운스) ── */
+  const _autoSaveTimers = {};
+
+  // ★ 탭 전환 전 / beforeunload 전 — 모든 pending 타이머를 즉시 flush
+  async function _flushAutoSaveTimers() {
+    const pendingSids = Object.keys(_autoSaveTimers);
+    if (!pendingSids.length) return;
+    console.log(`[GradeApp] ⚡ ${pendingSids.length}개 자동저장 타이머 즉시 실행`);
+    const jobs = pendingSids.map(async sid => {
+      clearTimeout(_autoSaveTimers[sid]);
+      delete _autoSaveTimers[sid];
+      if (_st.dirty.has(sid) && _st.bookId && _st.classId) {
+        try {
+          const result = await _saveOneQuiet(sid);
+          _showAutoSaveHint(sid, result?.savedToServer ? 'ok' : 'queued');
+        } catch(e) {
+          _showAutoSaveHint(sid, 'fail');
+          console.error('[flushAutoSave]', sid, e);
+        }
+      }
+    });
+    await Promise.all(jobs);
+    _updateSyncBtn();
+  }
+  function _scheduleAutoSave(sid) {
+    if (!_st.bookId || !_st.classId) return; // 교재/반 미선택 시 스킵
+    clearTimeout(_autoSaveTimers[sid]);
+    _showAutoSaveHint(sid, 'pending');
+    _autoSaveTimers[sid] = setTimeout(async () => {
+      try {
+        const result = await _saveOneQuiet(sid);
+        _showAutoSaveHint(sid, result?.savedToServer ? 'ok' : 'queued');
+        _updateSyncBtn();
+      } catch(e) {
+        _showAutoSaveHint(sid, 'fail');
+        console.error('[autoSave]', sid, e);
+      }
+    }, 1500);
+  }
+
+  // 행 고정셀에 저장 상태 힌트 표시
+  function _showAutoSaveHint(sid, state) {
+    const fixCell = document.querySelector(`#gr-row-${sid} .gs-fix`);
+    if (!fixCell) return;
+    let hint = fixCell.querySelector('.gr-save-hint');
+    if (!hint) {
+      hint = document.createElement('span');
+      hint.className = 'gr-save-hint';
+      hint.style.cssText = 'font-size:8px;margin-left:3px;transition:opacity .3s';
+      fixCell.querySelector('div')?.appendChild(hint);
+    }
+    if (state === 'pending') { hint.textContent = '⏳'; hint.style.opacity = '1'; }
+    else if (state === 'ok')     { hint.textContent = '✅'; hint.style.opacity = '1'; setTimeout(()=>{ hint.style.opacity='0'; }, 2000); }
+    else if (state === 'queued') { hint.textContent = '📶'; hint.style.opacity = '1'; }
+    else if (state === 'fail')   { hint.textContent = '❌'; hint.style.opacity = '1'; }
+  }
+
   async function _copyReport(){const el=document.getElementById('gr-rpt-preview');try{await navigator.clipboard.writeText(el?.innerText||'');_toast('📋 복사됐습니다','success');}catch{_toast('⚠️ 복사 실패');}}
+
+  // ★ 서버 동기화 버튼 핸들러 (툴바 🔄 버튼)
+  async function _syncNow() {
+    const btn = document.getElementById('gr-sync-btn');
+    if (btn) { btn.textContent = '⏳ 동기화 중...'; btn.disabled = true; }
+    try {
+      const pending = FireDB.getPendingCount();
+      if (pending > 0) {
+        _toast(`📡 ${pending}건 서버 전송 중...`, 'info', 2000);
+      }
+      const ok = await FireDB.syncNow();
+      if (ok) {
+        _toast('✅ 서버 동기화 완료', 'success');
+        // 서버 최신 데이터로 화면 갱신
+        await GradeDB.init();
+        _renderContent();
+        _renderStudents();
+      } else {
+        const still = FireDB.getPendingCount();
+        _toast(still > 0
+          ? `⚠ ${still}건 미전송 — 인터넷 연결을 확인해 주세요`
+          : '✅ 동기화 완료', still > 0 ? 'error' : 'success');
+      }
+    } finally {
+      if (btn) {
+        btn.textContent = '🔄 동기화';
+        btn.disabled = false;
+        _updateSyncBtn();
+      }
+    }
+  }
+
+  // 동기화 버튼 표시/숨김 갱신
+  function _updateSyncBtn() {
+    const btn = document.getElementById('gr-sync-btn');
+    if (!btn) return;
+    const hasPending = FireDB.getPendingCount() > 0;
+    const isOffline  = !FireDB.isConnected();
+    btn.style.display = (hasPending || isOffline) ? '' : 'none';
+    if (hasPending) {
+      btn.style.background = 'rgba(239,68,68,.1)';
+      btn.style.borderColor = 'rgba(239,68,68,.4)';
+      btn.style.color = '#dc2626';
+      btn.textContent = `🔄 동기화 (${FireDB.getPendingCount()})`;
+    } else {
+      btn.style.background = 'rgba(5,150,105,.1)';
+      btn.style.borderColor = 'rgba(5,150,105,.3)';
+      btn.style.color = '#059669';
+      btn.textContent = '🔄 동기화';
+    }
+  }
   async function _shareReport(){
     const el = document.getElementById('gr-rpt-preview'); if (!el) return;
     const s = _getStudents().find(st=>st.id===_st.studentId) || _getStudents()[0];
@@ -4315,7 +4668,7 @@ to{opacity:1;transform:none}}
     const savedAt = `${now.toISOString().slice(0,10)} ${now.toTimeString().slice(0,5)}`;
     _st.data[sid].savedAt = savedAt;
 
-    await GradeDB.saveRecord({
+    const result = await GradeDB.saveRecord({
       classId:   _st.classId||'__noclass__',
       studentId: sid,
       bookId:    _st.bookId,
@@ -4338,7 +4691,15 @@ to{opacity:1;transform:none}}
       })();
       savedEl.textContent = savedAt.slice(5,16);
     }
-    _toast('✅ 저장 완료', 'success');
+
+    // ★ 서버 저장 성공/오프라인 큐 여부 피드백
+    if (result?.savedToServer) {
+      _toast('✅ 서버 저장 완료', 'success');
+    } else if (FireDB.getPendingCount() > 0) {
+      _toast('💾 로컬 저장됨 · 서버 동기화 대기중', 'info');
+    } else {
+      _toast('✅ 저장 완료', 'success');
+    }
     _renderStudents();
   }
 
@@ -4359,7 +4720,7 @@ to{opacity:1;transform:none}}
       for (const book of books.filter(b => !b.archived)) {
         const config = GradeDB.getReportConfig(book.id);
         const revs   = GradeDB.getActiveReviews(book.id);
-        const hasWord = config?.word?.totalQ > 0;
+        const hasWord = config?.word?.enabled !== false && (config?.word?.totalQ || 0) > 0; // ★ enabled 체크 추가
         const hasRd   = config?.reading?.enabled && revs.length > 0;
         if (!hasWord && !hasRd) continue;
 
@@ -4525,16 +4886,19 @@ to{opacity:1;transform:none}}
     /* dirty 있는 학생만 저장 */
     const sids = [..._st.dirty].filter(sid => _getSorted().some(s => s.id === sid));
     if (!sids.length) { _toast('저장할 내용이 없습니다', 'info'); return; }
-    let ok = 0, fail = 0;
+    let ok = 0, fail = 0, serverOk = 0;
     for (const sid of sids) {
       _ensureData(sid);
-      try { await saveOne(sid); ok++; }
+      try { await saveOne(sid); ok++; if (FireDB.isConnected()) serverOk++; }
       catch(e) { console.error('[saveAll]', sid, e); fail++; }
     }
     _st.dirty.clear();
     _refreshDirtyUI();
     if (fail > 0) _toast(`⚠ ${ok}명 저장 / ${fail}명 실패`, 'error');
-    else          _toast(`✅ ${ok}명 저장 완료`, 'success');
+    else if (!FireDB.isConnected())
+      _toast(`💾 ${ok}명 로컬 저장 · 서버 동기화 대기중`, 'info');
+    else
+      _toast(`✅ ${ok}명 서버 저장 완료`, 'success');
     /* _setView 흐름이 아닌 직접 저장 버튼 클릭 시에만 렌더 갱신
        (_setView는 자체적으로 _renderContent 호출하므로 중복 방지) */
     if (!_viewBusy) _renderContent();
@@ -4551,33 +4915,38 @@ to{opacity:1;transform:none}}
 
   /* ══ 선택 핸들러 ══ */
   async function _onCls(clsId) {
+    // ★ 반 전환 전: 자동저장 타이머 즉시 flush + dirty 저장
+    if (Object.keys(_autoSaveTimers).length > 0) await _flushAutoSaveTimers();
     if (_st.dirty.size > 0) {
-      const save = confirm('변경되거나 입력된 값이 있습니다.\n저장하시겠습니까?\n\n[확인] 저장  [취소] 저장 안 함');
-      if (save) { await saveAll(); }
-      _st.dirty.clear(); _st.data = {};
+      _toast('💾 반 전환 전 자동 저장 중...', 'info', 1500);
+      const sids = [..._st.dirty].filter(sid => _getSorted().some(s => s.id === sid));
+      await Promise.all(sids.map(sid => _saveOneQuiet(sid).catch(e => console.error('[onCls]', sid, e))));
+      _st.dirty.clear();
     }
     _st.classId=clsId||null; _st.bookId=null; _st.studentId=null;
     _st.data={}; _st.dirty.clear(); _st.sortCol=null;
-    _stuSearch = ''; // ★ 반 선택 시 검색어 초기화
+    _stuSearch = '';
     _fillBooks();
     _renderStudents(); _renderContent(); _updateRptBtn(); _updateSub();
     _refreshToolbar();
     const bsel=document.getElementById('gr-bsel'); if(bsel)bsel.disabled=false;
   }
   async function _onBk(bkId) {
+    // ★ 교재 전환 전: 자동저장 타이머 즉시 flush + dirty 저장
+    if (Object.keys(_autoSaveTimers).length > 0) await _flushAutoSaveTimers();
     if (_st.dirty.size > 0) {
-      const save = confirm('변경되거나 입력된 값이 있습니다.\n저장하시겠습니까?\n\n[확인] 저장  [취소] 저장 안 함');
-      if (save) { await saveAll(); }
-      _st.dirty.clear(); _st.data = {};
+      _toast('💾 교재 전환 전 자동 저장 중...', 'info', 1500);
+      const sids = [..._st.dirty].filter(sid => _getSorted().some(s => s.id === sid));
+      await Promise.all(sids.map(sid => _saveOneQuiet(sid).catch(e => console.error('[onBk]', sid, e))));
+      _st.dirty.clear();
     }
     _st.bookId=bkId||null; _st.studentId=null; _st.data={}; _st.dirty.clear(); _st.sortCol=null;
     _renderStudents(); _renderContent(); _updateRptBtn(); _updateSub(); _refreshToolbar();
     if (_st.bookId) {
-      GradeDB.init(_st.classId||'__noclass__', _st.bookId);
-      // ★ 교재 선택 완료 후 즉각 그래프 표시
+      // ★ 교재 선택 시 서버에서 최신 데이터 pull
+      _syncFromServer(true);
       requestAnimationFrame(() => _updateChart());
     }
-    // ★ 평가 설정 버튼 표시/숨김
     const _evalBtn = document.getElementById('gr-eval-btn');
     if (_evalBtn) _evalBtn.style.display = _st.bookId ? 'inline-block' : 'none';
     const _bulkBtn = document.getElementById('gr-bulk-cmt-btn');
@@ -4610,31 +4979,41 @@ to{opacity:1;transform:none}}
   let _viewBusy = false; // 연속 클릭 race condition 방지
   async function _setView(mode) {
     if (_viewBusy) return;
-    if (_st.dirty.size > 0 && mode !== _st.viewMode) {
-      _viewBusy = true;
-      const save = confirm('변경되거나 입력된 값이 있습니다.\n저장하시겠습니까?\n\n[확인] 저장 후 전환   [취소] 저장 없이 전환');
-      if (save) { await saveAll(); }
-      _st.dirty.clear(); // 저장 성공/실패·취소 무관 항상 클리어 → 무한 confirm 방지
+    if (mode === _st.viewMode) return;
+    _viewBusy = true;
+    try {
+      // ★ 1단계: 자동저장 타이머가 대기 중이면 즉시 flush (데이터 유실 방지)
+      if (Object.keys(_autoSaveTimers).length > 0) {
+        await _flushAutoSaveTimers();
+      }
+      // ★ 2단계: 그래도 dirty가 남아있으면 조용히 전체 저장
+      if (_st.dirty.size > 0) {
+        const modeName = mode==='card'?'카드':mode==='report'?'리포트':'엑셀';
+        _toast(`💾 저장 후 ${modeName} 탭으로 전환 중...`, 'info', 1500);
+        const sids = [..._st.dirty].filter(sid => _getSorted().some(s => s.id === sid));
+        await Promise.all(sids.map(sid => _saveOneQuiet(sid).catch(e => console.error('[setView save]', sid, e))));
+        _st.dirty.clear();
+      }
       _st.data = {};
+    } finally {
       _viewBusy = false;
     }
     _st.viewMode = mode;
-    // ★ 리포트 탭 고정 버튼 표시/숨김
     const fixedBtns = document.getElementById('gr-rpt-fixed-btns');
     if (fixedBtns) fixedBtns.style.display = mode==='report' ? 'flex' : 'none';
-    // ★ 리포트 뷰에서는 하단 차트 영역 + 모달 바텀시트 완전 숨김
     const chartWrap = document.getElementById('gr-chart-wrap');
     if (chartWrap) chartWrap.style.display = 'none';
-    // ★ page-grade에 report-active 클래스 토글 (리포트 뷰 하단 여백 제거용)
     document.getElementById('page-grade')?.classList.toggle('report-active', mode==='report');
-    // ★ 뷰 전환 시 항상 전체 성적표 바텀시트 모달 닫기
-    //    openReport()가 이전에 호출되어 gr-rpt-ov에서 hidden이 제거된 경우 복원
     document.getElementById('gr-rpt-ov')?.classList.add('hidden');
-    // ★ 리포트 뷰에서는 📋 전체성적표 버튼 불필요 → 숨김
     const rptBtn = document.getElementById('gr-rpt-btn');
     if (rptBtn) rptBtn.style.display = mode==='report' ? 'none' : '';
     document.querySelectorAll('.gr-vbtn').forEach(b=>b.classList.toggle('on',b.dataset.mode===mode));
     _renderStudents(); _renderContent(); _refreshToolbar();
+
+    // ★ 3단계: 탭 전환 후 서버 최신 데이터 pull (백그라운드)
+    _syncFromServer(false).then(updated => {
+      if (updated) _toast('📡 서버 최신 데이터 반영됨', 'success', 2000);
+    });
   }
   function _updateRptBtn(){const btn=document.getElementById('gr-rpt-btn');if(btn)btn.style.display=(_st.classId&&_st.bookId&&_st.viewMode!=='report')?'':'none';}
   function _updateSub(){const sub=document.getElementById('gr-sub');if(!sub)return;const cls=_st.classId?_getCls(_st.classId):null;const bk=_st.bookId&&typeof BookLibDB!=='undefined'?BookLibDB.getBookById(_st.bookId):null;sub.textContent=cls&&bk?`${cls?.name||'학생배정'}반 · ${bk.name}`:cls?`${cls?.name||'학생배정'}반`:'반 · 교재를 선택하세요';}
@@ -4665,6 +5044,8 @@ to{opacity:1;transform:none}}
     /* 저장 버튼 */
     const saveBtn = document.getElementById('gr-save-btn');
     if(saveBtn) saveBtn.style.display = hasData ? '' : 'none';
+    /* 동기화 버튼 */
+    _updateSyncBtn();
     /* 평가 설정 버튼 */
     const evalBtn = document.getElementById('gr-eval-btn');
     if(evalBtn) evalBtn.style.display = (_st.bookId) ? 'inline-block' : 'none';
@@ -4679,9 +5060,15 @@ to{opacity:1;transform:none}}
     const chartWrap = document.getElementById('gr-chart-wrap');
     if(chartWrap){
       const sts = _getSorted();
+      const cfg = GradeDB.getReportConfig(_st.bookId);
+      const revs = GradeDB.getActiveReviews(_st.bookId);
       const hasScore = sts.some(s=>{
-        const r = GradeDB.getLatest(_st.classId||'__noclass__', s.id, _st.bookId);
-        return r?.word?.pass != null && r?.word?.totalQ > 0;
+        const r = GradeDB.getLatest(_st.classId||'__nocase__', s.id, _st.bookId);
+        const wdOn = cfg.word?.enabled !== false;
+        const rdOn = cfg.reading?.enabled && revs.length > 0;
+        const wordOk = wdOn && r?.word?.pass != null && r?.word?.totalQ > 0;
+        const rdOk   = rdOn && _calcRdN(r?.reading||{}, revs) != null;
+        return wordOk || rdOk;
       });
       chartWrap.style.display = (isExcel && hasData && hasScore) ? '' : 'none';
       if(isExcel && hasData && hasScore) requestAnimationFrame(()=>_updateChart());
@@ -5514,13 +5901,13 @@ to{opacity:1;transform:none}}
   function _onCmtInput(sid, val) {
     _ensureData(sid);
     const prev = _st.data[sid].comment || '';
-    /* 값이 실제로 바뀐 경우에만 dirty 추가 (자동완성·스펠체크 등 오트리거 방지) */
     if (val === prev) return;
     _st.data[sid].comment = val;
     _st.dirty.add(sid);
     _refreshDirtyUI();
     const icon = document.getElementById('gr-cmtbtn-' + sid);
     if (icon) icon.className = 'gs-cm-icon' + (val.trim() ? ' has-cmt' : '');
+    _scheduleAutoSave(sid); // ★ 실시간 자동저장 (코멘트)
   }
 
   /* ✏️ 버튼 → 대형 AI 팝업 */
@@ -6338,7 +6725,7 @@ to{opacity:1;transform:none}}
     _cardWordInput, _cardRdInput, _cardComment,
     _slideTo, _ts, _te,
     _onCtxTable, _closeCtxMenu,
-    saveOne, saveAll, resetOne,
+    saveOne, saveAll, resetOne, saveAndSync, _syncNow,
     _setLayout, _setHdrFontSize, _exportAllGrades, _importAllGrades, _toggleGraph, _setChartStyle, _setPageSize, _setRptFontSize, _setGraphAlign, _setDivider, _setLogoSize, _setTableRound, _applyTableWidth, _bindColResize, _bindGroupResizers, _repositionGroupResizers, _resetColWidths, _onCmtInput, _setFontFamily, _openFloatCfg, _setReportBold, _deliverReport, _setRptBg, _setRptScale, _openPreviewMode, _closePreviewMode, _togglePmFloat, _openPmFloat, _togglePmDrawer, _pmCaptureShare,
     _setTitleAlign, _setTblColor, _applyTheme, _applyRptStyles,
     _setGraphStyleMode, _fixStickyHeaderTops,
