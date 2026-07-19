@@ -1066,6 +1066,13 @@ to{opacity:1;transform:none}}
     _fillBooks(); // ★ 반 미선택이어도 학생배정 교재 표시
     _renderStudents();
     _renderContent();
+
+    // ★ 페이지 진입 시 안전망: GradeDB.init()이 아직 완료 전이었거나
+    //   앱 부팅 타이밍과 겹쳐 데이터가 비어있을 가능성에 대비해
+    //   백그라운드로 서버 최신 데이터를 한 번 더 확인
+    if (typeof GradeDB !== 'undefined') {
+      _syncFromServer(true);
+    }
   }
 
   function _shell() {
@@ -4090,7 +4097,12 @@ to{opacity:1;transform:none}}
   // ★ 서버에서 최신 성적 데이터 pull — 변경 건수 반환
   let _syncInProgress = false;
   async function _syncFromServer(notify = false) {
-    if (!FireDB.isConnected()) return 0;
+    // ★ isConnected()(websocket 상태 플래그)가 아닌 ready()(SDK 초기화 여부)만 체크.
+    //   isConnected는 .info/connected 이벤트가 아직 안 왔을 때 false일 수 있는데,
+    //   그 상태에서도 FireDB.get()은 정상적으로 서버에서 데이터를 받아올 수 있음.
+    //   isConnected에 의존하면 앱 초기 로딩 타이밍에 동기화가 조용히 스킵되는
+    //   레이스 컨디션이 발생함 (반/교재를 빠르게 선택했을 때 빈 화면 고정 버그의 원인).
+    if (typeof FireDB === 'undefined' || !FireDB.ready()) return 0;
     if (_syncInProgress) return 0; // 중복 호출 방지
     _syncInProgress = true;
     try {
@@ -4943,8 +4955,8 @@ to{opacity:1;transform:none}}
     _st.bookId=bkId||null; _st.studentId=null; _st.data={}; _st.dirty.clear(); _st.sortCol=null;
     _renderStudents(); _renderContent(); _updateRptBtn(); _updateSub(); _refreshToolbar();
     if (_st.bookId) {
-      // ★ 교재 선택 시 서버에서 최신 데이터 pull
-      _syncFromServer(true);
+      // ★ 교재 선택 시 서버 최신 데이터 pull을 기다린 후 최종 렌더 (레이스 컨디션 방지)
+      await _syncFromServer(true);
       requestAnimationFrame(() => _updateChart());
     }
     const _evalBtn = document.getElementById('gr-eval-btn');

@@ -74,11 +74,16 @@ const GradeDB = (() => {
         // ★ Firebase 객체 구조를 배열 구조로 변환 후 저장
         _grades = _snapToGrades(snap);
         _ls(LS_GRADES, _grades);
+        // ★★★ 핵심 수정: 최초 로드 완료 시에도 반드시 이벤트 발생
+        //     이전엔 초기 get()이 조용히 값만 채우고 이벤트를 안 쏴서,
+        //     init() 완료 전에 이미 화면을 그린 페이지(반/교재 빠르게 선택)는
+        //     실제 데이터가 도착해도 다시 그려지지 않고 빈 화면으로 고정되는
+        //     레이스 컨디션 버그가 있었음.
+        _fire('grades');
       }
     } catch(e) { console.warn('[GradeDB] init', e); }
 
-    /* 실시간 리스너 — 기존엔 최초 1회 get()만 있어서 다른 기기가 입력한
-     * 성적이 새로고침 전까지 화면에 반영되지 않는 문제가 있었음 */
+    /* 실시간 리스너 — 다른 기기가 입력한 성적을 실시간 반영 */
     FireDB.listen(FB_GRADES, v => {
       const nd = v ? _snapToGrades(v) : {};
       if (JSON.stringify(nd) !== JSON.stringify(_grades)) {
