@@ -93,6 +93,10 @@
         </div>
       </div>
       <div class="phr">
+        <button id="op-save-btn" class="ibtn" onclick="App.forceSaveNow()" title="지금 저장" style="position:relative">
+          💾
+          <span id="save-badge" class="hidden" style="position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:9px;min-width:14px;height:14px;border-radius:7px;display:flex;align-items:center;justify-content:center;padding:0 3px;font-weight:700">0</span>
+        </button>
         <div id="sync-dot" style="width:8px;height:8px;border-radius:50%;background:var(--tx3);transition:background .4s;flex-shrink:0"></div>
         <button id="op-manage-btn" class="ibtn" onclick="App.go('manage')" title="관리" style="display:none">⚙️</button><button id="op-share-btn" class="ibtn hidden" onclick="App.shareCurrentClass()" title="진도 공유">🔗</button>
         <button id="op-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>

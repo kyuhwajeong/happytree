@@ -71,6 +71,8 @@ const DB = (() => {
   const _classBaseRev = {};          // classId -> 마지막으로 확인한 서버 _rev
   const _pendingConflicts = {};      // classId -> resolve(choice) 콜백
   let _conflictCb = null;            // UI(app.js)가 등록하는 충돌 알림 핸들러
+  const _monthPending = new Set();   // ★ 신규: "classId__mk" — 새 달 교재목록이 서버에서 확정되기 전까지 잠금
+  function isMonthPending(classId, mk) { return _monthPending.has(`${classId}__${mk}`); }
   function onConflict(cb) { _conflictCb = cb; }
   function resolveConflict(classId, choice) {
     const fn = _pendingConflicts[classId];
@@ -473,6 +475,7 @@ const DB = (() => {
         main: base.main.map(b=>({...b,id:nid(),createdAt:now(),firstRegisteredAt:b.firstRegisteredAt||b.createdAt||now()})),
         sub:  base.sub.map(b=>({...b,id:nid(),createdAt:now(),firstRegisteredAt:b.firstRegisteredAt||b.createdAt||now()})),
       };
+      _monthPending.add(`${classId}__${mk}`); // ★ 신규: 서버가 확정해줄 때까지 이 달은 입력 잠금
     } else {
       newBooks = _emptyBooks();
     }
@@ -488,7 +491,11 @@ const DB = (() => {
   //  → monthBooks/{mk} 경로에 트랜잭션을 걸어 "이미 값이 있으면 포기(abort)"하게 하여
   //    실제로 서버에 반영되는 건 딱 하나뿐이고, 진 기기는 그 결과를 자동으로 되받아 화면을 맞춘다.
   async function _createMonthSafely(classId, mk, myBooks) {
-    if (!FireDB.ready() || typeof FireDB.transaction !== 'function') return; // 오프라인 → 로컬 유지, 재접속 시 리스너가 정리
+    const pendKey = `${classId}__${mk}`;
+    if (!FireDB.ready() || typeof FireDB.transaction !== 'function') {
+      _monthPending.delete(pendKey);
+      return; // 오프라인 → 로컬 유지, 재접속 시 리스너가 정리
+    }
     const path = `${FireDB.P.classes}/${classId}/monthBooks/${mk}`;
     try {
       const result = await FireDB.transaction(path, current => {
@@ -501,10 +508,14 @@ const DB = (() => {
         if (cls) {
           cls.monthBooks[mk] = result.snapshot;
           ls(LS.classes, C.classes);
-          _fire('classes');
         }
       }
-    } catch(e) { console.warn('[DB] _createMonthSafely 실패:', e.message); }
+    } catch(e) {
+      console.warn('[DB] _createMonthSafely 실패:', e.message);
+    } finally {
+      _monthPending.delete(pendKey); // ★ 신규: 성공/실패/오프라인 어떤 경우든 반드시 잠금 해제
+      _fire('classes');              // ★ 신규: 항상 화면 갱신 → 잠금 UI가 자동으로 풀림
+    }
   }
 
   // ★★★ 반 데이터 저장 — rev 충돌 감지 포함 ★★★
@@ -746,6 +757,8 @@ const DB = (() => {
     }, 800);
   }
 
+  function getPendingCount() { return _pendingKeys.size; }
+
   function autoSave(classId, weekKey, dayName, field, value, bookId=null) {
     let key;
     if (field==='memo') {
@@ -844,5 +857,6 @@ const DB = (() => {
     getWeekProgress, autoSave,
     getTheme, saveTheme, exportAll, importAll,
     onConflict, resolveConflict,
+    getPendingCount, isMonthPending,
   };
 })();

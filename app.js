@@ -73,6 +73,30 @@ const App = (() => {
     window.addEventListener('pagehide', _flushAllDirtyFields);
   }
 
+  // ★★★ 신규: 수동 저장 버튼 + 미저장 뱃지 + 닫기 전 경고 ★★★
+  function _pendingTotal(){ return _dirtyFields.size + (typeof DB!=='undefined' && DB.getPendingCount ? DB.getPendingCount() : 0); }
+  function _updateSaveBadge(){
+    const b=_q('save-badge'); if(!b) return;
+    const n=_pendingTotal();
+    if(n>0){ b.textContent=n; b.classList.remove('hidden'); } else b.classList.add('hidden');
+  }
+  if(typeof window!=='undefined'){
+    setInterval(_updateSaveBadge, 1000);
+    window.addEventListener('beforeunload', e=>{
+      if(_pendingTotal()>0){ e.preventDefault(); e.returnValue=''; }
+    });
+  }
+  async function forceSaveNow(){
+    const before=_pendingTotal();
+    if(before===0){ _toast('저장할 변경사항이 없습니다 ✅','success',2000); return; }
+    _flushAllDirtyFields();
+    await new Promise(r=>setTimeout(r,400));
+    const after=_pendingTotal();
+    _updateSaveBadge();
+    if(after===0) _toast('✅ 모든 진도가 서버에 저장되었습니다','success',2500);
+    else _toast(`⏳ ${after}건 저장 중입니다. 네트워크 상태를 확인해주세요`,'warn',3500);
+  }
+
   const S={
     page:'operate', mgTab:'classes',
     selCls:null, monday:_mon(new Date()),
@@ -509,6 +533,7 @@ const App = (() => {
       const date=_addDays(S.monday,i);
       const mk=DB.monthKey(date);
       const books=DB.getMonthBooks(cls.id,mk);
+      const mLocked=!!(DB.isMonthPending && DB.isMonthPending(cls.id,mk)); // ★ 신규: 새 달 확정 전 잠금
       const dc=DC[dayName];
       const isToday=date.toDateString()===today.toDateString();
       const mainBooks=books.main||[], subBooks=books.sub||[];
@@ -521,8 +546,9 @@ const App = (() => {
       if(!mainBooks.length&&!subBooks.length){card.innerHTML+='<div class="no-bk">이 월에 배정된 교재가 없습니다</div>';}
       else{
         const rows=document.createElement('div'); rows.className='bk-rows';
-        if(mainBooks.length){const sl=document.createElement('div');sl.className='bk-section-lbl';sl.textContent='📘 주교재';rows.appendChild(sl);mainBooks.forEach(b=>rows.appendChild(_mkBookRow(b,'main',cls.id,weekKey,dayName,saved,canEdit)));}
-        if(subBooks.length){const sl=document.createElement('div');sl.className='bk-section-lbl';sl.style.marginTop='4px';sl.textContent='📗 부교재';rows.appendChild(sl);subBooks.forEach(b=>rows.appendChild(_mkBookRow(b,'sub',cls.id,weekKey,dayName,saved,canEdit)));}
+        if(mLocked){const lk=document.createElement('div');lk.className='tl-future-note';lk.innerHTML='⏳ 이번 달 교재 정보를 서버와 동기화하는 중입니다 (잠시 후 자동으로 풀립니다)';rows.appendChild(lk);}
+        if(mainBooks.length){const sl=document.createElement('div');sl.className='bk-section-lbl';sl.textContent='📘 주교재';rows.appendChild(sl);mainBooks.forEach(b=>rows.appendChild(_mkBookRow(b,'main',cls.id,weekKey,dayName,saved,canEdit&&!mLocked)));}
+        if(subBooks.length){const sl=document.createElement('div');sl.className='bk-section-lbl';sl.style.marginTop='4px';sl.textContent='📗 부교재';rows.appendChild(sl);subBooks.forEach(b=>rows.appendChild(_mkBookRow(b,'sub',cls.id,weekKey,dayName,saved,canEdit&&!mLocked)));}
         card.appendChild(rows);
         const ms=document.createElement('div'); ms.className='memo-section';
         const memoKey=`${dayName}__MEMO`; const memoVal=saved[memoKey]||'';
@@ -681,6 +707,7 @@ const App = (() => {
       const books = crossesFutureMonth
         ? DB.getMonthBooks(cls.id, todayMk)  // 이미 존재 보장된 이번 달 데이터 재사용 (신규 커밋 없음)
         : DB.getMonthBooks(cls.id, dateMk);  // 과거·현재 달은 기존과 완전히 동일하게 동작
+      const mLocked = !!(DB.isMonthPending && DB.isMonthPending(cls.id, crossesFutureMonth?todayMk:dateMk)); // ★ 신규: 새 달 확정 전 잠금
 
       const mainBooks=books.main||[], subBooks=books.sub||[];
 
@@ -732,15 +759,20 @@ const App = (() => {
           }
         } else {
           // ★ 과거·이번 달: 기존 _mkBookRow를 100% 그대로 재사용 (동일 함수, 동일 저장 경로)
+          if(mLocked){
+            const lk=document.createElement('div'); lk.className='tl-future-note';
+            lk.innerHTML='⏳ 이번 달 교재 정보를 서버와 동기화하는 중입니다 (잠시 후 자동으로 풀립니다)';
+            rows.appendChild(lk);
+          }
           if(mainBooks.length){
             const sl=document.createElement('div'); sl.className='bk-section-lbl'; sl.textContent='📘 주교재';
             rows.appendChild(sl);
-            mainBooks.forEach(b=>rows.appendChild(_mkBookRow(b,'main',cls.id,weekKey,dayName,saved,canEdit)));
+            mainBooks.forEach(b=>rows.appendChild(_mkBookRow(b,'main',cls.id,weekKey,dayName,saved,canEdit&&!mLocked)));
           }
           if(subBooks.length){
             const sl=document.createElement('div'); sl.className='bk-section-lbl'; sl.style.marginTop='4px'; sl.textContent='📗 부교재';
             rows.appendChild(sl);
-            subBooks.forEach(b=>rows.appendChild(_mkBookRow(b,'sub',cls.id,weekKey,dayName,saved,canEdit)));
+            subBooks.forEach(b=>rows.appendChild(_mkBookRow(b,'sub',cls.id,weekKey,dayName,saved,canEdit&&!mLocked)));
           }
         }
         card.appendChild(rows);
@@ -2190,6 +2222,7 @@ const App = (() => {
     handleImport,shareUrl,sendSms,shareCurrentClass,
     closeModal,
     _saveNavOrder, _renderNav, _applyNavOrder, _resetNavOrder, _toast,
+    forceSaveNow,
   };
 })();
 document.addEventListener('DOMContentLoaded',App.init);
