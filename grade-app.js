@@ -4252,7 +4252,8 @@ to{opacity:1;transform:none}}
     _updateSyncBtn();
   }
   function _scheduleAutoSave(sid) {
-    if (!_st.bookId || !_st.classId) return; // 교재/반 미선택 시 스킵
+    // ★ 교재만 선택돼도 자동저장 (반 미지정 = 학생배정 교재도 '__noclass__'로 정상 저장됨)
+    if (!_st.bookId) return;
     clearTimeout(_autoSaveTimers[sid]);
     _showAutoSaveHint(sid, 'pending');
     _autoSaveTimers[sid] = setTimeout(async () => {
@@ -5027,14 +5028,14 @@ to{opacity:1;transform:none}}
       if (updated) _toast('📡 서버 최신 데이터 반영됨', 'success', 2000);
     });
   }
-  function _updateRptBtn(){const btn=document.getElementById('gr-rpt-btn');if(btn)btn.style.display=(_st.classId&&_st.bookId&&_st.viewMode!=='report')?'':'none';}
+  function _updateRptBtn(){const btn=document.getElementById('gr-rpt-btn');if(btn)btn.style.display=(_st.bookId&&_st.viewMode!=='report')?'':'none';}
   function _updateSub(){const sub=document.getElementById('gr-sub');if(!sub)return;const cls=_st.classId?_getCls(_st.classId):null;const bk=_st.bookId&&typeof BookLibDB!=='undefined'?BookLibDB.getBookById(_st.bookId):null;sub.textContent=cls&&bk?`${cls?.name||'학생배정'}반 · ${bk.name}`:cls?`${cls?.name||'학생배정'}반`:'반 · 교재를 선택하세요';}
   function _refreshDirtyUI(){
     const el=document.getElementById('gr-dirty-cnt');
     if(el) el.textContent=_st.dirty.size?`(${_st.dirty.size})`:'';
-    /* 저장 버튼: 교재 선택 OR dirty 있을 때 */
+    /* 저장 버튼: 교재 선택 시 표시 (학생배정 교재도 포함) */
     const saveBtn = document.getElementById('gr-save-btn');
-    if(saveBtn) saveBtn.style.display = (_st.classId&&_st.bookId) ? '' : 'none';
+    if(saveBtn) saveBtn.style.display = _st.bookId ? '' : 'none';
     document.querySelectorAll('.gr-stu-item').forEach(item=>{
       const m=item.getAttribute('onclick')?.match(/'([^']+)'/);
       if(m) item.classList.toggle('dirty-item',_st.dirty.has(m[1]));
@@ -5043,7 +5044,8 @@ to{opacity:1;transform:none}}
 
   /* 저장/Aa버튼/차트 표시·숨김을 viewMode·hasData에 맞게 동기화 */
   function _refreshToolbar(){
-    const hasData = !!(_st.classId && _st.bookId);
+    // ★ 교재만 선택돼도 저장/동기화 버튼 표시 (학생배정 교재는 반 미지정이 정상)
+    const hasData = !!_st.bookId;
     const clsOnly = !!(_st.classId && !_st.bookId);
     const isExcel = _st.viewMode === 'excel';
 
@@ -5934,8 +5936,8 @@ to{opacity:1;transform:none}}
     const stuName = stu ? (stu.name + (stu.nickname ? ' (' + stu.nickname + ')' : '')) : sid;
     const bkName  = (typeof BookLibDB !== 'undefined' && _st.bookId)
       ? (BookLibDB.getBookById(_st.bookId)?.name || '') : '';
-    const prevRecs = (typeof GradeDB !== 'undefined' && _st.classId && _st.bookId)
-      ? (GradeDB.getRecords(_st.classId, sid, _st.bookId) || []).map(r => r.comment).filter(Boolean).slice(0, 5)
+    const prevRecs = (typeof GradeDB !== 'undefined' && _st.bookId)
+      ? (GradeDB.getRecords(_st.classId||'__noclass__', sid, _st.bookId) || []).map(r => r.comment).filter(Boolean).slice(0, 5)
       : [];
     const overlay = document.createElement('div');
     overlay.className = 'gcm-overlay'; overlay.id = 'gcm-overlay';
