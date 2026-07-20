@@ -1590,7 +1590,8 @@ to{opacity:1;transform:none}}
       const bookName = bookObj?.name || bookId;
 
       const rec     = records[records.length - 1];
-      const wordAch = hasWord && (rec.word?.totalQ || 0) > 0
+      // ★ pass가 null/undefined인데 totalQ만 있는 경우 NaN 발생 방지 (미평가 학생 제외)
+      const wordAch = hasWord && (rec.word?.totalQ || 0) > 0 && rec.word?.pass != null && rec.word?.pass !== ''
         ? Math.round(rec.word.pass / rec.word.totalQ * 100) : null;
       const rdAch   = hasRd ? _calcRdN(rec.reading || {}, actRevs) : null;
       if (wordAch == null && rdAch == null) continue;
@@ -1599,7 +1600,7 @@ to{opacity:1;transform:none}}
       if (classId && classId !== '__noclass__') {
         const clsRecs = GradeDB.getClassSummary(classId, bookId);
         if (hasWord && clsRecs.length) {
-          const ws = clsRecs.map(r => (r.word?.totalQ||0)>0
+          const ws = clsRecs.map(r => ((r.word?.totalQ||0)>0 && r.word?.pass != null && r.word?.pass !== '')
             ? Math.round(r.word.pass/r.word.totalQ*100) : null).filter(v=>v!=null);
           if (ws.length) avgWord = Math.round(ws.reduce((a,b)=>a+b,0)/ws.length);
         }
@@ -1996,14 +1997,24 @@ to{opacity:1;transform:none}}
       </tr>`;
   }
 
+  /* ★ 단어 성취율 계산 — 엑셀 셀 표시(_excelRow)와 완전히 동일한 공식을 사용해
+   *   "화면에 보이는 값"과 "평균/그래프에 쓰이는 값"이 항상 일치하도록 보장한다.
+   *   (재시험 미입력 학생은 retake가 없으므로 null 반환 → 평균/합계에서 자동 제외) */
+  function _wordAchOf(sid, totalWQ) {
+    const d = _st.data[sid];
+    const rawRetake = d?.word?.retake;
+    if (rawRetake === undefined || rawRetake === '' || rawRetake === null) return null;
+    const tq = Number(totalWQ) || 0;
+    if (tq <= 0) return null;
+    const retake = Math.max(0, Math.min(tq, Number(rawRetake)));
+    const pass = Math.max(0, tq - retake);
+    return Math.round(pass / tq * 100);
+  }
+
   /* 평균 행 */
   function _avgRow(students, config, totalWQ, actRevs, hasRd, hasWd) {
-    const achWs = !hasWd ? [] : students.map(s => {
-      const d = _st.data[s.id];
-      if (d?.word?.pass !== '' && d?.word?.pass != null && d?.word?.totalQ > 0) return Math.round(d.word.pass / d.word.totalQ * 100);
-      const rec = GradeDB.getLatest(_st.classId||'__noclass__', s.id, _st.bookId);
-      return rec?.word?.totalQ > 0 ? Math.round(rec.word.pass / rec.word.totalQ * 100) : null;
-    }).filter(v => v != null);
+    // ★ 평가(재시험 입력) 완료 학생만 평균/그래프에 포함 — 미평가 학생은 자동 제외
+    const achWs = !hasWd ? [] : students.map(s => _wordAchOf(s.id, totalWQ)).filter(v => v != null);
     const avgW = achWs.length ? Math.round(achWs.reduce((a,b)=>a+b,0)/achWs.length) : null;
 
     let rdAvgCells = '';
@@ -2046,13 +2057,10 @@ to{opacity:1;transform:none}}
     const actRevs  = GradeDB.getActiveReviews(_st.bookId);
     const hasWd    = config.word?.enabled !== false; // ★ 단어 표시 여부
     const hasRd    = config.reading?.enabled && actRevs.length > 0;
+    const totalWQ  = config.word?.totalQ || 0;
 
-    const achWs = !hasWd ? [] : students.map(s => {
-      const d = _st.data[s.id];
-      if (!d?.word?.totalQ) return null;
-      const p = d.word.pass !== '' ? d.word.pass : null;
-      return p != null && d.word.totalQ > 0 ? Math.round(p / d.word.totalQ * 100) : null;
-    }).filter(v => v != null);
+    // ★ 엑셀 셀 표시(_excelRow)와 동일한 공식(_wordAchOf) 사용 → 화면/평균 항상 일치
+    const achWs = !hasWd ? [] : students.map(s => _wordAchOf(s.id, totalWQ)).filter(v => v != null);
     const avgW = achWs.length ? Math.round(achWs.reduce((a,b)=>a+b,0)/achWs.length) : null;
     const avgWEl = document.getElementById('gr-avg-w');
     if (avgWEl) avgWEl.textContent = avgW != null ? avgW + '%' : '—';
@@ -2491,11 +2499,20 @@ to{opacity:1;transform:none}}
     const students=_getStudents();
     const today=new Date().toLocaleDateString('ko-KR');
 
-    const achWs=!hasWd?[]:students.map(st=>{const r=GradeDB.getLatest(_st.classId||'__noclass__',st.id,_st.bookId);return r?.word?.totalQ>0?Math.round(r.word.pass/r.word.totalQ*100):null;}).filter(v=>v!=null);
+    const rptTotalWQ=config.word?.totalQ||0;
+    // ★ 저장된 pass 필드가 아니라 retake(재시험)+현재 총문제수로 재계산 — 엑셀 뷰와 항상 일치.
+    //   재시험 값이 없는(미평가) 학생은 null → 반평균/합계에서 자동 제외됨.
+    const _rptWordAch=(r)=>{
+      const rt=r?.word?.retake;
+      if(rt===undefined||rt===''||rt===null||!(rptTotalWQ>0))return null;
+      const retake=Math.max(0,Math.min(rptTotalWQ,Number(rt)));
+      return Math.round(Math.max(0,rptTotalWQ-retake)/rptTotalWQ*100);
+    };
+    const achWs=!hasWd?[]:students.map(st=>_rptWordAch(GradeDB.getLatest(_st.classId||'__noclass__',st.id,_st.bookId))).filter(v=>v!=null);
     const avgW=achWs.length?Math.round(achWs.reduce((a,b)=>a+b,0)/achWs.length):null;
     const achRds=hasRd?students.map(st=>{const r=GradeDB.getLatest(_st.classId||'__noclass__',st.id,_st.bookId);return _calcRdN(r?.reading||{},actRevs);}).filter(v=>v!=null):[];
     const avgRd=achRds.length?Math.round(achRds.reduce((a,b)=>a+b,0)/achRds.length):null;
-    const achW=hasWd&&rec?.word?.totalQ>0?Math.round(rec.word.pass/rec.word.totalQ*100):null;
+    const achW=_rptWordAch(rec);
     const achRd=hasRd?_calcRdN(rec?.reading||{},actRevs):null;
     const isGW=achW!=null&&achW>=80;
 
@@ -2528,15 +2545,19 @@ to{opacity:1;transform:none}}
 
     const wordCardContent = hasWd && rec ? (() => {
       const wd=rec.word||{};
-      const achW2=wd.totalQ>0?Math.round(wd.pass/wd.totalQ*100):null;
+      // ★ retry는 실제 저장 필드명이 아니라 항상 '—'만 표시되던 오타 버그 → retake로 수정
+      //   pass/성취율도 저장된 pass 필드 대신 retake+현재totalQ로 재계산(엑셀 뷰와 일치)
+      const wRetake=(wd.retake!==undefined&&wd.retake!==''&&wd.retake!==null)?Number(wd.retake):null;
+      const wPass2=(wRetake!=null&&rptTotalWQ>0)?Math.max(0,rptTotalWQ-wRetake):null;
+      const achW2=_rptWordAch(rec);
       return `<div style="display:flex;flex-direction:column;gap:6px">
         <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #e0e7ff">
           <span style="font-size:11px;color:#6b7280;width:60px">재시험</span>
-          <div style="flex:1;background:#fff;border:1px solid #e0e7ff;border-radius:8px;padding:6px 12px;text-align:center;font-weight:800;font-size:13px;color:#ea580c">${wd.retry??'—'}</div>
+          <div style="flex:1;background:#fff;border:1px solid #e0e7ff;border-radius:8px;padding:6px 12px;text-align:center;font-weight:800;font-size:13px;color:#ea580c">${wRetake??'—'}</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #e0e7ff">
           <span style="font-size:11px;color:#6b7280;width:60px">통과</span>
-          <div style="flex:1;background:#fff;border:1px solid #e0e7ff;border-radius:8px;padding:6px 12px;text-align:center;font-weight:800;font-size:13px;color:#059669">${wd.pass??'—'}</div>
+          <div style="flex:1;background:#fff;border:1px solid #e0e7ff;border-radius:8px;padding:6px 12px;text-align:center;font-weight:800;font-size:13px;color:#059669">${wPass2??'—'}</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;padding:6px 0">
           <span style="font-size:11px;color:#6b7280;width:60px">성취율</span>
@@ -2547,16 +2568,19 @@ to{opacity:1;transform:none}}
 
     const rdCardContent = hasRd && rec ? (() => {
       const rd=rec.reading||{};
+      const rdTotalQ=config.reading?.totalQ??30;
       return `<div style="display:flex;flex-direction:column;gap:6px">
-        ${actRevs.map(rv=>{
-          const score=rd.reviews?.[rv.id]??null;
-          const pct=score!=null&&config.reading?.totalQ>0?Math.round(score/config.reading.totalQ*100):null;
+        ${actRevs.map((rv,ri)=>{
+          // ★ 실제 저장 필드는 rd[`R${idx}`].correct(정답수)/.score(점수) — rd.reviews[rv.id]는 존재하지 않는 필드였음(항상 '—')
+          const cell=rd[`R${ri}`]||{};
+          const correct=(cell.correct!=null&&cell.correct!=='')?cell.correct:null;
+          const score=(cell.score!=null&&cell.score!=='')?cell.score:null;
           return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #e0e7ff">
             <span style="font-size:11px;color:#6b7280;width:60px">${_e(rv.name)}</span>
             <div style="flex:1;background:#fff;border:1px solid #e0e7ff;border-radius:8px;padding:5px 12px;display:flex;justify-content:space-between;align-items:center">
-              <span style="font-weight:800;font-size:13px;color:#4f46e5">${score!=null?score:'—'}</span>
-              <span style="font-size:11px;color:#9ca3af">/ ${config.reading?.totalQ??30}</span>
-              <span style="font-size:12px;font-weight:700;color:#7c3aed">${pct!=null?pct+'점':'—'}</span>
+              <span style="font-weight:800;font-size:13px;color:#4f46e5">${correct!=null?correct:'—'}</span>
+              <span style="font-size:11px;color:#9ca3af">/ ${rdTotalQ}</span>
+              <span style="font-size:12px;font-weight:700;color:#7c3aed">${score!=null?score+'점':'—'}</span>
             </div>
           </div>`;
         }).join('')}
@@ -2601,7 +2625,7 @@ to{opacity:1;transform:none}}
     const dashL7 = `${dashBanner}<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">${wordCard}${rdCard}</div>${cmtCard}`;
 
     // ★ infoCard 정의
-    const achWInfo2=hasWd&&rec&&rec.word&&rec.word.totalQ>0?Math.round((rec.word.pass||0)/rec.word.totalQ*100):null;
+    const achWInfo2=hasWd?_rptWordAch(rec):null;
     const _clsName=(_getCls(_st.classId)||{}).name||'';
     const _bookName=(book&&book.name)||_st.bookId||'';
     const infoCard='<div style="background:linear-gradient(135deg,#e8f5e9,#f0f7ff);border-radius:14px;padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;border:1.5px solid #d1fae5">'
@@ -5167,8 +5191,11 @@ to{opacity:1;transform:none}}
     if (!rec) return { word: null, rd: null };
     const config  = GradeDB.getReportConfig(bkId);
     const actRevs = GradeDB.getActiveReviews(bkId);
-    const word = rec.word?.totalQ > 0
-      ? Math.round(rec.word.pass / rec.word.totalQ * 100) : null;
+    // ★ pass 필드가 null/undefined인데 totalQ만 있는 경우(미평가) NaN이 발생해
+    //   filter(v=>v!=null)를 통과해버리던 문제 → pass 유효성 검사 추가
+    const rw = rec.word;
+    const word = (rw && rw.totalQ > 0 && rw.pass != null && rw.pass !== '')
+      ? Math.round(rw.pass / rw.totalQ * 100) : null;
     const rd   = (config.reading?.enabled && actRevs.length)
       ? _calcRdN(rec.reading||{}, actRevs) : null;
     return { word, rd };
