@@ -4146,7 +4146,7 @@ to{opacity:1;transform:none}}
 
   // ★ 개별 저장 (토스트 없이 조용히) — 실시간 자동저장용
   async function _saveOneQuiet(sid) {
-    if (!_st.bookId || !_st.classId) return null;  // ★ 반/교재 미선택 시 스킵
+    if (!_st.bookId) return null;  // ★ 교재 미선택 시에만 스킵 (반 미지정=학생배정은 정상 케이스)
     _ensureData(sid);
 
     // ★ 데이터가 완전히 비어있으면 저장 스킵 (뷰 전환 타이밍 보호)
@@ -5552,9 +5552,9 @@ to{opacity:1;transform:none}}
   /* ════════════════════════════════════════════════════ */
   /* ══ 전체 성적표 ══ */
   function openReport() {
-    if(!_st.classId||!_st.bookId){_toast('⚠️ 반과 교재를 선택해주세요');return;}
+    if(!_st.bookId){_toast('⚠️ 교재를 선택해주세요');return;}
     const ov=document.getElementById('gr-rpt-ov'),sh=document.getElementById('gr-rpt-sh');if(!ov||!sh)return;
-    const cls=_getCls(_st.classId),book=typeof BookLibDB!=='undefined'?BookLibDB.getBookById(_st.bookId):null;
+    const cls=_st.classId?_getCls(_st.classId):null,book=typeof BookLibDB!=='undefined'?BookLibDB.getBookById(_st.bookId):null;
     const config=GradeDB.getReportConfig(_st.bookId),actRevs=GradeDB.getActiveReviews(_st.bookId);
     const hasRd=config.reading?.enabled&&actRevs.length>0;
     const sts=_getSorted(),today=new Date().toLocaleDateString('ko-KR');
