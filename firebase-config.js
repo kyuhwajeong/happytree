@@ -208,16 +208,18 @@ const FireDB = (() => {
     }
   }
 
-  /* ── keepalive 핑 (60초 주기 — WebSocket 연결 유지) ── */
+  /* ── keepalive 핑 (60초 주기 — WebSocket 연결 유지) ──
+   * 기존엔 `.info/serverTimeOffset`에 .get()을 호출했는데, 이 특수 경로는
+   * Firebase compat SDK에서 .get()을 안정적으로 지원하지 않아
+   * "Invalid token in path" 오류가 계속 발생했음.
+   * .info/connected는 이미 실시간 리스너로 추적 중이므로, 별도 네트워크
+   * 요청 없이 그 값만 재확인하는 것으로 충분히 안전하게 대체함. */
   function _startKeepAlive() {
-    setInterval(async () => {
-      /* 탭 비활성 또는 미초기화 상태면 핑 생략 */
+    setInterval(() => {
       if (document.hidden || !_ok || !_db) return;
-      try {
-        await _db.ref('.info/serverTimeOffset').get();
-        /* 성공 → 연결 유지 확인, 별도 동작 불필요 */
-      } catch (e) {
-        console.warn('[FireDB] ⚠️ keepalive 실패 — SDK 재연결 중:', e.message);
+      // 실시간 리스너가 살아있는지만 가볍게 재확인 (네트워크 요청 없음)
+      if (!_connected) {
+        console.log('[FireDB] 🔁 keepalive: 연결 끊김 상태 감지, 재연결 대기 중');
       }
     }, 60000);
   }
