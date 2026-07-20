@@ -2000,7 +2000,7 @@ to{opacity:1;transform:none}}
   function _avgRow(students, config, totalWQ, actRevs, hasRd, hasWd) {
     const achWs = !hasWd ? [] : students.map(s => {
       const d = _st.data[s.id];
-      if (d?.word?.pass != null && d?.word?.totalQ > 0) return Math.round(d.word.pass / d.word.totalQ * 100);
+      if (d?.word?.pass !== '' && d?.word?.pass != null && d?.word?.totalQ > 0) return Math.round(d.word.pass / d.word.totalQ * 100);
       const rec = GradeDB.getLatest(_st.classId||'__noclass__', s.id, _st.bookId);
       return rec?.word?.totalQ > 0 ? Math.round(rec.word.pass / rec.word.totalQ * 100) : null;
     }).filter(v => v != null);
@@ -2161,7 +2161,7 @@ to{opacity:1;transform:none}}
     const vals = students.map(s => {
       const d=_st.data[s.id]||{}; const rec=GradeDB.getLatest(_st.classId||'__noclass__',s.id,_st.bookId);
       const wd=d.word||rec?.word||{};
-      return wd.totalQ>0&&wd.pass!=null ? Math.round(wd.pass/wd.totalQ*100) : null;
+      return wd.totalQ>0&&wd.pass!==''&&wd.pass!=null ? Math.round(wd.pass/wd.totalQ*100) : null;
     }).filter(v=>v!=null);
     return vals.length ? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length) : null;
   }
@@ -2188,7 +2188,7 @@ to{opacity:1;transform:none}}
       const rec = GradeDB.getLatest(_st.classId||'__noclass__', s.id, _st.bookId);
       const wd  = d.word    || rec?.word    || {};
       const rdD = d.reading || rec?.reading || {};
-      const wordOk = hasWd && wd.totalQ > 0 && wd.pass != null;
+      const wordOk = hasWd && wd.totalQ > 0 && wd.pass !== '' && wd.pass != null;
       const rdOk   = hasRd && _calcRdN(rdD, actRevs) != null;
       return wordOk || rdOk;
     });
@@ -2211,7 +2211,7 @@ to{opacity:1;transform:none}}
       const rec  = GradeDB.getLatest(_st.classId||'__noclass__', s.id, _st.bookId);
       const wd   = d.word || rec?.word || {};
       const rdD  = d.reading || rec?.reading || {};
-      const achW = hasWd && wd.totalQ > 0 && wd.pass != null ? Math.round(wd.pass / wd.totalQ * 100) : null;
+      const achW = hasWd && wd.totalQ > 0 && wd.pass !== '' && wd.pass != null ? Math.round(wd.pass / wd.totalQ * 100) : null;
       const achR = hasRd ? _calcRdN(rdD, actRevs) : null;
       const isHL = _st.studentId === s.id;
       const x    = i * gapX + gapX / 2;
