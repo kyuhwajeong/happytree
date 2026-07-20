@@ -2179,6 +2179,20 @@ to{opacity:1;transform:none}}
     const config  = GradeDB.getReportConfig(_st.bookId||'');
     const hasWd   = config.word?.enabled !== false;  // ★ 단어 표시 여부
     const hasRd   = config.reading?.enabled && actRevs.length > 0;
+
+    // ★ 평가 데이터(단어 또는 리딩)가 있는 학생만 그래프에 포함 —
+    //   교재 수업을 하지 않아 미평가인 학생은 반평균/그래프에서 자동 제외.
+    //   나중에 해당 학생 점수가 입력되면 자동으로 다시 포함됨(재렌더 시점마다 재계산).
+    const chartStudents = students.filter(s => {
+      const d   = _st.data[s.id] || {};
+      const rec = GradeDB.getLatest(_st.classId||'__noclass__', s.id, _st.bookId);
+      const wd  = d.word    || rec?.word    || {};
+      const rdD = d.reading || rec?.reading || {};
+      const wordOk = hasWd && wd.totalQ > 0 && wd.pass != null;
+      const rdOk   = hasRd && _calcRdN(rdD, actRevs) != null;
+      return wordOk || rdOk;
+    });
+
     const W = canvas.offsetWidth || 300, H = 72;
     canvas.width = W * window.devicePixelRatio; canvas.height = H * window.devicePixelRatio;
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
@@ -2186,19 +2200,19 @@ to{opacity:1;transform:none}}
     ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
     ctx.clearRect(0, 0, W, H);
 
-    if (!students.length) return;
-    const n = students.length;
+    if (!chartStudents.length) return;
+    const n = chartStudents.length;
     // 단어+리딩 둘 다 있을 때만 너비 반분
     const bw = Math.max(8, Math.min(24, (W / n / ((hasWd && hasRd) ? 2 : 1)) - 3));
     const gapX = W / n;
 
-    students.forEach((s, i) => {
+    chartStudents.forEach((s, i) => {
       const d    = _st.data[s.id] || {};
       const rec  = GradeDB.getLatest(_st.classId||'__noclass__', s.id, _st.bookId);
       const wd   = d.word || rec?.word || {};
       const rdD  = d.reading || rec?.reading || {};
       const achW = hasWd && wd.totalQ > 0 && wd.pass != null ? Math.round(wd.pass / wd.totalQ * 100) : null;
-      const achR = hasRd ? (_calcRdN(rdD, actRevs) ?? 0) : null;
+      const achR = hasRd ? _calcRdN(rdD, actRevs) : null;
       const isHL = _st.studentId === s.id;
       const x    = i * gapX + gapX / 2;
       const maxH = H - 18;
@@ -4564,8 +4578,20 @@ to{opacity:1;transform:none}}
   // ★ 전체 학생 일괄 캡처 저장
   async function _captureAllReports(){
     if(typeof html2canvas==='undefined'){_toast('⚠️ html2canvas 라이브러리가 필요합니다');return;}
-    const students=_getStudents();
-    if(!students.length){_toast('⚠️ 학생이 없습니다');return;}
+    const allStudents=_getStudents();
+    if(!allStudents.length){_toast('⚠️ 학생이 없습니다');return;}
+    // ★ 평가 데이터(단어 또는 리딩)가 있는 학생만 일괄 캡처 대상에 포함
+    const config=GradeDB.getReportConfig(_st.bookId),actRevs=GradeDB.getActiveReviews(_st.bookId);
+    const hasWd=config.word?.enabled !== false;
+    const hasRd=config.reading?.enabled&&actRevs.length>0;
+    const students=allStudents.filter(s=>{
+      const rec=GradeDB.getLatest(_st.classId||'__noclass__',s.id,_st.bookId);
+      if(!rec) return false;
+      const wordOk=hasWd&&rec.word?.totalQ>0&&rec.word?.pass!=null;
+      const rdOk=hasRd&&_calcRdN(rec.reading||{},actRevs)!=null;
+      return wordOk||rdOk;
+    });
+    if(!students.length){_toast('⚠️ 평가 데이터가 있는 학생이 없습니다');return;}
 
     const cls  = _st.classId?_getCls(_st.classId):null;
     const book = typeof BookLibDB!=='undefined'?BookLibDB.getBookById(_st.bookId):null;
@@ -5556,13 +5582,25 @@ to{opacity:1;transform:none}}
     const ov=document.getElementById('gr-rpt-ov'),sh=document.getElementById('gr-rpt-sh');if(!ov||!sh)return;
     const cls=_st.classId?_getCls(_st.classId):null,book=typeof BookLibDB!=='undefined'?BookLibDB.getBookById(_st.bookId):null;
     const config=GradeDB.getReportConfig(_st.bookId),actRevs=GradeDB.getActiveReviews(_st.bookId);
+    const hasWd=config.word?.enabled !== false;
     const hasRd=config.reading?.enabled&&actRevs.length>0;
-    const sts=_getSorted(),today=new Date().toLocaleDateString('ko-KR');
-    let txt=`📝 ${book?.name||''} 성적표\n🏫 ${cls?.name||''}반 · ${today}\n${'─'.repeat(26)}\n`;
-    sts.forEach(s=>{const rec=GradeDB.getLatest(_st.classId||'__noclass__',s.id,_st.bookId);if(!rec){txt+=`${s.name}: 미입력\n`;return;}const achW=rec.word?.totalQ>0?Math.round(rec.word.pass/rec.word.totalQ*100):null;const achRd=hasRd?_calcRdN(rec.reading||{},actRevs):null;txt+=`${s.name}${s.nickname?'('+s.nickname+')':''}: 단어 ${rec.word?.pass??'—'}/${rec.word?.totalQ??'—'}${achW!=null?'('+achW+'%)':''}`+(achRd!=null?` · 리딩 ${Math.round(achRd)}%`:'')+'\n';});
+    // ★ 평가 데이터(단어 또는 리딩)가 있는 학생만 리포트에 포함 —
+    //   외부 공유용 성적표이므로 미평가 학생(반 소속이지만 해당 교재 미수강 등)은 제외
+    const allSts=_getSorted();
+    const sts=allSts.filter(s=>{
+      const rec=GradeDB.getLatest(_st.classId||'__noclass__',s.id,_st.bookId);
+      if(!rec) return false;
+      const wordOk = hasWd && rec.word?.totalQ>0 && rec.word?.pass!=null;
+      const rdOk   = hasRd && _calcRdN(rec.reading||{},actRevs)!=null;
+      return wordOk || rdOk;
+    });
+    const today=new Date().toLocaleDateString('ko-KR');
+    let txt=`📝 ${book?.name||''} 성적표\n🏫 ${cls?.name||''}반 · ${today} · 평가대상 ${sts.length}명\n${'─'.repeat(26)}\n`;
+    sts.forEach(s=>{const rec=GradeDB.getLatest(_st.classId||'__noclass__',s.id,_st.bookId);const achW=rec.word?.totalQ>0?Math.round(rec.word.pass/rec.word.totalQ*100):null;const achRd=hasRd?_calcRdN(rec.reading||{},actRevs):null;txt+=`${s.name}${s.nickname?'('+s.nickname+')':''}: 단어 ${rec.word?.pass??'—'}/${rec.word?.totalQ??'—'}${achW!=null?'('+achW+'%)':''}`+(achRd!=null?` · 리딩 ${Math.round(achRd)}%`:'')+'\n';});
     const thRd=hasRd?actRevs.map(rv=>`<th style="border:1px solid var(--bdr);padding:6px">${_e(rv.name)}</th>`).join('')+'<th style="border:1px solid var(--bdr);padding:6px">성취율</th>':'';
-    const tdRows=sts.map(s=>{const r=GradeDB.getLatest(_st.classId||'__noclass__',s.id,_st.bookId);if(!r)return`<tr><td style="border:1px solid var(--bdr);padding:6px;font-weight:700">${_e(s.name)}</td><td colspan="99" style="border:1px solid var(--bdr);padding:6px;color:var(--tx3)">미입력</td></tr>`;const achW=r.word?.totalQ>0?Math.round(r.word.pass/r.word.totalQ*100):null;const isGW=achW!=null&&achW>=80;const achRd=hasRd?_calcRdN(r.reading||{},actRevs):null;const rdTds=hasRd?actRevs.map((_,i)=>{const sc=r.reading?.[`R${i}`]?.score??'—';return`<td style="border:1px solid var(--bdr);padding:6px;color:var(--a)">${sc}</td>`;}).join('')+`<td style="border:1px solid var(--bdr);padding:6px;color:#8b5cf6;font-weight:700">${achRd!=null?Math.round(achRd)+'%':'—'}</td>`:'';return`<tr><td style="border:1px solid var(--bdr);padding:6px;font-weight:700">${_e(s.name)}${s.nickname?` (${_e(s.nickname)})`:''}</td><td style="border:1px solid var(--bdr);padding:6px;color:${isGW?'#16a34a':'#f97316'};font-weight:700">${r.word?.pass??'—'}</td><td style="border:1px solid var(--bdr);padding:6px">${r.word?.retake??'—'}</td><td style="border:1px solid var(--bdr);padding:6px;color:${isGW?'#16a34a':'#f97316'};font-weight:800">${achW!=null?achW+'%':'—'}</td>${rdTds}<td style="border:1px solid var(--bdr);padding:6px;font-size:11px">${_e(r.comment||'')}</td></tr>`;}).join('');
-    sh.innerHTML=`<div class="sh-handle"></div><div class="sh-title">📋 반 전체 성적표</div><div class="sh-sub">${_e(cls?.name||'')}반 · ${_e(book?.name||'')} · ${today}</div><div class="gr-rpt-sh-scroll"><div style="overflow-x:auto;padding:10px 2px"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:max-content"><thead><tr style="background:var(--surf2)"><th style="border:1px solid var(--bdr);padding:7px 10px;font-size:11px;color:var(--tx3)">학생</th><th style="border:1px solid var(--bdr);padding:7px 10px;font-size:11px;color:var(--tx3)">통과</th><th style="border:1px solid var(--bdr);padding:7px 10px;font-size:11px;color:var(--tx3)">재시험</th><th style="border:1px solid var(--bdr);padding:7px 10px;font-size:11px;color:var(--tx3)">성취율</th>${thRd}<th style="border:1px solid var(--bdr);padding:7px 10px;font-size:11px;color:var(--tx3)">코멘트</th></tr></thead><tbody>${tdRows}</tbody></table></div><div style="font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:1px;margin:10px 14px 4px">공유용 텍스트</div><div class="gr-share-box" style="margin:0 14px 8px">${_e(txt)}</div></div><div class="gr-sacts" style="padding:0 0 8px"><button class="gr-sbtn copy" onclick="GradeApp._copy(${JSON.stringify(txt)})">📋 복사</button><button class="gr-sbtn share" onclick="GradeApp._shr(${JSON.stringify(txt)})">📤 공유</button></div><button class="btn-x" style="width:100%" onclick="GradeApp.closeReport()">닫기</button>`;
+    const tdRows=sts.map(s=>{const r=GradeDB.getLatest(_st.classId||'__noclass__',s.id,_st.bookId);const achW=r.word?.totalQ>0?Math.round(r.word.pass/r.word.totalQ*100):null;const isGW=achW!=null&&achW>=80;const achRd=hasRd?_calcRdN(r.reading||{},actRevs):null;const rdTds=hasRd?actRevs.map((_,i)=>{const sc=r.reading?.[`R${i}`]?.score??'—';return`<td style="border:1px solid var(--bdr);padding:6px;color:var(--a)">${sc}</td>`;}).join('')+`<td style="border:1px solid var(--bdr);padding:6px;color:#8b5cf6;font-weight:700">${achRd!=null?Math.round(achRd)+'%':'—'}</td>`:'';return`<tr><td style="border:1px solid var(--bdr);padding:6px;font-weight:700">${_e(s.name)}${s.nickname?` (${_e(s.nickname)})`:''}</td><td style="border:1px solid var(--bdr);padding:6px;color:${isGW?'#16a34a':'#f97316'};font-weight:700">${r.word?.pass??'—'}</td><td style="border:1px solid var(--bdr);padding:6px">${r.word?.retake??'—'}</td><td style="border:1px solid var(--bdr);padding:6px;color:${isGW?'#16a34a':'#f97316'};font-weight:800">${achW!=null?achW+'%':'—'}</td>${rdTds}<td style="border:1px solid var(--bdr);padding:6px;font-size:11px">${_e(r.comment||'')}</td></tr>`;}).join('');
+    const emptyRow = !sts.length ? `<tr><td colspan="99" style="padding:20px;text-align:center;color:var(--tx3)">아직 평가된 학생이 없습니다</td></tr>` : '';
+    sh.innerHTML=`<div class="sh-handle"></div><div class="sh-title">📋 반 전체 성적표</div><div class="sh-sub">${_e(cls?.name||'')}반 · ${_e(book?.name||'')} · ${today} · 평가대상 ${sts.length}명${allSts.length>sts.length?` (전체 ${allSts.length}명 중)`:''}</div><div class="gr-rpt-sh-scroll"><div style="overflow-x:auto;padding:10px 2px"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:max-content"><thead><tr style="background:var(--surf2)"><th style="border:1px solid var(--bdr);padding:7px 10px;font-size:11px;color:var(--tx3)">학생</th><th style="border:1px solid var(--bdr);padding:7px 10px;font-size:11px;color:var(--tx3)">통과</th><th style="border:1px solid var(--bdr);padding:7px 10px;font-size:11px;color:var(--tx3)">재시험</th><th style="border:1px solid var(--bdr);padding:7px 10px;font-size:11px;color:var(--tx3)">성취율</th>${thRd}<th style="border:1px solid var(--bdr);padding:7px 10px;font-size:11px;color:var(--tx3)">코멘트</th></tr></thead><tbody>${tdRows||emptyRow}</tbody></table></div><div style="font-size:10px;font-weight:800;color:var(--tx3);letter-spacing:1px;margin:10px 14px 4px">공유용 텍스트</div><div class="gr-share-box" style="margin:0 14px 8px">${_e(txt)}</div></div><div class="gr-sacts" style="padding:0 0 8px"><button class="gr-sbtn copy" onclick="GradeApp._copy(${JSON.stringify(txt)})">📋 복사</button><button class="gr-sbtn share" onclick="GradeApp._shr(${JSON.stringify(txt)})">📤 공유</button></div><button class="btn-x" style="width:100%" onclick="GradeApp.closeReport()">닫기</button>`;
     ov.classList.remove('hidden');history.pushState({pg:'grade',modal:'report'},'');
   }
   async function _copy(t){try{await navigator.clipboard.writeText(t);_toast('📋 복사됐습니다','success');}catch{_toast('⚠️ 복사 실패');}}
