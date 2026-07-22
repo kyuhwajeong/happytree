@@ -2942,27 +2942,6 @@ const BooklibApp = (() => {
   function closeShare(){document.getElementById('bl-share-ov')?.classList.add('hidden');}
   function closeReport(){document.getElementById('bl-report-ov')?.classList.add('hidden');}
 
-  /* ── 자연 정렬(Natural Sort) ──
-   * "U9" < "U10", "U9" < "U9.R1" < "U9.R2" 순으로 정렬되도록
-   * 문자열 내 숫자를 숫자로, 나머지를 문자로 비교
-   * ★ 챕터 순서(order)를 CSV/확장 프로그램이 보내주는 행(row) 순서에
-   *   의존하지 않고, 항상 챕터명 자체로부터 안정적으로 계산하기 위해 사용
-   *   (ClassCard/확장 스크래핑 순서가 실제 유닛 진행 순서와 다를 수 있어
-   *    기존 방식은 동기화할 때마다 순서가 흔들리는 문제가 있었음)
-   */
-  function _naturalCompare(a, b) {
-    const tok = s => { const out=[]; String(s||'').replace(/(\d+)|(\D+)/g,(_,d,t)=>{out.push(d!==undefined?{n:parseInt(d,10)}:{s:t});return '';}); return out; };
-    const ax = tok(a), bx = tok(b);
-    const len = Math.max(ax.length, bx.length);
-    for (let i=0;i<len;i++) {
-      const av=ax[i], bv=bx[i];
-      if (!av) return -1; if (!bv) return 1;
-      if (av.n!==undefined && bv.n!==undefined) { if (av.n!==bv.n) return av.n-bv.n; }
-      else { const as=av.n!==undefined?String(av.n):av.s, bs=bv.n!==undefined?String(bv.n):bv.s; const c=as.localeCompare(bs); if (c) return c; }
-    }
-    return 0;
-  }
-
   function _getCls(id){if(typeof DB==='undefined')return null;if(typeof DB.getClassById==='function')return DB.getClassById(id);return(DB.getActiveClasses?.()||[]).find(c=>c.id===id)||null;}
   async function _fileToLines(file){if(/\.(xlsx|xls)$/i.test(file.name)&&typeof XLSX!=='undefined'){const buf=await file.arrayBuffer();const wb=XLSX.read(buf,{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{header:1});return rows.map(r=>String(r[0]||'').trim()).filter(Boolean);}const text=await file.text();return text.split(/[\r\n,]+/).map(l=>l.trim()).filter(Boolean);}
   function _showLoading(container){const ov=document.createElement('div');ov.className='bl-ov-load';ov.innerHTML='<div class="bl-ov-load-box">⏳ 처리 중…</div>';if(container){container.style.position='relative';container.appendChild(ov);}return ov;}
@@ -3044,12 +3023,6 @@ const BooklibApp = (() => {
       if (!seen.has(key)) { seen.add(key); xlsxChs.push({ key, title, typ }); }
     });
     if (!xlsxChs.length) return;
-
-    // ★ 1.5. 챕터 순서를 "행이 도착한 순서"가 아닌 "챕터명 자연 정렬"로 고정
-    //   → CSV/확장 프로그램이 매번 다른 순서로 데이터를 보내도(예: ClassCard
-    //     스크래핑 순서가 실제 유닛 순서와 다른 경우) order가 항상 U1<U2<...
-    //     처럼 실제 진도 순서와 일치하게 되어, 타임스탬프 범위 계산이 안정적으로 동작함
-    xlsxChs.sort((a, b) => _naturalCompare(a.title, b.title) || _naturalCompare(a.typ, b.typ));
 
     // 2. 기존 챕터와 매칭: 동일하면 기존 id 유지, 없으면 신규
     const existingChs = book.chapters || [];
@@ -3599,35 +3572,46 @@ const BooklibApp = (() => {
   }
 
   /* ── 타임스탬프 기준 챕터 찾기 ──
-   * 챕터를 최신(order 큰 순) → 과거 순으로 순회하며,
-   * 첫 번째로 완료율 ≥ threshold(%) 인 챕터를 스탬프 기준으로 반환
-   *
-   * ★ 버그 수정 이력:
-   *   기존에는 CSV/확장 프로그램이 넘겨준 rows 배열의 "행 순서"를 역순으로 훑어
-   *   "최신 챕터"를 추정했다. 하지만 ClassCard 확장 프로그램의 스크래핑 순서가
-   *   실제 유닛 진행 순서(U06→U07→…→U11)와 항상 일치한다는 보장이 없어서,
-   *   실제로는 더 진행된 챕터(U09)까지 인정되어야 하는데 훨씬 이전 챕터(U06)에서
-   *   멈춰버리는 오류가 발생했다.
-   *   → 이제는 _syncChaptersFromXlsx에서 이미 "챕터명 자연 정렬"로 order를
-   *     고정해두었으므로, rows 순서가 아니라 안정적인 chs[].order를 기준으로
-   *     최신→과거 순회한다. 매칭도 fallback(포함 비교) 없이 _matchChapter의
-   *     정확 매칭만 사용해 다른 유닛을 잘못 집어오는 것을 방지한다.
+   * CSV를 챕터 역순으로 순회, 첫 번째 완료율 ≥50% 챕터
    */
   function _findStampChapter(rows, chs, threshold) {
     threshold = threshold || 50; // default 50%
-    if (!chs || !chs.length) return null;
+    /* ★ CSV 챕터 고유 목록: 제목+타입 조합으로 dedup (역순) */
+    const csvChapters = []; // [{title, type}]
+    const seen = new Set();
+    for (let i = rows.length-1; i >= 0; i--) {
+      const t   = rows[i]['제목']?.trim();
+      const typ = rows[i]['타입']?.trim();
+      const key = t + '||' + typ;
+      if (t && !seen.has(key)) { csvChapters.push({title:t, type:typ}); seen.add(key); }
+    }
 
-    /* ★ order 내림차순(최신 챕터부터) 순회 — chs 원본 배열은 변경하지 않음 */
-    const sortedChs = [...chs].sort((a, b) => (b.order||0) - (a.order||0));
-
-    for (const ch of sortedChs) {
-      /* 챕터에 해당하는 CSV/확장 데이터 행만 정확 매칭으로 추출 */
-      const chRows = rows.filter(r => _matchChapter(ch.title, r['제목'], r['타입']));
-      if (!chRows.length) continue; // 이 배치에 해당 챕터 데이터가 없으면 더 과거 챕터로 계속 탐색
-
-      const done = chRows.filter(r => (r['완료']||'').trim() === '완료').length;
-      const pct  = done / chRows.length * 100;
-      if (pct >= threshold) return ch.id; // ★ 최신 챕터부터 훑어 첫 번째로 기준 충족한 챕터
+    /* 각 제목+타입 조합별 완료율 계산 → 역순 첫 ≥50% 챕터 반환 */
+    for (const {title:csvTitle, type:csvType} of csvChapters) {
+      const titleRows = rows.filter(r =>
+        r['제목']?.trim() === csvTitle && r['타입']?.trim() === csvType
+      );
+      if (!titleRows.length) continue;
+      const done = titleRows.filter(r => r['완료']?.trim() === '완료').length;
+      // ★ 50% 이상(포함): done/total >= 0.5 → done*2 >= total
+      const pct  = done / titleRows.length * 100;
+      if (pct >= threshold) {
+        /* ★ 학습현황 챕터에서 제목+타입 매칭 (_syncChaptersFromXlsx로 이미 동기화됨) */
+        const fullTitle = `[${csvType}] ${csvTitle}`;
+        // 1차: _matchChapter 정확 매칭 → 동일명 전체 중 order 최대(마지막) 반환
+        let matchedAll = chs.filter(ch => _matchChapter(ch.title, csvTitle, csvType));
+        // 2차: fullTitle 직접 매칭
+        if (!matchedAll.length) matchedAll = chs.filter(ch => ch.title === fullTitle);
+        // 3차: 정규화 없이 title 포함 비교
+        if (!matchedAll.length) matchedAll = chs.filter(ch => ch.title.includes(csvTitle));
+        if (matchedAll.length) {
+          // ★ 동일명 그룹 중 가장 마지막(order 최대) 챕터를 stamp로 지정
+          // → chsInScope = order ≤ 마지막 → 동일명 그룹 전체가 scope에 포함
+          const matched = matchedAll.reduce((a,b)=>(b.order>a.order?b:a));
+          return matched.id;
+        }
+        /* 매칭 실패 시: 계속 탐색 */
+      }
     }
     return null;
   }
@@ -3694,11 +3678,11 @@ const BooklibApp = (() => {
             • CSV '제목'+'타입' → 챕터 매칭<br>
             • CSV '학생명'(예: 001.도현/수진) → 성 제외 이름 매칭<br>
             • 완료='완료' → 수행 처리 / '미완료' → 미수행+공란 항목 체크<br>
-            • 타임스탬프: 최신 챕터부터 역순으로 완료율이 기준 비율 이상인 첫 챕터까지 → 이후 챕터 제외
+            • 타임스탬프: 역순 첫 완료율 기준 비율 이상 챕터 → 이후 챕터 제외 (아래 슬라이더로 조정)
           </div>
         </details>
 
-        <!-- ★ 타임스탬프 기준 비율 (xlsx/CSV/확장 프로그램 공통 적용) -->
+        <!-- ★ 타임스탬프 기준 비율 (xlsx/CSV/확장 프로그램 공통 적용, 기존 localStorage 값 그대로 사용) -->
         <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surf2);border-radius:8px;border:1px solid var(--bdr2);margin-bottom:12px">
           <span style="font-size:11px;font-weight:700;color:var(--tx2);white-space:nowrap">📍 스탬프 기준</span>
           <input type="range" id="bl-stamp-thresh-csv" min="30" max="80" step="5" value="${Number(localStorage.getItem('bl_stamp_threshold')||50)}" style="flex:1;accent-color:var(--a)">
@@ -3724,7 +3708,7 @@ const BooklibApp = (() => {
         </div>
       </div>`;
     document.body.appendChild(modal);
-    // ★ 스탬프 기준 비율 슬라이더 — xlsx/CSV/확장 프로그램 공통 localStorage 값
+    // ★ 스탬프 기준 비율 슬라이더 — 기존 localStorage 값을 그대로 읽고 씀 (알고리즘 변경 없음)
     document.getElementById('bl-stamp-thresh-csv')?.addEventListener('input', function(){
       document.getElementById('bl-stamp-thresh-csv-val').textContent = this.value+'%';
       localStorage.setItem('bl_stamp_threshold', this.value);
@@ -4266,9 +4250,9 @@ const BooklibApp = (() => {
   }
 
   /* ── 타임스탬프 기준 비율 설정 (빠른 접근용) ──
-   * xlsx 단일/일괄 반영, CSV 반영, ClassCard 확장 프로그램 연동(_applyClassCardData)
-   * 모두 동일한 localStorage 키(bl_stamp_threshold)를 읽어 사용하므로,
-   * 여기서 값을 바꿔두면 확장 프로그램으로 반영할 때도 즉시 적용된다.
+   * ★ 알고리즘은 전혀 건드리지 않음. 기존에도 있던 localStorage 키(bl_stamp_threshold)를
+   *   읽고 쓰는 UI만 추가한 것으로, xlsx/CSV/확장 프로그램(_applyClassCardData)이
+   *   원래부터 공통으로 참조하던 값을 어디서든 쉽게 바꿀 수 있게 해줄 뿐이다.
    */
   function openStampSettings(){
     document.getElementById('bl-stamp-settings')?.remove();
@@ -4291,7 +4275,7 @@ const BooklibApp = (() => {
         <input type="range" id="bl-stamp-thresh-g" min="30" max="80" step="5" value="${val}" style="flex:1;accent-color:var(--a)">
         <span id="bl-stamp-thresh-g-val" style="font-size:14px;font-weight:900;color:var(--a);min-width:38px;text-align:right">${val}%</span>
       </div>
-      <div style="font-size:10px;color:var(--tx3);margin-top:6px">기본값 50% · 현재 이 반에 다음 반영부터 적용됩니다</div>
+      <div style="font-size:10px;color:var(--tx3);margin-top:6px">기본값 50% · 다음 반영부터 적용됩니다</div>
       <button style="margin-top:16px;width:100%;padding:11px;border-radius:10px;background:var(--a);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font)"
               onclick="document.getElementById('bl-stamp-settings')?.remove()">확인</button>
     `;
