@@ -2195,8 +2195,8 @@ const BooklibApp = (() => {
       const _cid2=_st.matrixClassId||'__noclass__';
       _checks=BookLibDB.getMatrixChecks(_cid2,_st.matrixBookId);
       _stamps=BookLibDB.getStamps(_cid2,_st.matrixBookId);
-      _st.stopMatrix=BookLibDB.listenMatrix(_cid2,_st.matrixBookId,v=>{_checks=v;_refreshBody();});
-      _st.stopStamps=BookLibDB.listenStamps(_cid2,_st.matrixBookId,v=>{_stamps=v;_refreshBody();});
+      _st.stopMatrix=BookLibDB.listenMatrix(_cid2,_st.matrixBookId,v=>{_checks=v;_refreshBodyDebounced();});
+      _st.stopStamps=BookLibDB.listenStamps(_cid2,_st.matrixBookId,v=>{_stamps=v;_refreshBodyDebounced();});
       _refreshBody();
     }
   }
@@ -2208,11 +2208,24 @@ const BooklibApp = (() => {
       const _cid=_st.matrixClassId||'__noclass__';
       _checks=BookLibDB.getMatrixChecks(_cid,_st.matrixBookId);
       _stamps=BookLibDB.getStamps(_cid,_st.matrixBookId);
-      _st.stopMatrix=BookLibDB.listenMatrix(_cid,_st.matrixBookId,v=>{_checks=v;_refreshBody();});
-      _st.stopStamps=BookLibDB.listenStamps(_cid,_st.matrixBookId,v=>{_stamps=v;_refreshBody();});
+      _st.stopMatrix=BookLibDB.listenMatrix(_cid,_st.matrixBookId,v=>{_checks=v;_refreshBodyDebounced();});
+      _st.stopStamps=BookLibDB.listenStamps(_cid,_st.matrixBookId,v=>{_stamps=v;_refreshBodyDebounced();});
     }
     _refreshBody();
   }
+  /* ★ 실시간 리스너 전용 디바운스 래퍼
+   *   대량 반영(스탬프 처리 범위가 넓을 때 등) 시 setCheck이 연속으로 여러 번
+   *   호출되면 Firebase 실시간 리스너(listenMatrix/listenStamps)가 그때마다
+   *   각각 발동해서 _refreshBody()가 짧은 시간에 수십 번 연속 호출된다.
+   *   _refreshBody 자체는 스크롤 위치를 복원하지만, 연속 재호출이 너무 잦으면
+   *   사용자가 스크롤하는 도중에 계속 원위치로 복원돼버려 "스크롤이 안 되는"
+   *   것처럼 보인다. 데이터 반영 로직은 그대로 두고, 화면 갱신만 짧게 묶는다. */
+  let _refreshBodyDebTimer = null;
+  function _refreshBodyDebounced(){
+    clearTimeout(_refreshBodyDebTimer);
+    _refreshBodyDebTimer = setTimeout(_refreshBody, 300);
+  }
+
   function _refreshBody(){
     const mb=document.getElementById('bl-mbody'); if(!mb)return;
     // ★ 스크롤 위치 보존: innerHTML 교체 전 현재 스크롤 저장
