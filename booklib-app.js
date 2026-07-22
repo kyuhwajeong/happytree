@@ -3065,7 +3065,9 @@ const BooklibApp = (() => {
     /* 3. 타임스탬프 기준 챕터 결정 (CSV 역순, 완료율 ≥80%) */
     const stampTs   = _nowStampStr();
     const stampThreshold = Number(localStorage.getItem('bl_stamp_threshold')||50);
+    console.log('%c[DEBUG 스탬프 진단] localStorage 원본값=', 'color:#e11d48;font-weight:bold', localStorage.getItem('bl_stamp_threshold'), '→ 실제 사용 threshold=', stampThreshold, '| 처리 중인 반=', classId, '| 교재=', bookId);
     const stampChId = _findStampChapter(rows, chs, stampThreshold);
+    console.log('%c[DEBUG 스탬프 진단] 결정된 스탬프 챕터=', 'color:#e11d48;font-weight:bold', chs.find(c=>c.id===stampChId)?.title || '(없음/null)', '| stampChId=', stampChId);
 
     /* ★ 타임스탬프 이후 챕터는 처리 대상에서 제외
      *   - 타임스탬프 챕터 order 이하만 처리
