@@ -3607,9 +3607,20 @@ const BooklibApp = (() => {
    *   'completion'   (기본/토글 OFF): 이 챕터를 시도한 학생 중 '완료' 비율
    *                                    pct = 완료 학생 수 / 챕터에 데이터가 있는 학생 수
    *   'participation'(토글 ON)      : 완료 여부와 무관하게, 반 전체 학생 중
-   *                                    이 챕터를 시도(수행)한 학생 비율
-   *                                    pct = 챕터에 데이터가 있는 학생 수 / 전체 학생 수
+   *                                    이 챕터를 "실제로 조금이라도 수행한" 학생 비율
+   *                                    pct = 실제 수행 학생 수 / 전체 학생 수
+   *                                    ★ 단순히 CSV 행이 있다고 참여로 세지 않음 —
+   *                                      확장 프로그램은 학생이 전혀 손 안 댄 챕터도
+   *                                      공란 값으로 행 자체는 만들어서 보내기 때문에,
+   *                                      암기·리콜·스펠·스피킹·게임·테스트 중 하나라도
+   *                                      실제 값이 있는 행만 "수행"으로 인정한다
+   *                                      (기존에 검증된 _isColEmpty 판정 재사용)
    */
+  function _hasAnyActivity(row) {
+    const cols = ['암기','리콜','스펠','스피킹','테스트'];
+    if (cols.some(c => !_isColEmpty(row[c]))) return true;
+    return !!(row['게임']||'').trim();
+  }
   function _findStampChapter(rows, chs, threshold, totalStudents, mode) {
     threshold = threshold || 50; // default 50%
     mode = mode === 'participation' ? 'participation' : 'completion'; // ★ 안전한 기본값
@@ -3624,9 +3635,10 @@ const BooklibApp = (() => {
 
       let pct;
       if (mode === 'participation') {
-        /* ★ 수행(참여) 학생 비율: 완료 여부 무관, 데이터가 있는 학생 수 / 전체 학생 수 */
+        /* ★ 수행(참여) 학생 비율: 실제로 뭔가 한 학생 수 / 전체 학생 수 */
         const total = Number(totalStudents) || 0;
-        pct = total > 0 ? (chRows.length / total * 100) : 0;
+        const participated = chRows.filter(_hasAnyActivity).length;
+        pct = total > 0 ? (participated / total * 100) : 0;
       } else {
         /* 기존(기본값): 완료 비율 — 로직 변경 없음 */
         const done = chRows.filter(r => (r['완료']||'').trim() === '완료').length;
