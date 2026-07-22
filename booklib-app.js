@@ -3066,6 +3066,21 @@ const BooklibApp = (() => {
     const stampTs   = _nowStampStr();
     const stampThreshold = Number(localStorage.getItem('bl_stamp_threshold')||50);
     console.log('%c[DEBUG 스탬프 진단] localStorage 원본값=', 'color:#e11d48;font-weight:bold', localStorage.getItem('bl_stamp_threshold'), '→ 실제 사용 threshold=', stampThreshold, '| 처리 중인 반=', classId, '| 교재=', bookId);
+    // ★ [DEBUG] 이번 동기화 배치(rows)에 실제로 어떤 챕터 데이터가 들어있는지 요약
+    (function(){
+      const seen = {};
+      rows.forEach(r=>{
+        const t=(r['제목']||'').trim(), ty=(r['타입']||'').trim();
+        const key = `[${ty}] ${t}`;
+        if(!seen[key]) seen[key]={total:0,done:0};
+        seen[key].total++;
+        if((r['완료']||'').trim()==='완료') seen[key].done++;
+      });
+      console.log('%c[DEBUG rows 배치 내용] 총 행 수=', 'color:#059669;font-weight:bold', rows.length, '| 고유 챕터 수=', Object.keys(seen).length);
+      Object.entries(seen).forEach(([k,v])=>{
+        console.log(`  ${k}  →  ${v.done}/${v.total} (${Math.round(v.done/v.total*100)}%)`);
+      });
+    })();
     const stampChId = _findStampChapter(rows, chs, stampThreshold);
     console.log('%c[DEBUG 스탬프 진단] 결정된 스탬프 챕터=', 'color:#e11d48;font-weight:bold', chs.find(c=>c.id===stampChId)?.title || '(없음/null)', '| stampChId=', stampChId);
 
