@@ -3080,6 +3080,18 @@ const BooklibApp = (() => {
     const stampTs   = _nowStampStr();
     const stampThreshold = Number(localStorage.getItem('bl_stamp_threshold')||50);
     const stampMode  = localStorage.getItem('bl_stamp_mode') === 'participation' ? 'participation' : 'completion';
+    // ★ [DEBUG] 지금 chs 목록(순서)과 각 챕터별 참여/완료 계산값을 그대로 덤프
+    (function(){
+      const sortedForDump = [...chs].sort((a,b)=>(b.order||0)-(a.order||0));
+      console.log('%c[DEBUG 챕터 목록] 총 챕터 수=', 'color:#7c3aed;font-weight:bold', chs.length, '| 전체 학생 수=', students.length, '| 모드=', stampMode, '| threshold=', stampThreshold);
+      sortedForDump.forEach(ch=>{
+        const chRows = rows.filter(r => _matchChapter(ch.title, r['제목'], r['타입']));
+        if (!chRows.length) { console.log(`  order=${ch.order} [${ch.title}] → 데이터 없음(skip)`); return; }
+        const done = chRows.filter(r=>(r['완료']||'').trim()==='완료').length;
+        const participated = chRows.filter(_hasAnyActivity).length;
+        console.log(`  order=${ch.order} [${ch.title}] → 행수=${chRows.length}, 완료=${done}, 실참여=${participated}, 완료율=${Math.round(done/chRows.length*100)}%, 참여율=${Math.round(participated/students.length*100)}%`);
+      });
+    })();
     const stampChId = _findStampChapter(rows, chs, stampThreshold, students.length, stampMode);
 
     /* ★ 타임스탬프 이후 챕터는 처리 대상에서 제외
