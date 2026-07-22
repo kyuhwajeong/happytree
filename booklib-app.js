@@ -2995,7 +2995,8 @@ const BooklibApp = (() => {
 
       const result = await _processCsv(rows);  // rows 배열 직접 전달
       const stampMsg = result.stampTitle ? ` | 📍 ${result.stampTitle}까지 처리` : '';
-      _toast(`✅ 반영 완료 — 챕터 동기화 + 미수행 ${result.undone}건, 수행 ${result.done}건${stampMsg}`, 'success');
+      const noDataMsg = result.noDataChapters?.length ? ` | ⚠️ 데이터 없어 건너뜀 ${result.noDataChapters.length}개(콘솔 확인)` : '';
+      _toast(`✅ 반영 완료 — 챕터 동기화 + 미수행 ${result.undone}건, 수행 ${result.done}건${stampMsg}${noDataMsg}`, 'success');
       _refreshBody();
     } catch(e) {
       console.error('[XLSX Import]', e);
@@ -3088,12 +3089,13 @@ const BooklibApp = (() => {
     const dupGivens = _buildDupGivens(students);
 
     let undone=0, done=0, exception=0, skipped=0;
+    const noDataChapters = []; // ★ [추가] 처리 범위 안인데 이번 배치에 데이터가 하나도 없던 챕터 (진단용, 동작에는 영향 없음)
 
     /* 5. 챕터 × 학생 매트릭스 순회 (★ 타임스탬프 이후 챕터 제외) */
     for (const ch of chsInScope) {
       /* 챕터에 해당하는 CSV 행들 */
       const chRows = rows.filter(r => _matchChapter(ch.title, r['제목'], r['타입']));
-      if (!chRows.length) continue;
+      if (!chRows.length) { noDataChapters.push(ch.title); continue; }
 
       for (const stu of students) {
         /* 학생 매칭: 성 제외 이름으로 CSV 학생명 검색 */
@@ -3131,7 +3133,11 @@ const BooklibApp = (() => {
     _checks = BookLibDB.getMatrixChecks(classId, bookId);
     _stamps = BookLibDB.getStamps(classId, bookId);
 
-    return { undone, done, exception, skipped,
+    if (noDataChapters.length) {
+      console.warn('[BooklibApp] ⚠️ 이번 반영 배치에 데이터가 없어 건너뛴 챕터(처리범위 내):', noDataChapters);
+    }
+
+    return { undone, done, exception, skipped, noDataChapters,
       stampTitle: stampCh?.title || null };
   }
 
@@ -4144,7 +4150,7 @@ const BooklibApp = (() => {
       // ★ 성적 반영 (xlsx와 완전 동일)
       const res = await _processCsv(rows);
 
-      return { ok: true, done: res.done, undone: res.undone, stampTitle: res.stampTitle };
+      return { ok: true, done: res.done, undone: res.undone, stampTitle: res.stampTitle, noDataChapters: res.noDataChapters };
     } catch(e) {
       console.error('[_applyClassCardData]', e);
       return { ok: false, error: e.message };
