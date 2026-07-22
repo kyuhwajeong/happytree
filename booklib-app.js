@@ -3062,7 +3062,7 @@ const BooklibApp = (() => {
           return StudentDB.getAll().filter(s=>sIds.includes(s.id));
         })();
 
-    /* 3. 타임스탬프 기준 챕터 결정 (CSV 역순, 완료율 ≥80%) */
+    /* 3. 타임스탬프 기준 챕터 결정 (자연정렬 기준 최신순 스캔, 완료율 ≥threshold%) */
     const stampTs   = _nowStampStr();
     const stampThreshold = Number(localStorage.getItem('bl_stamp_threshold')||50);
     console.log('%c[DEBUG 스탬프 진단] localStorage 원본값=', 'color:#e11d48;font-weight:bold', localStorage.getItem('bl_stamp_threshold'), '→ 실제 사용 threshold=', stampThreshold, '| 처리 중인 반=', classId, '| 교재=', bookId);
@@ -3070,11 +3070,12 @@ const BooklibApp = (() => {
     console.log('%c[DEBUG 스탬프 진단] 결정된 스탬프 챕터=', 'color:#e11d48;font-weight:bold', chs.find(c=>c.id===stampChId)?.title || '(없음/null)', '| stampChId=', stampChId);
 
     /* ★ 타임스탬프 이후 챕터는 처리 대상에서 제외
-     *   - 타임스탬프 챕터 order 이하만 처리
+     *   - chs[].order(매트릭스 표시 순서)는 CSV/확장 프로그램 순서에 따라 신뢰할 수
+     *     없을 수 있으므로, 스탬프 판정과 동일한 자연정렬 기준으로 범위를 결정한다
      *   - 이후 챕터는 완료/미수행 여부 불문 완전 무시 */
     const stampCh    = stampChId ? chs.find(ch => ch.id === stampChId) : null;
     const chsInScope = stampCh
-      ? chs.filter(ch => ch.order <= stampCh.order)
+      ? chs.filter(ch => _naturalCompare(_stripTypeTag(ch.title), _stripTypeTag(stampCh.title)) <= 0)
       : chs; // 타임스탬프 없으면 전체 처리
 
     /* 4. 예외 설정 가져오기 (모달에서 설정한 값) */
@@ -3174,6 +3175,25 @@ const BooklibApp = (() => {
    * 학습현황 챕터명에 CSV 제목이 포함되거나, CSV 제목에 챕터명이 포함
    * + CSV 타입(단어/문장)이 챕터명에 포함
    */
+  /* ── 자연 정렬(Natural Sort) 비교 ──
+   * "U9" < "U10", "U9" < "U9.R1" < "U9.R2" 순으로 비교
+   * ★ 스탬프 판정(_findStampChapter)에서만 "그때그때" 계산해서 쓰는 용도.
+   *   chs[].order(매트릭스 표시 순서)나 챕터 저장 데이터는 절대 건드리지 않음.
+   */
+  function _naturalCompare(a, b) {
+    const tok = s => { const out=[]; String(s||'').replace(/(\d+)|(\D+)/g,(_,d,t)=>{out.push(d!==undefined?{n:parseInt(d,10)}:{s:t});return '';}); return out; };
+    const ax = tok(a), bx = tok(b);
+    const len = Math.max(ax.length, bx.length);
+    for (let i=0;i<len;i++) {
+      const av=ax[i], bv=bx[i];
+      if (!av) return -1; if (!bv) return 1;
+      if (av.n!==undefined && bv.n!==undefined) { if (av.n!==bv.n) return av.n-bv.n; }
+      else { const as=av.n!==undefined?String(av.n):av.s, bs=bv.n!==undefined?String(bv.n):bv.s; const c=as.localeCompare(bs); if (c) return c; }
+    }
+    return 0;
+  }
+  const _stripTypeTag = s => String(s||'').replace(/\[단어\]|\[문장\]/g,'').trim();
+
   function _matchChapter(chTitle, csvTitle, csvType) {
     const stripType = s => s.replace(/\[단어\]|\[문장\]/g,'').trim();
     // ★ normalize: 괄호 안 번호를 _N으로 변환하여 "Unit.10(1)"→"unit.10_1" 구분 보장
@@ -3574,46 +3594,27 @@ const BooklibApp = (() => {
   }
 
   /* ── 타임스탬프 기준 챕터 찾기 ──
-   * CSV를 챕터 역순으로 순회, 첫 번째 완료율 ≥50% 챕터
+   * ★ 버그 수정(실측 로그로 확인됨): 기존엔 rows 배열을 역순으로 훑어 "최신 챕터"를
+   *   추정했으나, 확장 프로그램이 넘기는 rows 배열의 순서가 실제 유닛 진행 순서와
+   *   달라서 엉뚱하게 오래된 챕터(U06)에서 멈추는 문제가 실측으로 확인됐다.
+   *   → chs[].order(매트릭스 표시 순서, 저장 데이터)는 절대 건드리지 않고,
+   *     스탬프 판정 이 순간에만 챕터명을 자연정렬(숫자 기준)해서 진짜 최신순으로
+   *     재계산한다. 매칭은 기존 _matchChapter(정확 매칭)만 사용.
    */
   function _findStampChapter(rows, chs, threshold) {
-    threshold = threshold || 50; // default 50%
-    /* ★ CSV 챕터 고유 목록: 제목+타입 조합으로 dedup (역순) */
-    const csvChapters = []; // [{title, type}]
-    const seen = new Set();
-    for (let i = rows.length-1; i >= 0; i--) {
-      const t   = rows[i]['제목']?.trim();
-      const typ = rows[i]['타입']?.trim();
-      const key = t + '||' + typ;
-      if (t && !seen.has(key)) { csvChapters.push({title:t, type:typ}); seen.add(key); }
-    }
+    threshold = threshold || 50;
+    if (!chs || !chs.length) return null;
 
-    /* 각 제목+타입 조합별 완료율 계산 → 역순 첫 ≥50% 챕터 반환 */
-    for (const {title:csvTitle, type:csvType} of csvChapters) {
-      const titleRows = rows.filter(r =>
-        r['제목']?.trim() === csvTitle && r['타입']?.trim() === csvType
-      );
-      if (!titleRows.length) continue;
-      const done = titleRows.filter(r => r['완료']?.trim() === '완료').length;
-      // ★ 50% 이상(포함): done/total >= 0.5 → done*2 >= total
-      const pct  = done / titleRows.length * 100;
-      if (pct >= threshold) {
-        /* ★ 학습현황 챕터에서 제목+타입 매칭 (_syncChaptersFromXlsx로 이미 동기화됨) */
-        const fullTitle = `[${csvType}] ${csvTitle}`;
-        // 1차: _matchChapter 정확 매칭 → 동일명 전체 중 order 최대(마지막) 반환
-        let matchedAll = chs.filter(ch => _matchChapter(ch.title, csvTitle, csvType));
-        // 2차: fullTitle 직접 매칭
-        if (!matchedAll.length) matchedAll = chs.filter(ch => ch.title === fullTitle);
-        // 3차: 정규화 없이 title 포함 비교
-        if (!matchedAll.length) matchedAll = chs.filter(ch => ch.title.includes(csvTitle));
-        if (matchedAll.length) {
-          // ★ 동일명 그룹 중 가장 마지막(order 최대) 챕터를 stamp로 지정
-          // → chsInScope = order ≤ 마지막 → 동일명 그룹 전체가 scope에 포함
-          const matched = matchedAll.reduce((a,b)=>(b.order>a.order?b:a));
-          return matched.id;
-        }
-        /* 매칭 실패 시: 계속 탐색 */
-      }
+    /* ★ chs 원본 배열/순서는 변경하지 않고, 판정용 사본만 자연정렬(최신→과거) */
+    const ranked = [...chs].sort((a, b) => _naturalCompare(_stripTypeTag(b.title), _stripTypeTag(a.title)));
+
+    for (const ch of ranked) {
+      const chRows = rows.filter(r => _matchChapter(ch.title, r['제목'], r['타입']));
+      if (!chRows.length) continue; // 이 배치에 해당 챕터 데이터가 없으면 더 과거 챕터로 계속 탐색
+
+      const done = chRows.filter(r => (r['완료']||'').trim() === '완료').length;
+      const pct  = done / chRows.length * 100;
+      if (pct >= threshold) return ch.id;
     }
     return null;
   }
