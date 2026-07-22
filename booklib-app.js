@@ -3062,35 +3062,17 @@ const BooklibApp = (() => {
           return StudentDB.getAll().filter(s=>sIds.includes(s.id));
         })();
 
-    /* 3. 타임스탬프 기준 챕터 결정 (자연정렬 기준 최신순 스캔, 완료율 ≥threshold%) */
+    /* 3. 타임스탬프 기준 챕터 결정 (CSV 역순, 완료율 ≥80%) */
     const stampTs   = _nowStampStr();
     const stampThreshold = Number(localStorage.getItem('bl_stamp_threshold')||50);
-    console.log('%c[DEBUG 스탬프 진단] localStorage 원본값=', 'color:#e11d48;font-weight:bold', localStorage.getItem('bl_stamp_threshold'), '→ 실제 사용 threshold=', stampThreshold, '| 처리 중인 반=', classId, '| 교재=', bookId);
-    // ★ [DEBUG] 이번 동기화 배치(rows)에 실제로 어떤 챕터 데이터가 들어있는지 요약
-    (function(){
-      const seen = {};
-      rows.forEach(r=>{
-        const t=(r['제목']||'').trim(), ty=(r['타입']||'').trim();
-        const key = `[${ty}] ${t}`;
-        if(!seen[key]) seen[key]={total:0,done:0};
-        seen[key].total++;
-        if((r['완료']||'').trim()==='완료') seen[key].done++;
-      });
-      console.log('%c[DEBUG rows 배치 내용] 총 행 수=', 'color:#059669;font-weight:bold', rows.length, '| 고유 챕터 수=', Object.keys(seen).length);
-      Object.entries(seen).forEach(([k,v])=>{
-        console.log(`  ${k}  →  ${v.done}/${v.total} (${Math.round(v.done/v.total*100)}%)`);
-      });
-    })();
     const stampChId = _findStampChapter(rows, chs, stampThreshold);
-    console.log('%c[DEBUG 스탬프 진단] 결정된 스탬프 챕터=', 'color:#e11d48;font-weight:bold', chs.find(c=>c.id===stampChId)?.title || '(없음/null)', '| stampChId=', stampChId);
 
     /* ★ 타임스탬프 이후 챕터는 처리 대상에서 제외
-     *   - chs[].order(매트릭스 표시 순서)는 CSV/확장 프로그램 순서에 따라 신뢰할 수
-     *     없을 수 있으므로, 스탬프 판정과 동일한 자연정렬 기준으로 범위를 결정한다
+     *   - 타임스탬프 챕터 order 이하만 처리
      *   - 이후 챕터는 완료/미수행 여부 불문 완전 무시 */
     const stampCh    = stampChId ? chs.find(ch => ch.id === stampChId) : null;
     const chsInScope = stampCh
-      ? chs.filter(ch => _naturalCompare(_stripTypeTag(ch.title), _stripTypeTag(stampCh.title)) <= 0)
+      ? chs.filter(ch => ch.order <= stampCh.order)
       : chs; // 타임스탬프 없으면 전체 처리
 
     /* 4. 예외 설정 가져오기 (모달에서 설정한 값) */
@@ -3190,25 +3172,6 @@ const BooklibApp = (() => {
    * 학습현황 챕터명에 CSV 제목이 포함되거나, CSV 제목에 챕터명이 포함
    * + CSV 타입(단어/문장)이 챕터명에 포함
    */
-  /* ── 자연 정렬(Natural Sort) 비교 ──
-   * "U9" < "U10", "U9" < "U9.R1" < "U9.R2" 순으로 비교
-   * ★ 스탬프 판정(_findStampChapter)에서만 "그때그때" 계산해서 쓰는 용도.
-   *   chs[].order(매트릭스 표시 순서)나 챕터 저장 데이터는 절대 건드리지 않음.
-   */
-  function _naturalCompare(a, b) {
-    const tok = s => { const out=[]; String(s||'').replace(/(\d+)|(\D+)/g,(_,d,t)=>{out.push(d!==undefined?{n:parseInt(d,10)}:{s:t});return '';}); return out; };
-    const ax = tok(a), bx = tok(b);
-    const len = Math.max(ax.length, bx.length);
-    for (let i=0;i<len;i++) {
-      const av=ax[i], bv=bx[i];
-      if (!av) return -1; if (!bv) return 1;
-      if (av.n!==undefined && bv.n!==undefined) { if (av.n!==bv.n) return av.n-bv.n; }
-      else { const as=av.n!==undefined?String(av.n):av.s, bs=bv.n!==undefined?String(bv.n):bv.s; const c=as.localeCompare(bs); if (c) return c; }
-    }
-    return 0;
-  }
-  const _stripTypeTag = s => String(s||'').replace(/\[단어\]|\[문장\]/g,'').trim();
-
   function _matchChapter(chTitle, csvTitle, csvType) {
     const stripType = s => s.replace(/\[단어\]|\[문장\]/g,'').trim();
     // ★ normalize: 괄호 안 번호를 _N으로 변환하여 "Unit.10(1)"→"unit.10_1" 구분 보장
@@ -3609,21 +3572,25 @@ const BooklibApp = (() => {
   }
 
   /* ── 타임스탬프 기준 챕터 찾기 ──
-   * ★ 버그 수정(실측 로그로 확인됨): 기존엔 rows 배열을 역순으로 훑어 "최신 챕터"를
-   *   추정했으나, 확장 프로그램이 넘기는 rows 배열의 순서가 실제 유닛 진행 순서와
-   *   달라서 엉뚱하게 오래된 챕터(U06)에서 멈추는 문제가 실측으로 확인됐다.
-   *   → chs[].order(매트릭스 표시 순서, 저장 데이터)는 절대 건드리지 않고,
-   *     스탬프 판정 이 순간에만 챕터명을 자연정렬(숫자 기준)해서 진짜 최신순으로
-   *     재계산한다. 매칭은 기존 _matchChapter(정확 매칭)만 사용.
+   * ★ 버그 수정 (실제 ClassCard 데이터로 확인됨):
+   *   기존엔 rows 배열을 역순으로 훑어 "배열 끝 = 최신 챕터"라고 추정했다.
+   *   그런데 실제 ClassCard 세트 목록엔 U01~U20이 최소 2~3번 중복 등록되어
+   *   있고(예전에 만들었다가 다시 만든 세트 등), 이 중복 세트들이 배열 뒤쪽에
+   *   위치하면서 이미 완료율이 높은 오래된 세트라 threshold를 몇 %로 두든
+   *   먼저 걸려버려 엉뚱하게 오래된 챕터(U06)에서 멈추는 문제가 있었다.
+   *   → rows 배열 순서 대신, chs[].order(=_syncChaptersFromXlsx가 "처음 등장한
+   *     순서"로 dedup하며 이미 정확하게 매겨둔 진짜 챕터 순서)를 그대로 사용해
+   *     최신→과거 순으로 훑는다. 이 순서는 실측 데이터로 Review 세트 위치까지
+   *     정확함이 확인됐다.
    */
   function _findStampChapter(rows, chs, threshold) {
-    threshold = threshold || 50;
+    threshold = threshold || 50; // default 50%
     if (!chs || !chs.length) return null;
 
-    /* ★ chs 원본 배열/순서는 변경하지 않고, 판정용 사본만 자연정렬(최신→과거) */
-    const ranked = [...chs].sort((a, b) => _naturalCompare(_stripTypeTag(b.title), _stripTypeTag(a.title)));
+    /* ★ order 내림차순(최신 챕터부터) — chs 원본 배열/순서는 변경하지 않음 */
+    const sortedChs = [...chs].sort((a, b) => (b.order||0) - (a.order||0));
 
-    for (const ch of ranked) {
+    for (const ch of sortedChs) {
       const chRows = rows.filter(r => _matchChapter(ch.title, r['제목'], r['타입']));
       if (!chRows.length) continue; // 이 배치에 해당 챕터 데이터가 없으면 더 과거 챕터로 계속 탐색
 
