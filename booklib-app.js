@@ -3063,10 +3063,11 @@ const BooklibApp = (() => {
           return StudentDB.getAll().filter(s=>sIds.includes(s.id));
         })();
 
-    /* 3. 타임스탬프 기준 챕터 결정 (CSV 역순, 완료율 ≥80%) */
+    /* 3. 타임스탬프 기준 챕터 결정 (완료율 또는 수행 학생 비율, 토글로 전환) */
     const stampTs   = _nowStampStr();
     const stampThreshold = Number(localStorage.getItem('bl_stamp_threshold')||50);
-    const stampChId = _findStampChapter(rows, chs, stampThreshold);
+    const stampMode  = localStorage.getItem('bl_stamp_mode') === 'participation' ? 'participation' : 'completion';
+    const stampChId = _findStampChapter(rows, chs, stampThreshold, students.length, stampMode);
 
     /* ★ 타임스탬프 이후 챕터는 처리 대상에서 제외
      *   - 타임스탬프 챕터 order 이하만 처리
@@ -3588,9 +3589,17 @@ const BooklibApp = (() => {
    *     순서"로 dedup하며 이미 정확하게 매겨둔 진짜 챕터 순서)를 그대로 사용해
    *     최신→과거 순으로 훑는다. 이 순서는 실측 데이터로 Review 세트 위치까지
    *     정확함이 확인됐다.
+   *
+   * ★ 판정 모드 (mode) — 기본값은 반드시 'completion'(기존 동작)이어야 함
+   *   'completion'   (기본/토글 OFF): 이 챕터를 시도한 학생 중 '완료' 비율
+   *                                    pct = 완료 학생 수 / 챕터에 데이터가 있는 학생 수
+   *   'participation'(토글 ON)      : 완료 여부와 무관하게, 반 전체 학생 중
+   *                                    이 챕터를 시도(수행)한 학생 비율
+   *                                    pct = 챕터에 데이터가 있는 학생 수 / 전체 학생 수
    */
-  function _findStampChapter(rows, chs, threshold) {
+  function _findStampChapter(rows, chs, threshold, totalStudents, mode) {
     threshold = threshold || 50; // default 50%
+    mode = mode === 'participation' ? 'participation' : 'completion'; // ★ 안전한 기본값
     if (!chs || !chs.length) return null;
 
     /* ★ order 내림차순(최신 챕터부터) — chs 원본 배열/순서는 변경하지 않음 */
@@ -3600,8 +3609,16 @@ const BooklibApp = (() => {
       const chRows = rows.filter(r => _matchChapter(ch.title, r['제목'], r['타입']));
       if (!chRows.length) continue; // 이 배치에 해당 챕터 데이터가 없으면 더 과거 챕터로 계속 탐색
 
-      const done = chRows.filter(r => (r['완료']||'').trim() === '완료').length;
-      const pct  = done / chRows.length * 100;
+      let pct;
+      if (mode === 'participation') {
+        /* ★ 수행(참여) 학생 비율: 완료 여부 무관, 데이터가 있는 학생 수 / 전체 학생 수 */
+        const total = Number(totalStudents) || 0;
+        pct = total > 0 ? (chRows.length / total * 100) : 0;
+      } else {
+        /* 기존(기본값): 완료 비율 — 로직 변경 없음 */
+        const done = chRows.filter(r => (r['완료']||'').trim() === '완료').length;
+        pct = done / chRows.length * 100;
+      }
       if (pct >= threshold) return ch.id;
     }
     return null;
@@ -4253,6 +4270,7 @@ const BooklibApp = (() => {
     modal.onclick = e=>{ if(e.target===modal) modal.remove(); };
 
     const val = Number(localStorage.getItem('bl_stamp_threshold')||50);
+    const isParticipation = localStorage.getItem('bl_stamp_mode') === 'participation'; // ★ 기본값 false(완료율 모드)
     const box = document.createElement('div');
     box.style.cssText = 'background:var(--card);border-radius:16px;width:92%;max-width:380px;padding:20px;box-shadow:var(--sh2)';
     box.onclick = e=>e.stopPropagation();
@@ -4260,13 +4278,30 @@ const BooklibApp = (() => {
       <div style="font-size:15px;font-weight:800;color:var(--tx);margin-bottom:6px">📍 타임스탬프 기준 비율</div>
       <div style="font-size:11px;color:var(--tx3);line-height:1.6;margin-bottom:14px">
         xlsx/CSV 반영 및 ClassCard 확장 프로그램 연동 모두에 공통 적용됩니다.<br>
-        해당 챕터의 학생 완료율이 이 값 이상이면, 그 챕터까지 진도 스탬프가 찍힙니다.
+        아래 판정 방식으로 계산한 비율이 기준 이상이면, 그 챕터까지 진도 스탬프가 찍힙니다.
       </div>
+
+      <!-- ★ 판정 방식 토글 -->
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:var(--surf2);border-radius:10px;border:1px solid var(--bdr2);margin-bottom:10px">
+        <div>
+          <div style="font-size:12px;font-weight:800;color:var(--tx2)" id="bl-stamp-mode-label">${isParticipation ? '👥 수행 학생 비율' : '✅ 완료 비율'}</div>
+          <div style="font-size:10px;color:var(--tx3);margin-top:2px" id="bl-stamp-mode-desc">${isParticipation
+            ? '완료 여부 무관 · 반 전체 중 시도한 학생 비율'
+            : '이 챕터를 시도한 학생 중 완료 비율(기본값)'}</div>
+        </div>
+        <label style="position:relative;display:inline-block;width:42px;height:24px;flex-shrink:0">
+          <input type="checkbox" id="bl-stamp-mode-toggle" ${isParticipation?'checked':''} style="opacity:0;width:0;height:0">
+          <span id="bl-stamp-mode-track" style="position:absolute;inset:0;background:${isParticipation?'var(--a)':'var(--bdr2)'};border-radius:24px;cursor:pointer;transition:.15s">
+            <span id="bl-stamp-mode-knob" style="position:absolute;top:3px;left:${isParticipation?'21px':'3px'};width:18px;height:18px;background:#fff;border-radius:50%;transition:.15s;box-shadow:0 1px 3px rgba(0,0,0,.3)"></span>
+          </span>
+        </label>
+      </div>
+
       <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surf2);border-radius:10px;border:1px solid var(--bdr2)">
         <input type="range" id="bl-stamp-thresh-g" min="30" max="80" step="5" value="${val}" style="flex:1;accent-color:var(--a)">
         <span id="bl-stamp-thresh-g-val" style="font-size:14px;font-weight:900;color:var(--a);min-width:38px;text-align:right">${val}%</span>
       </div>
-      <div style="font-size:10px;color:var(--tx3);margin-top:6px">기본값 50% · 다음 반영부터 적용됩니다</div>
+      <div style="font-size:10px;color:var(--tx3);margin-top:6px">기본값 50% / 완료 비율 · 다음 반영부터 적용됩니다</div>
       <button style="margin-top:16px;width:100%;padding:11px;border-radius:10px;background:var(--a);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font)"
               onclick="document.getElementById('bl-stamp-settings')?.remove()">확인</button>
     `;
@@ -4275,6 +4310,16 @@ const BooklibApp = (() => {
     box.querySelector('#bl-stamp-thresh-g').addEventListener('input', function(){
       box.querySelector('#bl-stamp-thresh-g-val').textContent = this.value+'%';
       localStorage.setItem('bl_stamp_threshold', this.value);
+    });
+    box.querySelector('#bl-stamp-mode-toggle').addEventListener('change', function(){
+      const on = this.checked;
+      localStorage.setItem('bl_stamp_mode', on ? 'participation' : 'completion');
+      box.querySelector('#bl-stamp-mode-track').style.background = on ? 'var(--a)' : 'var(--bdr2)';
+      box.querySelector('#bl-stamp-mode-knob').style.left = on ? '21px' : '3px';
+      box.querySelector('#bl-stamp-mode-label').textContent = on ? '👥 수행 학생 비율' : '✅ 완료 비율';
+      box.querySelector('#bl-stamp-mode-desc').textContent = on
+        ? '완료 여부 무관 · 반 전체 중 시도한 학생 비율'
+        : '이 챕터를 시도한 학생 중 완료 비율(기본값)';
     });
   }
 
