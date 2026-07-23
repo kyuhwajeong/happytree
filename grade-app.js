@@ -1048,6 +1048,15 @@ to{opacity:1;transform:none}}
         e.returnValue = '저장되지 않은 성적 데이터가 있습니다. 페이지를 떠나시겠습니까?';
       }
     });
+
+    // ★ 탭 전환/백그라운드 전환 방어 — beforeunload는 모바일 앱 전환·화면잠금 시
+    //   거의 발화하지 않으므로, visibilitychange(hidden)와 pagehide에서도
+    //   동일하게 즉시 flush한다. (app.js의 기존 방어 패턴과 동일하게 통일)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') _flushAutoSaveTimers();
+    });
+    window.addEventListener('pagehide', () => { _flushAutoSaveTimers(); });
+
     document.addEventListener('click', _closeCtxMenu);
     console.log('[GradeApp] ✅ v4.1');
   }

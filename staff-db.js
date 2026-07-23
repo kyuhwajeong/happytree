@@ -43,6 +43,8 @@ const StaffDB = (() => {
   const LS_WORK  = 'hk10b_staffwork';
   const LS_TEMPL = 'hk10b_stafftempl';
   const LS_ACAD  = 'hk10b_acad';
+  const LS_PAY    = 'hk10b_staffpay';    // ★ 급여 로컬 캐시(오프라인 대비, 실시간 구독과 병행)
+  const LS_PAYALL = 'hk10b_staffpayall'; // ★ 전원 일괄 급여 로컬 캐시
   const FB_STAFF = 'hakwon10/staff';
   const FB_WORK  = 'hakwon10/staffwork';
   const FB_TEMPL  = 'hakwon10/stafftempl';
@@ -102,6 +104,8 @@ const StaffDB = (() => {
     });
     _templ = _lg(LS_TEMPL) || {};
     _acad  = { name: '해피트리 영어학원', ...(_lg(LS_ACAD) || {}) };
+    _pay    = _lg(LS_PAY)    || {};
+    _payAll = _lg(LS_PAYALL) || {};
 
     /* 기존 데이터 마이그레이션 — employType 없으면 'fulltime' 기본값 */
     _staff = _staff.map(s => ({
@@ -186,6 +190,22 @@ const StaffDB = (() => {
         _templ = nd;
         _ls(LS_TEMPL, _templ);
         _fire('templ');
+      }
+    });
+
+    /* ─ 급여 이력 실시간 리스너 (기존엔 최초 1회 get()만 있었음 — 멀티기기 미반영 버그) ─
+     *   다른 기기에서 급여를 확정/수정하면 즉시 이 화면에도 반영되도록 구독 추가.
+     *   기존 syncPayHistory()의 수동 조회는 그대로 유지(하위 호환), 이 리스너가 보완함. */
+    FireDB.listen(FB_PAY, v => {
+      const nd = v || {};
+      if (JSON.stringify(nd) !== JSON.stringify(_pay)) {
+        _pay = nd; _ls(LS_PAY, _pay); _fire('pay');
+      }
+    });
+    FireDB.listen(FB_PAYALL, v => {
+      const nd = v || {};
+      if (JSON.stringify(nd) !== JSON.stringify(_payAll)) {
+        _payAll = nd; _ls(LS_PAYALL, _payAll); _fire('payall');
       }
     });
 
@@ -790,6 +810,7 @@ const StaffDB = (() => {
     };
     if (!_pay[key]) _pay[key] = {};
     _pay[key][sid] = snapshot;
+    _ls(LS_PAY, _pay); // ★ 즉시 로컬 캐시 (연결 여부와 무관 — FireDB.set이 오프라인이면 자체 큐잉)
     await FireDB.set(`${FB_PAY}/${key}/${sid}`, snapshot).catch(console.warn);
     return snapshot;
   }
@@ -810,6 +831,7 @@ const StaffDB = (() => {
       }),
     };
     _payAll[key] = summary;
+    _ls(LS_PAYALL, _payAll); // ★ 즉시 로컬 캐시
     await FireDB.set(`${FB_PAYALL}/${key}`, summary).catch(console.warn);
     return summary;
   }
@@ -838,8 +860,8 @@ const StaffDB = (() => {
         FireDB.get(FB_PAY).catch(() => null),
         FireDB.get(FB_PAYALL).catch(() => null),
       ]);
-      if (pD)  _pay    = pD;
-      if (paD) _payAll = paD;
+      if (pD)  { _pay    = pD;  _ls(LS_PAY, _pay); }
+      if (paD) { _payAll = paD; _ls(LS_PAYALL, _payAll); }
       console.log('[StaffDB] 급여 이력 동기화 완료');
     } catch(e) { console.warn('[StaffDB] syncPayHistory', e); }
   }
@@ -849,6 +871,7 @@ const StaffDB = (() => {
     if (_pay[key]?.[sid]) {
       delete _pay[key][sid];
       if (!Object.keys(_pay[key]).length) delete _pay[key];
+      _ls(LS_PAY, _pay); // ★ 즉시 로컬 캐시 갱신
       await FireDB.remove(`${FB_PAY}/${key}/${sid}`).catch(console.warn);
     }
   }
