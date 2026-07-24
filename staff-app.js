@@ -1850,13 +1850,24 @@ const StaffApp = (() => {
   async function _calcAndRender() {
     _onSel();
     if (!_st.payStaffId) { _toast('⚠️ 직원을 선택해주세요'); return; }
+
+    // 로딩 표시 (서버 동기화 중임을 명확히)
+    const pb0 = document.getElementById('sf-pb');
+    if (pb0) pb0.innerHTML = `<div class="sf-empty" style="padding:48px 20px"><div style="font-size:36px;margin-bottom:8px">⏳</div>서버에서 최신 근무 내역 확인 중...</div>`;
+
+    // 급여 계산 전 반드시 서버에서 최신 근무 데이터 강제 재조회
+    // (달력 탭의 openCal()과 동일한 안전장치 — 폰/PC 어디서든 항상 최신 서버값 기준으로 계산)
+    try {
+      await StaffDB.syncWorkData(_st.payStaffId);
+    } catch(e) { console.warn('[_calcAndRender] syncWorkData 실패', e); }
+
     const r = StaffDB.calcPay(_st.payStaffId, _st.payYear, _st.payMonth);
     _st.payResult = r;
     const pb = document.getElementById('sf-pb');
     if (pb) pb.innerHTML = _payHTML(r);
     try {
       await StaffDB.savePayResult(_st.payStaffId, _st.payYear, _st.payMonth, r);
-      _toast('💾 급여 저장 완료', 'success');
+      _toast('💾 급여 저장 완료 (서버 기준)', 'success');
     } catch(e) { console.warn('savePayResult', e); }
   }
   /**
@@ -2066,6 +2077,13 @@ const StaffApp = (() => {
     const staff = StaffDB.getActive();
     const body  = document.getElementById('sf-all-body'); if (!body) return;
     if (!staff.length) { body.innerHTML = '<div class="sf-empty">등록된 직원이 없습니다</div>'; return; }
+
+    // 집계 전 전 직원 근무 데이터를 서버에서 강제 재조회 (멀티기기 일관성 보장)
+    body.innerHTML = `<div class="sf-empty" style="padding:48px 20px"><div style="font-size:36px;margin-bottom:8px">⏳</div>서버에서 전 직원 근무 내역 확인 중...</div>`;
+    try {
+      await Promise.all(staff.map(s => StaffDB.syncWorkData(s.id)));
+    } catch(e) { console.warn('[_calcAll] syncWorkData 실패', e); }
+
     if (_st.payMonth === 0) {
       _renderAnnual(staff, body);
     } else {
@@ -2074,7 +2092,7 @@ const StaffApp = (() => {
         const results = staff.map(s => ({ sid: s.id, r: StaffDB.calcPay(s.id, _st.payYear, _st.payMonth) }));
         await StaffDB.savePayAllResult(_st.payYear, _st.payMonth, results);
         await Promise.all(results.map(({ sid, r }) => r ? StaffDB.savePayResult(sid, _st.payYear, _st.payMonth, r) : null));
-        _toast('💾 급여 집계 저장 완료', 'success');
+        _toast('💾 급여 집계 저장 완료 (서버 기준)', 'success');
       } catch(e) { console.warn('savePayAllResult', e); }
     }
   }
