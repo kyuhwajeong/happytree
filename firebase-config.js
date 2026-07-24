@@ -58,8 +58,12 @@ const FireDB = (() => {
     if (idx >= 0) q[idx] = item; else q.push(item); // 같은 경로는 최신값으로 덮어씀
     _saveQueue(q);
     console.log(`[FireDB] 📥 오프라인 큐 적재 (${op}):`, path);
+    _updatePendingBadge();
   }
-  function _dequeue(path) { _saveQueue(_loadQueue().filter(x => x.path !== path)); }
+  function _dequeue(path) {
+    _saveQueue(_loadQueue().filter(x => x.path !== path));
+    _updatePendingBadge();
+  }
 
   let _flushing = false;
   async function _flushQueue() {
@@ -86,8 +90,43 @@ const FireDB = (() => {
       console.log(`[FireDB] ✅ 오프라인 큐 전송 완료: 성공 ${ok}건, 실패 ${fail}건`);
       _showFlushedBadge(ok);
     }
+    _updatePendingBadge();
   }
   function getPendingCount() { return _loadQueue().length; }
+
+  /* ══════════════════════════════════════════════════════
+   * ★ 대기 항목 상시 배지 — 모든 모듈(진도·교재·성적·직원) 공통
+   * ────────────────────────────────────────────────────────
+   * "언젠가 다 전송되고 나서"만 잠깐 뜨는 완료 배지와 달리,
+   * 큐에 무언가 쌓여 있는 "동안 내내" 화면 한쪽에 계속 보인다.
+   * 사용자가 지금 입력한 게 서버에 반영됐는지 안 됐는지를
+   * 어느 화면(진도/교재/성적/직원)에 있든 항상 스스로 판단할 수 있게 함.
+   * ══════════════════════════════════════════════════════ */
+  function _updatePendingBadge() {
+    const n = getPendingCount();
+    let badge = document.getElementById('fb-pending-badge');
+    if (n === 0) {
+      if (badge) badge.remove();
+      return;
+    }
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.id = 'fb-pending-badge';
+      badge.style.cssText = [
+        'position:fixed;bottom:118px;right:12px;z-index:8887',
+        'display:flex;align-items:center;gap:6px',
+        'padding:6px 12px;border-radius:20px',
+        'font-size:11px;font-weight:800;pointer-events:auto;cursor:pointer',
+        'background:rgba(245,158,11,.14);color:#b45309',
+        'border:1.5px solid rgba(245,158,11,.4)',
+        'box-shadow:0 2px 10px rgba(0,0,0,.15)',
+        'backdrop-filter:blur(8px);transition:opacity .3s',
+      ].join(';');
+      badge.onclick = () => { syncNow(); };
+      document.body.appendChild(badge);
+    }
+    badge.innerHTML = `⏳ 서버 저장 대기 ${n}건 · 탭하여 재시도`;
+  }
 
   /* ★ 큐 전송 완료 알림 배지 (사용자가 자동 동기화를 인지할 수 있도록) */
   function _showFlushedBadge(count) {
@@ -271,7 +310,9 @@ const FireDB = (() => {
         if (!_connected) _scheduleRetry();
       });
 
-      /* ★ 탭 백그라운드→포어그라운드 복귀 */
+      /* ★ 탭 백그라운드→포어그라운드 복귀 — 장시간 방치 후에도
+       * 즉시 응답하도록, 연결이 끊겨 있었다면 재연결부터, 이미
+       * 연결돼 있다면 대기 중인 큐가 있는지 바로 확인해 전송 시도 */
       document.addEventListener('visibilitychange', () => {
         if (document.hidden) return;
         console.log('[FireDB] 👁 탭 활성화 → 연결 상태 확인');
@@ -279,13 +320,19 @@ const FireDB = (() => {
           _retryCount = 0;
           clearTimeout(_retryTimer); _retryTimer = null;
           _scheduleRetry();
+        } else if (getPendingCount() > 0) {
+          console.log(`[FireDB] 👁 탭 재활성화 시 대기 항목 ${getPendingCount()}건 발견 → 즉시 전송 시도`);
+          _flushQueue();
         }
+        _updatePendingBadge();
       });
 
       /* ★ keepalive 시작 */
       _startKeepAlive();
       /* ★ 주기적 큐 자동 전송 시작 */
       _startQueueWatcher();
+      /* ★ 이전 세션에서 넘어온 대기 항목이 있으면 즉시 배지로 알림 */
+      _updatePendingBadge();
 
     } catch (e) {
       _ok = false;
