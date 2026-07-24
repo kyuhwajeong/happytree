@@ -47,6 +47,7 @@ const StaffApp = (() => {
     subTab:       _loadHomeTab ? _loadHomeTab() : 'list',
     editId:       null,
     calStaffId:   null,
+    calSyncFailed: false,
     calYear:      new Date().getFullYear(),
     calMonth:     new Date().getMonth() + 1,
     payStaffId:   null,
@@ -898,18 +899,23 @@ const StaffApp = (() => {
     _st.selectMode  = false;
     _st.selected    = new Set();
     _st.copyTargets = new Set();
+    _st.calSyncFailed = false;
     document.getElementById('sf-cal-ov')?.classList.remove('hidden');
     history.pushState({ pg: 'staff', modal: 'cal' }, '');
     // 1차: 메모리 캐시로 즉시 표시
     _drawCal();
     // 2차: Firebase 서버에서 직원정보 + 근무데이터 강제 재조회 후 갱신 (타기기 등록 반영)
-    try {
-      await Promise.all([
-        StaffDB.syncStaffData(),
-        StaffDB.syncWorkData(sid),
-      ]);
-      _drawCal(); // 최신 데이터로 재렌더
-    } catch(e) { console.warn('[openCal] sync', e); }
+    // 8초 타임아웃 — 네트워크가 불안정해도 달력이 "확인 중" 상태로 멈추지 않게 함.
+    // 급여 계산과 달리 달력은 "아무것도 안 보여준다"가 답이 아니므로
+    // 실패 시에도 화면은 그대로 두되, 서버 미확인 상태임을 눈에 띄게 표시한다.
+    const syncOk = await _withTimeout(
+      Promise.all([StaffDB.syncStaffData(), StaffDB.syncWorkData(sid)])
+        .then(() => true).catch(e => { console.warn('[openCal] sync', e); return false; }),
+      8000,
+      '달력 서버동기화'
+    );
+    _st.calSyncFailed = (syncOk !== true);
+    _drawCal(); // 최신(또는 미확인 경고 포함) 데이터로 재렌더
   }
 
   /**
@@ -924,9 +930,9 @@ const StaffApp = (() => {
       const beforeId = _st.calStaffId;
       const before = Object.keys(StaffDB.getWorkMonth(beforeId, `${_st.calYear}-${String(_st.calMonth).padStart(2,'0')}`));
 
-      // 직원 목록 + 근무 데이터 모두 서버 강제 재조회
-      await StaffDB.syncStaffData();
-      await StaffDB.syncWorkData(beforeId);
+      // 직원 목록 + 근무 데이터 모두 서버 강제 재조회 (8초 타임아웃)
+      await _withTimeout(StaffDB.syncStaffData(), 8000, '진단 직원목록 동기화');
+      await _withTimeout(StaffDB.syncWorkData(beforeId), 8000, '진단 근무데이터 동기화');
       _drawCal();
 
       const s = StaffDB.getById(beforeId);
@@ -995,6 +1001,10 @@ const StaffApp = (() => {
 
     sh.innerHTML = `
       <div class="sh-handle"></div>
+      ${_st.calSyncFailed ? `<div style="background:#fef2f2;border-bottom:2px solid #ef4444;padding:8px 14px;flex-shrink:0;display:flex;align-items:center;gap:8px">
+        <span style="font-size:12px;font-weight:700;color:#991b1b;flex:1">⚠️ 서버 확인 실패 — 화면에 최신 정보가 아닐 수 있습니다</span>
+        <button onclick="StaffApp._forceServerSync()" style="padding:5px 12px;border-radius:7px;background:#ef4444;color:#fff;border:none;font-size:11px;font-weight:700;cursor:pointer;font-family:var(--font)">🔄 재시도</button>
+      </div>` : ''}
       ${_st.copyMode ? `<div class="sf-copy-banner">
         <span class="sf-copy-banner-txt">📋 ${_st.copyFromDate} 복사 중 · ${_st.copyTargets.size}개 선택<br><small>대상 날짜를 탭하세요</small></span>
         <button class="sf-copy-confirm" onclick="StaffApp._confirmCopy()">복사 (${_st.copyTargets.size})</button>
@@ -1870,7 +1880,7 @@ const StaffApp = (() => {
     }
   }
 
-  async function _calcAndRender() {
+  async function _calcAndRender(retrying) {
     _onSel();
     if (!_st.payStaffId) { _toast('⚠️ 직원을 선택해주세요'); return; }
 
@@ -1878,14 +1888,37 @@ const StaffApp = (() => {
     const pb0 = document.getElementById('sf-pb');
     if (pb0) pb0.innerHTML = `<div class="sf-empty" style="padding:48px 20px"><div style="font-size:36px;margin-bottom:8px">⏳</div>서버에서 최신 데이터 확인 중...</div>`;
 
-    // 급여 계산 전 반드시 서버에서 최신 직원정보 + 근무 데이터를 강제 재조회
-    // (직원 목록도 함께 동기화해 기기 간 id 불일치로 인한 "이름은 같은데 근무가 안 보이는" 문제를 방지)
-    try {
-      await Promise.all([
-        StaffDB.syncStaffData(),
-        StaffDB.syncWorkData(_st.payStaffId),
-      ]);
-    } catch(e) { console.warn('[_calcAndRender] sync 실패', e); }
+    // 급여 계산 전 반드시 서버에서 최신 직원정보 + 근무 데이터를 강제 재조회.
+    // ★ 중요: 확인에 실패했는데도 그냥 로컬 값으로 계산해서 "정상 결과"처럼
+    //   보여주면, 겉보기엔 정상 계산인데 실제로는 옛날 값일 수 있는
+    //   "숨겨진 오류 표시"가 되어버린다 — 이전에 겪었던 동기화 버그와
+    //   본질적으로 같은 문제. 그래서 실패 시엔 절대 계산 결과를 보여주지
+    //   않고, 재시도를 명확히 요구하는 오류 화면만 보여준다.
+    const syncOk = await _withTimeout(
+      Promise.all([StaffDB.syncStaffData(), StaffDB.syncWorkData(_st.payStaffId)])
+        .then(() => true)
+        .catch(e => { console.warn('[_calcAndRender] sync 실패', e); return false; }),
+      8000,
+      '급여탭 서버동기화'
+    );
+
+    if (syncOk !== true) {
+      // 서버 확인 실패/타임아웃 — 계산하지 않고 명확한 오류 화면만 표시
+      _st.payResult = null;
+      const pb = document.getElementById('sf-pb');
+      if (pb) pb.innerHTML = `
+        <div class="sf-empty" style="padding:40px 20px">
+          <div style="font-size:40px;margin-bottom:10px">⚠️</div>
+          <div style="font-weight:800;color:#dc2626;margin-bottom:6px">서버 확인에 실패했습니다</div>
+          <div style="font-size:12px;color:var(--tx3);line-height:1.8;margin-bottom:16px">
+            네트워크가 불안정하여 최신 데이터를 확인하지 못했습니다.<br>
+            정확하지 않은 값을 보여드리지 않기 위해 계산을 중단했습니다.
+          </div>
+          <button class="sf-calc-btn" style="padding:10px 24px" onclick="StaffApp._calcAndRender(true)">🔄 다시 시도</button>
+        </div>`;
+      if (!retrying) _toast('⚠️ 서버 확인 실패 — 다시 시도해주세요');
+      return; // 여기서 종료. 부정확할 수 있는 값은 절대 계산·표시하지 않는다.
+    }
 
     const r = StaffDB.calcPay(_st.payStaffId, _st.payYear, _st.payMonth);
     _st.payResult = r;
@@ -1893,7 +1926,7 @@ const StaffApp = (() => {
     if (pb) pb.innerHTML = _payHTML(r);
     try {
       await StaffDB.savePayResult(_st.payStaffId, _st.payYear, _st.payMonth, r);
-      _toast('💾 급여 저장 완료 (서버 기준)', 'success');
+      _toast('💾 급여 저장 완료 (서버 확인됨)', 'success');
     } catch(e) { console.warn('savePayResult', e); }
   }
   /**
@@ -2103,15 +2136,40 @@ const StaffApp = (() => {
     const body = document.getElementById('sf-all-body'); if (!body) return;
 
     // 집계 전 직원 목록 + 전 직원 근무 데이터를 서버에서 강제 재조회 (멀티기기 일관성 보장)
+    // ★ 실패 시 계산을 진행하지 않는다 — 부정확할 수 있는 값을 정상 결과처럼
+    //   보여주지 않기 위함(단일 직원 급여탭과 동일한 원칙).
     body.innerHTML = `<div class="sf-empty" style="padding:48px 20px"><div style="font-size:36px;margin-bottom:8px">⏳</div>서버에서 전 직원 근무 내역 확인 중...</div>`;
-    try { await StaffDB.syncStaffData(); } catch(e) { console.warn('[_calcAll] syncStaffData 실패', e); }
+    const staffSyncOk = await _withTimeout(
+      StaffDB.syncStaffData().then(() => true).catch(e => { console.warn('[_calcAll] syncStaffData 실패', e); return false; }),
+      8000, '일괄정산 직원목록 동기화'
+    );
+    if (staffSyncOk !== true) {
+      body.innerHTML = `<div class="sf-empty" style="padding:40px 20px">
+        <div style="font-size:40px;margin-bottom:10px">⚠️</div>
+        <div style="font-weight:800;color:#dc2626;margin-bottom:6px">서버 확인에 실패했습니다</div>
+        <div style="font-size:12px;color:var(--tx3);margin-bottom:16px">네트워크 상태를 확인하고 다시 시도해주세요.</div>
+        <button class="sf-calc-btn" style="padding:10px 24px" onclick="StaffApp._calcAll()">🔄 다시 시도</button>
+      </div>`;
+      return;
+    }
 
     const staff = StaffDB.getActive();
     if (!staff.length) { body.innerHTML = '<div class="sf-empty">등록된 직원이 없습니다</div>'; return; }
 
-    try {
-      await Promise.all(staff.map(s => StaffDB.syncWorkData(s.id)));
-    } catch(e) { console.warn('[_calcAll] syncWorkData 실패', e); }
+    const workSyncOk = await _withTimeout(
+      Promise.all(staff.map(s => StaffDB.syncWorkData(s.id)))
+        .then(() => true).catch(e => { console.warn('[_calcAll] syncWorkData 실패', e); return false; }),
+      12000, '일괄정산 근무데이터 동기화'
+    );
+    if (workSyncOk !== true) {
+      body.innerHTML = `<div class="sf-empty" style="padding:40px 20px">
+        <div style="font-size:40px;margin-bottom:10px">⚠️</div>
+        <div style="font-weight:800;color:#dc2626;margin-bottom:6px">서버 확인에 실패했습니다</div>
+        <div style="font-size:12px;color:var(--tx3);margin-bottom:16px">근무 데이터 확인 중 문제가 발생했습니다. 다시 시도해주세요.</div>
+        <button class="sf-calc-btn" style="padding:10px 24px" onclick="StaffApp._calcAll()">🔄 다시 시도</button>
+      </div>`;
+      return;
+    }
 
     if (_st.payMonth === 0) {
       _renderAnnual(staff, body);
@@ -2121,7 +2179,7 @@ const StaffApp = (() => {
         const results = staff.map(s => ({ sid: s.id, r: StaffDB.calcPay(s.id, _st.payYear, _st.payMonth) }));
         await StaffDB.savePayAllResult(_st.payYear, _st.payMonth, results);
         await Promise.all(results.map(({ sid, r }) => r ? StaffDB.savePayResult(sid, _st.payYear, _st.payMonth, r) : null));
-        _toast('💾 급여 집계 저장 완료 (서버 기준)', 'success');
+        _toast('💾 급여 집계 저장 완료 (서버 확인됨)', 'success');
       } catch(e) { console.warn('savePayAllResult', e); }
     }
   }
@@ -3408,6 +3466,19 @@ const StaffApp = (() => {
   }
 
   /* ══ 유틸 ══ */
+  /* 서버 동기화가 응답 없이 무한정 걸리는 상황(네트워크 불안정 등) 방지용
+   * 타임아웃 래퍼 — 지정 시간 안에 안 끝나면 조용히 포기하고
+   * 로컬 캐시로라도 계속 진행할 수 있게 한다(화면이 영원히 "확인 중"에
+   * 멈춰있는 문제 방지). */
+  function _withTimeout(promise, ms, label) {
+    return Promise.race([
+      promise,
+      new Promise((resolve) => setTimeout(() => {
+        console.warn(`[Timeout] ${label} — ${ms}ms 내 응답 없음, 로컬 데이터로 진행`);
+        resolve(null);
+      }, ms)),
+    ]);
+  }
   const _fmtHrs = h => { const n = Math.round(Number(h || 0) * 100) / 100; return n % 1 === 0 ? String(n) : String(n); };
   const _fmt    = n => Number(n).toLocaleString('ko-KR');
   const _e      = v => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
