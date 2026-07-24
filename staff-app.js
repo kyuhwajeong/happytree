@@ -2535,12 +2535,13 @@ const StaffApp = (() => {
       const pd     = Number(s.payDay || 0);
       const pdStr  = pd === 0 ? '말일' : `${pd}일`;
 
-      // 일별 상세 행
+      // 일별 상세 행 — 시간대(예: 20:00~23:00)를 함께 표시
       const dayRowsHTML = Object.keys(r.byDay).sort().map(date => {
         const d   = r.byDay[date];
         const dow = StaffDB.DOW_KO[new Date(date).getDay()];
+        const entries = d.entries || [];
         const amt = isPt
-          ? Math.round(d.entries.reduce((sum, e) => {
+          ? Math.round(entries.reduce((sum, e) => {
               const h  = Number(e.hours || e.baseHours || 0);
               const tr = e.type === 'class'
                 ? (r.classRate   || r.defaultRate || StaffDB.getMinWage())
@@ -2548,11 +2549,18 @@ const StaffApp = (() => {
               return sum + h * (Number(e.appliedRate) > 0 ? Number(e.appliedRate) : tr);
             }, 0))
           : Math.round((d.classHrs||0)*s.classRate + (d.generalHrs||0)*s.generalRate);
+
+        // 타입별 시간대 문자열 ("20:00~23:00" 형태), 같은 타입 여러 건이면 줄바꿈 연결
+        const classTimes   = entries.filter(e=>e.type==='class'  ).map(e=>e.start&&e.end?`${e.start}~${e.end}`:'').filter(Boolean);
+        const generalTimes = entries.filter(e=>e.type!=='class'  ).map(e=>e.start&&e.end?`${e.start}~${e.end}`:'').filter(Boolean);
+        const classCell   = d.classHrs   ? `${_fmtHrs(d.classHrs)}h${classTimes.length?`<br><span style="color:#9ca3af;font-size:9.5px">${classTimes.join('<br>')}</span>`:''}`   : '-';
+        const generalCell = d.generalHrs ? `${_fmtHrs(d.generalHrs)}h${generalTimes.length?`<br><span style="color:#9ca3af;font-size:9.5px">${generalTimes.join('<br>')}</span>`:''}` : '-';
+
         return `<tr>
-          <td>${date.slice(5)} (${dow})</td>
-          <td style="text-align:center">${d.classHrs?_fmtHrs(d.classHrs)+'h':'-'}</td>
-          <td style="text-align:center">${d.generalHrs?_fmtHrs(d.generalHrs)+'h':'-'}</td>
-          <td style="text-align:right;font-weight:700">${_fmt(amt)}원</td>
+          <td style="vertical-align:top;padding-top:6px">${date.slice(5)} (${dow})</td>
+          <td style="text-align:center;vertical-align:top">${classCell}</td>
+          <td style="text-align:center;vertical-align:top">${generalCell}</td>
+          <td style="text-align:right;font-weight:700;vertical-align:top;padding-top:6px">${_fmt(amt)}원</td>
         </tr>`;
       }).join('');
 
@@ -2570,19 +2578,10 @@ const StaffApp = (() => {
         <div style="font-family:'Noto Sans KR',Arial,sans-serif;background:#ffffff;width:360px;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.12)">
           <!-- 헤더 -->
           <div style="background:linear-gradient(135deg,#f0fdf4,#eff6ff);padding:16px 18px;border-bottom:1px solid #e5e7eb">
-            <div style="display:flex;align-items:center;justify-content:space-between">
-              <div>
-                <div style="font-size:11px;color:#6b7280;font-weight:700;letter-spacing:.5px">💰 급여 명세서</div>
-                <div style="font-size:18px;font-weight:900;color:#111;margin-top:3px">${_e(s.name)}</div>
-                <div style="font-size:11px;color:#6b7280;margin-top:3px">
-                  ${isPt?'⏱ 알바':'🏢 정직원'} · ${r.from} ~ ${r.to} · 지급 ${pdStr}
-                </div>
-              </div>
-              <div style="text-align:right">
-                <div style="font-size:11px;color:#6b7280">세전 합계</div>
-                <div style="font-size:26px;font-weight:900;color:#2563eb;line-height:1.1">${_fmt(r.totalPay)}</div>
-                <div style="font-size:12px;color:#2563eb">원</div>
-              </div>
+            <div style="font-size:11px;color:#6b7280;font-weight:700;letter-spacing:.5px">💰 급여 명세서</div>
+            <div style="font-size:20px;font-weight:900;color:#111;margin-top:4px">${_e(s.name)}</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:4px">
+              ${isPt?'⏱ 알바':'🏢 정직원'} · ${r.from} ~ ${r.to} · 지급 ${pdStr}
             </div>
           </div>
           <!-- 급여 항목 -->
@@ -2612,11 +2611,6 @@ const StaffApp = (() => {
               </div>` : ''}
               ${r.monthlyFixed ? `<div style="padding:7px 10px;background:#eff6ff;border-radius:8px;margin-top:6px;font-size:12px;font-weight:700;color:#2563eb">🏢 고정 월급 적용</div>` : ''}
             `}
-            <!-- 합계 -->
-            <div style="display:flex;justify-content:space-between;padding:10px 0 4px;border-top:2px solid #2563eb;margin-top:8px">
-              <span style="font-size:14px;font-weight:800;color:#111">⚡ 세전 합계</span>
-              <span style="font-size:20px;font-weight:900;color:#2563eb">${_fmt(r.totalPay)}원</span>
-            </div>
           </div>
           ${dayRowsHTML ? `
           <!-- 일별 상세 -->
@@ -2632,6 +2626,13 @@ const StaffApp = (() => {
               <tbody>${dayRowsHTML}</tbody>
             </table>
           </div>` : ''}
+          <!-- 세전 합계: 근무 상세 아래에서 위→아래로 합산 흐름을 인지하기 쉽게 배치 -->
+          <div style="padding:14px 18px;background:#eff6ff;border-top:2px solid #2563eb">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-size:14px;font-weight:800;color:#111">⚡ 세전 합계</span>
+              <span style="font-size:22px;font-weight:900;color:#2563eb">${_fmt(r.totalPay)}원</span>
+            </div>
+          </div>
           <!-- 푸터 -->
           <div style="padding:10px 18px;background:#f9fafb;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center">
             <span style="font-size:11px;color:#9ca3af">🏫 ${_e(acad.name)}</span>
