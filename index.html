@@ -1,6 +1,94 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
+<script>
+/* ══════════════════════════════════════════════════════
+ * 완전 자동 버전 감지 — 사람이 손댈 파일도, 목록도 없음
+ * ────────────────────────────────────────────────────────
+ * "이 파일들만 감시" 식의 하드코딩된 목록을 아예 없앴다.
+ * 대신 이 페이지가 실제로 불러오는 <script src>·<link href>
+ * 태그를 DOM에서 그때그때 직접 읽어서 감시 대상으로 삼는다.
+ *   → app.js, style.css, monitor-*.js 등 어떤 파일이 새로
+ *     추가되거나 index.html에 스크립트가 새로 추가돼도
+ *     자동으로 감시 대상에 포함된다. 목록 유지보수 불필요.
+ *
+ * Vercel은 배포 시 파일 "내용"이 바뀌면 그 파일의 ETag(고유 지문)를
+ * 서버가 스스로 새로 부여한다 — 이건 100% 자동, 개발자가 건드릴
+ * 부분이 없다. 이 지문을 주기적으로 HEAD 요청으로 확인해서,
+ * 하나라도 바뀌면 즉시 새로고침한다.
+ *
+ * no-cache 헤더만으론 못 막는 두 상황까지 방어:
+ *   1) bfcache(뒤로가기 캐시) 복원 — 네트워크 요청 자체가 생략됨
+ *   2) 홈 화면 PWA 백그라운드 재개 — 마찬가지로 새 요청 없음
+ * ══════════════════════════════════════════════════════ */
+(function() {
+  const LS_KEY = 'hk10b_fileSignature';
+  let checking = false;
+
+  /* 현재 페이지가 실제로 불러오는 "같은 서버(same-origin)의 로컬 파일"만
+   * 자동으로 골라낸다 — gstatic.com, cdnjs.com 같은 외부 CDN은 우리가
+   * 관리하는 파일이 아니므로 제외. 새 스크립트/스타일이 index.html에
+   * 추가되면 다음 로드 때부터 자동으로 이 목록에 포함된다. */
+  function discoverLocalFiles() {
+    const urls = new Set();
+    document.querySelectorAll('script[src], link[rel="stylesheet"][href]').forEach(el => {
+      const raw = el.getAttribute('src') || el.getAttribute('href');
+      if (!raw) return;
+      try {
+        const u = new URL(raw, location.href);
+        if (u.origin === location.origin) urls.add(u.pathname);
+      } catch (e) {}
+    });
+    urls.add('/index.html'); // 마크업 자체 변경도 감지
+    return Array.from(urls);
+  }
+
+  async function fetchSignature() {
+    const files = discoverLocalFiles();
+    const results = await Promise.all(files.map(async path => {
+      try {
+        const res = await fetch(path, { method: 'HEAD', cache: 'no-store' });
+        return path + ':' + (res.headers.get('etag') || res.headers.get('last-modified') || '');
+      } catch (e) { return path + ':err'; }
+    }));
+    return results.sort().join('|');
+  }
+
+  async function checkForUpdate(reason) {
+    if (checking) return;
+    checking = true;
+    try {
+      const sig  = await fetchSignature();
+      const prev = localStorage.getItem(LS_KEY);
+      if (prev === null) {
+        localStorage.setItem(LS_KEY, sig);
+      } else if (prev !== sig) {
+        console.log('[AutoUpdate] 서버 파일 변경 감지(' + reason + ') — 자동 새로고침');
+        localStorage.setItem(LS_KEY, sig);
+        location.reload();
+        return;
+      }
+    } catch (e) { /* 오프라인 등 - 조용히 무시 */ }
+    checking = false;
+  }
+
+  // 최초 확인은 모든 <script>/<link> 태그가 실제로 DOM에 존재해야 하므로
+  // 문서 파싱이 끝난 뒤(DOMContentLoaded)에 실행한다.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => checkForUpdate('최초 로드'));
+  } else {
+    checkForUpdate('최초 로드');
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') checkForUpdate('탭 활성화');
+  });
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted) checkForUpdate('bfcache 복원');
+  });
+  setInterval(() => checkForUpdate('주기 점검'), 5 * 60 * 1000);
+})();
+</script>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover,interactive-widget=resizes-content">
 <meta name="theme-color" content="#f8f9fc">
@@ -417,24 +505,24 @@
 <div id="toast" class="hidden"></div>
 <div id="drag-ghost" class="drag-ghost hidden"></div>
 
-<script src="firebase-config.js?v=202607231200"></script>
-<script src="logo.js?v=202607231200"></script>
-<script src="db.js?v=202607231200"></script>
-<script src="students-db.js?v=202607231200"></script>
-<script src="students-app.js?v=202607231200"></script>
-<script src="booklib-db.js?v=202607231200"></script>
-<script src="booklib-app.js?v=202607231200"></script>
-<script src="staff-db.js?v=202607231200"></script>
-<script src="staff-app.js?v=202607231200"></script>
-<script src="gemini-ai.js?v=202607231200"></script>
-<script src="grade-db.js?v=202607231200"></script>
-<script src="grade-app.js?v=202607231200"></script>
-<script src="app.js?v=202607231200"></script>
+<script src="firebase-config.js"></script>
+<script src="logo.js"></script>
+<script src="db.js"></script>
+<script src="students-db.js"></script>
+<script src="students-app.js"></script>
+<script src="booklib-db.js"></script>
+<script src="booklib-app.js"></script>
+<script src="staff-db.js"></script>
+<script src="staff-app.js"></script>
+<script src="gemini-ai.js"></script>
+<script src="grade-db.js"></script>
+<script src="grade-app.js"></script>
+<script src="app.js"></script>
 <!-- ★ 히든 실시간 모니터링 시스템 (app.js 이후 로드 필수) -->
-<script src="monitor-fcm.js?v=202607231200"></script>
-<script src="monitor-db.js?v=202607231200"></script>
-<script src="monitor-app.js?v=202607231200"></script>
-<script src="monitor-patch.js?v=202607231200"></script>
-<script src="guest-mode.js?v=202607231200"></script>
+<script src="monitor-fcm.js"></script>
+<script src="monitor-db.js"></script>
+<script src="monitor-app.js"></script>
+<script src="monitor-patch.js"></script>
+<script src="guest-mode.js"></script>
 </body>
 </html>

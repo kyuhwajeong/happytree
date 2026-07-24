@@ -902,9 +902,12 @@ const StaffApp = (() => {
     history.pushState({ pg: 'staff', modal: 'cal' }, '');
     // 1차: 메모리 캐시로 즉시 표시
     _drawCal();
-    // 2차: Firebase 서버에서 강제 읽기 후 갱신 (타기기 등록 반영)
+    // 2차: Firebase 서버에서 직원정보 + 근무데이터 강제 재조회 후 갱신 (타기기 등록 반영)
     try {
-      await StaffDB.syncWorkData(sid);
+      await Promise.all([
+        StaffDB.syncStaffData(),
+        StaffDB.syncWorkData(sid),
+      ]);
       _drawCal(); // 최신 데이터로 재렌더
     } catch(e) { console.warn('[openCal] sync', e); }
   }
@@ -918,19 +921,25 @@ const StaffApp = (() => {
     if (!_st.calStaffId) return;
     _toast('🔄 서버 데이터 확인 중...');
     try {
-      const s = StaffDB.getById(_st.calStaffId);
-      const before = Object.keys(StaffDB.getWorkMonth(_st.calStaffId, `${_st.calYear}-${String(_st.calMonth).padStart(2,'0')}`));
-      await StaffDB.syncWorkData(_st.calStaffId);
-      _drawCal();
-      const after = Object.keys(StaffDB.getWorkMonth(_st.calStaffId, `${_st.calYear}-${String(_st.calMonth).padStart(2,'0')}`));
+      const beforeId = _st.calStaffId;
+      const before = Object.keys(StaffDB.getWorkMonth(beforeId, `${_st.calYear}-${String(_st.calMonth).padStart(2,'0')}`));
 
-      // 진단용: 화면에 실제 서버 응답 날짜 목록을 직접 보여줌 (스크린샷으로 비교 가능)
-      console.log('[진단] 직원:', s?.name, '| 이번 달 이전:', before, '| 서버 동기화 후:', after);
+      // 직원 목록 + 근무 데이터 모두 서버 강제 재조회
+      await StaffDB.syncStaffData();
+      await StaffDB.syncWorkData(beforeId);
+      _drawCal();
+
+      const s = StaffDB.getById(beforeId);
+      const after = Object.keys(StaffDB.getWorkMonth(beforeId, `${_st.calYear}-${String(_st.calMonth).padStart(2,'0')}`));
+
+      // 진단용: 화면에 실제 서버 응답 날짜 목록 + 직원 id를 직접 보여줌 (스크린샷으로 비교 가능)
+      console.log('[진단] 직원:', s?.name, 'id:', beforeId, '| 이번 달 이전:', before, '| 서버 동기화 후:', after);
       const diagBox = document.createElement('div');
       const connOk = typeof FireDB !== 'undefined' && FireDB.isConnected();
       diagBox.style.cssText = 'position:fixed;bottom:80px;left:12px;right:12px;z-index:9999;background:#111;color:#0f0;font-family:monospace;font-size:11px;padding:10px 12px;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.4);max-height:40vh;overflow-y:auto';
       diagBox.innerHTML = `
         <div style="color:#fff;font-weight:800;margin-bottom:6px">🔍 서버 동기화 진단 (${s?.name || ''})</div>
+        <div>직원 ID: <span style="color:#93c5fd">${beforeId}</span></div>
         <div>기기: ${/Mobi|Android/i.test(navigator.userAgent) ? '📱 모바일' : '💻 PC'}</div>
         <div>Firebase 연결: ${connOk ? '🟢 온라인(신뢰 가능)' : '🔴 오프라인(캐시일 수 있음!)'}</div>
         <div>시각: ${new Date().toLocaleTimeString('ko-KR')}</div>
@@ -1827,6 +1836,20 @@ const StaffApp = (() => {
         ${_st.payResult ? _payHTML(_st.payResult)
           : `<div class="sf-empty" style="padding:48px 20px"><div style="font-size:44px;margin-bottom:8px">💰</div>직원을 선택하면 자동으로 계산됩니다<br><small style="font-size:12px">급여 기간: 1일~말일</small></div>`}
       </div>`;
+
+    // 급여 탭 진입 시 백그라운드로 직원 목록을 서버 기준으로 재동기화.
+    // 이름은 같아도 기기마다 id가 어긋나 있던 과거 데이터 불일치를 방지한다.
+    StaffDB.syncStaffData().then(() => {
+      if (_st.subTab === 'salary' && document.getElementById('sf-ps')) {
+        const sel = document.getElementById('sf-ps');
+        const cur = sel.value;
+        const fresh = StaffDB.getActive();
+        const opts = `<option value="">— 직원 선택 —</option>` +
+          fresh.map(s => `<option value="${s.id}" ${cur===s.id?'selected':''}>${_e(s.name)} (${s.employType==='parttime'?'알바':'정직원'})</option>`).join('');
+        if (sel.innerHTML !== opts) sel.innerHTML = opts;
+        if (_st.payStaffId && !_st.payResult) _calcAndRender();
+      }
+    }).catch(e => console.warn('[_renderSalary] syncStaffData', e));
   }
 
   function _onSel() {
@@ -1853,13 +1876,16 @@ const StaffApp = (() => {
 
     // 로딩 표시 (서버 동기화 중임을 명확히)
     const pb0 = document.getElementById('sf-pb');
-    if (pb0) pb0.innerHTML = `<div class="sf-empty" style="padding:48px 20px"><div style="font-size:36px;margin-bottom:8px">⏳</div>서버에서 최신 근무 내역 확인 중...</div>`;
+    if (pb0) pb0.innerHTML = `<div class="sf-empty" style="padding:48px 20px"><div style="font-size:36px;margin-bottom:8px">⏳</div>서버에서 최신 데이터 확인 중...</div>`;
 
-    // 급여 계산 전 반드시 서버에서 최신 근무 데이터 강제 재조회
-    // (달력 탭의 openCal()과 동일한 안전장치 — 폰/PC 어디서든 항상 최신 서버값 기준으로 계산)
+    // 급여 계산 전 반드시 서버에서 최신 직원정보 + 근무 데이터를 강제 재조회
+    // (직원 목록도 함께 동기화해 기기 간 id 불일치로 인한 "이름은 같은데 근무가 안 보이는" 문제를 방지)
     try {
-      await StaffDB.syncWorkData(_st.payStaffId);
-    } catch(e) { console.warn('[_calcAndRender] syncWorkData 실패', e); }
+      await Promise.all([
+        StaffDB.syncStaffData(),
+        StaffDB.syncWorkData(_st.payStaffId),
+      ]);
+    } catch(e) { console.warn('[_calcAndRender] sync 실패', e); }
 
     const r = StaffDB.calcPay(_st.payStaffId, _st.payYear, _st.payMonth);
     _st.payResult = r;
@@ -2074,12 +2100,15 @@ const StaffApp = (() => {
 
   async function _calcAll() {
     _onAllSel();
+    const body = document.getElementById('sf-all-body'); if (!body) return;
+
+    // 집계 전 직원 목록 + 전 직원 근무 데이터를 서버에서 강제 재조회 (멀티기기 일관성 보장)
+    body.innerHTML = `<div class="sf-empty" style="padding:48px 20px"><div style="font-size:36px;margin-bottom:8px">⏳</div>서버에서 전 직원 근무 내역 확인 중...</div>`;
+    try { await StaffDB.syncStaffData(); } catch(e) { console.warn('[_calcAll] syncStaffData 실패', e); }
+
     const staff = StaffDB.getActive();
-    const body  = document.getElementById('sf-all-body'); if (!body) return;
     if (!staff.length) { body.innerHTML = '<div class="sf-empty">등록된 직원이 없습니다</div>'; return; }
 
-    // 집계 전 전 직원 근무 데이터를 서버에서 강제 재조회 (멀티기기 일관성 보장)
-    body.innerHTML = `<div class="sf-empty" style="padding:48px 20px"><div style="font-size:36px;margin-bottom:8px">⏳</div>서버에서 전 직원 근무 내역 확인 중...</div>`;
     try {
       await Promise.all(staff.map(s => StaffDB.syncWorkData(s.id)));
     } catch(e) { console.warn('[_calcAll] syncWorkData 실패', e); }
