@@ -907,6 +907,46 @@ const StaffDB = (() => {
     }
   }
 
+  /**
+   * 직원 목록(및 각 직원의 실제 id)을 서버에서 강제 재조회.
+   *
+   * ★ 왜 필요한가 ★
+   * 근무 데이터는 syncWorkData()로 서버 강제 재조회를 하지만,
+   * "어떤 직원을 조회할지" 자체를 결정하는 _staff 배열(및 그 안의 id)은
+   * init() 시점에 로드된 뒤 갱신되지 않는 경우가 있었다.
+   * 과거 오프라인 상태에서 같은 이름의 직원이 기기별로 서로 다른
+   * 로컬 id로 각각 생성/저장된 적이 있다면 — 이름은 같아 보여도
+   * 실제 근무 데이터가 연결된 Firebase 경로(hakwon10/staffwork/{id})가
+   * 기기마다 달라져 "이름은 같은데 근무내역이 안 보이는" 현상이 생긴다.
+   * 급여 계산 직전에 이 함수로 직원 목록 자체를 서버 기준으로
+   * 재확인해, 여러 기기가 정확히 같은 id를 참조하도록 보장한다.
+   */
+  async function syncStaffData() {
+    if (!_fb()) {
+      console.warn('[StaffDB] syncStaffData: Firebase 연결 안됨 — offline 상태');
+      return;
+    }
+    try {
+      const connState = FireDB.isConnected() ? '🟢 온라인' : '🔴 오프라인(캐시 위험)';
+      const data = await FireDB.getFromServer(FB_STAFF);
+      if (data) {
+        const nd = Object.values(data).map(s => ({
+          employType: 'fulltime', monthlySalary: 0, baseHourlyRate: 0,
+          overtimeEnabled: false, overtimeRate: 1.5, overtimeStart: '22:00',
+          ...s,
+        }));
+        _staff = nd;
+        _ls(LS_STAFF, _staff);
+        console.log(`[StaffDB] ✅ syncStaffData [${connState}]: 직원 ${nd.length}명 로드`,
+          nd.map(s => `${s.name}(${s.id})`));
+      } else {
+        console.warn(`[StaffDB] ⚠️ syncStaffData [${connState}]: 서버에 직원 데이터 없음`);
+      }
+    } catch(e) {
+      console.error('[StaffDB] syncStaffData 오류:', e);
+    }
+  }
+
   /* ════════════════════════════════════════
    * 엑셀 출력 데이터 생성 (SheetJS 용)
    * ════════════════════════════════════════ */
@@ -978,7 +1018,7 @@ const StaffDB = (() => {
     /* 근무 */
     getWorkDay, getWorkMonth, getWorkRange,
     setWorkDay, addWorkEntry, deleteWorkEntry, updateWorkEntry,
-    syncWorkData,
+    syncWorkData, syncStaffData,
     deleteWorkEntries, copyEntries,
     /* 일괄 등록 */
     checkOverlap, batchInsert, batchDelete,
