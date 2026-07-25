@@ -737,6 +737,22 @@ body.dark .bk-inp.filled{color:#4ade80}
   100%{opacity:0;}
 }
 
+/* ★ 8-2b. 서버 미확인(오프라인 큐 대기) 상태 — .saved(초록 체크)와 명확히 구분되는
+ *   정직한 표시. 로컬엔 저장됐지만 아직 서버 반영이 확인되지 않았음을 알려서
+ *   "저장됐다고 믿었는데 실은 안 갔더라"는 오인을 방지한다. 실제로 서버에
+ *   반영되면(재연결 후 큐 전송 성공) 실시간 리스너가 다시 그리면서 이 클래스는
+ *   자연히 사라진다 — 별도 정리 코드 불필요. */
+.bk-row.queued{border-color:rgba(217,119,6,.5)!important}
+.bk-row.queued::after{
+  content:'🕓';position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  font-size:12px;pointer-events:none;
+  animation:tlQueuedPulse 1.6s ease-in-out infinite;
+}
+@keyframes tlQueuedPulse{
+  0%,100%{opacity:.5;}
+  50%{opacity:1;}
+}
+
 /* 8-3. "오늘로 이동"은 #op-tlnav 내 .tl-today-btn으로 통합됨(중복 플로팅 버튼 제거) */
 
 /* 8-4. 예정 교재(미확정) 카드 — 사선 패턴으로 "미확정" 시각적 은유 */
