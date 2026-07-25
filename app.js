@@ -199,6 +199,8 @@ const App = (() => {
     if (typeof BooklibApp  !== 'undefined') BooklibApp.init().catch(e=>console.warn('[BooklibApp]',e));
     if (typeof StaffApp    !== 'undefined') StaffApp.init().catch(e=>console.warn('[StaffApp]',e));
     if (typeof GradeApp    !== 'undefined') GradeApp.init().catch(e=>console.warn('[GradeApp]',e));
+    // ★ 공지 알림 팝업 모듈 초기화 (독립 모듈 — 오류 시 기존 기능 영향 없음)
+    if (typeof NoticeApp   !== 'undefined') NoticeApp.init().catch(e=>console.warn('[NoticeApp]',e));
 
     DB.on('classes',()=>{_renderChips();if(S.page==='operate')_renderOperateBody();if(S.page==='manage'&&S.mgTab==='classes'){_renderMgCls();if(_q('mg-fee-ov')&&!_q('mg-fee-ov').classList.contains('hidden'))_renderFeePanel();}});
     DB.on('progress',()=>{if(S.page==='operate')_renderOperateBody();if(S.shareActive)_refreshShareProgress();});
@@ -313,6 +315,8 @@ const App = (() => {
     _q('sf-logout-btn')?.classList.toggle('hidden',!loggedIn);
     // ★ admin 전용 탭 표시/숨김 → 동적 nav 렌더로 교체
     _renderNav();
+    // ★ 공지 알림 🔔 버튼 표시 상태 갱신 (독립 모듈)
+    if (typeof NoticeApp !== 'undefined') NoticeApp.refreshUI();
     if(loggedIn)_resetAutoLogout();
   }
 
