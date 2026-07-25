@@ -738,23 +738,31 @@ const DB = (() => {
 
   // ★ progress 개별 키 debounce 쓰기 — 완료 시 _pendingKeys에서 제거
   //   Firebase 리스너보다 늦게 도착한 서버 데이터가 로컬 입력을 덮어쓰는 버그 방지
+  //   ★ Promise를 반환해 호출부(UI)가 "진짜 서버 확인" vs "로컬 대기중"을
+  //     구분해서 보여줄 수 있게 한다 (true=서버 확인됨, false=오프라인 큐 대기중)
   function _writeProgress(key, value) {
     _pendingKeys.add(key);
     _outboxPut(key, value); // ★ 예약과 동시에 즉시 기록(디바운스 타이머가 못 돌아도 다음 세션에서 복구 가능)
     clearTimeout(_progressDebounce[key]);
-    _progressDebounce[key] = setTimeout(async () => {
-      delete _progressDebounce[key];
-      // 연결 여부와 무관하게 항상 저장 시도 — 오프라인이면 FireDB.set/remove가 자체 큐잉
-      const path = `${FireDB.P.progress}/${key}`;
-      try {
-        if (!value && value !== 0) await FireDB.remove(path);
-        else await FireDB.set(path, value);
-        _outboxRemove(key); // ★ 서버 반영 확인 후에만 대기열에서 제거
-      } catch(e) {
-        console.warn('[DB] progress 쓰기 실패:', key, e);
-      }
-      _pendingKeys.delete(key);
-    }, 800);
+    return new Promise((resolve) => {
+      _progressDebounce[key] = setTimeout(async () => {
+        delete _progressDebounce[key];
+        // 연결 여부와 무관하게 항상 저장 시도 — 오프라인이면 FireDB.set/remove가 자체 큐잉
+        const path = `${FireDB.P.progress}/${key}`;
+        let confirmed = false;
+        try {
+          if (!value && value !== 0) confirmed = await FireDB.remove(path);
+          else                        confirmed = await FireDB.set(path, value);
+          // FireDB.set/remove: true=서버에 실제 반영됨, false=오프라인이라 큐에 적재만 됨
+          if (confirmed !== false) _outboxRemove(key); // ★ 서버 반영 확인된 경우만 대기열에서 제거
+        } catch(e) {
+          console.warn('[DB] progress 쓰기 실패:', key, e);
+          confirmed = false;
+        }
+        _pendingKeys.delete(key);
+        resolve(confirmed === true);
+      }, 800);
+    });
   }
 
   function getPendingCount() { return _pendingKeys.size; }
@@ -774,8 +782,8 @@ const DB = (() => {
     }
     if (!value) delete C.progress[key]; else C.progress[key] = value;
     ls(LS.progress, C.progress);
-    // ★ 전용 debounce — 완료 후 _pendingKeys 자동 해제
-    _writeProgress(key, value||null);
+    // ★ 전용 debounce — 완료 후 _pendingKeys 자동 해제. 호출부에서 await 가능하도록 반환.
+    return _writeProgress(key, value||null);
   }
 
   /* ═══ THEME ═══ */

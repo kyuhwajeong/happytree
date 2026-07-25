@@ -55,7 +55,7 @@ const App = (() => {
     {key:'IBM Plex Sans KR',label:'IBM Plex KR',sample:'가나다 Aa'},
   ];
   const LS_REM='hk10b_rem_id', LS_REM_PW='hk10b_rem_pw';
-  const AUTO_LOGOUT_MS=3*60*60*1000; // 3시간
+  const AUTO_LOGOUT_MS=12*60*60*1000; // 12시간
 
   // ★★★ 데이터 유실 방지: 입력 후 최대 1500ms 동안은 DB.autoSave()조차 아직 호출 안 된 상태.
   //   이 사이 반 전환·화면 이탈·앱 종료가 일어나면 값이 통째로 증발할 수 있어,
@@ -119,8 +119,23 @@ const App = (() => {
   function _resetAutoLogout(){
     clearTimeout(_autoLogoutTimer);
     if(!DB.isLoggedIn())return;
-    _autoLogoutTimer=setTimeout(()=>{
-      if(DB.isLoggedIn()){DB.clearSession();_refreshAuthUI();go('operate');_toast('⏰ 3시간 미사용으로 자동 로그아웃되었습니다');}
+    _autoLogoutTimer=setTimeout(async()=>{
+      if(DB.isLoggedIn()){
+        // ★ 로그아웃 직전, 디바운스 대기 중이던 진도/메모 입력을 즉시 강제 전송
+        //   (그냥 로그아웃하면 800ms~1.5s 디바운스 타이머가 취소되어 마지막 입력이
+        //    서버에 반영되지 않은 채로 남을 수 있음 — 반드시 먼저 확실히 밀어넣는다)
+        try {
+          if (typeof DB.flushPendingWrites === 'function') DB.flushPendingWrites();
+          if (typeof FireDB !== 'undefined' && typeof FireDB.syncNow === 'function') await FireDB.syncNow();
+        } catch(e) { console.warn('[AutoLogout] flush 실패', e); }
+
+        const _prevPage = S.page;
+        DB.clearSession();_refreshAuthUI();go('operate');
+        _toast('⏰ 12시간 미사용으로 자동 로그아웃되었습니다 — 다시 로그인해주세요');
+        // 토스트만으로는 눈에 띄지 않고 지나칠 수 있으므로, 로그인 게이트를
+        // 강제로 다시 띄워 "재로그인이 필요한 상태"임을 명확히 인지시킨다.
+        _showLogin(_prevPage && _prevPage!=='operate' ? _prevPage : '');
+      }
     },AUTO_LOGOUT_MS);
   }
 
@@ -363,7 +378,13 @@ const App = (() => {
       _toast(`✅ ${acc.username} (${acc.role==='admin'?'관리자':acc.role==='teacher'?'강사':'운용자'}) 로그인`,'success');
     } else {_q('li-err').textContent='⚠️ 아이디 또는 비밀번호가 올바르지 않습니다';_q('li-pw').value='';}
   }
-  function logout(){
+  async function logout(){
+    // ★ 로그아웃 직전, 대기 중인 진도/메모 입력을 즉시 강제 전송해 유실 방지
+    try {
+      if (typeof DB.flushPendingWrites === 'function') DB.flushPendingWrites();
+      if (typeof FireDB !== 'undefined' && typeof FireDB.syncNow === 'function') await FireDB.syncNow();
+    } catch(e) { console.warn('[logout] flush 실패', e); }
+
     DB.clearSession();
     clearTimeout(_autoLogoutTimer);
     go('operate');
