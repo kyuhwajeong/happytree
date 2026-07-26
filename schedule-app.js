@@ -1,16 +1,18 @@
 /**
- * schedule-app.js — v1
+ * schedule-app.js — v2
  * ─────────────────────────────────────────────────────────────
  * 학원 "일정표" UI 모듈
  *
- * - 대시보드에 삽입되는 미니 월간 캘린더 (renderMiniCalendar)
+ * - 대시보드에 삽입되는 월간 캘린더 + 우측 "오늘의 수업" 패널 (renderMiniCalendar)
+ *   → 오늘의 수업은 항상 "오늘" 기준으로 표시되며, 달력에서 다른 달로 이동해도 바뀌지 않음
  * - 날짜를 탭하면 그날의 일정(방학/공휴일/일반) + 직원 급여일 + 공지 알림을
  *   한번에 모아 보여주는 상세 시트, 여기서 일정 등록/수정/삭제 가능
+ *   → 급여일·공지 알림은 별도 섹션 없이 이 캘린더 하나로 통합되어 표시됨
  * - 알림이 필요 없는 일정(방학·공휴일 등)도 그대로 등록 가능 (notifyEnabled=false 기본)
  * - 알림을 켠 일정은 예약 시점에 도달하면 자동 팝업 (NoticeApp과 동일한 방식,
  *   단 팝업이 겹치지 않도록 서로의 팝업이 떠 있을 때는 양보함)
  *
- * 독립 모듈: ScheduleDB(별도 Firebase 경로)만 직접 사용하고, StaffDB/NoticeDB는
+ * 독립 모듈: ScheduleDB(별도 Firebase 경로)만 직접 사용하고, StaffDB/NoticeDB/DB는
  *            "조회"만 하므로 오류가 나도 기존 기능에 영향 없음.
  */
 const ScheduleApp = (() => {
@@ -42,27 +44,45 @@ const ScheduleApp = (() => {
     if (_cssInjected) return; _cssInjected = true;
     const s = document.createElement('style');
     s.textContent = `
-.sch-cal-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-.sch-cal-title{font-size:13px;font-weight:800;color:var(--tx)}
+.sch-cal-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.sch-cal-title{font-size:13.5px;font-weight:800;color:var(--tx)}
 .sch-cal-navs{display:flex;align-items:center;gap:4px}
 .sch-nav-btn{width:26px;height:26px;border-radius:8px;background:var(--card2);border:1px solid var(--bdr);display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer;color:var(--tx2)}
 .sch-today-btn{padding:5px 9px;border-radius:8px;background:var(--card2);border:1px solid var(--bdr);font-size:10.5px;font-weight:700;color:var(--tx2);cursor:pointer}
-.sch-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
-.sch-dow{text-align:center;font-size:10px;font-weight:700;color:var(--tx3);padding:3px 0}
+.sch-widget-layout{display:flex;flex-wrap:wrap;gap:18px}
+.sch-cal-col{flex:1 1 250px;min-width:230px}
+.sch-tdc-col{flex:1 1 150px;min-width:150px;border-left:1px solid var(--bdr);padding-left:16px}
+.sch-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.sch-dow{text-align:center;font-size:10px;font-weight:800;color:var(--tx3);padding:2px 0 6px}
 .sch-dow.sun{color:#ef4444}.sch-dow.sat{color:#3b82f6}
-.sch-cell{aspect-ratio:1/0.82;border-radius:9px;padding:3px 2px;display:flex;flex-direction:column;align-items:center;cursor:pointer;background:var(--card2);border:1px solid transparent;transition:all .12s;min-height:38px}
-.sch-cell:active{transform:scale(.93)}
-.sch-cell.other{opacity:.32}
-.sch-cell.today{border-color:var(--a);background:var(--a10)}
-.sch-cell-num{font-size:11px;font-weight:700;color:var(--tx2)}
+.sch-cell{aspect-ratio:1/0.86;border-radius:10px;padding:4px 2px 3px;display:flex;flex-direction:column;align-items:center;cursor:pointer;background:var(--card2);border:1px solid transparent;transition:all .12s;min-height:38px}
+.sch-cell:active{transform:scale(.92)}
+.sch-cell.has-items{background:var(--surf2)}
+.sch-cell.other{opacity:.28}
+.sch-cell.today{border-color:var(--a);background:var(--a10);box-shadow:0 0 0 1px var(--a) inset}
+.sch-cell-num{font-size:11.5px;font-weight:800;color:var(--tx2)}
 .sch-cell.sun .sch-cell-num{color:#ef4444}
 .sch-cell.sat .sch-cell-num{color:#3b82f6}
 .sch-cell.today .sch-cell-num{color:var(--a)}
-.sch-dots{display:flex;gap:2px;margin-top:2px;flex-wrap:wrap;justify-content:center;max-width:26px}
-.sch-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
-.sch-legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;padding-top:9px;border-top:1px solid var(--bdr)}
-.sch-legend-item{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--tx3)}
+.sch-dots{display:flex;align-items:center;gap:2.5px;margin-top:3px;flex-wrap:wrap;justify-content:center;max-width:30px;min-height:6px}
+.sch-dot{width:5.5px;height:5.5px;border-radius:50%;flex-shrink:0}
+.sch-dot-more{font-size:7.5px;font-weight:800;color:var(--tx3);line-height:1}
+.sch-legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;padding-top:10px;border-top:1px dashed var(--bdr)}
+.sch-legend-item{display:flex;align-items:center;gap:4px;font-size:9.5px;font-weight:600;color:var(--tx3);background:var(--card2);border-radius:999px;padding:3px 8px 3px 6px}
 .sch-legend-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+
+/* 오늘의 수업 (캘린더 우측 패널) */
+.sch-tdc-hdr{margin-bottom:9px}
+.sch-tdc-title{font-size:12px;font-weight:800;color:var(--tx);display:block}
+.sch-tdc-date{font-size:10px;color:var(--tx3)}
+.sch-tdc-list{display:flex;flex-direction:column;gap:6px}
+.sch-tdc-row{border-radius:10px;padding:8px 9px;background:var(--card2);border:1px solid var(--bdr);cursor:pointer;transition:all .15s}
+.sch-tdc-row:active{transform:scale(.96)}
+.sch-tdc-row.now{border-color:var(--a);background:var(--a10)}
+.sch-tdc-time{font-size:10px;font-weight:800;color:var(--a);margin-bottom:2px}
+.sch-tdc-name{font-size:12px;font-weight:700;color:var(--tx)}
+.sch-tdc-now-tag{font-size:9px;font-weight:800;color:#fff;background:#ef4444;border-radius:999px;padding:2px 6px;margin-left:5px;vertical-align:middle}
+.sch-empty-mini{text-align:center;color:var(--tx3);font-size:11.5px;padding:20px 6px;line-height:1.5}
 
 /* 일자 상세 시트 */
 .sch-detail-date{font-size:12.5px;color:var(--tx3);margin:-4px 0 10px}
@@ -70,6 +90,8 @@ const ScheduleApp = (() => {
 .sch-detail-sec:last-child{margin-bottom:0}
 .sch-detail-sec-title{font-size:11px;font-weight:800;color:var(--tx3);letter-spacing:.4px;margin-bottom:6px}
 .sch-item-row{display:flex;align-items:flex-start;gap:9px;background:var(--card2);border:1px solid var(--bdr);border-radius:11px;padding:10px;margin-bottom:6px}
+.sch-item-row.sch-item-clickable{cursor:pointer;transition:all .15s}
+.sch-item-row.sch-item-clickable:active{transform:scale(.98);background:var(--surf2)}
 .sch-item-ico{font-size:16px;flex-shrink:0}
 .sch-item-body{flex:1;min-width:0}
 .sch-item-title{font-size:12.5px;font-weight:700;color:var(--tx)}
@@ -192,8 +214,11 @@ const ScheduleApp = (() => {
       scheds.forEach(s => { if (!seenCat.has(s.category)) { seenCat.add(s.category); dots.push((CATS[s.category] || CATS.general).color); } });
       if (hasPay) dots.push(PAY_COLOR);
       if (hasNotice) dots.push(NOTICE_COLOR);
-      const dotsHtml = dots.slice(0, 4).map(c => `<span class="sch-dot" style="background:${c}"></span>`).join('');
-      cells += `<div class="sch-cell${other ? ' other' : ''}${dateStr === todayStr ? ' today' : ''}${dow === 0 ? ' sun' : ''}${dow === 6 ? ' sat' : ''}"
+      const shown = dots.slice(0, 3);
+      const extra = dots.length - shown.length;
+      const dotsHtml = shown.map(c => `<span class="sch-dot" style="background:${c}"></span>`).join('')
+        + (extra > 0 ? `<span class="sch-dot-more">+${extra}</span>` : '');
+      cells += `<div class="sch-cell${other ? ' other' : ''}${dateStr === todayStr ? ' today' : ''}${dow === 0 ? ' sun' : ''}${dow === 6 ? ' sat' : ''}${dots.length ? ' has-items' : ''}"
         onclick="ScheduleApp.openDayDetail('${dateStr}')">
         <span class="sch-cell-num">${cellDay}</span>
         <div class="sch-dots">${dotsHtml}</div>
@@ -210,13 +235,70 @@ const ScheduleApp = (() => {
           <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(1)">›</button>
         </div>
       </div>
-      <div class="sch-grid">${dowHtml}${cells}</div>
-      <div class="sch-legend">
-        ${Object.values(CATS).map(c => `<span class="sch-legend-item"><span class="sch-legend-dot" style="background:${c.color}"></span>${c.ico} ${c.label}</span>`).join('')}
-        <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${PAY_COLOR}"></span>💰 급여일</span>
-        <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${NOTICE_COLOR}"></span>🔔 공지</span>
+      <div class="sch-widget-layout">
+        <div class="sch-cal-col">
+          <div class="sch-grid">${dowHtml}${cells}</div>
+          <div class="sch-legend">
+            ${Object.values(CATS).map(c => `<span class="sch-legend-item"><span class="sch-legend-dot" style="background:${c.color}"></span>${c.ico} ${c.label}</span>`).join('')}
+            <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${PAY_COLOR}"></span>💰 급여일</span>
+            <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${NOTICE_COLOR}"></span>🔔 공지</span>
+          </div>
+        </div>
+        <div class="sch-tdc-col">${_todayClassesHtml()}</div>
       </div>`;
   }
+
+  /* ═══════════════════════════════════════════════════════════
+   * 오늘의 수업 (캘린더 우측 패널 — 항상 "오늘" 기준, 달력 이동과 무관)
+   * ═══════════════════════════════════════════════════════════ */
+  function _visibleClasses() {
+    if (typeof DB === 'undefined') return [];
+    let classes = DB.getActiveClasses();
+    if (DB.getRole() === 'teacher') {
+      const tcIds = DB.getTeacherClasses ? DB.getTeacherClasses() : [];
+      if (tcIds.length) {
+        const tcNames = tcIds.map(id => classes.find(c => c.id === id)?.name || id);
+        classes = classes.filter(c => tcIds.includes(c.id) || tcNames.includes(c.name));
+      } else classes = [];
+    }
+    return classes;
+  }
+  function _timeToMin(t) { if (!t || !t.includes(':')) return null; const [h, m] = t.split(':').map(Number); return h * 60 + m; }
+  function _fmtTime(dt) {
+    if (!dt || (!dt.start && !dt.end)) return '';
+    if (dt.start && dt.end) return `${dt.start}~${dt.end}`;
+    return dt.start || dt.end || '';
+  }
+  function _todayClassesHtml() {
+    const now = new Date();
+    const todayDow = DAYS_KO[now.getDay()];
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const list = _visibleClasses()
+      .filter(c => (c.days || []).includes(todayDow))
+      .map(c => {
+        const dt = c.dayTimes?.[todayDow] || null;
+        return { cls: c, dt, startMin: dt?.start ? _timeToMin(dt.start) : null, endMin: dt?.end ? _timeToMin(dt.end) : null };
+      })
+      .sort((a, b) => {
+        if (a.startMin === null && b.startMin === null) return a.cls.name.localeCompare(b.cls.name);
+        if (a.startMin === null) return 1;
+        if (b.startMin === null) return -1;
+        return a.startMin - b.startMin;
+      });
+    const dateLabel = `${now.getMonth() + 1}월 ${now.getDate()}일 (${todayDow})`;
+    let html = `<div class="sch-tdc-hdr"><span class="sch-tdc-title">📅 오늘의 수업</span><span class="sch-tdc-date">${dateLabel}</span></div>`;
+    if (!list.length) { html += `<div class="sch-empty-mini">오늘은 예정된 수업이 없어요 🎈</div>`; return html; }
+    html += `<div class="sch-tdc-list">${list.map(({ cls, dt, startMin, endMin }) => {
+      const inSession = startMin !== null && endMin !== null && nowMin >= startMin && nowMin <= endMin;
+      const timeTxt = dt ? _fmtTime(dt) : '시간 미정';
+      return `<div class="sch-tdc-row${inSession ? ' now' : ''}" onclick="App.goClass('${cls.id}')">
+        <div class="sch-tdc-time">${_esc(timeTxt)}</div>
+        <div class="sch-tdc-name">${_esc(cls.name)}반${inSession ? '<span class="sch-tdc-now-tag">수업중</span>' : ''}</div>
+      </div>`;
+    }).join('')}</div>`;
+    return html;
+  }
+
   function _navMonth(diff) {
     let m = _st.month + diff, y = _st.year;
     if (m < 1) { m = 12; y--; } else if (m > 12) { m = 1; y++; }
@@ -278,7 +360,7 @@ const ScheduleApp = (() => {
           <button class="sch-item-ibtn" title="삭제" onclick="ScheduleApp.deleteItem('${s.id}')">🗑</button>
         </div>` : ''}
       </div>`;
-    }).join('') : '<div class="db-empty-mini" style="padding:10px 0">등록된 일정이 없습니다</div>';
+    }).join('') : '<div class="sch-empty-mini">등록된 일정이 없습니다</div>';
     html += `</div>`;
 
     if (paydays.length) {
@@ -288,7 +370,8 @@ const ScheduleApp = (() => {
         const saved = (typeof StaffDB !== 'undefined') ? StaffDB.getSavedPay(s.id, now.getFullYear(), now.getMonth() + 1) : null;
         const pay = saved ? saved.totalPay : ((typeof StaffDB !== 'undefined' && StaffDB.calcPay(s.id, y, m)?.totalPay) || 0);
         const won = (pay || 0).toLocaleString('ko-KR');
-        return `<div class="sch-item-row">
+        const canNav = typeof StaffApp !== 'undefined' && StaffApp.goToSalary;
+        return `<div class="sch-item-row${canNav ? ' sch-item-clickable' : ''}"${canNav ? ` onclick="StaffApp.goToSalary('${s.id}',${y},${m})"` : ''}>
           <span class="sch-item-ico">💰</span>
           <div class="sch-item-body">
             <div class="sch-item-title">${_esc(s.name)}</div>
@@ -305,13 +388,14 @@ const ScheduleApp = (() => {
       html += notices.map(n => {
         const cat = (typeof NoticeApp !== 'undefined' && NoticeApp.getCatMeta) ? NoticeApp.getCatMeta(n.category) : { ico: '📢' };
         const isDue = dueIds.includes(n.id);
-        return `<div class="sch-item-row">
+        const canNav = typeof NoticeApp !== 'undefined' && NoticeApp.openCenter;
+        return `<div class="sch-item-row${canNav ? ' sch-item-clickable' : ''}"${canNav ? ` onclick="NoticeApp.openCenter()"` : ''}>
           <span class="sch-item-ico">${cat.ico}</span>
           <div class="sch-item-body">
             <div class="sch-item-title">${_esc(n.title)}</div>
             ${n.body ? `<div class="sch-item-memo">${_esc(n.body)}</div>` : ''}
           </div>
-          ${isDue && isAdmin ? `<button class="sch-item-ibtn" title="완료 처리" onclick="NoticeApp.completeNow('${n.id}');ScheduleApp.refresh()">✅</button>` : `<span class="sch-badge info">${isDue ? '확인 필요' : '예정'}</span>`}
+          ${isDue && isAdmin ? `<button class="sch-item-ibtn" title="완료 처리" onclick="event.stopPropagation();NoticeApp.completeNow('${n.id}');ScheduleApp.refresh()">✅</button>` : `<span class="sch-badge info">${isDue ? '확인 필요' : '예정'}</span>`}
         </div>`;
       }).join('');
       html += `</div>`;
