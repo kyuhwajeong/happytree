@@ -1,10 +1,14 @@
 /**
- * schedule-app.js — v2
+ * schedule-app.js — v3
  * ─────────────────────────────────────────────────────────────
  * 학원 "일정표" UI 모듈
  *
  * - 대시보드에 삽입되는 월간 캘린더 + 우측 "오늘의 수업" 패널 (renderMiniCalendar)
  *   → 오늘의 수업은 항상 "오늘" 기준으로 표시되며, 달력에서 다른 달로 이동해도 바뀌지 않음
+ * - ★ v3: 점(dot)으로 요약해서 클릭해야만 알 수 있던 방식을 버리고, 구글/네이버 캘린더처럼
+ *   기간이 있는 일정(방학 등)은 그 기간만큼 "글자가 보이는 색띠"로 이어서 표시.
+ *   급여일·공지 알림도 동일하게 아이콘+텍스트 띠로 표시되어 한눈에 식별 가능.
+ *   하루에 너무 많이 겹치면 "+N"으로 요약되고, 탭하면 상세 시트에서 전부 확인 가능.
  * - 날짜를 탭하면 그날의 일정(방학/공휴일/일반) + 직원 급여일 + 공지 알림을
  *   한번에 모아 보여주는 상세 시트, 여기서 일정 등록/수정/삭제 가능
  *   → 급여일·공지 알림은 별도 섹션 없이 이 캘린더 하나로 통합되어 표시됨
@@ -52,21 +56,21 @@ const ScheduleApp = (() => {
 .sch-widget-layout{display:flex;flex-wrap:wrap;gap:18px}
 .sch-cal-col{flex:1 1 250px;min-width:230px}
 .sch-tdc-col{flex:1 1 150px;min-width:150px;border-left:1px solid var(--bdr);padding-left:16px}
-.sch-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.sch-dow-row{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:2px}
 .sch-dow{text-align:center;font-size:10px;font-weight:800;color:var(--tx3);padding:2px 0 6px}
 .sch-dow.sun{color:#ef4444}.sch-dow.sat{color:#3b82f6}
-.sch-cell{aspect-ratio:1/0.86;border-radius:10px;padding:4px 2px 3px;display:flex;flex-direction:column;align-items:center;cursor:pointer;background:var(--card2);border:1px solid transparent;transition:all .12s;min-height:38px}
-.sch-cell:active{transform:scale(.92)}
-.sch-cell.has-items{background:var(--surf2)}
-.sch-cell.other{opacity:.28}
-.sch-cell.today{border-color:var(--a);background:var(--a10);box-shadow:0 0 0 1px var(--a) inset}
-.sch-cell-num{font-size:11.5px;font-weight:800;color:var(--tx2)}
-.sch-cell.sun .sch-cell-num{color:#ef4444}
-.sch-cell.sat .sch-cell-num{color:#3b82f6}
-.sch-cell.today .sch-cell-num{color:var(--a)}
-.sch-dots{display:flex;align-items:center;gap:2.5px;margin-top:3px;flex-wrap:wrap;justify-content:center;max-width:30px;min-height:6px}
-.sch-dot{width:5.5px;height:5.5px;border-radius:50%;flex-shrink:0}
-.sch-dot-more{font-size:7.5px;font-weight:800;color:var(--tx3);line-height:1}
+.sch-week-block{border-bottom:1px solid var(--bdr);padding:3px 0 5px}
+.sch-week-block:last-of-type{border-bottom:none}
+.sch-daynum-row{display:grid;grid-template-columns:repeat(7,1fr)}
+.sch-daynum-cell{text-align:center;font-size:11px;font-weight:800;color:var(--tx2);cursor:pointer;padding:2px 0;border-radius:7px}
+.sch-daynum-cell.other{opacity:.32}
+.sch-daynum-cell.sun{color:#ef4444}
+.sch-daynum-cell.sat{color:#3b82f6}
+.sch-daynum-cell.today{background:var(--a);color:#fff;box-shadow:0 0 0 2px var(--a10)}
+.sch-track-row{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-top:2px}
+.sch-bar{grid-row:1;height:15px;line-height:15px;font-size:8.5px;font-weight:700;color:#fff;padding:0 4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;text-shadow:0 1px 1.5px rgba(0,0,0,.35)}
+.sch-overflow-row{margin-top:1px}
+.sch-overflow-cell{text-align:center;font-size:8px;font-weight:800;color:var(--tx3);cursor:pointer}
 .sch-legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;padding-top:10px;border-top:1px dashed var(--bdr)}
 .sch-legend-item{display:flex;align-items:center;gap:4px;font-size:9.5px;font-weight:600;color:var(--tx3);background:var(--card2);border-radius:999px;padding:3px 8px 3px 6px}
 .sch-legend-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
@@ -180,16 +184,88 @@ const ScheduleApp = (() => {
   }
 
   /* ═══════════════════════════════════════════════════════════
-   * 미니 월간 캘린더
+   * 월간 캘린더 — 구글/네이버 캘린더처럼 기간 일정을 "글자가 보이는 막대"로 표시
+   *   (점으로 뭉뚱그리지 않고, 방학처럼 여러 날짜에 걸친 일정은 그 기간만큼
+   *    색띠 + 텍스트로 이어져 보이도록 렌더링. 급여일/공지도 동일하게 텍스트로 표시)
    * ═══════════════════════════════════════════════════════════ */
+  const MAX_TRACKS = 2; // 하루에 동시에 보여줄 막대 줄 수(그 이상은 "+N"으로 요약, 탭하면 상세)
+
+  function _dateDiffDays(a, b) { // b - a (일 단위), 'YYYY-MM-DD'
+    return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000);
+  }
+  function _uniqueYM(days) {
+    const seen = {}; const out = [];
+    days.forEach(d => { const k = `${d.cellYear}-${d.cellMonth}`; if (!seen[k]) { seen[k] = 1; out.push({ y: d.cellYear, m: d.cellMonth }); } });
+    return out;
+  }
+  function _mergedPaydayMap(days) {
+    const map = {};
+    _uniqueYM(days).forEach(({ y, m }) => { const pm = _buildPaydayMap(y, m); Object.keys(pm).forEach(k => { map[k] = (map[k] || []).concat(pm[k]); }); });
+    return map;
+  }
+  function _mergedNoticeMap(days) {
+    const map = {};
+    _uniqueYM(days).forEach(({ y, m }) => { const nm = _buildNoticeMap(y, m); Object.keys(nm).forEach(k => { map[k] = (map[k] || []).concat(nm[k]); }); });
+    return map;
+  }
+  // 표시 중인 달력 범위(선행/후행 여백일 포함) 안의 모든 이벤트를 "막대"로 통일해서 수집
+  function _buildBarEvents(days) {
+    const events = [];
+    if (typeof ScheduleDB !== 'undefined') {
+      const gridStart = days[0].dateStr, gridEnd = days[days.length - 1].dateStr;
+      ScheduleDB.getAll().forEach(s => {
+        const end = s.endDate || s.startDate;
+        if (!s.startDate || end < gridStart || s.startDate > gridEnd) return;
+        const cat = CATS[s.category] || CATS.general;
+        events.push({ title: `${cat.ico} ${s.title}`, color: cat.color, startDate: s.startDate, endDate: end, onclick: `ScheduleApp.openDayDetail('${s.startDate}')` });
+      });
+    }
+    const payMap = _mergedPaydayMap(days);
+    Object.keys(payMap).forEach(dateStr => {
+      const list = payMap[dateStr];
+      const label = list.length > 1 ? `💰 급여일 ${list.length}명` : `💰 ${list[0].name} 급여일`;
+      events.push({ title: label, color: PAY_COLOR, startDate: dateStr, endDate: dateStr, onclick: `ScheduleApp.openDayDetail('${dateStr}')` });
+    });
+    const noticeMap = _mergedNoticeMap(days);
+    Object.keys(noticeMap).forEach(dateStr => {
+      const list = noticeMap[dateStr];
+      const label = list.length > 1 ? `🔔 공지 ${list.length}건` : `🔔 ${list[0].title}`;
+      events.push({ title: label, color: NOTICE_COLOR, startDate: dateStr, endDate: dateStr, onclick: `ScheduleApp.openDayDetail('${dateStr}')` });
+    });
+    return events;
+  }
+  // 한 주(7일)에 걸쳐 막대를 겹치지 않게 트랙(줄)에 배치 — 넘치면 해당 날짜에 "+N"으로 요약
+  function _layoutWeek(week, events) {
+    const wkStart = week[0].dateStr, wkEnd = week[6].dateStr;
+    const weekEvents = events
+      .filter(e => e.endDate >= wkStart && e.startDate <= wkEnd)
+      .map(e => {
+        const segStartIdx = Math.min(6, Math.max(0, _dateDiffDays(wkStart, e.startDate)));
+        const segEndIdx = Math.min(6, Math.max(0, _dateDiffDays(wkStart, e.endDate)));
+        return { ev: e, segStartIdx, segEndIdx, isTrueStart: e.startDate >= wkStart, isTrueEnd: e.endDate <= wkEnd };
+      })
+      .sort((a, b) => a.segStartIdx - b.segStartIdx || (b.segEndIdx - b.segStartIdx) - (a.segEndIdx - a.segStartIdx));
+    const trackEndIdx = [];
+    const tracks = [];
+    const overflowByDay = [0, 0, 0, 0, 0, 0, 0];
+    weekEvents.forEach(seg => {
+      let track = trackEndIdx.findIndex(endIdx => endIdx < seg.segStartIdx);
+      if (track === -1) {
+        if (trackEndIdx.length < MAX_TRACKS) { track = trackEndIdx.length; trackEndIdx.push(-1); tracks.push([]); }
+        else { for (let d = seg.segStartIdx; d <= seg.segEndIdx; d++) overflowByDay[d]++; return; }
+      }
+      trackEndIdx[track] = seg.segEndIdx;
+      tracks[track].push(seg);
+    });
+    return { tracks, overflowByDay };
+  }
+
   function renderMiniCalendar(containerId) {
     if (typeof ScheduleDB === 'undefined') return;
     _mountId = containerId;
     const el = _q(containerId);
     if (!el) return;
     const { year, month } = _st;
-    const payMap = _buildPaydayMap(year, month);
-    const noticeMap = _buildNoticeMap(year, month);
     const todayStr = _todayStr();
     const first = new Date(year, month - 1, 1);
     const startOffset = first.getDay();
@@ -197,33 +273,48 @@ const ScheduleApp = (() => {
     const totalCells = Math.ceil((startOffset + dim) / 7) * 7;
     const prevDim = new Date(year, month - 1, 0).getDate();
 
-    let cells = '';
+    const days = [];
     for (let i = 0; i < totalCells; i++) {
       const dayNum = i - startOffset + 1;
       let cellYear = year, cellMonth = month, cellDay, other = false;
       if (dayNum < 1) { cellMonth = month - 1; if (cellMonth < 1) { cellMonth = 12; cellYear--; } cellDay = prevDim + dayNum; other = true; }
       else if (dayNum > dim) { cellDay = dayNum - dim; cellMonth = month + 1; if (cellMonth > 12) { cellMonth = 1; cellYear++; } other = true; }
       else cellDay = dayNum;
-      const dateStr = `${cellYear}-${_pad(cellMonth)}-${_pad(cellDay)}`;
-      const dow = (i % 7);
-      const scheds = other ? [] : _schedulesOn(dateStr);
-      const hasPay = !other && !!payMap[dateStr];
-      const hasNotice = !other && !!noticeMap[dateStr];
-      const dots = [];
-      const seenCat = new Set();
-      scheds.forEach(s => { if (!seenCat.has(s.category)) { seenCat.add(s.category); dots.push((CATS[s.category] || CATS.general).color); } });
-      if (hasPay) dots.push(PAY_COLOR);
-      if (hasNotice) dots.push(NOTICE_COLOR);
-      const shown = dots.slice(0, 3);
-      const extra = dots.length - shown.length;
-      const dotsHtml = shown.map(c => `<span class="sch-dot" style="background:${c}"></span>`).join('')
-        + (extra > 0 ? `<span class="sch-dot-more">+${extra}</span>` : '');
-      cells += `<div class="sch-cell${other ? ' other' : ''}${dateStr === todayStr ? ' today' : ''}${dow === 0 ? ' sun' : ''}${dow === 6 ? ' sat' : ''}${dots.length ? ' has-items' : ''}"
-        onclick="ScheduleApp.openDayDetail('${dateStr}')">
-        <span class="sch-cell-num">${cellDay}</span>
-        <div class="sch-dots">${dotsHtml}</div>
-      </div>`;
+      days.push({ dateStr: `${cellYear}-${_pad(cellMonth)}-${_pad(cellDay)}`, cellDay, cellYear, cellMonth, other, dow: i % 7 });
     }
+
+    const events = _buildBarEvents(days);
+    const weeks = [];
+    for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
+
+    const weeksHtml = weeks.map(week => {
+      const { tracks, overflowByDay } = _layoutWeek(week, events);
+      const daynumHtml = week.map(d => `
+        <div class="sch-daynum-cell${d.other ? ' other' : ''}${d.dateStr === todayStr ? ' today' : ''}${d.dow === 0 ? ' sun' : ''}${d.dow === 6 ? ' sat' : ''}"
+          onclick="ScheduleApp.openDayDetail('${d.dateStr}')">${d.cellDay}</div>`).join('');
+      const trackRowsHtml = tracks.map(track => {
+        const barsHtml = track.map(seg => {
+          const span = seg.segEndIdx - seg.segStartIdx + 1;
+          const rl = seg.isTrueStart ? '6px' : '0', rr = seg.isTrueEnd ? '6px' : '0';
+          const showLabel = seg.isTrueStart || seg.segStartIdx === 0;
+          const dim2 = week[seg.segStartIdx].other ? ';opacity:.55' : '';
+          return `<div class="sch-bar" style="grid-column:${seg.segStartIdx + 1} / span ${span};background:${seg.ev.color};border-radius:${rl} ${rr} ${rr} ${rl}${dim2}"
+            onclick="${seg.ev.onclick}" title="${_esc(seg.ev.title)}">${showLabel ? _esc(seg.ev.title) : ''}</div>`;
+        }).join('');
+        return `<div class="sch-track-row">${barsHtml}</div>`;
+      }).join('');
+      const hasOverflow = overflowByDay.some(n => n > 0);
+      const overflowHtml = hasOverflow
+        ? `<div class="sch-track-row sch-overflow-row">${week.map((d, i) => overflowByDay[i] > 0
+            ? `<div class="sch-overflow-cell" onclick="ScheduleApp.openDayDetail('${d.dateStr}')">+${overflowByDay[i]}</div>`
+            : `<div></div>`).join('')}</div>`
+        : '';
+      return `<div class="sch-week-block">
+        <div class="sch-daynum-row">${daynumHtml}</div>
+        ${trackRowsHtml}
+        ${overflowHtml}
+      </div>`;
+    }).join('');
     const dowHtml = DAYS_KO.map((d, i) => `<div class="sch-dow${i === 0 ? ' sun' : ''}${i === 6 ? ' sat' : ''}">${d}</div>`).join('');
 
     el.innerHTML = `
@@ -237,7 +328,8 @@ const ScheduleApp = (() => {
       </div>
       <div class="sch-widget-layout">
         <div class="sch-cal-col">
-          <div class="sch-grid">${dowHtml}${cells}</div>
+          <div class="sch-dow-row">${dowHtml}</div>
+          ${weeksHtml}
           <div class="sch-legend">
             ${Object.values(CATS).map(c => `<span class="sch-legend-item"><span class="sch-legend-dot" style="background:${c.color}"></span>${c.ico} ${c.label}</span>`).join('')}
             <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${PAY_COLOR}"></span>💰 급여일</span>
