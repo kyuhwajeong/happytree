@@ -1,0 +1,472 @@
+/**
+ * schedule-app.js — v1
+ * ─────────────────────────────────────────────────────────────
+ * 학원 "일정표" UI 모듈
+ *
+ * - 대시보드에 삽입되는 미니 월간 캘린더 (renderMiniCalendar)
+ * - 날짜를 탭하면 그날의 일정(방학/공휴일/일반) + 직원 급여일 + 공지 알림을
+ *   한번에 모아 보여주는 상세 시트, 여기서 일정 등록/수정/삭제 가능
+ * - 알림이 필요 없는 일정(방학·공휴일 등)도 그대로 등록 가능 (notifyEnabled=false 기본)
+ * - 알림을 켠 일정은 예약 시점에 도달하면 자동 팝업 (NoticeApp과 동일한 방식,
+ *   단 팝업이 겹치지 않도록 서로의 팝업이 떠 있을 때는 양보함)
+ *
+ * 독립 모듈: ScheduleDB(별도 Firebase 경로)만 직접 사용하고, StaffDB/NoticeDB는
+ *            "조회"만 하므로 오류가 나도 기존 기능에 영향 없음.
+ */
+const ScheduleApp = (() => {
+  const CATS = {
+    'general':         { ico: '📌', label: '일반',     color: '#6366f1' },
+    'vacation-summer': { ico: '☀️', label: '여름방학', color: '#f59e0b' },
+    'vacation-winter': { ico: '❄️', label: '겨울방학', color: '#0ea5e9' },
+    'holiday':         { ico: '🎌', label: '공휴일',   color: '#ef4444' },
+  };
+  const PAY_COLOR = '#22c55e', NOTICE_COLOR = '#a855f7';
+  const DAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
+
+  let _mountId = null;
+  let _st = { year: 0, month: 0 }; // 캘린더에 표시 중인 연/월 (month: 1~12)
+  let _editId = null;
+  let _timer = null;
+
+  function _esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function _q(id) { return document.getElementById(id); }
+  function _pad(n) { return String(n).padStart(2, '0'); }
+  function _todayStr() { const d = new Date(); return `${d.getFullYear()}-${_pad(d.getMonth() + 1)}-${_pad(d.getDate())}`; }
+  function _isAdmin() { return typeof DB !== 'undefined' && DB.isAdmin(); }
+
+  /* ═══════════════════════════════════════════════════════════
+   * 스타일
+   * ═══════════════════════════════════════════════════════════ */
+  let _cssInjected = false;
+  function _css() {
+    if (_cssInjected) return; _cssInjected = true;
+    const s = document.createElement('style');
+    s.textContent = `
+.sch-cal-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.sch-cal-title{font-size:13px;font-weight:800;color:var(--tx)}
+.sch-cal-navs{display:flex;align-items:center;gap:4px}
+.sch-nav-btn{width:26px;height:26px;border-radius:8px;background:var(--card2);border:1px solid var(--bdr);display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer;color:var(--tx2)}
+.sch-today-btn{padding:5px 9px;border-radius:8px;background:var(--card2);border:1px solid var(--bdr);font-size:10.5px;font-weight:700;color:var(--tx2);cursor:pointer}
+.sch-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.sch-dow{text-align:center;font-size:10px;font-weight:700;color:var(--tx3);padding:3px 0}
+.sch-dow.sun{color:#ef4444}.sch-dow.sat{color:#3b82f6}
+.sch-cell{aspect-ratio:1/0.82;border-radius:9px;padding:3px 2px;display:flex;flex-direction:column;align-items:center;cursor:pointer;background:var(--card2);border:1px solid transparent;transition:all .12s;min-height:38px}
+.sch-cell:active{transform:scale(.93)}
+.sch-cell.other{opacity:.32}
+.sch-cell.today{border-color:var(--a);background:var(--a10)}
+.sch-cell-num{font-size:11px;font-weight:700;color:var(--tx2)}
+.sch-cell.sun .sch-cell-num{color:#ef4444}
+.sch-cell.sat .sch-cell-num{color:#3b82f6}
+.sch-cell.today .sch-cell-num{color:var(--a)}
+.sch-dots{display:flex;gap:2px;margin-top:2px;flex-wrap:wrap;justify-content:center;max-width:26px}
+.sch-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.sch-legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;padding-top:9px;border-top:1px solid var(--bdr)}
+.sch-legend-item{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--tx3)}
+.sch-legend-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+
+/* 일자 상세 시트 */
+.sch-detail-date{font-size:12.5px;color:var(--tx3);margin:-4px 0 10px}
+.sch-detail-sec{margin-bottom:14px}
+.sch-detail-sec:last-child{margin-bottom:0}
+.sch-detail-sec-title{font-size:11px;font-weight:800;color:var(--tx3);letter-spacing:.4px;margin-bottom:6px}
+.sch-item-row{display:flex;align-items:flex-start;gap:9px;background:var(--card2);border:1px solid var(--bdr);border-radius:11px;padding:10px;margin-bottom:6px}
+.sch-item-ico{font-size:16px;flex-shrink:0}
+.sch-item-body{flex:1;min-width:0}
+.sch-item-title{font-size:12.5px;font-weight:700;color:var(--tx)}
+.sch-item-meta{font-size:10.5px;color:var(--tx3);margin-top:1px}
+.sch-item-memo{font-size:11.5px;color:var(--tx2);margin-top:4px;white-space:pre-line}
+.sch-item-acts{display:flex;gap:5px;flex-shrink:0}
+.sch-item-ibtn{width:26px;height:26px;border-radius:8px;background:var(--surf2);border:1px solid var(--bdr);display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer}
+.sch-badge{font-size:9.5px;font-weight:800;border-radius:999px;padding:2px 7px;flex-shrink:0}
+.sch-badge.ok{background:rgba(34,197,94,.14);color:#16a34a}
+.sch-badge.warn{background:rgba(239,68,68,.12);color:#ef4444}
+.sch-badge.info{background:var(--a10);color:var(--a)}
+
+/* 팝업 (알림 있는 일정) */
+.sch-pop-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px}
+.sch-pop-box{background:var(--card,#fff);border-radius:18px;padding:24px;max-width:400px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.35);animation:schPop .25s cubic-bezier(.34,1.56,.64,1)}
+@keyframes schPop{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
+.sch-pop-ico{font-size:34px;margin-bottom:10px}
+.sch-pop-title{font-size:17px;font-weight:800;color:var(--tx);margin-bottom:6px}
+.sch-pop-msg{font-size:13.5px;color:var(--tx2);line-height:1.6;white-space:pre-line;margin-bottom:18px}
+.sch-pop-acts{display:flex;gap:8px}
+    `;
+    document.head.appendChild(s);
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+   * 초기화
+   * ═══════════════════════════════════════════════════════════ */
+  async function init() {
+    _css();
+    if (typeof ScheduleDB === 'undefined') return;
+    const now = new Date();
+    _st.year = now.getFullYear(); _st.month = now.getMonth() + 1;
+    await ScheduleDB.init();
+    ScheduleDB.on('schedules', () => refresh());
+    if (typeof StaffDB !== 'undefined') { StaffDB.on('staff', () => refresh()); StaffDB.on('pay', () => refresh()); }
+    if (typeof NoticeDB !== 'undefined') NoticeDB.on('notices', () => refresh());
+    _checkPopup();
+    clearInterval(_timer);
+    _timer = setInterval(_checkPopup, 30000);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') _checkPopup(); });
+  }
+
+  function refresh() {
+    if (_mountId && _q(_mountId)) renderMiniCalendar(_mountId);
+    if (_q('sch-detail-ov')) _renderDetail(_q('sch-detail-ov').dataset.date);
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+   * 이 날짜의 일정/급여/공지 데이터 조합
+   * ═══════════════════════════════════════════════════════════ */
+  function _schedulesOn(dateStr) {
+    if (typeof ScheduleDB === 'undefined') return [];
+    return ScheduleDB.getAll().filter(s => s.startDate <= dateStr && (s.endDate || s.startDate) >= dateStr);
+  }
+  function _buildPaydayMap(year, month) {
+    const map = {};
+    if (typeof StaffDB === 'undefined') return map;
+    const dim = new Date(year, month, 0).getDate();
+    (StaffDB.getActive ? StaffDB.getActive() : []).forEach(s => {
+      const pd = Number(s.payDay || 0);
+      const day = pd > 0 ? Math.min(pd, dim) : dim;
+      const dateStr = `${year}-${_pad(month)}-${_pad(day)}`;
+      (map[dateStr] = map[dateStr] || []).push(s);
+    });
+    return map;
+  }
+  function _buildNoticeMap(year, month) {
+    const map = {};
+    if (typeof NoticeDB === 'undefined') return map;
+    const dim = new Date(year, month, 0).getDate();
+    NoticeDB.getAll().forEach(n => {
+      if (!n.active) return;
+      let dateStr;
+      if (n.scheduleType === 'monthly') {
+        const day = Math.min(+n.monthDay || 1, dim);
+        dateStr = `${year}-${_pad(month)}-${_pad(day)}`;
+      } else {
+        if (!n.onceDate) return;
+        const [y, m] = n.onceDate.split('-').map(Number);
+        if (y !== year || m !== month) return;
+        dateStr = n.onceDate;
+      }
+      (map[dateStr] = map[dateStr] || []).push(n);
+    });
+    return map;
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+   * 미니 월간 캘린더
+   * ═══════════════════════════════════════════════════════════ */
+  function renderMiniCalendar(containerId) {
+    if (typeof ScheduleDB === 'undefined') return;
+    _mountId = containerId;
+    const el = _q(containerId);
+    if (!el) return;
+    const { year, month } = _st;
+    const payMap = _buildPaydayMap(year, month);
+    const noticeMap = _buildNoticeMap(year, month);
+    const todayStr = _todayStr();
+    const first = new Date(year, month - 1, 1);
+    const startOffset = first.getDay();
+    const dim = new Date(year, month, 0).getDate();
+    const totalCells = Math.ceil((startOffset + dim) / 7) * 7;
+    const prevDim = new Date(year, month - 1, 0).getDate();
+
+    let cells = '';
+    for (let i = 0; i < totalCells; i++) {
+      const dayNum = i - startOffset + 1;
+      let cellYear = year, cellMonth = month, cellDay, other = false;
+      if (dayNum < 1) { cellMonth = month - 1; if (cellMonth < 1) { cellMonth = 12; cellYear--; } cellDay = prevDim + dayNum; other = true; }
+      else if (dayNum > dim) { cellDay = dayNum - dim; cellMonth = month + 1; if (cellMonth > 12) { cellMonth = 1; cellYear++; } other = true; }
+      else cellDay = dayNum;
+      const dateStr = `${cellYear}-${_pad(cellMonth)}-${_pad(cellDay)}`;
+      const dow = (i % 7);
+      const scheds = other ? [] : _schedulesOn(dateStr);
+      const hasPay = !other && !!payMap[dateStr];
+      const hasNotice = !other && !!noticeMap[dateStr];
+      const dots = [];
+      const seenCat = new Set();
+      scheds.forEach(s => { if (!seenCat.has(s.category)) { seenCat.add(s.category); dots.push((CATS[s.category] || CATS.general).color); } });
+      if (hasPay) dots.push(PAY_COLOR);
+      if (hasNotice) dots.push(NOTICE_COLOR);
+      const dotsHtml = dots.slice(0, 4).map(c => `<span class="sch-dot" style="background:${c}"></span>`).join('');
+      cells += `<div class="sch-cell${other ? ' other' : ''}${dateStr === todayStr ? ' today' : ''}${dow === 0 ? ' sun' : ''}${dow === 6 ? ' sat' : ''}"
+        onclick="ScheduleApp.openDayDetail('${dateStr}')">
+        <span class="sch-cell-num">${cellDay}</span>
+        <div class="sch-dots">${dotsHtml}</div>
+      </div>`;
+    }
+    const dowHtml = DAYS_KO.map((d, i) => `<div class="sch-dow${i === 0 ? ' sun' : ''}${i === 6 ? ' sat' : ''}">${d}</div>`).join('');
+
+    el.innerHTML = `
+      <div class="sch-cal-hdr">
+        <div class="sch-cal-title">${year}년 ${month}월</div>
+        <div class="sch-cal-navs">
+          <button class="sch-today-btn" onclick="ScheduleApp._goToday()">오늘</button>
+          <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(-1)">‹</button>
+          <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(1)">›</button>
+        </div>
+      </div>
+      <div class="sch-grid">${dowHtml}${cells}</div>
+      <div class="sch-legend">
+        ${Object.values(CATS).map(c => `<span class="sch-legend-item"><span class="sch-legend-dot" style="background:${c.color}"></span>${c.ico} ${c.label}</span>`).join('')}
+        <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${PAY_COLOR}"></span>💰 급여일</span>
+        <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${NOTICE_COLOR}"></span>🔔 공지</span>
+      </div>`;
+  }
+  function _navMonth(diff) {
+    let m = _st.month + diff, y = _st.year;
+    if (m < 1) { m = 12; y--; } else if (m > 12) { m = 1; y++; }
+    _st.year = y; _st.month = m;
+    if (_mountId) renderMiniCalendar(_mountId);
+  }
+  function _goToday() {
+    const now = new Date();
+    _st.year = now.getFullYear(); _st.month = now.getMonth() + 1;
+    if (_mountId) renderMiniCalendar(_mountId);
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+   * 일자 상세 시트
+   * ═══════════════════════════════════════════════════════════ */
+  function openDayDetail(dateStr) {
+    _q('sch-detail-ov')?.remove();
+    const ov = document.createElement('div');
+    ov.id = 'sch-detail-ov'; ov.className = 'ov';
+    ov.dataset.date = dateStr;
+    ov.onclick = e => { if (e.target === ov) closeDayDetail(); };
+    ov.innerHTML = `<div class="sh" style="max-height:88vh">
+      <div class="sh-handle"></div>
+      <div class="sh-title">🗓️ 일정 상세</div>
+      <div id="sch-detail-body"></div>
+    </div>`;
+    document.body.appendChild(ov);
+    _renderDetail(dateStr);
+  }
+  function closeDayDetail() { _q('sch-detail-ov')?.remove(); }
+
+  function _renderDetail(dateStr) {
+    const body = _q('sch-detail-body');
+    if (!body) return;
+    const d = new Date(dateStr + 'T00:00:00');
+    const dateLabel = `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${DAYS_KO[d.getDay()]})`;
+    const isAdmin = _isAdmin();
+    const scheds = _schedulesOn(dateStr);
+    const [y, m] = dateStr.split('-').map(Number);
+    const paydays = (_buildPaydayMap(y, m)[dateStr]) || [];
+    const notices = (_buildNoticeMap(y, m)[dateStr]) || [];
+    const dueIds = (typeof NoticeApp !== 'undefined' && NoticeApp.getDueList) ? NoticeApp.getDueList().map(n => n.id) : [];
+
+    let html = `<div class="sch-detail-date">${dateLabel}</div>`;
+
+    html += `<div class="sch-detail-sec"><div class="sch-detail-sec-title">📌 이 날의 일정</div>`;
+    html += scheds.length ? scheds.map(s => {
+      const cat = CATS[s.category] || CATS.general;
+      const range = s.startDate !== s.endDate ? `${s.startDate} ~ ${s.endDate}` : s.startDate;
+      return `<div class="sch-item-row">
+        <span class="sch-item-ico">${cat.ico}</span>
+        <div class="sch-item-body">
+          <div class="sch-item-title">${_esc(s.title)}</div>
+          <div class="sch-item-meta">${cat.label} · ${range}${s.notifyEnabled ? ` · 🔔 ${s.notifyTime}` : ''}</div>
+          ${s.memo ? `<div class="sch-item-memo">${_esc(s.memo)}</div>` : ''}
+        </div>
+        ${isAdmin ? `<div class="sch-item-acts">
+          <button class="sch-item-ibtn" title="수정" onclick="ScheduleApp.openEditor('${s.id}')">✏️</button>
+          <button class="sch-item-ibtn" title="삭제" onclick="ScheduleApp.deleteItem('${s.id}')">🗑</button>
+        </div>` : ''}
+      </div>`;
+    }).join('') : '<div class="db-empty-mini" style="padding:10px 0">등록된 일정이 없습니다</div>';
+    html += `</div>`;
+
+    if (paydays.length) {
+      html += `<div class="sch-detail-sec"><div class="sch-detail-sec-title">💰 직원 급여일</div>`;
+      html += paydays.map(s => {
+        const now = new Date();
+        const saved = (typeof StaffDB !== 'undefined') ? StaffDB.getSavedPay(s.id, now.getFullYear(), now.getMonth() + 1) : null;
+        const pay = saved ? saved.totalPay : ((typeof StaffDB !== 'undefined' && StaffDB.calcPay(s.id, y, m)?.totalPay) || 0);
+        const won = (pay || 0).toLocaleString('ko-KR');
+        return `<div class="sch-item-row">
+          <span class="sch-item-ico">💰</span>
+          <div class="sch-item-body">
+            <div class="sch-item-title">${_esc(s.name)}</div>
+            <div class="sch-item-meta">예상 지급액 ₩${won}</div>
+          </div>
+          <span class="sch-badge ${saved ? 'ok' : 'warn'}">${saved ? '확정' : '미확정'}</span>
+        </div>`;
+      }).join('');
+      html += `</div>`;
+    }
+
+    if (notices.length) {
+      html += `<div class="sch-detail-sec"><div class="sch-detail-sec-title">🔔 공지 알림</div>`;
+      html += notices.map(n => {
+        const cat = (typeof NoticeApp !== 'undefined' && NoticeApp.getCatMeta) ? NoticeApp.getCatMeta(n.category) : { ico: '📢' };
+        const isDue = dueIds.includes(n.id);
+        return `<div class="sch-item-row">
+          <span class="sch-item-ico">${cat.ico}</span>
+          <div class="sch-item-body">
+            <div class="sch-item-title">${_esc(n.title)}</div>
+            ${n.body ? `<div class="sch-item-memo">${_esc(n.body)}</div>` : ''}
+          </div>
+          ${isDue && isAdmin ? `<button class="sch-item-ibtn" title="완료 처리" onclick="NoticeApp.completeNow('${n.id}');ScheduleApp.refresh()">✅</button>` : `<span class="sch-badge info">${isDue ? '확인 필요' : '예정'}</span>`}
+        </div>`;
+      }).join('');
+      html += `</div>`;
+    }
+
+    if (isAdmin) {
+      html += `<button class="btn-ok" style="width:100%;margin-top:4px" onclick="ScheduleApp.openEditor(null,'${dateStr}')">➕ 이 날짜에 일정 등록</button>`;
+    }
+    body.innerHTML = html;
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+   * 등록 / 수정 폼
+   * ═══════════════════════════════════════════════════════════ */
+  function openEditor(id = null, prefillDate = null) {
+    _editId = id;
+    const s = id ? ScheduleDB.getById(id) : null;
+    _q('sch-editor-ov')?.remove();
+    const ov = document.createElement('div');
+    ov.id = 'sch-editor-ov'; ov.className = 'ov';
+    ov.style.zIndex = 900;
+    ov.onclick = e => { if (e.target === ov) closeEditor(); };
+    const cat = s?.category || 'general';
+    const notify = s ? !!s.notifyEnabled : false;
+    const startDate = s?.startDate || prefillDate || _todayStr();
+    const endDate = s?.endDate || startDate;
+    ov.innerHTML = `
+      <div class="sh" style="max-height:92vh;overflow-y:auto">
+        <div class="sh-handle"></div>
+        <div class="sh-title">${s ? '✏️ 일정 수정' : '➕ 새 일정 등록'}</div>
+        <div class="f-grp">
+          <label class="f-lbl">제목</label>
+          <input class="f-inp" id="sch-f-title" maxlength="40" placeholder="예: 여름방학 시작" value="${_esc(s?.title || '')}">
+        </div>
+        <div class="f-grp">
+          <label class="f-lbl">메모 (선택)</label>
+          <textarea class="f-inp" id="sch-f-memo" rows="2" style="resize:vertical">${_esc(s?.memo || '')}</textarea>
+        </div>
+        <div class="f-grp">
+          <label class="f-lbl">분류</label>
+          <div class="ntc-pill-row" id="sch-f-cat">
+            ${Object.entries(CATS).map(([k, v]) => `<button type="button" class="ntc-pill${k === cat ? ' on' : ''}" data-v="${k}">${v.ico} ${v.label}</button>`).join('')}
+          </div>
+        </div>
+        <div class="f-grp" style="display:flex;gap:10px">
+          <div style="flex:1"><label class="f-lbl">시작일</label><input class="f-inp" id="sch-f-start" type="date" value="${startDate}"></div>
+          <div style="flex:1"><label class="f-lbl">종료일</label><input class="f-inp" id="sch-f-end" type="date" value="${endDate}"></div>
+        </div>
+        <div class="f-grp" style="display:flex;align-items:center;gap:8px">
+          <label class="day-ck" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="sch-f-notify" ${notify ? 'checked' : ''} onchange="document.getElementById('sch-f-notify-wrap').style.display=this.checked?'flex':'none'">
+            <span>🔔 알림 사용 (끄면 조용히 캘린더에만 표시됩니다)</span>
+          </label>
+        </div>
+        <div class="f-grp" id="sch-f-notify-wrap" style="display:${notify ? 'flex' : 'none'};gap:10px">
+          <div style="width:110px"><label class="f-lbl">알림 시간</label><input class="f-inp" id="sch-f-time" type="time" value="${s?.notifyTime || '09:00'}"></div>
+          <div style="flex:1">
+            <label class="f-lbl">알림 대상</label>
+            <div class="ntc-pill-row" id="sch-f-aud">
+              <button type="button" class="ntc-pill${(s?.audience || 'all') === 'admin' ? ' on' : ''}" data-v="admin">🔑 원장만</button>
+              <button type="button" class="ntc-pill${(s?.audience || 'all') === 'all' ? ' on' : ''}" data-v="all">👥 전체</button>
+            </div>
+          </div>
+        </div>
+        <div class="sh-acts">
+          <button class="btn-x" onclick="ScheduleApp.closeEditor()">취소</button>
+          <button class="btn-ok" onclick="ScheduleApp.saveEditor()">저장</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    ov.querySelectorAll('#sch-f-cat .ntc-pill').forEach(b => b.onclick = () => {
+      ov.querySelectorAll('#sch-f-cat .ntc-pill').forEach(x => x.classList.remove('on')); b.classList.add('on');
+    });
+    ov.querySelectorAll('#sch-f-aud .ntc-pill').forEach(b => b.onclick = () => {
+      ov.querySelectorAll('#sch-f-aud .ntc-pill').forEach(x => x.classList.remove('on')); b.classList.add('on');
+    });
+    setTimeout(() => _q('sch-f-title')?.focus(), 150);
+  }
+  function closeEditor() { _q('sch-editor-ov')?.remove(); _editId = null; }
+
+  async function saveEditor() {
+    const title = _q('sch-f-title')?.value.trim();
+    if (!title) { alert('제목을 입력해주세요'); return; }
+    const cat = document.querySelector('#sch-f-cat .ntc-pill.on')?.dataset.v || 'general';
+    const startDate = _q('sch-f-start')?.value || _todayStr();
+    let endDate = _q('sch-f-end')?.value || startDate;
+    if (endDate < startDate) endDate = startDate;
+    const notifyEnabled = _q('sch-f-notify')?.checked || false;
+    const notifyTime = _q('sch-f-time')?.value || '09:00';
+    const audience = document.querySelector('#sch-f-aud .ntc-pill.on')?.dataset.v || 'all';
+    const memo = _q('sch-f-memo')?.value.trim() || '';
+    const data = { title, memo, category: cat, startDate, endDate, notifyEnabled, notifyTime, audience };
+    if (_editId) await ScheduleDB.update(_editId, data);
+    else await ScheduleDB.add(data);
+    closeEditor();
+    refresh();
+    if (typeof App !== 'undefined' && App._toast) App._toast('✅ 일정이 저장되었습니다', 'success');
+  }
+
+  async function deleteItem(id) {
+    const s = ScheduleDB.getById(id); if (!s) return;
+    if (!confirm(`"${s.title}" 일정을 삭제할까요?`)) return;
+    await ScheduleDB.remove(id);
+    refresh();
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+   * 알림 팝업 (notifyEnabled 켠 일정만)
+   * ═══════════════════════════════════════════════════════════ */
+  function _checkPopup() {
+    if (typeof ScheduleDB === 'undefined') return;
+    if (typeof DB === 'undefined' || !DB.isLoggedIn()) return;
+    if (_q('ntc-pop-ov') || _q('sch-pop-ov') || _q('sch-editor-ov')) return; // 다른 팝업과 겹치지 않게 양보
+    const todayStr = _todayStr();
+    const isAdmin = _isAdmin();
+    const now = new Date();
+    const due = ScheduleDB.getAll().filter(s => {
+      if (!s.notifyEnabled || s.notifiedAt) return false;
+      if (s.audience === 'admin' && !isAdmin) return false;
+      if (s.startDate > todayStr) return false;
+      if (s.startDate === todayStr) {
+        const [hh, mm] = (s.notifyTime || '09:00').split(':').map(Number);
+        const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh || 9, mm || 0);
+        if (now < target) return false;
+      }
+      return true;
+    });
+    const target = due.find(s => !sessionStorage.getItem(`sch_dismiss_${s.id}`));
+    if (target) _showPopup(target);
+  }
+  function _showPopup(s) {
+    _q('sch-pop-ov')?.remove();
+    const cat = CATS[s.category] || CATS.general;
+    const ov = document.createElement('div');
+    ov.id = 'sch-pop-ov'; ov.className = 'sch-pop-ov';
+    ov.innerHTML = `
+      <div class="sch-pop-box">
+        <div class="sch-pop-ico">${cat.ico}</div>
+        <div class="sch-pop-title">${_esc(s.title)}</div>
+        ${s.memo ? `<div class="sch-pop-msg">${_esc(s.memo)}</div>` : '<div style="height:12px"></div>'}
+        <div class="sch-pop-acts">
+          <button class="btn-x" id="sch-pop-later">⏰ 나중에</button>
+          <button class="btn-ok" id="sch-pop-ok">✅ 확인</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const _close = () => { ov.remove(); setTimeout(_checkPopup, 300); };
+    _q('sch-pop-later').onclick = () => { sessionStorage.setItem(`sch_dismiss_${s.id}`, '1'); _close(); };
+    _q('sch-pop-ok').onclick = async () => { await ScheduleDB.update(s.id, { notifiedAt: new Date().toISOString() }); _close(); };
+  }
+
+  return {
+    init, refresh, renderMiniCalendar,
+    openDayDetail, closeDayDetail,
+    openEditor, closeEditor, saveEditor, deleteItem,
+    _navMonth, _goToday,
+  };
+})();

@@ -206,6 +206,8 @@ const App = (() => {
     if (typeof NoticeApp   !== 'undefined') NoticeApp.init().catch(e=>console.warn('[NoticeApp]',e));
     // ★ 대시보드(홈) 모듈 초기화 (독립 모듈 — 오류 시 기존 기능 영향 없음)
     if (typeof DashboardApp!== 'undefined') DashboardApp.init().catch(e=>console.warn('[DashboardApp]',e));
+    // ★ 일정표 모듈 초기화 (독립 모듈 — 오류 시 기존 기능 영향 없음)
+    if (typeof ScheduleApp !== 'undefined') ScheduleApp.init().catch(e=>console.warn('[ScheduleApp]',e));
 
     DB.on('classes',()=>{_renderChips();if(S.page==='operate')_renderOperateBody();if(S.page==='manage'&&S.mgTab==='classes'){_renderMgCls();if(_q('mg-fee-ov')&&!_q('mg-fee-ov').classList.contains('hidden'))_renderFeePanel();}});
     DB.on('progress',()=>{if(S.page==='operate')_renderOperateBody();if(S.shareActive)_refreshShareProgress();});
