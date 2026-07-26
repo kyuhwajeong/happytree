@@ -292,6 +292,7 @@ const App = (() => {
   function goClass(clsId){
     const cls=(DB.getActiveClasses()||[]).find(c=>c.id===clsId)||(DB.getClassById?DB.getClassById(clsId):null);
     if(cls) S.selCls=cls;
+    S.tlAnchor=null; // ★ 이전에 다른 날짜를 탐색 중이었더라도 항상 "오늘" 기준으로 열리도록 초기화
     go('operate');
   }
 

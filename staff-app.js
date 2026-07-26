@@ -1862,6 +1862,16 @@ const StaffApp = (() => {
     }).catch(e => console.warn('[_renderSalary] syncStaffData', e));
   }
 
+  // ★ 대시보드/일정표 등 외부 화면에서 특정 직원의 급여 계산 탭으로 바로 이동
+  function goToSalary(staffId, year, month) {
+    _st.subTab = 'salary';
+    _st.payStaffId = staffId || null;
+    if (year)  _st.payYear  = year;
+    if (month) _st.payMonth = month;
+    if (typeof App !== 'undefined') App.go('staff');
+    if (_st.payStaffId) _calcAndRender();
+  }
+
   function _onSel() {
     _st.payStaffId = document.getElementById('sf-ps')?.value || null;
     _st.payYear    = Number(document.getElementById('sf-py')?.value) || new Date().getFullYear();
@@ -3660,7 +3670,7 @@ const StaffApp = (() => {
 
   /* ══ 퍼블릭 ══ */
   return {
-    init, render, switchTab,
+    init, render, switchTab, goToSalary,
     openAdd, openEdit, closeEdit, saveStaff, deleteStaff, _toggleEtype, _toggleOT,
     openCal, closeCal, _forceServerSync, _calPrev, _calNext, _calToSalary,
     _calCellClick, _entryClick, _confirmCopy, _cancelCopy, _applyTemplModal,
