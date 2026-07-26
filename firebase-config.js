@@ -199,15 +199,15 @@ const FireDB = (() => {
       r = await _flushQueue();
     }
     if (r.reason === 'offline') {
-      if (btn) { btn.disabled = false; btn.textContent = '🔄 지금 전체 재시도'; }
+      // ★ 여기서 alert()를 띄우던 게 문제였음 — "자동으로 처리됩니다"라고
+      //   말하면서 정작 사용자가 확인 버튼을 눌러야만 넘어가는 모순이었다.
+      //   사용자가 직접 재시도를 눌렀다는 것 자체가 "이미 한참 막혀있었다"는
+      //   신호이므로, 팝업으로 알리는 대신 바로 최후 수단(3단계: 조용한
+      //   새로고침)까지 자동으로 진행한다. 클릭 한 번 더 요구하지 않는다.
       if (navigator.onLine) {
-        // ★ 폰 인터넷은 정상인데 서버 연결만 안 되는 상황 — 사용자 탓이 아니므로
-        //   "인터넷 확인하라"고 책임을 떠넘기지 않는다. 백그라운드에서 계속
-        //   자동으로 재시도하며, 일정 시간 지나면 스스로 새로고침까지 시도한다.
-        alert('⏳ 서버와 연결을 재수립하는 중입니다.\n잠시 후 자동으로 다시 시도되니 그대로 두셔도 됩니다.');
-      } else {
-        alert('⚠️ 현재 인터넷이 연결되어 있지 않습니다. 연결되면 자동으로 저장됩니다.');
+        _autoReload(); // 내부적으로 5분 쿨다운 체크 — 무한 반복 방지
       }
+      if (btn) { btn.disabled = false; btn.textContent = navigator.onLine ? '🔄 재연결 중...' : '📴 인터넷 연결 대기 중'; }
       return;
     }
     if (r.reason === 'already-flushing') {
@@ -395,9 +395,12 @@ const FireDB = (() => {
 
   /* ── 재연결 스케줄 (무제한 — 인터넷 있는 한 계속 시도) ──
    *   ★ 단계별 자동 복구 — 사용자가 아무것도 몰라도 되게:
-   *      경과 15초~  : 강제 재연결(goOffline/goOnline)
-   *      경과 60초~  : 앱 인스턴스 재생성(2단계)
-   *      경과 120초~ : (진짜 인터넷은 있는데도 안 되면) 조용히 새로고침(3단계) */
+   *      경과 10초~  : 강제 재연결(goOffline/goOnline)
+   *      경과 30초~  : 앱 인스턴스 재생성(2단계)
+   *      경과 45초~  : (진짜 인터넷은 있는데도 안 되면) 조용히 새로고침(3단계)
+   *   (기존 15/60/120초는 "결국 새로고침해야 풀리는" 상황에서 사용자를
+   *    2분 가까이 방치하게 되어, 체감상 "캐시를 지워야 해결된다"는
+   *    경험과 똑같이 느껴지는 문제가 있었음 — 전체 주기를 크게 단축) */
   function _scheduleRetry() {
     if (_retryTimer || _connected) return;
     const delay = _retryDelay();
@@ -407,9 +410,9 @@ const FireDB = (() => {
       _retryCount++;
       const elapsed = _offlineSince ? Date.now() - _offlineSince : 0;
       console.log(`[FireDB] ⏳ 재연결 대기 ${_retryCount}회차 (경과 ${Math.round(elapsed/1000)}초)`);
-      if (elapsed >= 120000)      _autoReload();
-      else if (elapsed >= 60000)  _hardReset();
-      else                        _forceReconnect();
+      if (elapsed >= 45000)      _autoReload();
+      else if (elapsed >= 30000) _hardReset();
+      else                       _forceReconnect();
       _scheduleRetry(); // 무한 재시도
     }, delay);
   }
