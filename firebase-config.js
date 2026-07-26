@@ -51,7 +51,25 @@ const FireDB = (() => {
   function _saveQueue(q) {
     try { localStorage.setItem(LS_QUEUE, JSON.stringify(q)); } catch {}
   }
+  /* ★ 큐에 올리지 않고 조용히 버릴 경로 — 관리자 전용 모니터링의 세션
+   * 하트비트/행동 로그(hakwon10/monitor/sessions/...)는:
+   *   - 일반 사용자는 존재조차 모르는 부가 기능(관리자만 봄)
+   *   - 자주(수십 초 간격) 갱신되는 휘발성 데이터라 지금 값이 유실돼도
+   *     다음 하트비트가 금방 다시 채워줌
+   *   - 오래되면 _cleanupExpired()로 어차피 자동 삭제됨
+   * → 학원 실제 데이터(성적/진도/교재/직원/급여)와 달리 "재접속 시도 중"
+   *   같은 메시지로 일반 사용자를 신경 쓰이게 할 가치가 없다.
+   * (같은 monitor 경로라도 ip_labels처럼 관리자가 명시적으로 저장한
+   *  설정은 제외 대상이 아님 — 세션 로그만 정확히 걸러낸다) */
+  function _isDisposablePath(path) {
+    return path.startsWith('hakwon10/monitor/sessions/');
+  }
+
   function _enqueue(op, path, val) {
+    if (_isDisposablePath(path)) {
+      console.log(`[FireDB] 🗑 휘발성 모니터링 로그 — 큐 적재 생략:`, path);
+      return;
+    }
     const q = _loadQueue();
     const idx = q.findIndex(x => x.path === path);
     const item = { op, path, val, ts: Date.now() };
@@ -548,6 +566,17 @@ const FireDB = (() => {
       _db = firebase.database();
       _ok = true;
       console.log('[FireDB] ✅ connected');
+
+      // ★ 이번 수정 이전에 이미 큐에 쌓여있던 휘발성 모니터링 로그 정리
+      //   (앞으로는 _enqueue에서 애초에 안 쌓이지만, 과거에 쌓인 건 별도 정리 필요)
+      {
+        const before = _loadQueue();
+        const after = before.filter(x => !_isDisposablePath(x.path));
+        if (after.length !== before.length) {
+          _saveQueue(after);
+          console.log(`[FireDB] 🧹 기존 큐에서 휘발성 모니터링 로그 ${before.length - after.length}건 정리`);
+        }
+      }
 
       // keepSynced 제거 (v10 compat 미지원) — 실시간 listen()이 연결 유지 대체
 
