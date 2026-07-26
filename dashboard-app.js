@@ -1,26 +1,48 @@
 /**
- * dashboard-app.js — v1
+ * dashboard-app.js — v2
  * ─────────────────────────────────────────────────────────────
  * 첫 화면(홈) 대시보드
  *
- * 구성:
+ * 구성 (헤더의 ≡ 버튼으로 섹션 순서를 자유롭게 변경 가능, 기기별 저장):
  *  1. 오늘의 수업 — 오늘 요일 기준 반 목록을 수업 시간순으로 나열, 탭하면 진도 화면으로 이동
- *  2. 빠른 이동 — 진도/교재/성적/학생/직원 화면 바로가기 (권한에 맞는 항목만 표시)
- *  3. 공지 알림 — 도래한 알림 + 예정된(미확인) 알림 요약, 새 알림 등록 버튼
- *  4. 교재 학습 현황 — 반/교재별 미수행 학생과 미수행 챕터 개수 요약,
+ *  2. 이번 달 급여 현황 — 예상 총 급여, 확정/미확정 인원, 급여일순 목록
+ *  3. 일정표 — 방학/공휴일/일반 일정 + 직원 급여일 + 공지 알림을 한 캘린더에서 확인 (ScheduleApp에 위임)
+ *  4. 공지 알림 — 도래한 알림 + 예정된(미확인) 알림 요약, 새 알림 등록 버튼
+ *  5. 교재 학습 현황 — 반/교재별 미수행 학생과 미수행 챕터 개수 요약,
  *     탭하면 해당 반·교재의 학습 현황(매트릭스) 화면으로 바로 이동
  *
- * 독립 모듈: 다른 모듈(DB/BookLibDB/StudentDB/NoticeDB)이 이미 로드해둔 데이터를
- *            "조회"만 하고 직접 쓰지 않으므로, 오류가 나도 기존 기능에 영향 없음.
+ * ★ v2: 하단 탭으로 각 화면 이동이 이미 가능하므로 "빠른 이동" 섹션은 제거하고,
+ *        대신 남은 섹션들의 표시 순서를 사용자가 직접 정할 수 있게 함.
+ *
+ * 독립 모듈: 다른 모듈(DB/BookLibDB/StudentDB/NoticeDB/StaffDB/ScheduleApp)이 이미
+ *            로드해둔 데이터를 "조회"만 하고 직접 쓰지 않으므로, 오류가 나도 기존 기능에 영향 없음.
  */
 const DashboardApp = (() => {
-  const QUICK = [
-    { pg: 'operate',  ico: '📅', lbl: '진도', color: '#4f46e5' },
-    { pg: 'booklib',  ico: '📖', lbl: '교재', color: '#8b5cf6' },
-    { pg: 'grade',    ico: '📝', lbl: '성적', color: '#0891b2' },
-    { pg: 'students', ico: '👨‍🎓', lbl: '학생', color: '#22c55e' },
-    { pg: 'staff',    ico: '👩‍💼', lbl: '직원', color: '#f59e0b' },
+  // ★ 대시보드 섹션 구성 — 순서는 사용자가 자유롭게 변경 가능 (기기별 localStorage 저장)
+  const SECTION_DEFS = [
+    { key: 'today',    ico: '📅', lbl: '오늘의 수업' },
+    { key: 'payroll',  ico: '💰', lbl: '이번 달 급여 현황' },
+    { key: 'schedule', ico: '🗓️', lbl: '일정표' },
+    { key: 'notice',   ico: '🔔', lbl: '공지 알림' },
+    { key: 'books',    ico: '📊', lbl: '교재 학습 현황' },
   ];
+  const LS_ORDER = 'hk10b_dashboardOrder';
+  function _getSectionOrder() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(LS_ORDER));
+      if (Array.isArray(saved) && saved.length === SECTION_DEFS.length && saved.every(k => SECTION_DEFS.find(d => d.key === k))) return saved;
+    } catch (e) {}
+    return SECTION_DEFS.map(d => d.key);
+  }
+  function _saveSectionOrder(order) { try { localStorage.setItem(LS_ORDER, JSON.stringify(order)); } catch (e) {} }
+  // ★ 함수 선언은 호이스팅되므로 아래에서 정의될 함수들을 미리 참조해도 안전함
+  const _SECTION_HTML = {
+    today:    () => _todaySectionFullHtml(),
+    payroll:  () => _payrollSectionHtml(),
+    schedule: () => _scheduleSectionHtml(),
+    notice:   () => _noticeSectionHtml(),
+    books:    () => _bookStatusSectionHtml(),
+  };
   const DAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
   function _esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -55,12 +77,14 @@ const DashboardApp = (() => {
 .db-now-tag{font-size:9.5px;font-weight:800;color:#fff;background:#ef4444;border-radius:999px;padding:2px 7px;margin-left:5px;vertical-align:middle}
 .db-today-arrow{color:var(--tx3);font-size:16px;flex-shrink:0}
 
-/* 빠른 이동 */
-.db-quick-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
-.db-quick-btn{display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 4px;border-radius:14px;border:1px solid var(--bdr);background:var(--surf);cursor:pointer;transition:all .15s}
-.db-quick-btn:active{transform:scale(.94);background:var(--card2)}
-.db-quick-ico{width:38px;height:38px;border-radius:12px;background:color-mix(in srgb, var(--qc) 15%, transparent);display:flex;align-items:center;justify-content:center;font-size:18px}
-.db-quick-lbl{font-size:11px;font-weight:700;color:var(--tx2)}
+/* 순서 변경 버튼/편집 시트 */
+.db-reorder-btn{width:34px;height:34px;border-radius:9px;background:var(--a10);border:1px solid var(--a40);display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer;color:var(--a);flex-shrink:0}
+.db-reorder-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--card2);border:1px solid var(--bdr);border-radius:10px;margin-bottom:6px}
+.db-reorder-ico{font-size:17px;flex-shrink:0}
+.db-reorder-lbl{flex:1;font-size:13px;font-weight:700;color:var(--tx)}
+.db-reorder-btns{display:flex;gap:4px}
+.db-reorder-arrow{width:28px;height:28px;border-radius:7px;border:1px solid var(--bdr2);background:var(--surf2);color:var(--tx2);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center}
+.db-reorder-arrow:disabled{opacity:.35;pointer-events:none}
 
 /* 공지 알림 */
 .db-notice-label{font-size:10.5px;font-weight:800;color:var(--tx3);letter-spacing:.5px;margin:8px 0 5px}
@@ -86,6 +110,21 @@ const DashboardApp = (() => {
 .db-stu-badge b{color:#ef4444;font-weight:800}
 .db-stu-badge.more{color:var(--tx3)}
 .db-more-note{text-align:center;font-size:10.5px;color:var(--tx3);margin-top:8px}
+
+/* 급여 현황 */
+.db-pay-summary{display:flex;align-items:center;justify-content:space-between;background:var(--card2);border:1px solid var(--bdr);border-radius:12px;padding:11px 13px;margin-bottom:8px}
+.db-pay-total{display:flex;flex-direction:column;gap:2px}
+.db-pay-total span{font-size:10.5px;color:var(--tx3)}
+.db-pay-total b{font-size:16px;font-weight:800;color:var(--tx)}
+.db-pay-status{font-size:10.5px;color:var(--tx3);text-align:right}
+.db-pay-list{display:flex;flex-direction:column;gap:5px}
+.db-pay-row{display:flex;align-items:center;gap:8px;padding:7px 4px;border-radius:9px;cursor:pointer}
+.db-pay-row:hover,.db-pay-row:active{background:var(--card2)}
+.db-pay-day{font-size:10.5px;font-weight:700;color:var(--a);background:var(--a10);border-radius:7px;padding:2px 7px;flex-shrink:0}
+.db-pay-name{flex:1;font-size:12px;font-weight:700;color:var(--tx);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.db-pay-amt{font-size:11.5px;font-weight:700;color:var(--tx2);white-space:nowrap}
+.db-pay-badge{font-size:9.5px;font-weight:800;border-radius:999px;padding:2px 7px;background:rgba(239,68,68,.1);color:#ef4444;flex-shrink:0}
+.db-pay-badge.ok{background:rgba(34,197,94,.14);color:#16a34a}
     `;
     document.head.appendChild(s);
   }
@@ -103,6 +142,11 @@ const DashboardApp = (() => {
     }
     if (typeof StudentDB !== 'undefined') StudentDB.on('students', () => { if (_isActive()) render(); });
     if (typeof NoticeDB !== 'undefined')  NoticeDB.on('notices', () => { if (_isActive()) render(); });
+    if (typeof StaffDB !== 'undefined') {
+      StaffDB.on('staff', () => { if (_isActive()) render(); });
+      StaffDB.on('pay',   () => { if (_isActive()) render(); });
+      StaffDB.on('work',  () => { if (_isActive()) render(); });
+    }
   }
 
   /* ═══════════════════════════════════════════════════════════
@@ -140,8 +184,11 @@ const DashboardApp = (() => {
     const pg = _q('page-dashboard'); if (!pg) return;
     pg.innerHTML = _shell();
     if (typeof LOGO !== 'undefined') { const li = _q('db-logo'); if (li) li.src = LOGO.small; }
-    if (typeof App !== 'undefined' && App._refreshAuthUI) { /* no-op: App이 자체적으로 호출함 */ }
     _refreshBadges();
+    // ★ 일정표(캘린더)는 별도 모듈(ScheduleApp)이 렌더링 — 오류가 나도 대시보드 나머지는 정상 동작
+    if (typeof ScheduleApp !== 'undefined' && _q('sch-mini-cal')) {
+      try { ScheduleApp.renderMiniCalendar('sch-mini-cal'); } catch (e) { console.warn('[DashboardApp] ScheduleApp 렌더 실패', e); }
+    }
   }
   function _refreshBadges() {
     if (typeof DB === 'undefined') return;
@@ -153,6 +200,8 @@ const DashboardApp = (() => {
   function _shell() {
     const today = new Date();
     const dateStr = `${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일 (${DAYS_KO[today.getDay()]})`;
+    const order = _getSectionOrder();
+    const html = order.map(key => _SECTION_HTML[key] ? _SECTION_HTML[key]() : '').join('');
     return `
       <div class="ph">
         <div class="phl">
@@ -163,18 +212,69 @@ const DashboardApp = (() => {
           </div>
         </div>
         <div class="phr">
+          <button class="db-reorder-btn" onclick="DashboardApp.openReorder()" title="화면 구성 순서 변경">≡</button>
           <button id="db-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>
         </div>
       </div>
-      <div class="db-body">
-        <div class="db-sec">
-          <div class="db-sec-hdr"><div class="db-sec-title">📅 오늘의 수업</div></div>
-          ${_todaySectionHtml()}
-        </div>
-        ${_quickNavHtml()}
-        ${_noticeSectionHtml()}
-        ${_bookStatusSectionHtml()}
-      </div>`;
+      <div class="db-body">${html}</div>`;
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+   * 섹션 순서 변경 (기기별 저장)
+   * ═══════════════════════════════════════════════════════════ */
+  let _reorderTmp = null;
+  function openReorder() {
+    _q('db-reorder-ov')?.remove();
+    _reorderTmp = _getSectionOrder().slice();
+    const ov = document.createElement('div');
+    ov.id = 'db-reorder-ov'; ov.className = 'ov';
+    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+    ov.innerHTML = `<div class="sh">
+      <div class="sh-handle"></div>
+      <div class="sh-title">≡ 화면 구성 순서 변경</div>
+      <div class="sh-sub" style="color:var(--tx3);font-size:11.5px;line-height:1.5;margin-bottom:10px">
+        화살표로 순서를 바꾸면 홈 화면에 그 순서대로 표시됩니다. 이 기기에만 적용됩니다.
+      </div>
+      <div id="db-reorder-list"></div>
+      <div class="sh-acts">
+        <button class="btn-x" onclick="(()=>{localStorage.removeItem('${LS_ORDER}');DashboardApp.render();document.getElementById('db-reorder-ov')?.remove();App._toast&&App._toast('🔄 기본 순서로 초기화됨','success',2000);})()">초기화</button>
+        <button class="btn-ok" onclick="DashboardApp._saveReorder()">💾 순서 저장</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+
+    function renderList() {
+      const list = _q('db-reorder-list');
+      list.innerHTML = '';
+      _reorderTmp.forEach((key, idx) => {
+        const def = SECTION_DEFS.find(d => d.key === key); if (!def) return;
+        const row = document.createElement('div');
+        row.className = 'db-reorder-row';
+        row.innerHTML = `
+          <span class="db-reorder-ico">${def.ico}</span>
+          <span class="db-reorder-lbl">${def.lbl}</span>
+          <div class="db-reorder-btns">
+            <button class="db-reorder-arrow" data-dir="up" ${idx === 0 ? 'disabled' : ''}>↑</button>
+            <button class="db-reorder-arrow" data-dir="dn" ${idx === _reorderTmp.length - 1 ? 'disabled' : ''}>↓</button>
+          </div>`;
+        row.querySelectorAll('button[data-dir]').forEach(btn => {
+          btn.onclick = () => {
+            const dir = btn.dataset.dir, j = dir === 'up' ? idx - 1 : idx + 1;
+            if (j < 0 || j >= _reorderTmp.length) return;
+            [_reorderTmp[idx], _reorderTmp[j]] = [_reorderTmp[j], _reorderTmp[idx]];
+            renderList();
+          };
+        });
+        list.appendChild(row);
+      });
+    }
+    renderList();
+  }
+  function _saveReorder() {
+    if (_reorderTmp) _saveSectionOrder(_reorderTmp);
+    _q('db-reorder-ov')?.remove();
+    render();
+    if (typeof App !== 'undefined' && App._toast) App._toast('✅ 순서가 저장되었습니다', 'success', 2000);
   }
 
   function _greeting() {
@@ -192,6 +292,12 @@ const DashboardApp = (() => {
     if (!dt || (!dt.start && !dt.end)) return '';
     if (dt.start && dt.end) return `${dt.start}~${dt.end}`;
     return dt.start || dt.end || '';
+  }
+  function _todaySectionFullHtml() {
+    return `<div class="db-sec">
+      <div class="db-sec-hdr"><div class="db-sec-title">📅 오늘의 수업</div></div>
+      ${_todaySectionHtml()}
+    </div>`;
   }
   function _todaySectionHtml() {
     const now = new Date();
@@ -219,21 +325,6 @@ const DashboardApp = (() => {
         <div class="db-today-arrow">›</div>
       </div>`;
     }).join('')}</div>`;
-  }
-
-  /* ═══════════════════════════════════════════════════════════
-   * 2. 빠른 이동
-   * ═══════════════════════════════════════════════════════════ */
-  function _quickNavHtml() {
-    const items = QUICK.filter(q => _canSee(q.pg));
-    if (!items.length) return '';
-    return `<div class="db-sec">
-      <div class="db-sec-hdr"><div class="db-sec-title">🚀 빠른 이동</div></div>
-      <div class="db-quick-grid">${items.map(q => `
-        <button class="db-quick-btn" style="--qc:${q.color}" onclick="App.go('${q.pg}')">
-          <span class="db-quick-ico">${q.ico}</span><span class="db-quick-lbl">${q.lbl}</span>
-        </button>`).join('')}</div>
-    </div>`;
   }
 
   /* ═══════════════════════════════════════════════════════════
@@ -340,11 +431,73 @@ const DashboardApp = (() => {
   }
 
   /* ═══════════════════════════════════════════════════════════
+   * 5. 이번 달 급여 현황
+   * ═══════════════════════════════════════════════════════════ */
+  function _payrollSectionHtml() {
+    if (!_canSee('staff')) return '';
+    if (typeof StaffDB === 'undefined') return '';
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth() + 1;
+    const dim = new Date(y, m, 0).getDate();
+    const list = (StaffDB.getActive ? StaffDB.getActive() : []);
+    if (!list.length) {
+      return `<div class="db-sec">
+        <div class="db-sec-hdr"><div class="db-sec-title">💰 이번 달 급여 현황</div>
+          <button class="db-mini-btn ghost" onclick="App.go('staff')">전체보기</button></div>
+        <div class="db-empty-mini">등록된 직원이 없습니다</div>
+      </div>`;
+    }
+    let total = 0, confirmedCnt = 0;
+    const rows = list.map(s => {
+      const saved = StaffDB.getSavedPay(s.id, y, m);
+      let pay, confirmed;
+      if (saved) { pay = saved.totalPay || 0; confirmed = true; }
+      else { const r = StaffDB.calcPay(s.id, y, m); pay = r ? (r.totalPay || 0) : 0; confirmed = false; }
+      if (confirmed) confirmedCnt++;
+      total += pay;
+      const pd = Number(s.payDay || 0);
+      const day = pd > 0 ? Math.min(pd, dim) : dim;
+      return { staff: s, pay, confirmed, day };
+    }).sort((a, b) => a.day - b.day);
+    const won = n => (n || 0).toLocaleString('ko-KR');
+    return `<div class="db-sec">
+      <div class="db-sec-hdr"><div class="db-sec-title">💰 이번 달 급여 현황</div>
+        <button class="db-mini-btn ghost" onclick="App.go('staff')">전체보기</button></div>
+      <div class="db-pay-summary">
+        <div class="db-pay-total"><span>예상 총 급여</span><b>₩${won(total)}</b></div>
+        <div class="db-pay-status">✅ 확정 ${confirmedCnt}명 · ⏳ 미확정 ${rows.length - confirmedCnt}명</div>
+      </div>
+      <div class="db-pay-list">${rows.map(r => `
+        <div class="db-pay-row" onclick="App.go('staff')">
+          <span class="db-pay-day">${m}/${r.day}</span>
+          <span class="db-pay-name">${_esc(r.staff.name)}</span>
+          <span class="db-pay-amt">₩${won(r.pay)}</span>
+          <span class="db-pay-badge${r.confirmed ? ' ok' : ''}">${r.confirmed ? '확정' : '미확정'}</span>
+        </div>`).join('')}</div>
+    </div>`;
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+   * 6. 일정표 (ScheduleApp에 렌더링 위임)
+   * ═══════════════════════════════════════════════════════════ */
+  function _scheduleSectionHtml() {
+    if (typeof ScheduleApp === 'undefined') return '';
+    const isAdmin = typeof DB !== 'undefined' && DB.isAdmin();
+    return `<div class="db-sec">
+      <div class="db-sec-hdr">
+        <div class="db-sec-title">🗓️ 일정표</div>
+        ${isAdmin ? '<button class="db-mini-btn" onclick="ScheduleApp.openEditor()">➕ 등록</button>' : ''}
+      </div>
+      <div id="sch-mini-cal"></div>
+    </div>`;
+  }
+
+  /* ═══════════════════════════════════════════════════════════
    * 이동 액션
    * ═══════════════════════════════════════════════════════════ */
   function goMatrix(clsId, bkId) {
     if (typeof BooklibApp !== 'undefined' && BooklibApp.goToMatrix) BooklibApp.goToMatrix(clsId, bkId);
   }
 
-  return { init, render, goMatrix, _refreshBadges };
+  return { init, render, goMatrix, _refreshBadges, openReorder, _saveReorder };
 })();
