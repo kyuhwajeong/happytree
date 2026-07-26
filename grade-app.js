@@ -1056,6 +1056,8 @@ to{opacity:1;transform:none}}
       if (document.visibilityState === 'hidden') _flushAutoSaveTimers();
     });
     window.addEventListener('pagehide', () => { _flushAutoSaveTimers(); });
+    // ★ firebase-config.js가 좀비 연결 복구 최후수단(자동 새로고침) 전에 보내는 신호
+    window.addEventListener('fb:force-flush-before-reload', () => { _flushAutoSaveTimers(); });
 
     document.addEventListener('click', _closeCtxMenu);
     console.log('[GradeApp] ✅ v4.1');
@@ -2090,15 +2092,19 @@ to{opacity:1;transform:none}}
     const pass   = retake !== '' ? Math.max(0, tq - retake) : '';
     const achW   = pass !== '' && tq > 0 ? Math.round(pass / tq * 100) : '';
     const isGW   = achW !== '' && achW >= 80;
-    _st.data[sid].word = { totalQ:tq, retake, pass };
-    _st.dirty.add(sid); _refreshDirtyUI();
+    const next   = { totalQ:tq, retake, pass };
+    // ★ 실제로 값이 달라졌을 때만 dirty·자동저장 — 값이 같으면(예: 입력했다가 원래대로
+    //   되돌린 경우) 불필요한 서버 전송을 하지 않는다.
+    const changed = JSON.stringify(_st.data[sid].word || null) !== JSON.stringify(next);
+    _st.data[sid].word = next;
+    if (changed) { _st.dirty.add(sid); _refreshDirtyUI(); }
 
     const passEl = document.getElementById(`gr-pass-${sid}`);
     const achEl  = document.getElementById(`gr-achvw-${sid}`);
     if (passEl) { passEl.querySelector('.gs-val').textContent = pass!==''?pass:'—'; passEl.className=`gs-td ro ${pass!==''?(isGW?'pass-c':'fail-c'):''}`; }
     if (achEl)  { achEl.querySelector('.gs-val').textContent  = achW!==''?achW+'%':'—'; achEl.className =`gs-td ro ${achW!==''?(isGW?'pass-c':'fail-c'):''}`; }
     _updateAvg(); _updateChart();
-    _scheduleAutoSave(sid); // ★ 실시간 자동저장
+    if (changed) _scheduleAutoSave(sid); // ★ 실시간 자동저장 (실제 변경 시에만)
   }
 
   function _excelRdInput(sid, key, val, totalRQ) {
@@ -2107,8 +2113,10 @@ to{opacity:1;transform:none}}
     const correct = val === '' ? '' : Math.max(0, Math.min(tq, Number(val)));
     const score   = correct !== '' ? Math.round(correct / tq * 100 * 10) / 10 : '';
     if (!_st.data[sid].reading) _st.data[sid].reading = {};
-    _st.data[sid].reading[key] = { correct, score };
-    _st.dirty.add(sid); _refreshDirtyUI();
+    const next = { correct, score };
+    const changed = JSON.stringify(_st.data[sid].reading[key] || null) !== JSON.stringify(next);
+    _st.data[sid].reading[key] = next;
+    if (changed) { _st.dirty.add(sid); _refreshDirtyUI(); }
 
     const actRevs = GradeDB.getActiveReviews(_st.bookId);
     const scEl    = document.getElementById(`gr-sc-${sid}-${key}`);
@@ -2116,12 +2124,14 @@ to{opacity:1;transform:none}}
     if (scEl) scEl.querySelector('.gs-val').textContent = score !== '' ? score : '—';
     if (achvEl) achvEl.querySelector('.gs-val').textContent = _calcRdStr(_st.data[sid].reading, actRevs) || '—';
     _updateAvg();
-    _scheduleAutoSave(sid); // ★ 실시간 자동저장
+    if (changed) _scheduleAutoSave(sid); // ★ 실시간 자동저장 (실제 변경 시에만)
   }
 
   function _excelComment(sid, val) {
-    _ensureData(sid); _st.data[sid].comment = val;
-    _st.dirty.add(sid); _refreshDirtyUI();
+    _ensureData(sid);
+    const changed = (_st.data[sid].comment || '') !== val;
+    _st.data[sid].comment = val;
+    if (changed) { _st.dirty.add(sid); _refreshDirtyUI(); }
   }
 
   /* ── 키보드 네비게이션 ── */
@@ -2438,8 +2448,10 @@ to{opacity:1;transform:none}}
     const pass = rt!==''?Math.max(0,tq-rt):'';
     const achW = pass!==''&&tq>0?Math.round(pass/tq*100):'';
     const isGW = achW!==''&&achW>=80;
-    _st.data[sid].word = {totalQ:tq,retake:rt,pass};
-    _st.dirty.add(sid); _refreshDirtyUI();
+    const next = {totalQ:tq,retake:rt,pass};
+    const changed = JSON.stringify(_st.data[sid].word || null) !== JSON.stringify(next);
+    _st.data[sid].word = next;
+    if (changed) { _st.dirty.add(sid); _refreshDirtyUI(); }
     const pe=document.getElementById(`gr-cd-pass-${sid}`), ae=document.getElementById(`gr-cd-achw-${sid}`);
     if(pe){pe.textContent=pass!==''?pass:'—';pe.className=`gr-cdisp ${pass!==''?(isGW?'pass':'fail'):''}`;}
     if(ae){ae.textContent=achW!==''?achW+'%':'—';ae.className=`gr-cdisp ${achW!==''?(isGW?'pass':'fail'):''}`;}
@@ -2451,8 +2463,10 @@ to{opacity:1;transform:none}}
     const corr = val===''?'':Math.max(0,Math.min(tq,Number(val)));
     const sc   = corr!==''?Math.round(corr/tq*100*10)/10:'';
     if (!_st.data[sid].reading) _st.data[sid].reading = {};
-    _st.data[sid].reading[key] = {correct:corr, score:sc};
-    _st.dirty.add(sid); _refreshDirtyUI();
+    const next = {correct:corr, score:sc};
+    const changed = JSON.stringify(_st.data[sid].reading[key] || null) !== JSON.stringify(next);
+    _st.data[sid].reading[key] = next;
+    if (changed) { _st.dirty.add(sid); _refreshDirtyUI(); }
     const actRevs = GradeDB.getActiveReviews(_st.bookId);
     const scEl  = document.getElementById(`gr-cd-sc-${sid}-${key}`);
     const achEl = document.getElementById(`gr-cd-achrd-${sid}`);
@@ -2461,8 +2475,10 @@ to{opacity:1;transform:none}}
   }
 
   function _cardComment(val, sid) {
-    _ensureData(sid); _st.data[sid].comment=val;
-    _st.dirty.add(sid); _refreshDirtyUI();
+    _ensureData(sid);
+    const changed = (_st.data[sid].comment || '') !== val;
+    _st.data[sid].comment = val;
+    if (changed) { _st.dirty.add(sid); _refreshDirtyUI(); }
   }
 
   function _slideTo(i) {

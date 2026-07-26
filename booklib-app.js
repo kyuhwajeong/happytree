@@ -2480,7 +2480,15 @@ const BooklibApp = (() => {
         const ta=document.createElement('textarea'); ta.id='bl-memo-txt';
         ta.style.cssText='width:100%;height:160px;padding:10px;border:none;outline:none;resize:vertical;font-size:12px;font-family:var(--font);background:var(--card);color:var(--tx);box-sizing:border-box';
         ta.placeholder='반·교재별 메모를 입력하세요...';
-        ta.oninput=()=>BooklibApp._saveMemo(ta.value);
+        // ★ 기존엔 키 입력마다 debounce/값비교 없이 매번 바로 Firebase.set() 호출됨
+        //   (예: "안녕"을 치면 3번의 개별 쓰기 발생) — 진도/성적 모듈과 동일하게
+        //   800ms 디바운스 + 실제로 값이 바뀌었을 때만 저장하도록 통일.
+        let _memoLastVal = ta.value;
+        const _memoDoSave = () => {
+          if (ta.value !== _memoLastVal) { _memoLastVal = ta.value; BooklibApp._saveMemo(ta.value); }
+        };
+        ta.oninput = () => { clearTimeout(ta._memoTimer); ta._memoTimer = setTimeout(_memoDoSave, 800); };
+        ta.addEventListener('blur', () => { clearTimeout(ta._memoTimer); _memoDoSave(); });
         pad.appendChild(hdrDiv); pad.appendChild(dtDiv); pad.appendChild(ta);
         document.body.appendChild(pad);
         // DB에서 메모 로드
@@ -2495,6 +2503,7 @@ const BooklibApp = (() => {
           }
           if(data){
             ta.value=data.text||'';
+            _memoLastVal=ta.value; // ★ 서버에서 불러온 값을 기준선으로 — 로드 직후 오탐 저장 방지
             if(data.updatedAt){
               const d=new Date(data.updatedAt);
               dtDiv.textContent='수정: '+d.toLocaleString('ko-KR');
