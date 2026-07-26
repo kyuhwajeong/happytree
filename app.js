@@ -71,6 +71,8 @@ const App = (() => {
   if(typeof document!=='undefined'){
     document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') _flushAllDirtyFields(); });
     window.addEventListener('pagehide', _flushAllDirtyFields);
+    // ★ firebase-config.js가 좀비 연결 복구 최후수단(자동 새로고침) 전에 보내는 신호
+    window.addEventListener('fb:force-flush-before-reload', _flushAllDirtyFields);
   }
 
   // ★★★ 신규: 수동 저장 버튼 + 미저장 뱃지 + 닫기 전 경고 ★★★

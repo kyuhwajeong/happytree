@@ -83,7 +83,10 @@ const NoticeDB = (() => {
     };
     _list.push(n);
     _saveLS(); _fire('notices');
-    if (typeof FireDB !== 'undefined' && FireDB.ready()) {
+    // ★ 연결 여부와 무관하게 항상 시도 — 오프라인이면 FireDB.set이 자체 큐잉해
+    //   재연결 시 자동 재전송한다. 기존엔 FireDB.ready()가 false면 아예 시도조차
+    //   안 해서, 그 시점 이후로 서버 전송 재시도 없이 로컬에만 영원히 남는 문제가 있었음.
+    if (typeof FireDB !== 'undefined') {
       try { await FireDB.set(`${FB_PATH}/${n.id}`, n); } catch (e) { console.warn('[NoticeDB] add 서버 저장 실패', e); }
     }
     return n;
@@ -96,7 +99,7 @@ const NoticeDB = (() => {
     if (patch.monthDay !== undefined) n.monthDay = Math.min(31, Math.max(1, +patch.monthDay || 1));
     _list[idx] = n;
     _saveLS(); _fire('notices');
-    if (typeof FireDB !== 'undefined' && FireDB.ready()) {
+    if (typeof FireDB !== 'undefined') {
       try { await FireDB.set(`${FB_PATH}/${id}`, n); } catch (e) { console.warn('[NoticeDB] update 서버 저장 실패', e); }
     }
     return n;
@@ -105,7 +108,7 @@ const NoticeDB = (() => {
   async function remove(id) {
     _list = _list.filter(n => n.id !== id);
     _saveLS(); _fire('notices');
-    if (typeof FireDB !== 'undefined' && FireDB.ready()) {
+    if (typeof FireDB !== 'undefined') {
       try { await FireDB.remove(`${FB_PATH}/${id}`); } catch (e) { console.warn('[NoticeDB] remove 서버 반영 실패', e); }
     }
   }

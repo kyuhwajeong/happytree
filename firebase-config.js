@@ -185,10 +185,29 @@ const FireDB = (() => {
    * 닫아버리면 실제로 전송됐는지 사용자가 확인할 수 없기 때문). */
   async function _retryFromPanel(btn) {
     if (btn) { btn.disabled = true; btn.textContent = '🔄 전송 중...'; }
-    const r = await _flushQueue();
+    let r = await _flushQueue();
+    if (r.reason === 'offline') {
+      // 1단계: 소켓 재수립
+      _forceReconnect();
+      await new Promise(res => setTimeout(res, 1500));
+      r = await _flushQueue();
+    }
+    if (r.reason === 'offline') {
+      // 2단계: 그래도 안 되면 앱 인스턴스 재생성까지 자동으로
+      await _hardReset();
+      await new Promise(res => setTimeout(res, 1500));
+      r = await _flushQueue();
+    }
     if (r.reason === 'offline') {
       if (btn) { btn.disabled = false; btn.textContent = '🔄 지금 전체 재시도'; }
-      alert('⚠️ 현재 오프라인 상태입니다. 인터넷 연결을 확인한 뒤 다시 시도해주세요.');
+      if (navigator.onLine) {
+        // ★ 폰 인터넷은 정상인데 서버 연결만 안 되는 상황 — 사용자 탓이 아니므로
+        //   "인터넷 확인하라"고 책임을 떠넘기지 않는다. 백그라운드에서 계속
+        //   자동으로 재시도하며, 일정 시간 지나면 스스로 새로고침까지 시도한다.
+        alert('⏳ 서버와 연결을 재수립하는 중입니다.\n잠시 후 자동으로 다시 시도되니 그대로 두셔도 됩니다.');
+      } else {
+        alert('⚠️ 현재 인터넷이 연결되어 있지 않습니다. 연결되면 자동으로 저장됩니다.');
+      }
       return;
     }
     if (r.reason === 'already-flushing') {
@@ -311,8 +330,74 @@ const FireDB = (() => {
   /* ── 오프라인 상태 추적 ── */
   let _offlineSince    = 0;
   let _offlineShowTimer = null;
+  let _hardResetTried  = false;
 
-  /* ── 재연결 스케줄 (무제한 — 인터넷 있는 한 계속 시도) ── */
+  /* ★ 강제 재연결 — goOffline()→goOnline() 사이클
+   *   문제: 탭을 장시간(수시간~하루) 방치하면 OS/브라우저가 백그라운드에서
+   *         WebSocket을 강제 종료하는데, 이때 Firebase SDK 내부 재연결
+   *         로직까지 같이 멈춰버려 navigator.onLine은 정상인데 앱만
+   *         영원히 "오프라인"으로 남는 경우가 실제로 발생함(좀비 연결).
+   *   해결: 단순히 기다리지 않고, 명시적으로 연결을 끊었다 다시 살려서
+   *         SDK가 새 WebSocket을 맺도록 강제한다. */
+  function _forceReconnect() {
+    if (!_db || !_ok) return;
+    try {
+      console.log('[FireDB] 🔧 강제 재연결 시도 (goOffline→goOnline)');
+      _db.goOffline();
+      setTimeout(() => { try { _db.goOnline(); } catch (e) { console.warn('[FireDB] goOnline 실패', e); } }, 300);
+    } catch (e) { console.warn('[FireDB] 강제 재연결 실패', e); }
+  }
+
+  /* ★ 2단계 복구 — 앱 인스턴스 자체를 재생성
+   *   goOffline/goOnline으로도 못 살아나는 더 심각한 좀비 상태를 대비.
+   *   장애당 1회만 시도(무한 반복으로 오히려 상태를 꼬이게 하지 않도록). */
+  async function _hardReset() {
+    if (_hardResetTried || !_ok) return;
+    _hardResetTried = true;
+    try {
+      console.log('[FireDB] 🔧🔧 2단계 복구 — Firebase 앱 인스턴스 재생성');
+      const app = firebase.app();
+      await app.delete();
+      firebase.initializeApp(FIREBASE_CONFIG);
+      _db = firebase.database();
+      _attachConnListener();
+    } catch (e) { console.warn('[FireDB] 앱 재생성 실패', e); }
+  }
+
+  /* ★ 3단계 복구 — 최후 수단: 조용히 새로고침
+   *   목적: "새로고침하면 되는데" 를 사용자가 알아서 하게 두지 않고,
+   *         앱이 스스로 판단해서 실행한다. 사용자는 이 과정을 몰라도 됨.
+   *   안전장치:
+   *   - navigator.onLine이 true(=폰 인터넷은 정상)일 때만 실행
+   *     → 진짜 오프라인 상황에서 새로고침을 반복해 배터리/데이터만
+   *       낭비하거나 브라우저 자체 오류 화면을 띄우는 걸 방지.
+   *   - 5분 쿨다운 → 서버 자체 장애 등으로 계속 실패해도 새로고침이
+   *     무한 반복(luup)되지 않도록.
+   *   - 새로고침 직전, 화면에 열려있는 각 모듈(성적/진도 등)에
+   *     "저장 안 된 입력 즉시 로컬에 반영" 신호를 보낸다 — 오프라인 큐는
+   *     이미 localStorage에 있으므로 새로고침으로 사라지지 않음(재시작 후
+   *     자동 재전송됨), 다만 메모리에만 있던 디바운스 대기값까지 한 번 더
+   *     확실히 챙기기 위함. */
+  const RELOAD_COOLDOWN_KEY = 'hk10b_fbAutoReloadAt';
+  function _canAutoReload() {
+    try {
+      const last = Number(sessionStorage.getItem(RELOAD_COOLDOWN_KEY) || 0);
+      return Date.now() - last > 5 * 60 * 1000;
+    } catch { return true; }
+  }
+  function _autoReload() {
+    if (!navigator.onLine || !_canAutoReload()) return;
+    try { sessionStorage.setItem(RELOAD_COOLDOWN_KEY, String(Date.now())); } catch {}
+    console.log('[FireDB] 🔄 장시간 재연결 실패 — 데이터 보존 신호 전송 후 자동 새로고침');
+    try { window.dispatchEvent(new Event('fb:force-flush-before-reload')); } catch {}
+    setTimeout(() => { try { location.reload(); } catch {} }, 500);
+  }
+
+  /* ── 재연결 스케줄 (무제한 — 인터넷 있는 한 계속 시도) ──
+   *   ★ 단계별 자동 복구 — 사용자가 아무것도 몰라도 되게:
+   *      경과 15초~  : 강제 재연결(goOffline/goOnline)
+   *      경과 60초~  : 앱 인스턴스 재생성(2단계)
+   *      경과 120초~ : (진짜 인터넷은 있는데도 안 되면) 조용히 새로고침(3단계) */
   function _scheduleRetry() {
     if (_retryTimer || _connected) return;
     const delay = _retryDelay();
@@ -320,7 +405,11 @@ const FireDB = (() => {
       _retryTimer = null;
       if (_connected) return;
       _retryCount++;
-      console.log(`[FireDB] ⏳ 재연결 대기 ${_retryCount}회차 (${delay/1000}초 후)`);
+      const elapsed = _offlineSince ? Date.now() - _offlineSince : 0;
+      console.log(`[FireDB] ⏳ 재연결 대기 ${_retryCount}회차 (경과 ${Math.round(elapsed/1000)}초)`);
+      if (elapsed >= 120000)      _autoReload();
+      else if (elapsed >= 60000)  _hardReset();
+      else                        _forceReconnect();
       _scheduleRetry(); // 무한 재시도
     }, delay);
   }
@@ -434,6 +523,21 @@ const FireDB = (() => {
   }
 
   /* ── 초기화 ── */
+  function _attachConnListener() {
+    /* 연결 상태 실시간 감지 */
+    _db.ref('.info/connected').on('value', snap => {
+      const prev = _connected;
+      _connected = !!snap.val();
+      _updateConnUI(_connected);
+      if (_connected && !prev) {
+        console.log('[FireDB] 🌐 온라인 복귀');
+        _retryCount = 0; _hardResetTried = false; // ★ 다음 장애 때도 단계별 복구가 다시 작동하도록 리셋
+        setTimeout(_flushQueue, 500); // 재연결 안정화 후 큐 전송
+      }
+      if (!_connected) console.log('[FireDB] 📴 연결 끊김 — 8초 후 배너 예정');
+    });
+  }
+
   async function init() {
     try {
       if (!firebase?.database) throw new Error('no sdk');
@@ -444,35 +548,28 @@ const FireDB = (() => {
 
       // keepSynced 제거 (v10 compat 미지원) — 실시간 listen()이 연결 유지 대체
 
-      /* 연결 상태 실시간 감지 */
-      _db.ref('.info/connected').on('value', snap => {
-        const prev = _connected;
-        _connected = !!snap.val();
-        _updateConnUI(_connected);
-        if (_connected && !prev) {
-          console.log('[FireDB] 🌐 온라인 복귀');
-          setTimeout(_flushQueue, 500); // 재연결 안정화 후 큐 전송
-        }
-        if (!_connected) console.log('[FireDB] 📴 연결 끊김 — 8초 후 배너 예정');
-      });
+      _attachConnListener();
 
       /* ★ 네트워크 복귀 이벤트 (WiFi↔LTE 전환 등) */
       window.addEventListener('online', () => {
         console.log('[FireDB] 🌐 navigator.online 감지 → 재연결 시도');
         _retryCount = 0;
         clearTimeout(_retryTimer); _retryTimer = null;
-        if (!_connected) _scheduleRetry();
+        if (!_connected) { _forceReconnect(); _scheduleRetry(); }
       });
 
       /* ★ 탭 백그라운드→포어그라운드 복귀 — 장시간 방치 후에도
-       * 즉시 응답하도록, 연결이 끊겨 있었다면 재연결부터, 이미
-       * 연결돼 있다면 대기 중인 큐가 있는지 바로 확인해 전송 시도 */
+       * 즉시 응답하도록, 연결이 끊겨 있었다면 강제 재연결부터, 이미
+       * 연결돼 있다면 대기 중인 큐가 있는지 바로 확인해 전송 시도.
+       * (장시간 방치 시 소켓이 죽어도 SDK가 스스로 못 살아나는 경우가 있어
+       *  단순 대기가 아니라 goOffline/goOnline으로 명시적으로 흔들어 깨움) */
       document.addEventListener('visibilitychange', () => {
         if (document.hidden) return;
         console.log('[FireDB] 👁 탭 활성화 → 연결 상태 확인');
         if (!_connected) {
           _retryCount = 0;
           clearTimeout(_retryTimer); _retryTimer = null;
+          _forceReconnect();
           _scheduleRetry();
         } else if (getPendingCount() > 0) {
           console.log(`[FireDB] 👁 탭 재활성화 시 대기 항목 ${getPendingCount()}건 발견 → 즉시 전송 시도`);
