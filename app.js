@@ -16,6 +16,7 @@ const App = (() => {
 
   // ★ 하단 탭 정의 (기본 순서)
   const NAV_DEF = [
+    { pg:'dashboard',ico:'🏠', lbl:'홈',    adminOnly:false },
     { pg:'operate',  ico:'📅', lbl:'진도',  adminOnly:false },
     { pg:'manage',   ico:'⚙️', lbl:'관리',  adminOnly:false },
     { pg:'booklib',  ico:'📖', lbl:'교재',  adminOnly:true  },
@@ -100,7 +101,7 @@ const App = (() => {
   }
 
   const S={
-    page:'operate', mgTab:'classes',
+    page:'dashboard', mgTab:'classes',
     selCls:null, monday:_mon(new Date()),
     mgMk:DB.monthKey(new Date()),
     editClsId:null, editAccId:null, copyFromClsId:null, copyToClsId:null,
@@ -203,6 +204,8 @@ const App = (() => {
     if (typeof GradeApp    !== 'undefined') GradeApp.init().catch(e=>console.warn('[GradeApp]',e));
     // ★ 공지 알림 팝업 모듈 초기화 (독립 모듈 — 오류 시 기존 기능 영향 없음)
     if (typeof NoticeApp   !== 'undefined') NoticeApp.init().catch(e=>console.warn('[NoticeApp]',e));
+    // ★ 대시보드(홈) 모듈 초기화 (독립 모듈 — 오류 시 기존 기능 영향 없음)
+    if (typeof DashboardApp!== 'undefined') DashboardApp.init().catch(e=>console.warn('[DashboardApp]',e));
 
     DB.on('classes',()=>{_renderChips();if(S.page==='operate')_renderOperateBody();if(S.page==='manage'&&S.mgTab==='classes'){_renderMgCls();if(_q('mg-fee-ov')&&!_q('mg-fee-ov').classList.contains('hidden'))_renderFeePanel();}});
     DB.on('progress',()=>{if(S.page==='operate')_renderOperateBody();if(S.shareActive)_refreshShareProgress();});
@@ -216,7 +219,7 @@ const App = (() => {
     _applyTheme(t); _syncDot(FireDB.ready()?'on':'off');
     mq?.addEventListener('change',()=>{if(DB.getTheme().palette==='system')_applyTheme(DB.getTheme());});
     ['touchstart','mousedown','keydown'].forEach(ev=>document.addEventListener(ev,_resetAutoLogout,{passive:true}));
-    history.pushState({pg:'operate'},'');
+    history.pushState({pg:'dashboard'},'');
     window.addEventListener('popstate',_onBack);
     setTimeout(_hideSplash,400);
   }
@@ -226,7 +229,7 @@ const App = (() => {
     ['spl-logo-img','op-logo'].forEach(id=>{const el=document.getElementById(id);if(el)el.src=LOGO.small;});
   }
   function _hideSplash(){const sp=document.getElementById('splash');sp.classList.add('out');setTimeout(()=>{sp.style.display='none';document.getElementById('app').classList.remove('hidden');
-      if(!DB.isLoggedIn()){_showLogin();}else{go(DB.getRole()==='teacher'?'operate':S.page||'operate');}
+      if(!DB.isLoggedIn()){_showLogin();}else{go(S.page||'dashboard');}
     },480);}
   function _setSt(m){const e=_q('spl-st');if(e)e.textContent=m;}
   function _syncDot(s){const d=_q('sync-dot');if(!d)return;d.style.background=s==='on'?'var(--green)':s==='saving'?'var(--orange)':'var(--tx3)';}
@@ -272,6 +275,7 @@ const App = (() => {
     document.getElementById('page-'+page)?.classList.add('on');
     document.querySelector(`[data-pg="${page}"]`)?.classList.add('on');
     history.pushState({pg:page},'');
+    if(page==='dashboard'&&typeof DashboardApp!=='undefined') DashboardApp.render();
     if(page==='operate') {_renderChips();_renderWeekNav();_renderOperateBody();}
     if(page==='manage')  _renderManage();
     if(page==='students'&&typeof StudentApp!=='undefined') StudentApp.render();
@@ -280,6 +284,13 @@ const App = (() => {
     if(page==='grade'   &&typeof GradeApp  !=='undefined') GradeApp.render();
     // ★ render() 이후 호출해야 동적으로 생성된 로그아웃 버튼이 DOM에 존재함
     _refreshAuthUI();
+  }
+
+  // ★ 특정 반을 선택한 상태로 진도(운용) 화면으로 이동 (대시보드 '오늘의 수업' 등에서 사용)
+  function goClass(clsId){
+    const cls=(DB.getActiveClasses()||[]).find(c=>c.id===clsId)||(DB.getClassById?DB.getClassById(clsId):null);
+    if(cls) S.selCls=cls;
+    go('operate');
   }
 
   function _onBack(e){
@@ -301,7 +312,8 @@ const App = (() => {
     if(S.page==='booklib' ){go('operate');return;}
     if(S.page==='staff'   ){go('operate');return;}
     if(S.page==='grade'   ){go('operate');return;}
-    history.pushState({pg:'operate'},'');
+    if(S.page==='operate' ){go('dashboard');return;}
+    history.pushState({pg:'dashboard'},'');
   }
 
   function _refreshAuthUI(){
@@ -319,6 +331,8 @@ const App = (() => {
     _renderNav();
     // ★ 공지 알림 🔔 버튼 표시 상태 갱신 (독립 모듈)
     if (typeof NoticeApp !== 'undefined') NoticeApp.refreshUI();
+    // ★ 대시보드 로그아웃/관리자 배지 갱신 (독립 모듈)
+    if (typeof DashboardApp !== 'undefined' && DashboardApp._refreshBadges) DashboardApp._refreshBadges();
     if(loggedIn)_resetAutoLogout();
   }
 
@@ -2235,7 +2249,7 @@ const App = (() => {
 
   return {
     _onRoleChange, _showClassCard,
-    init,go,mgTab,toggleView,
+    init,go,goClass,mgTab,toggleView,
     cancelLogin,doLogin,logout,
     prevWeek,nextWeek,
     toggleTlLayout,tlPrev,tlNext,tlToday, // ★ 신규: 타임라인 Grid/List 토글 + 이전/오늘/다음 탐색

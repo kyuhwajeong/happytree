@@ -395,10 +395,29 @@ const NoticeApp = (() => {
     if (typeof App !== 'undefined' && App._toast) App._toast('✅ 알림이 저장되었습니다', 'success');
   }
 
+  // ★ 대시보드 등 외부 화면에서 사용하는 조회 헬퍼
+  function getDueList() {
+    if (typeof NoticeDB === 'undefined') return [];
+    return _dueList();
+  }
+  function getUpcomingList(limit = 5) {
+    if (typeof NoticeDB === 'undefined') return [];
+    const ref = new Date();
+    return NoticeDB.getAll()
+      .filter(n => _audienceOk(n) && n.active && !_isDue(n, ref))
+      .map(n => ({ n, t: _targetDate(n, ref) }))
+      .filter(x => x.t)
+      .sort((a, b) => a.t.getTime() - b.t.getTime())
+      .slice(0, limit)
+      .map(x => x.n);
+  }
+  function getCatMeta(key) { return CATS[key] || CATS.general; }
+
   return {
     init, refreshUI,
     openCenter, closeCenter,
     openEditor, closeEditor, saveEditor,
     completeNow, deleteNotice,
+    getDueList, getUpcomingList, getCatMeta,
   };
 })();

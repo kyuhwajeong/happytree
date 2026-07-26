@@ -2181,6 +2181,14 @@ const BooklibApp = (() => {
     </div>`;
   }
 
+  // ★ 대시보드 등 외부 화면에서 특정 반+교재의 학습 현황(매트릭스)으로 바로 이동
+  function goToMatrix(clsId, bkId){
+    _st.subTab = 'matrix';
+    if (typeof App !== 'undefined') App.go('booklib');
+    _onClsChange(clsId || null);
+    if (bkId && bkId !== _st.matrixBookId) _onBkChange(bkId);
+  }
+
   function _onClsChange(clsId){
     // ★ 반 변경 시: 메모창 제거
     document.getElementById('bl-memo-pad')?.remove();
@@ -5159,7 +5167,7 @@ const BooklibApp = (() => {
 
     /* ══ PUBLIC ══ */
   return{
-    init,render,switchTab,
+    init,render,switchTab,goToMatrix,
     _addExcRow,
     addBook,deleteBook,_renameBook,_excAutoComplete,
     openEditor,closeEditor,saveEditor,
