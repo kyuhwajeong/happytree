@@ -1,20 +1,19 @@
 /**
- * schedule-app.js — v3
+ * schedule-app.js — v4
  * ─────────────────────────────────────────────────────────────
  * 학원 "일정표" UI 모듈
  *
  * - 대시보드에 삽입되는 월간 캘린더 + 우측 "오늘의 수업" 패널 (renderMiniCalendar)
  *   → 오늘의 수업은 항상 "오늘" 기준으로 표시되며, 달력에서 다른 달로 이동해도 바뀌지 않음
- * - ★ v3: 점(dot)으로 요약해서 클릭해야만 알 수 있던 방식을 버리고, 구글/네이버 캘린더처럼
- *   기간이 있는 일정(방학 등)은 그 기간만큼 "글자가 보이는 색띠"로 이어서 표시.
- *   급여일·공지 알림도 동일하게 아이콘+텍스트 띠로 표시되어 한눈에 식별 가능.
- *   하루에 너무 많이 겹치면 "+N"으로 요약되고, 탭하면 상세 시트에서 전부 확인 가능.
- * - 날짜를 탭하면 그날의 일정(방학/공휴일/일반) + 직원 급여일 + 공지 알림을
- *   한번에 모아 보여주는 상세 시트, 여기서 일정 등록/수정/삭제 가능
- *   → 급여일·공지 알림은 별도 섹션 없이 이 캘린더 하나로 통합되어 표시됨
- * - 알림이 필요 없는 일정(방학·공휴일 등)도 그대로 등록 가능 (notifyEnabled=false 기본)
- * - 알림을 켠 일정은 예약 시점에 도달하면 자동 팝업 (NoticeApp과 동일한 방식,
- *   단 팝업이 겹치지 않도록 서로의 팝업이 떠 있을 때는 양보함)
+ * - v3: 점(dot) 대신 구글/네이버 캘린더처럼 기간이 있는 일정(방학 등)은 그 기간만큼
+ *   "글자가 보이는 색띠"로 이어서 표시. 하루에 너무 많이 겹치면 "+N"으로 요약.
+ * - ★ v4:
+ *   1) 직원의 실제 근무 기록(누가/몇시~몇시/시급 반영 금액)도 해당 근무일에 색띠로 표시
+ *      (기존 "급여일" 표시는 그대로 유지 — 지급일과 실제 근무일을 구분해서 보여줌)
+ *   2) 날짜를 탭했을 때 팝업(바텀시트)을 띄우던 방식을 버리고, 캘린더 우측
+ *      "오늘의 수업" 바로 아래에 구분선으로 나눠 인라인으로 상세를 표시.
+ *      다시 탭하면 선택 해제, 다른 날짜를 탭하면 그 날짜로 갱신됨.
+ *   3) 공지 알림도 상세 패널에서 바로 ✏️수정 / 🗑삭제 가능 (기존엔 완료 처리만 가능했음)
  *
  * 독립 모듈: ScheduleDB(별도 Firebase 경로)만 직접 사용하고, StaffDB/NoticeDB/DB는
  *            "조회"만 하므로 오류가 나도 기존 기능에 영향 없음.
@@ -26,11 +25,12 @@ const ScheduleApp = (() => {
     'vacation-winter': { ico: '❄️', label: '겨울방학', color: '#0ea5e9' },
     'holiday':         { ico: '🎌', label: '공휴일',   color: '#ef4444' },
   };
-  const PAY_COLOR = '#22c55e', NOTICE_COLOR = '#a855f7';
+  const PAY_COLOR = '#22c55e', NOTICE_COLOR = '#a855f7', WORK_COLOR = '#0891b2';
   const DAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
   let _mountId = null;
   let _st = { year: 0, month: 0 }; // 캘린더에 표시 중인 연/월 (month: 1~12)
+  let _selDate = null; // ★ 우측 패널에 상세를 보여주고 있는 선택된 날짜 (팝업 대신 인라인 표시)
   let _editId = null;
   let _timer = null;
 
@@ -55,7 +55,15 @@ const ScheduleApp = (() => {
 .sch-today-btn{padding:5px 9px;border-radius:8px;background:var(--card2);border:1px solid var(--bdr);font-size:10.5px;font-weight:700;color:var(--tx2);cursor:pointer}
 .sch-widget-layout{display:flex;flex-wrap:wrap;gap:18px}
 .sch-cal-col{flex:1 1 250px;min-width:230px}
-.sch-tdc-col{flex:1 1 150px;min-width:150px;border-left:1px solid var(--bdr);padding-left:16px}
+.sch-tdc-col{flex:1.15 1 220px;min-width:210px;border-left:1px solid var(--bdr);padding-left:16px;display:flex;flex-direction:column}
+.sch-selday-divider{border-top:1px dashed var(--bdr);margin:14px 0 12px}
+.sch-selday-hint{text-align:center;color:var(--tx3);font-size:11.5px;line-height:1.6;padding:22px 8px;background:var(--card2);border-radius:12px}
+.sch-selday-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.sch-selday-title{font-size:12px;font-weight:800;color:var(--tx)}
+.sch-selday-close{width:22px;height:22px;border-radius:7px;background:var(--card2);border:1px solid var(--bdr);color:var(--tx3);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sch-detail-sec{margin-bottom:14px}
+.sch-detail-sec:last-child{margin-bottom:0}
+.sch-detail-sec-title{font-size:11px;font-weight:800;color:var(--tx3);letter-spacing:.4px;margin-bottom:6px}
 .sch-dow-row{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:2px}
 .sch-dow{text-align:center;font-size:10px;font-weight:800;color:var(--tx3);padding:2px 0 6px}
 .sch-dow.sun{color:#ef4444}.sch-dow.sat{color:#3b82f6}
@@ -67,6 +75,7 @@ const ScheduleApp = (() => {
 .sch-daynum-cell.sun{color:#ef4444}
 .sch-daynum-cell.sat{color:#3b82f6}
 .sch-daynum-cell.today{background:var(--a);color:#fff;box-shadow:0 0 0 2px var(--a10)}
+.sch-daynum-cell.selected{box-shadow:0 0 0 2px var(--a);font-weight:900}
 .sch-track-row{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-top:2px}
 .sch-bar{grid-row:1;height:15px;line-height:15px;font-size:8.5px;font-weight:700;color:#fff;padding:0 4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;text-shadow:0 1px 1.5px rgba(0,0,0,.35)}
 .sch-overflow-row{margin-top:1px}
@@ -88,11 +97,7 @@ const ScheduleApp = (() => {
 .sch-tdc-now-tag{font-size:9px;font-weight:800;color:#fff;background:#ef4444;border-radius:999px;padding:2px 6px;margin-left:5px;vertical-align:middle}
 .sch-empty-mini{text-align:center;color:var(--tx3);font-size:11.5px;padding:20px 6px;line-height:1.5}
 
-/* 일자 상세 시트 */
-.sch-detail-date{font-size:12.5px;color:var(--tx3);margin:-4px 0 10px}
-.sch-detail-sec{margin-bottom:14px}
-.sch-detail-sec:last-child{margin-bottom:0}
-.sch-detail-sec-title{font-size:11px;font-weight:800;color:var(--tx3);letter-spacing:.4px;margin-bottom:6px}
+/* 일자 상세 (우측 패널 인라인) */
 .sch-item-row{display:flex;align-items:flex-start;gap:9px;background:var(--card2);border:1px solid var(--bdr);border-radius:11px;padding:10px;margin-bottom:6px}
 .sch-item-row.sch-item-clickable{cursor:pointer;transition:all .15s}
 .sch-item-row.sch-item-clickable:active{transform:scale(.98);background:var(--surf2)}
@@ -140,7 +145,6 @@ const ScheduleApp = (() => {
 
   function refresh() {
     if (_mountId && _q(_mountId)) renderMiniCalendar(_mountId);
-    if (_q('sch-detail-ov')) _renderDetail(_q('sch-detail-ov').dataset.date);
   }
 
   /* ═══════════════════════════════════════════════════════════
@@ -208,6 +212,32 @@ const ScheduleApp = (() => {
     _uniqueYM(days).forEach(({ y, m }) => { const nm = _buildNoticeMap(y, m); Object.keys(nm).forEach(k => { map[k] = (map[k] || []).concat(nm[k]); }); });
     return map;
   }
+  // 근무 기록: 누가(직원) 언제(날짜) 몇시~몇시 근무했고, 시급을 반영하면 얼마인지
+  function _dayWorkInfo(sid, dateStr) {
+    if (typeof StaffDB === 'undefined') return { entries: [], amount: 0 };
+    const entries = StaffDB.getWorkDay ? StaffDB.getWorkDay(sid, dateStr) : [];
+    const y = +dateStr.slice(0, 4);
+    let amount = 0;
+    entries.forEach(e => {
+      const rate = StaffDB.resolveRate ? StaffDB.resolveRate(sid, e.rate || 0, y, e.type) : 0;
+      const hrs = Number(e.baseHours || e.hours || 0) + Number(e.nightHours || 0);
+      amount += Math.round(hrs * rate);
+    });
+    return { entries, amount };
+  }
+  function _mergedWorkMap(days) {
+    const map = {};
+    if (typeof StaffDB === 'undefined') return map;
+    const gridStart = days[0].dateStr, gridEnd = days[days.length - 1].dateStr;
+    (StaffDB.getActive ? StaffDB.getActive() : []).forEach(s => {
+      const range = StaffDB.getWorkRange ? StaffDB.getWorkRange(s.id, gridStart, gridEnd) : {};
+      Object.keys(range).forEach(dateStr => {
+        if (!range[dateStr] || !range[dateStr].length) return;
+        (map[dateStr] = map[dateStr] || []).push(s);
+      });
+    });
+    return map;
+  }
   // 표시 중인 달력 범위(선행/후행 여백일 포함) 안의 모든 이벤트를 "막대"로 통일해서 수집
   function _buildBarEvents(days) {
     const events = [];
@@ -231,6 +261,21 @@ const ScheduleApp = (() => {
       const list = noticeMap[dateStr];
       const label = list.length > 1 ? `🔔 공지 ${list.length}건` : `🔔 ${list[0].title}`;
       events.push({ title: label, color: NOTICE_COLOR, startDate: dateStr, endDate: dateStr, onclick: `ScheduleApp.openDayDetail('${dateStr}')` });
+    });
+    const workMap = _mergedWorkMap(days);
+    Object.keys(workMap).forEach(dateStr => {
+      const staffList = workMap[dateStr];
+      let label;
+      if (staffList.length === 1) {
+        const info = _dayWorkInfo(staffList[0].id, dateStr);
+        const first = info.entries[0];
+        label = info.entries.length === 1 && first?.start && first?.end
+          ? `👤 ${staffList[0].name} ${first.start}~${first.end}`
+          : `👤 ${staffList[0].name} (${info.entries.length}건)`;
+      } else {
+        label = `👤 근무 ${staffList.length}명`;
+      }
+      events.push({ title: label, color: WORK_COLOR, startDate: dateStr, endDate: dateStr, onclick: `ScheduleApp.openDayDetail('${dateStr}')` });
     });
     return events;
   }
@@ -290,7 +335,7 @@ const ScheduleApp = (() => {
     const weeksHtml = weeks.map(week => {
       const { tracks, overflowByDay } = _layoutWeek(week, events);
       const daynumHtml = week.map(d => `
-        <div class="sch-daynum-cell${d.other ? ' other' : ''}${d.dateStr === todayStr ? ' today' : ''}${d.dow === 0 ? ' sun' : ''}${d.dow === 6 ? ' sat' : ''}"
+        <div class="sch-daynum-cell${d.other ? ' other' : ''}${d.dateStr === todayStr ? ' today' : ''}${d.dateStr === _selDate ? ' selected' : ''}${d.dow === 0 ? ' sun' : ''}${d.dow === 6 ? ' sat' : ''}"
           onclick="ScheduleApp.openDayDetail('${d.dateStr}')">${d.cellDay}</div>`).join('');
       const trackRowsHtml = tracks.map(track => {
         const barsHtml = track.map(seg => {
@@ -333,10 +378,15 @@ const ScheduleApp = (() => {
           <div class="sch-legend">
             ${Object.values(CATS).map(c => `<span class="sch-legend-item"><span class="sch-legend-dot" style="background:${c.color}"></span>${c.ico} ${c.label}</span>`).join('')}
             <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${PAY_COLOR}"></span>💰 급여일</span>
+            <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${WORK_COLOR}"></span>👤 근무기록</span>
             <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${NOTICE_COLOR}"></span>🔔 공지</span>
           </div>
         </div>
-        <div class="sch-tdc-col">${_todayClassesHtml()}</div>
+        <div class="sch-tdc-col">
+          ${_todayClassesHtml()}
+          <div class="sch-selday-divider"></div>
+          <div id="sch-selday-panel">${_selDate ? _selDayPanelHtml(_selDate) : _selDayPlaceholderHtml()}</div>
+        </div>
       </div>`;
   }
 
@@ -404,37 +454,34 @@ const ScheduleApp = (() => {
   }
 
   /* ═══════════════════════════════════════════════════════════
-   * 일자 상세 시트
+   * 일자 상세 — 팝업 대신 캘린더 우측 "오늘의 수업" 옆에 인라인으로 표시
    * ═══════════════════════════════════════════════════════════ */
   function openDayDetail(dateStr) {
-    _q('sch-detail-ov')?.remove();
-    const ov = document.createElement('div');
-    ov.id = 'sch-detail-ov'; ov.className = 'ov';
-    ov.dataset.date = dateStr;
-    ov.onclick = e => { if (e.target === ov) closeDayDetail(); };
-    ov.innerHTML = `<div class="sh" style="max-height:88vh">
-      <div class="sh-handle"></div>
-      <div class="sh-title">🗓️ 일정 상세</div>
-      <div id="sch-detail-body"></div>
-    </div>`;
-    document.body.appendChild(ov);
-    _renderDetail(dateStr);
+    _selDate = (_selDate === dateStr) ? null : dateStr; // 같은 날짜를 다시 탭하면 선택 해제
+    refresh();
   }
-  function closeDayDetail() { _q('sch-detail-ov')?.remove(); }
+  function closeDayDetail() { _selDate = null; refresh(); }
 
-  function _renderDetail(dateStr) {
-    const body = _q('sch-detail-body');
-    if (!body) return;
+  function _selDayPlaceholderHtml() {
+    return `<div class="sch-selday-hint">📍 날짜를 탭하면<br>이곳에 상세 내용이 표시돼요</div>`;
+  }
+
+  function _selDayPanelHtml(dateStr) {
     const d = new Date(dateStr + 'T00:00:00');
-    const dateLabel = `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${DAYS_KO[d.getDay()]})`;
+    const dateLabel = `${d.getMonth() + 1}월 ${d.getDate()}일 (${DAYS_KO[d.getDay()]})`;
     const isAdmin = _isAdmin();
     const scheds = _schedulesOn(dateStr);
     const [y, m] = dateStr.split('-').map(Number);
     const paydays = (_buildPaydayMap(y, m)[dateStr]) || [];
+    const workStaff = (typeof StaffDB === 'undefined') ? [] :
+      (StaffDB.getActive ? StaffDB.getActive() : []).filter(s => (StaffDB.getWorkDay ? StaffDB.getWorkDay(s.id, dateStr) : []).length > 0);
     const notices = (_buildNoticeMap(y, m)[dateStr]) || [];
     const dueIds = (typeof NoticeApp !== 'undefined' && NoticeApp.getDueList) ? NoticeApp.getDueList().map(n => n.id) : [];
 
-    let html = `<div class="sch-detail-date">${dateLabel}</div>`;
+    let html = `<div class="sch-selday-hdr">
+      <span class="sch-selday-title">🗓️ ${dateLabel}</span>
+      <button class="sch-selday-close" onclick="ScheduleApp.closeDayDetail()" title="닫기">✕</button>
+    </div>`;
 
     html += `<div class="sch-detail-sec"><div class="sch-detail-sec-title">📌 이 날의 일정</div>`;
     html += scheds.length ? scheds.map(s => {
@@ -454,6 +501,24 @@ const ScheduleApp = (() => {
       </div>`;
     }).join('') : '<div class="sch-empty-mini">등록된 일정이 없습니다</div>';
     html += `</div>`;
+
+    if (workStaff.length) {
+      html += `<div class="sch-detail-sec"><div class="sch-detail-sec-title">👤 근무 기록</div>`;
+      html += workStaff.map(s => {
+        const info = _dayWorkInfo(s.id, dateStr);
+        const won = info.amount.toLocaleString('ko-KR');
+        const timeTxt = info.entries.map(e => `${e.start || '?'}~${e.end || '?'}`).join(', ');
+        const canNav = typeof StaffApp !== 'undefined' && StaffApp.goToSalary;
+        return `<div class="sch-item-row${canNav ? ' sch-item-clickable' : ''}"${canNav ? ` onclick="StaffApp.goToSalary('${s.id}',${y},${m})"` : ''}>
+          <span class="sch-item-ico">👤</span>
+          <div class="sch-item-body">
+            <div class="sch-item-title">${_esc(s.name)}</div>
+            <div class="sch-item-meta">${_esc(timeTxt)} · 시급 반영 ₩${won}</div>
+          </div>
+        </div>`;
+      }).join('');
+      html += `</div>`;
+    }
 
     if (paydays.length) {
       html += `<div class="sch-detail-sec"><div class="sch-detail-sec-title">💰 직원 급여일</div>`;
@@ -480,14 +545,17 @@ const ScheduleApp = (() => {
       html += notices.map(n => {
         const cat = (typeof NoticeApp !== 'undefined' && NoticeApp.getCatMeta) ? NoticeApp.getCatMeta(n.category) : { ico: '📢' };
         const isDue = dueIds.includes(n.id);
-        const canNav = typeof NoticeApp !== 'undefined' && NoticeApp.openCenter;
-        return `<div class="sch-item-row${canNav ? ' sch-item-clickable' : ''}"${canNav ? ` onclick="NoticeApp.openCenter()"` : ''}>
+        return `<div class="sch-item-row">
           <span class="sch-item-ico">${cat.ico}</span>
           <div class="sch-item-body">
             <div class="sch-item-title">${_esc(n.title)}</div>
             ${n.body ? `<div class="sch-item-memo">${_esc(n.body)}</div>` : ''}
           </div>
-          ${isDue && isAdmin ? `<button class="sch-item-ibtn" title="완료 처리" onclick="event.stopPropagation();NoticeApp.completeNow('${n.id}');ScheduleApp.refresh()">✅</button>` : `<span class="sch-badge info">${isDue ? '확인 필요' : '예정'}</span>`}
+          <div class="sch-item-acts">
+            ${isDue && isAdmin ? `<button class="sch-item-ibtn" title="완료 처리" onclick="NoticeApp.completeNow('${n.id}');ScheduleApp.refresh()">✅</button>` : (isDue ? `<span class="sch-badge info">확인 필요</span>` : '')}
+            ${isAdmin ? `<button class="sch-item-ibtn" title="수정" onclick="NoticeApp.openEditor('${n.id}')">✏️</button>
+            <button class="sch-item-ibtn" title="삭제" onclick="NoticeApp.deleteNotice('${n.id}');ScheduleApp.refresh()">🗑</button>` : ''}
+          </div>
         </div>`;
       }).join('');
       html += `</div>`;
@@ -496,7 +564,7 @@ const ScheduleApp = (() => {
     if (isAdmin) {
       html += `<button class="btn-ok" style="width:100%;margin-top:4px" onclick="ScheduleApp.openEditor(null,'${dateStr}')">➕ 이 날짜에 일정 등록</button>`;
     }
-    body.innerHTML = html;
+    return html;
   }
 
   /* ═══════════════════════════════════════════════════════════
