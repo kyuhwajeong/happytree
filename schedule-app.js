@@ -93,16 +93,20 @@ const ScheduleApp = (() => {
 .sch-legend-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 
 /* 오늘의 수업 (캘린더 우측 패널) */
-.sch-tdc-hdr{margin-bottom:9px}
-.sch-tdc-title{font-size:12px;font-weight:800;color:var(--tx);display:block}
-.sch-tdc-date{font-size:10px;color:var(--tx3)}
-.sch-tdc-list{display:flex;flex-direction:column;gap:6px}
-.sch-tdc-row{border-radius:10px;padding:8px 9px;background:var(--card2);border:1px solid var(--bdr);cursor:pointer;transition:all .15s}
-.sch-tdc-row:active{transform:scale(.96)}
-.sch-tdc-row.now{border-color:var(--a);background:var(--a10)}
-.sch-tdc-time{font-size:10px;font-weight:800;color:var(--a);margin-bottom:2px}
-.sch-tdc-name{font-size:12px;font-weight:700;color:var(--tx)}
-.sch-tdc-now-tag{font-size:9px;font-weight:800;color:#fff;background:#ef4444;border-radius:999px;padding:2px 6px;margin-left:5px;vertical-align:middle}
+.sch-tdc-hdr{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px}
+.sch-tdc-title{font-size:12.5px;font-weight:800;color:var(--tx)}
+.sch-tdc-date{font-size:10.5px;color:var(--tx3)}
+.sch-tdc-grid{display:flex;flex-wrap:wrap;gap:8px}
+.sch-tdc-card{flex:0 1 175px;display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:12px;background:var(--card2);border:1px solid var(--bdr);cursor:pointer;transition:all .15s}
+.sch-tdc-card:active{transform:scale(.95);background:var(--surf2)}
+.sch-tdc-card.now{border-color:var(--a);background:var(--a10)}
+.sch-tdc-num{width:22px;height:22px;border-radius:50%;background:var(--a);color:#fff;font-size:10.5px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sch-tdc-card.now .sch-tdc-num{background:#ef4444}
+.sch-tdc-info{min-width:0}
+.sch-tdc-time2{font-size:10px;font-weight:700;color:var(--a);margin-bottom:1px;white-space:nowrap}
+.sch-tdc-card.now .sch-tdc-time2{color:#ef4444}
+.sch-tdc-name2{font-size:12.5px;font-weight:800;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sch-tdc-empty{text-align:center;color:var(--tx3);font-size:12px;padding:24px 10px;background:var(--card2);border-radius:12px;border:1px dashed var(--bdr2)}
 .sch-empty-mini{text-align:center;color:var(--tx3);font-size:11.5px;padding:20px 6px;line-height:1.5}
 
 /* 일자 상세 (우측 패널 인라인) */
@@ -444,13 +448,16 @@ const ScheduleApp = (() => {
       });
     const dateLabel = `${now.getMonth() + 1}월 ${now.getDate()}일 (${todayDow})`;
     let html = `<div class="sch-tdc-hdr"><span class="sch-tdc-title">📅 오늘의 수업</span><span class="sch-tdc-date">${dateLabel}</span></div>`;
-    if (!list.length) { html += `<div class="sch-empty-mini">오늘은 예정된 수업이 없어요 🎈</div>`; return html; }
-    html += `<div class="sch-tdc-list">${list.map(({ cls, dt, startMin, endMin }) => {
+    if (!list.length) { html += `<div class="sch-tdc-empty">🎈 오늘은 예정된 수업이 없어요</div>`; return html; }
+    html += `<div class="sch-tdc-grid">${list.map(({ cls, dt, startMin, endMin }, idx) => {
       const inSession = startMin !== null && endMin !== null && nowMin >= startMin && nowMin <= endMin;
       const timeTxt = dt ? _fmtTime(dt) : '시간 미정';
-      return `<div class="sch-tdc-row${inSession ? ' now' : ''}" onclick="App.goClass('${cls.id}')">
-        <div class="sch-tdc-time">${_esc(timeTxt)}</div>
-        <div class="sch-tdc-name">${_esc(cls.name)}반${inSession ? '<span class="sch-tdc-now-tag">수업중</span>' : ''}</div>
+      return `<div class="sch-tdc-card${inSession ? ' now' : ''}" onclick="App.goClass('${cls.id}')">
+        <span class="sch-tdc-num">${idx + 1}</span>
+        <div class="sch-tdc-info">
+          <div class="sch-tdc-time2">${_esc(timeTxt)}${inSession ? ' · 진행중' : ''}</div>
+          <div class="sch-tdc-name2">${_esc(cls.name)}반</div>
+        </div>
       </div>`;
     }).join('')}</div>`;
     return html;
