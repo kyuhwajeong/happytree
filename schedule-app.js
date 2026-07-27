@@ -113,6 +113,9 @@ const ScheduleApp = (() => {
 .sch-item-row{display:flex;align-items:flex-start;gap:9px;background:var(--card2);border:1px solid var(--bdr);border-radius:11px;padding:10px;margin-bottom:6px}
 .sch-item-row.sch-item-clickable{cursor:pointer;transition:all .15s}
 .sch-item-row.sch-item-clickable:active{transform:scale(.98);background:var(--surf2)}
+.sch-item-row.sch-item-done{opacity:.6}
+.sch-item-row.sch-item-done .sch-item-title{text-decoration:line-through}
+.sch-item-row.sch-item-done .sch-item-memo{text-decoration:line-through}
 .sch-item-ico{font-size:16px;flex-shrink:0}
 .sch-item-body{flex:1;min-width:0}
 .sch-item-title{font-size:12.5px;font-weight:700;color:var(--tx)}
@@ -198,6 +201,14 @@ const ScheduleApp = (() => {
     });
     return map;
   }
+  // 공지의 "이 날짜가 속한 회차"가 완료 처리됐는지 판단 (1회성=날짜 자체, 매월반복=연-월)
+  function _noticePeriodKey(n, dateStr) {
+    return n.scheduleType === 'monthly' ? dateStr.slice(0, 7) : (n.onceDate || dateStr);
+  }
+  function _noticeIsCompleted(n, dateStr) {
+    const pk = _noticePeriodKey(n, dateStr);
+    return !!(n.completedPeriods && n.completedPeriods[pk]);
+  }
 
   /* ═══════════════════════════════════════════════════════════
    * 월간 캘린더 — 구글/네이버 캘린더처럼 기간 일정을 "글자가 보이는 막대"로 표시
@@ -271,8 +282,9 @@ const ScheduleApp = (() => {
     const noticeMap = _mergedNoticeMap(days);
     Object.keys(noticeMap).forEach(dateStr => {
       const list = noticeMap[dateStr];
+      const allDone = list.every(n => _noticeIsCompleted(n, dateStr));
       const label = list.length > 1 ? `🔔 공지 ${list.length}건` : `🔔 ${list[0].title}`;
-      events.push({ title: label, color: NOTICE_COLOR, startDate: dateStr, endDate: dateStr, onclick: `ScheduleApp.openDayDetail('${dateStr}')` });
+      events.push({ title: label, color: NOTICE_COLOR, startDate: dateStr, endDate: dateStr, onclick: `ScheduleApp.openDayDetail('${dateStr}')`, done: allDone });
     });
     const workMap = _mergedWorkMap(days);
     Object.keys(workMap).forEach(dateStr => {
@@ -355,8 +367,9 @@ const ScheduleApp = (() => {
           const rl = seg.isTrueStart ? '6px' : '0', rr = seg.isTrueEnd ? '6px' : '0';
           const showLabel = seg.isTrueStart || seg.segStartIdx === 0;
           const dim2 = week[seg.segStartIdx].other ? ';opacity:.55' : '';
-          return `<div class="sch-bar" style="grid-column:${seg.segStartIdx + 1} / span ${span};background:${seg.ev.color};border-radius:${rl} ${rr} ${rr} ${rl}${dim2}"
-            onclick="${seg.ev.onclick}" title="${_esc(seg.ev.title)}">${showLabel ? _esc(seg.ev.title) : ''}</div>`;
+          const doneStyle = seg.ev.done ? ';text-decoration:line-through;opacity:.6' : '';
+          return `<div class="sch-bar" style="grid-column:${seg.segStartIdx + 1} / span ${span};background:${seg.ev.color};border-radius:${rl} ${rr} ${rr} ${rl}${dim2}${doneStyle}"
+            onclick="${seg.ev.onclick}" title="${_esc(seg.ev.title)}${seg.ev.done ? ' (완료)' : ''}">${showLabel ? _esc(seg.ev.title) : ''}</div>`;
         }).join('');
         return `<div class="sch-track-row">${barsHtml}</div>`;
       }).join('');
@@ -568,14 +581,15 @@ const ScheduleApp = (() => {
       html += notices.map(n => {
         const cat = (typeof NoticeApp !== 'undefined' && NoticeApp.getCatMeta) ? NoticeApp.getCatMeta(n.category) : { ico: '📢' };
         const isDue = dueIds.includes(n.id);
-        return `<div class="sch-item-row">
+        const isDone = _noticeIsCompleted(n, dateStr);
+        return `<div class="sch-item-row${isDone ? ' sch-item-done' : ''}">
           <span class="sch-item-ico">${cat.ico}</span>
           <div class="sch-item-body">
             <div class="sch-item-title">${_esc(n.title)}</div>
             ${n.body ? `<div class="sch-item-memo">${_esc(n.body)}</div>` : ''}
           </div>
           <div class="sch-item-acts">
-            ${isDue && isAdmin ? `<button class="sch-item-ibtn" title="완료 처리" onclick="NoticeApp.completeNow('${n.id}');ScheduleApp.refresh()">✅</button>` : (isDue ? `<span class="sch-badge info">확인 필요</span>` : '')}
+            ${isDone ? '<span class="sch-badge ok">✔ 완료</span>' : (isDue && isAdmin ? `<button class="sch-item-ibtn" title="완료 처리" onclick="NoticeApp.completeNow('${n.id}');ScheduleApp.refresh()">✅</button>` : (isDue ? `<span class="sch-badge info">확인 필요</span>` : ''))}
             ${isAdmin ? `<button class="sch-item-ibtn" title="수정" onclick="NoticeApp.openEditor('${n.id}')">✏️</button>
             <button class="sch-item-ibtn" title="삭제" onclick="NoticeApp.deleteNotice('${n.id}');ScheduleApp.refresh()">🗑</button>` : ''}
           </div>
