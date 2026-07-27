@@ -1,22 +1,25 @@
 /**
- * schedule-app.js — v4
+ * schedule-app.js — v5
  * ─────────────────────────────────────────────────────────────
  * 학원 "일정표" UI 모듈
  *
- * - 대시보드에 삽입되는 월간 캘린더 + 우측 "오늘의 수업" 패널 (renderMiniCalendar)
- *   → 오늘의 수업은 항상 "오늘" 기준으로 표시되며, 달력에서 다른 달로 이동해도 바뀌지 않음
  * - v3: 점(dot) 대신 구글/네이버 캘린더처럼 기간이 있는 일정(방학 등)은 그 기간만큼
  *   "글자가 보이는 색띠"로 이어서 표시. 하루에 너무 많이 겹치면 "+N"으로 요약.
- * - ★ v4:
- *   1) 직원의 실제 근무 기록(누가/몇시~몇시/시급 반영 금액)도 해당 근무일에 색띠로 표시
- *      (기존 "급여일" 표시는 그대로 유지 — 지급일과 실제 근무일을 구분해서 보여줌)
- *   2) 날짜를 탭했을 때 팝업(바텀시트)을 띄우던 방식을 버리고, 캘린더 우측
- *      "오늘의 수업" 바로 아래에 구분선으로 나눠 인라인으로 상세를 표시.
- *      다시 탭하면 선택 해제, 다른 날짜를 탭하면 그 날짜로 갱신됨.
- *   3) 공지 알림도 상세 패널에서 바로 ✏️수정 / 🗑삭제 가능 (기존엔 완료 처리만 가능했음)
+ * - v4: 직원 실제 근무 기록(누가/몇시~몇시/시급 반영 금액)도 근무일에 색띠로 표시.
+ *   팝업 대신 인라인 패널로 일자 상세를 보여주기 시작.
+ * - ★ v5: 레이아웃 재배치
+ *   1) "오늘의 수업"은 캘린더 전체 폭 아래로 이동 (더 이상 우측 컬럼을 공유하지 않음)
+ *   2) 캘린더 우측은 "선택한 날짜 상세" 전용 — 기본값은 항상 "오늘"이라 클릭 없이도
+ *      바로 오늘 일정이 보이고, 다른 날짜를 탭하면 그 날짜로 교체, 다시 탭하면 오늘로 복귀
+ *   3) 일자 상세 안에서 "➕ 등록" 버튼으로 근무 기록을 바로 빠르게 등록 가능
+ *      (직원 선택 + 구분 + 시작/종료 시간 → 시급 자동 반영해서 저장.
+ *       휴게시간·수동시급·메모 등 세밀한 조정은 근무 기록을 탭해 직원 관리
+ *       화면의 급여 계산 탭으로 이동해서 처리)
+ *   4) 일정 등록(➕ 이 날짜에 일정 등록)은 기존과 동일하게 유지
  *
  * 독립 모듈: ScheduleDB(별도 Firebase 경로)만 직접 사용하고, StaffDB/NoticeDB/DB는
- *            "조회"만 하므로 오류가 나도 기존 기능에 영향 없음.
+ *            조회 + (근무 등록 시에만) StaffDB.addWorkEntry 호출 정도만 사용하므로
+ *            오류가 나도 기존 기능에 영향 없음.
  */
 const ScheduleApp = (() => {
   const CATS = {
@@ -30,7 +33,8 @@ const ScheduleApp = (() => {
 
   let _mountId = null;
   let _st = { year: 0, month: 0 }; // 캘린더에 표시 중인 연/월 (month: 1~12)
-  let _selDate = null; // ★ 우측 패널에 상세를 보여주고 있는 선택된 날짜 (팝업 대신 인라인 표시)
+  let _selDate = null; // ★ 우측 패널에 상세를 보여주고 있는 선택된 날짜 (기본값=오늘)
+  let _workAddFor = null; // ★ 근무 등록 폼이 열려있는 날짜 (해당 날짜의 상세 패널 안에 인라인으로 표시)
   let _editId = null;
   let _timer = null;
 
@@ -56,11 +60,15 @@ const ScheduleApp = (() => {
 .sch-widget-layout{display:flex;flex-wrap:wrap;gap:18px}
 .sch-cal-col{flex:1 1 250px;min-width:230px}
 .sch-tdc-col{flex:1.15 1 220px;min-width:210px;border-left:1px solid var(--bdr);padding-left:16px;display:flex;flex-direction:column}
-.sch-selday-divider{border-top:1px dashed var(--bdr);margin:14px 0 12px}
 .sch-selday-hint{text-align:center;color:var(--tx3);font-size:11.5px;line-height:1.6;padding:22px 8px;background:var(--card2);border-radius:12px}
 .sch-selday-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .sch-selday-title{font-size:12px;font-weight:800;color:var(--tx)}
-.sch-selday-close{width:22px;height:22px;border-radius:7px;background:var(--card2);border:1px solid var(--bdr);color:var(--tx3);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sch-selday-close{padding:4px 9px;border-radius:7px;background:var(--a10);border:1px solid var(--a40);color:var(--a);font-size:10.5px;font-weight:700;cursor:pointer;flex-shrink:0}
+.sch-detail-sec-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.sch-mini-add-btn{padding:4px 9px;border-radius:7px;background:var(--card2);border:1px solid var(--bdr2);color:var(--tx2);font-size:10px;font-weight:700;cursor:pointer}
+.sch-workadd-box{background:var(--surf2);border:1px dashed var(--bdr2);border-radius:11px;padding:10px;margin-top:2px}
+.sch-today-divider{border-top:1px solid var(--bdr);margin:16px 0 14px}
+.sch-today-section{width:100%}
 .sch-detail-sec{margin-bottom:14px}
 .sch-detail-sec:last-child{margin-bottom:0}
 .sch-detail-sec-title{font-size:11px;font-weight:800;color:var(--tx3);letter-spacing:.4px;margin-bottom:6px}
@@ -383,11 +391,18 @@ const ScheduleApp = (() => {
           </div>
         </div>
         <div class="sch-tdc-col">
-          ${_todayClassesHtml()}
-          <div class="sch-selday-divider"></div>
-          <div id="sch-selday-panel">${_selDate ? _selDayPanelHtml(_selDate) : _selDayPlaceholderHtml()}</div>
+          <div id="sch-selday-panel">${_selDayPanelHtml(_selDate || todayStr)}</div>
         </div>
-      </div>`;
+      </div>
+      <div class="sch-today-divider"></div>
+      <div class="sch-today-section">${_todayClassesHtml()}</div>`;
+
+    // ★ 근무 빠른 등록 폼의 분류(일반/수업) 토글 버튼 바인딩 (innerHTML로 삽입되므로 렌더 후 별도 연결 필요)
+    const waType = _q('sch-wa-type');
+    if (waType) waType.querySelectorAll('.ntc-pill').forEach(b => b.onclick = () => {
+      waType.querySelectorAll('.ntc-pill').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+    });
   }
 
   /* ═══════════════════════════════════════════════════════════
@@ -454,17 +469,15 @@ const ScheduleApp = (() => {
   }
 
   /* ═══════════════════════════════════════════════════════════
-   * 일자 상세 — 팝업 대신 캘린더 우측 "오늘의 수업" 옆에 인라인으로 표시
+   * 일자 상세 — 캘린더 우측에 항상 표시 (기본값: 오늘). 팝업 없음.
    * ═══════════════════════════════════════════════════════════ */
   function openDayDetail(dateStr) {
-    _selDate = (_selDate === dateStr) ? null : dateStr; // 같은 날짜를 다시 탭하면 선택 해제
+    const active = _selDate || _todayStr();
+    _selDate = (active === dateStr) ? null : dateStr; // 이미 보고 있는 날짜를 다시 탭하면 "오늘"로 복귀
+    _workAddFor = null; // 다른 날짜로 이동하면 열려있던 등록 폼은 닫음
     refresh();
   }
-  function closeDayDetail() { _selDate = null; refresh(); }
-
-  function _selDayPlaceholderHtml() {
-    return `<div class="sch-selday-hint">📍 날짜를 탭하면<br>이곳에 상세 내용이 표시돼요</div>`;
-  }
+  function closeDayDetail() { _selDate = null; _workAddFor = null; refresh(); }
 
   function _selDayPanelHtml(dateStr) {
     const d = new Date(dateStr + 'T00:00:00');
@@ -480,7 +493,7 @@ const ScheduleApp = (() => {
 
     let html = `<div class="sch-selday-hdr">
       <span class="sch-selday-title">🗓️ ${dateLabel}</span>
-      <button class="sch-selday-close" onclick="ScheduleApp.closeDayDetail()" title="닫기">✕</button>
+      ${dateStr !== _todayStr() ? `<button class="sch-selday-close" onclick="ScheduleApp.closeDayDetail()" title="오늘로 돌아가기">오늘로</button>` : ''}
     </div>`;
 
     html += `<div class="sch-detail-sec"><div class="sch-detail-sec-title">📌 이 날의 일정</div>`;
@@ -502,23 +515,26 @@ const ScheduleApp = (() => {
     }).join('') : '<div class="sch-empty-mini">등록된 일정이 없습니다</div>';
     html += `</div>`;
 
-    if (workStaff.length) {
-      html += `<div class="sch-detail-sec"><div class="sch-detail-sec-title">👤 근무 기록</div>`;
-      html += workStaff.map(s => {
-        const info = _dayWorkInfo(s.id, dateStr);
-        const won = info.amount.toLocaleString('ko-KR');
-        const timeTxt = info.entries.map(e => `${e.start || '?'}~${e.end || '?'}`).join(', ');
-        const canNav = typeof StaffApp !== 'undefined' && StaffApp.goToSalary;
-        return `<div class="sch-item-row${canNav ? ' sch-item-clickable' : ''}"${canNav ? ` onclick="StaffApp.goToSalary('${s.id}',${y},${m})"` : ''}>
-          <span class="sch-item-ico">👤</span>
-          <div class="sch-item-body">
-            <div class="sch-item-title">${_esc(s.name)}</div>
-            <div class="sch-item-meta">${_esc(timeTxt)} · 시급 반영 ₩${won}</div>
-          </div>
-        </div>`;
-      }).join('');
-      html += `</div>`;
-    }
+    html += `<div class="sch-detail-sec">
+      <div class="sch-detail-sec-title-row">
+        <div class="sch-detail-sec-title">👤 근무 기록</div>
+        ${isAdmin ? `<button class="sch-mini-add-btn" onclick="ScheduleApp.${_workAddFor === dateStr ? 'closeWorkQuickAdd' : `openWorkQuickAdd('${dateStr}')`}">${_workAddFor === dateStr ? '✕ 취소' : '➕ 등록'}</button>` : ''}
+      </div>`;
+    html += workStaff.length ? workStaff.map(s => {
+      const info = _dayWorkInfo(s.id, dateStr);
+      const won = info.amount.toLocaleString('ko-KR');
+      const timeTxt = info.entries.map(e => `${e.start || '?'}~${e.end || '?'}`).join(', ');
+      const canNav = typeof StaffApp !== 'undefined' && StaffApp.goToSalary;
+      return `<div class="sch-item-row${canNav ? ' sch-item-clickable' : ''}"${canNav ? ` onclick="StaffApp.goToSalary('${s.id}',${y},${m})"` : ''}>
+        <span class="sch-item-ico">👤</span>
+        <div class="sch-item-body">
+          <div class="sch-item-title">${_esc(s.name)}</div>
+          <div class="sch-item-meta">${_esc(timeTxt)} · 시급 반영 ₩${won}</div>
+        </div>
+      </div>`;
+    }).join('') : '<div class="sch-empty-mini">근무 기록이 없습니다</div>';
+    if (_workAddFor === dateStr) html += _workQuickAddFormHtml();
+    html += `</div>`;
 
     if (paydays.length) {
       html += `<div class="sch-detail-sec"><div class="sch-detail-sec-title">💰 직원 급여일</div>`;
@@ -565,6 +581,52 @@ const ScheduleApp = (() => {
       html += `<button class="btn-ok" style="width:100%;margin-top:4px" onclick="ScheduleApp.openEditor(null,'${dateStr}')">➕ 이 날짜에 일정 등록</button>`;
     }
     return html;
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+   * 근무 빠른 등록 (일자 상세 패널 내 인라인 폼)
+   *   — 세밀한 조정(휴게시간·수동시급·메모 등)이 필요하면 행을 탭해
+   *     직원 관리 화면의 근무 등록 화면에서 처리하면 됨
+   * ═══════════════════════════════════════════════════════════ */
+  function _workQuickAddFormHtml() {
+    const staffList = typeof StaffDB !== 'undefined' ? (StaffDB.getActive ? StaffDB.getActive() : []) : [];
+    return `<div class="sch-workadd-box">
+      <select class="f-inp" id="sch-wa-staff" style="margin-bottom:7px">
+        <option value="">— 직원 선택 —</option>
+        ${staffList.map(s => `<option value="${s.id}">${_esc(s.name)}</option>`).join('')}
+      </select>
+      <div class="ntc-pill-row" id="sch-wa-type" style="margin-bottom:7px">
+        <button type="button" class="ntc-pill on" data-v="general">일반</button>
+        <button type="button" class="ntc-pill" data-v="class">수업</button>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:9px">
+        <input class="f-inp" id="sch-wa-start" type="time" style="flex:1">
+        <input class="f-inp" id="sch-wa-end" type="time" style="flex:1">
+      </div>
+      <button class="btn-ok" style="width:100%" onclick="ScheduleApp.saveWorkQuickAdd('${_workAddFor}')">💾 근무 기록 저장</button>
+    </div>`;
+  }
+  function openWorkQuickAdd(dateStr) { _workAddFor = dateStr; refresh(); }
+  function closeWorkQuickAdd() { _workAddFor = null; refresh(); }
+  async function saveWorkQuickAdd(dateStr) {
+    if (typeof StaffDB === 'undefined') return;
+    const sid = _q('sch-wa-staff')?.value;
+    if (!sid) { alert('직원을 선택해주세요'); return; }
+    const type = document.querySelector('#sch-wa-type .ntc-pill.on')?.dataset.v || 'general';
+    const start = _q('sch-wa-start')?.value, end = _q('sch-wa-end')?.value;
+    if (!start || !end) { alert('시작/종료 시간을 입력해주세요'); return; }
+    const y = +dateStr.slice(0, 4);
+    const split = StaffDB.splitNightHours ? StaffDB.splitNightHours(start, end, 0) : { baseHours: 0, nightHours: 0 };
+    const hours = split.baseHours + split.nightHours;
+    if (hours <= 0) { alert('근무 시간을 확인해주세요 (종료 시간이 시작 시간보다 늦어야 합니다)'); return; }
+    const rate = StaffDB.resolveRate ? StaffDB.resolveRate(sid, 0, y, type) : 0;
+    await StaffDB.addWorkEntry(sid, dateStr, {
+      type, start, end, hours, baseHours: split.baseHours, nightHours: split.nightHours,
+      breakMin: 0, appliedRate: rate, note: '',
+    });
+    _workAddFor = null;
+    refresh();
+    if (typeof App !== 'undefined' && App._toast) App._toast('✅ 근무 기록이 등록되었습니다', 'success');
   }
 
   /* ═══════════════════════════════════════════════════════════
@@ -711,6 +773,7 @@ const ScheduleApp = (() => {
     init, refresh, renderMiniCalendar,
     openDayDetail, closeDayDetail,
     openEditor, closeEditor, saveEditor, deleteItem,
+    openWorkQuickAdd, closeWorkQuickAdd, saveWorkQuickAdd,
     _navMonth, _goToday,
   };
 })();
