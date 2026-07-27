@@ -67,7 +67,7 @@ const ScheduleApp = (() => {
 .sch-detail-sec-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
 .sch-mini-add-btn{padding:4px 9px;border-radius:7px;background:var(--card2);border:1px solid var(--bdr2);color:var(--tx2);font-size:10px;font-weight:700;cursor:pointer}
 .sch-workadd-box{background:var(--surf2);border:1px dashed var(--bdr2);border-radius:11px;padding:10px;margin-top:2px}
-.sch-today-divider{border-top:1px solid var(--bdr);margin:16px 0 14px}
+.sch-today-divider{border-top:1px dashed var(--bdr);margin:16px 0 12px}
 .sch-today-section{width:100%}
 .sch-detail-sec{margin-bottom:14px}
 .sch-detail-sec:last-child{margin-bottom:0}
@@ -93,9 +93,9 @@ const ScheduleApp = (() => {
 .sch-legend-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 
 /* 오늘의 수업 (캘린더 우측 패널) */
-.sch-tdc-hdr{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px}
-.sch-tdc-title{font-size:12.5px;font-weight:800;color:var(--tx)}
-.sch-tdc-date{font-size:10.5px;color:var(--tx3)}
+.sch-tdc-hdr{display:flex;align-items:baseline;gap:7px;margin-bottom:9px}
+.sch-tdc-title{font-size:11px;font-weight:800;color:var(--tx3);letter-spacing:.4px}
+.sch-tdc-date{font-size:10.5px;color:var(--tx3);opacity:.75}
 .sch-tdc-grid{display:flex;flex-wrap:wrap;gap:8px}
 .sch-tdc-card{flex:0 1 175px;display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:12px;background:var(--card2);border:1px solid var(--bdr);cursor:pointer;transition:all .15s}
 .sch-tdc-card:active{transform:scale(.95);background:var(--surf2)}
