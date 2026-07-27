@@ -67,6 +67,10 @@ const ScheduleApp = (() => {
 .sch-detail-sec-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
 .sch-mini-add-btn{padding:4px 9px;border-radius:7px;background:var(--card2);border:1px solid var(--bdr2);color:var(--tx2);font-size:10px;font-weight:700;cursor:pointer}
 .sch-workadd-box{background:var(--surf2);border:1px dashed var(--bdr2);border-radius:11px;padding:10px;margin-top:2px}
+.sch-notify-ck{display:flex;align-items:flex-start;gap:8px;cursor:pointer;padding:2px 0}
+.sch-notify-ck input{width:17px;height:17px;flex-shrink:0;margin-top:1px;accent-color:var(--a);cursor:pointer}
+.sch-notify-ck span{font-size:12.5px;color:var(--tx);line-height:1.5}
+.sch-notify-ck span em{font-style:normal;color:var(--tx3);font-size:11px}
 .sch-today-divider{border-top:1px dashed var(--bdr);margin:16px 0 12px}
 .sch-today-section{width:100%}
 .sch-detail-sec{margin-bottom:14px}
@@ -85,7 +89,14 @@ const ScheduleApp = (() => {
 .sch-daynum-cell.today{background:var(--a);color:#fff;box-shadow:0 0 0 2px var(--a10)}
 .sch-daynum-cell.selected{box-shadow:0 0 0 2px var(--a);font-weight:900}
 .sch-track-row{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-top:2px}
-.sch-bar{grid-row:1;height:15px;line-height:15px;font-size:8.5px;font-weight:700;color:#fff;padding:0 4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;text-shadow:0 1px 1.5px rgba(0,0,0,.35)}
+.sch-bar{position:relative;grid-row:1;height:15px;line-height:15px;font-size:8.5px;font-weight:700;color:#fff;padding:0 4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;text-shadow:0 1px 1.5px rgba(0,0,0,.35)}
+.sch-bar-draggable{padding:0 9px}
+.sch-resize-handle{position:absolute;top:0;bottom:0;width:9px;cursor:col-resize;touch-action:none}
+.sch-resize-handle.l{left:0}
+.sch-resize-handle.r{right:0}
+.sch-resize-handle::after{content:'';position:absolute;top:50%;left:50%;width:3px;height:9px;background:rgba(255,255,255,.85);border-radius:2px;transform:translate(-50%,-50%)}
+.sch-bar-dragging{box-shadow:0 0 0 2px #fff,0 2px 6px rgba(0,0,0,.3);z-index:5}
+.sch-drag-tip{position:fixed;transform:translate(-50%,0);background:var(--tx,#111);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:8px;pointer-events:none;z-index:4000;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.25)}
 .sch-overflow-row{margin-top:1px}
 .sch-overflow-cell{text-align:center;font-size:8px;font-weight:800;color:var(--tx3);cursor:pointer}
 .sch-legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;padding-top:10px;border-top:1px dashed var(--bdr)}
@@ -270,7 +281,7 @@ const ScheduleApp = (() => {
         const end = s.endDate || s.startDate;
         if (!s.startDate || end < gridStart || s.startDate > gridEnd) return;
         const cat = CATS[s.category] || CATS.general;
-        events.push({ title: `${cat.ico} ${s.title}`, color: cat.color, startDate: s.startDate, endDate: end, onclick: `ScheduleApp.openDayDetail('${s.startDate}')` });
+        events.push({ kind: 'sched', id: s.id, title: `${cat.ico} ${s.title}`, color: cat.color, startDate: s.startDate, endDate: end, onclick: `ScheduleApp.openDayDetail('${s.startDate}')` });
       });
     }
     const payMap = _mergedPaydayMap(days);
@@ -355,6 +366,8 @@ const ScheduleApp = (() => {
     const events = _buildBarEvents(days);
     const weeks = [];
     for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
+    const canDrag = _isAdmin(); // ★ 일정 막대 드래그 리사이즈는 관리자만
+    const weekDatesJson = week => _esc(JSON.stringify(week.map(d => d.dateStr)));
 
     const weeksHtml = weeks.map(week => {
       const { tracks, overflowByDay } = _layoutWeek(week, events);
@@ -368,10 +381,13 @@ const ScheduleApp = (() => {
           const showLabel = seg.isTrueStart || seg.segStartIdx === 0;
           const dim2 = week[seg.segStartIdx].other ? ';opacity:.55' : '';
           const doneStyle = seg.ev.done ? ';text-decoration:line-through;opacity:.6' : '';
-          return `<div class="sch-bar" style="grid-column:${seg.segStartIdx + 1} / span ${span};background:${seg.ev.color};border-radius:${rl} ${rr} ${rr} ${rl}${dim2}${doneStyle}"
-            onclick="${seg.ev.onclick}" title="${_esc(seg.ev.title)}${seg.ev.done ? ' (완료)' : ''}">${showLabel ? _esc(seg.ev.title) : ''}</div>`;
+          const draggable = canDrag && seg.ev.kind === 'sched';
+          const lHandle = draggable && seg.isTrueStart ? '<span class="sch-resize-handle l" data-side="l" onclick="event.stopPropagation()"></span>' : '';
+          const rHandle = draggable && seg.isTrueEnd ? '<span class="sch-resize-handle r" data-side="r" onclick="event.stopPropagation()"></span>' : '';
+          return `<div class="sch-bar${draggable ? ' sch-bar-draggable' : ''}" data-ev-id="${seg.ev.id || ''}" style="grid-column:${seg.segStartIdx + 1} / span ${span};background:${seg.ev.color};border-radius:${rl} ${rr} ${rr} ${rl}${dim2}${doneStyle}"
+            onclick="${seg.ev.onclick}" title="${_esc(seg.ev.title)}${seg.ev.done ? ' (완료)' : ''}">${lHandle}${showLabel ? _esc(seg.ev.title) : ''}${rHandle}</div>`;
         }).join('');
-        return `<div class="sch-track-row">${barsHtml}</div>`;
+        return `<div class="sch-track-row" data-week-dates="${weekDatesJson(week)}">${barsHtml}</div>`;
       }).join('');
       const hasOverflow = overflowByDay.some(n => n > 0);
       const overflowHtml = hasOverflow
@@ -420,6 +436,8 @@ const ScheduleApp = (() => {
       waType.querySelectorAll('.ntc-pill').forEach(x => x.classList.remove('on'));
       b.classList.add('on');
     });
+    // ★ 일정 막대 드래그 리사이즈 핸들 바인딩 (마우스/터치 공통, 관리자만)
+    el.querySelectorAll('.sch-resize-handle').forEach(h => h.addEventListener('pointerdown', _onResizeStart));
   }
 
   /* ═══════════════════════════════════════════════════════════
@@ -474,6 +492,85 @@ const ScheduleApp = (() => {
       </div>`;
     }).join('')}</div>`;
     return html;
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+   * 일정 막대 드래그 리사이즈 — 마우스/터치로 시작일·종료일을 늘렸다 줄였다
+   *   (관리자만 가능, 일정(schedule) 항목만 대상 — 급여일/공지/근무기록은 제외)
+   * ═══════════════════════════════════════════════════════════ */
+  let _dragSt = null;
+  let _dragTipEl = null;
+
+  function _onResizeStart(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    const handle = e.currentTarget;
+    const bar = handle.closest('.sch-bar');
+    const trackRow = bar?.closest('.sch-track-row');
+    if (!bar || !trackRow) return;
+    const id = bar.dataset.evId;
+    const item = ScheduleDB.getById(id);
+    if (!item) return;
+    const weekDates = JSON.parse(trackRow.dataset.weekDates || '[]');
+    _dragSt = { id, side: handle.dataset.side, weekDates, start: item.startDate, end: item.endDate };
+    handle.setPointerCapture(e.pointerId);
+    bar.classList.add('sch-bar-dragging');
+    _dragTipEl = document.createElement('div');
+    _dragTipEl.className = 'sch-drag-tip';
+    document.body.appendChild(_dragTipEl);
+    _positionDragTip(e, item.startDate);
+    handle.addEventListener('pointermove', _onResizeMove);
+    handle.addEventListener('pointerup', _onResizeEnd, { once: true });
+    handle.addEventListener('pointercancel', _onResizeEnd, { once: true });
+  }
+  function _dateFromPointer(e) {
+    if (!_dragSt) return null;
+    // 현재 보이는 모든 트랙 행 중, 포인터의 y좌표가 속한 "주(week)"를 찾아 그 주의 날짜 배열을 사용
+    // (같은 주 내에서 좌우로만 움직이는 일반적인 리사이즈는 트랙 자체의 폭으로 계산)
+    const rows = document.querySelectorAll('.sch-track-row');
+    let targetRow = null;
+    for (const r of rows) {
+      const rect = r.getBoundingClientRect();
+      if (e.clientY >= rect.top - 14 && e.clientY <= rect.bottom + 14) { targetRow = r; break; }
+    }
+    const rect = (targetRow || e.target?.closest('.sch-track-row'))?.getBoundingClientRect();
+    if (!rect) return null;
+    const weekDates = targetRow ? JSON.parse(targetRow.dataset.weekDates || '[]') : _dragSt.weekDates;
+    const colWidth = rect.width / 7;
+    let col = Math.floor((e.clientX - rect.left) / colWidth);
+    col = Math.max(0, Math.min(6, col));
+    return weekDates[col] || null;
+  }
+  function _positionDragTip(e, dateStr) {
+    if (!_dragTipEl || !dateStr) return;
+    const d = new Date(dateStr + 'T00:00:00');
+    _dragTipEl.textContent = `${d.getMonth() + 1}월 ${d.getDate()}일`;
+    _dragTipEl.style.left = `${e.clientX}px`;
+    _dragTipEl.style.top = `${e.clientY - 34}px`;
+  }
+  function _onResizeMove(e) {
+    if (!_dragSt) return;
+    const dateStr = _dateFromPointer(e);
+    if (!dateStr) return;
+    if (_dragSt.side === 'l') { if (dateStr <= _dragSt.end) _dragSt.start = dateStr; }
+    else { if (dateStr >= _dragSt.start) _dragSt.end = dateStr; }
+    _positionDragTip(e, dateStr);
+  }
+  async function _onResizeEnd(e) {
+    const handle = e.currentTarget;
+    handle.removeEventListener('pointermove', _onResizeMove);
+    const bar = handle.closest('.sch-bar');
+    bar?.classList.remove('sch-bar-dragging');
+    _dragTipEl?.remove(); _dragTipEl = null;
+    if (!_dragSt) return;
+    const { id, start, end } = _dragSt;
+    _dragSt = null;
+    const item = ScheduleDB.getById(id);
+    if (item && (item.startDate !== start || item.endDate !== end)) {
+      await ScheduleDB.update(id, { startDate: start, endDate: end });
+      refresh();
+      if (typeof App !== 'undefined' && App._toast) App._toast('✅ 일정 기간이 변경되었습니다', 'success', 2000);
+    }
   }
 
   function _navMonth(diff) {
@@ -687,10 +784,10 @@ const ScheduleApp = (() => {
           <div style="flex:1"><label class="f-lbl">시작일</label><input class="f-inp" id="sch-f-start" type="date" value="${startDate}"></div>
           <div style="flex:1"><label class="f-lbl">종료일</label><input class="f-inp" id="sch-f-end" type="date" value="${endDate}"></div>
         </div>
-        <div class="f-grp" style="display:flex;align-items:center;gap:8px">
-          <label class="day-ck" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <div class="f-grp">
+          <label class="sch-notify-ck">
             <input type="checkbox" id="sch-f-notify" ${notify ? 'checked' : ''} onchange="document.getElementById('sch-f-notify-wrap').style.display=this.checked?'flex':'none'">
-            <span>🔔 알림 사용 (끄면 조용히 캘린더에만 표시됩니다)</span>
+            <span>🔔 알림 사용 <em>(끄면 조용히 캘린더에만 표시됩니다)</em></span>
           </label>
         </div>
         <div class="f-grp" id="sch-f-notify-wrap" style="display:${notify ? 'flex' : 'none'};gap:10px">

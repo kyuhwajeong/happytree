@@ -55,6 +55,9 @@ const NoticeApp = (() => {
 .ntc-badge{display:inline-block;font-size:10px;font-weight:800;padding:2px 7px;border-radius:999px;background:#ef4444;color:#fff;margin-left:6px;vertical-align:middle}
 .ntc-badge.off{background:var(--surf2);color:var(--tx3)}
 .ntc-empty{text-align:center;color:var(--tx3);font-size:12.5px;padding:30px 10px}
+.ntc-active-ck{display:flex;align-items:center;gap:8px;cursor:pointer;padding:2px 0}
+.ntc-active-ck input{width:17px;height:17px;flex-shrink:0;accent-color:var(--a);cursor:pointer}
+.ntc-active-ck span{font-size:12.5px;color:var(--tx)}
 .ntc-pop-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px}
 .ntc-pop-box{background:var(--card,#fff);border-radius:18px;padding:24px;max-width:400px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.35);animation:ntcPop .25s cubic-bezier(.34,1.56,.64,1)}
 @keyframes ntcPop{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
@@ -338,8 +341,8 @@ const NoticeApp = (() => {
             <button type="button" class="ntc-pill${n?.audience === 'all' ? ' on' : ''}" data-v="all">👥 전체 로그인 사용자</button>
           </div>
         </div>
-        <div class="f-grp" style="display:flex;align-items:center;gap:8px">
-          <label class="day-ck" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <div class="f-grp">
+          <label class="ntc-active-ck">
             <input type="checkbox" id="ntc-f-active" ${n?.active !== false ? 'checked' : ''}>
             <span>사용 (활성화)</span>
           </label>
