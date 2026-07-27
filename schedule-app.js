@@ -118,6 +118,9 @@ const ScheduleApp = (() => {
 .sch-tdc-card.now .sch-tdc-time2{color:#ef4444}
 .sch-tdc-name2{font-size:12.5px;font-weight:800;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sch-tdc-empty{text-align:center;color:var(--tx3);font-size:12px;padding:24px 10px;background:var(--card2);border-radius:12px;border:1px dashed var(--bdr2)}
+.sch-tdc-suppress{background:var(--a10);border:1px solid var(--a40);border-radius:12px;padding:14px}
+.sch-tdc-suppress-title{font-size:12.5px;font-weight:700;color:var(--tx);text-align:center}
+.sch-tdc-suppress-note{font-size:11.5px;color:var(--tx2);text-align:center;margin-top:6px;padding-top:6px;border-top:1px dashed var(--a40)}
 .sch-empty-mini{text-align:center;color:var(--tx3);font-size:11.5px;padding:20px 6px;line-height:1.5}
 
 /* 일자 상세 (우측 패널 인라인) */
@@ -127,6 +130,7 @@ const ScheduleApp = (() => {
 .sch-item-row.sch-item-done{opacity:.6}
 .sch-item-row.sch-item-done .sch-item-title{text-decoration:line-through}
 .sch-item-row.sch-item-done .sch-item-memo{text-decoration:line-through}
+.sch-item-suppress-tag{font-size:10.5px;color:var(--a);font-weight:700;margin-top:5px;padding-top:5px;border-top:1px dashed var(--bdr2)}
 .sch-item-ico{font-size:16px;flex-shrink:0}
 .sch-item-body{flex:1;min-width:0}
 .sch-item-title{font-size:12.5px;font-weight:700;color:var(--tx)}
@@ -461,10 +465,28 @@ const ScheduleApp = (() => {
     if (dt.start && dt.end) return `${dt.start}~${dt.end}`;
     return dt.start || dt.end || '';
   }
+  // 오늘 날짜가 "정규 수업 숨기기"로 설정된 일정(방학·임시휴강 등) 기간에 속하는지 확인
+  function _todaySuppression() {
+    if (typeof ScheduleDB === 'undefined') return null;
+    const todayStr = _todayStr();
+    return ScheduleDB.getAll().find(s => s.suppressClasses && s.startDate <= todayStr && (s.endDate || s.startDate) >= todayStr) || null;
+  }
   function _todayClassesHtml() {
     const now = new Date();
     const todayDow = DAYS_KO[now.getDay()];
     const nowMin = now.getHours() * 60 + now.getMinutes();
+    const dateLabel = `${now.getMonth() + 1}월 ${now.getDate()}일 (${todayDow})`;
+    const hdr = `<div class="sch-tdc-hdr"><span class="sch-tdc-title">📅 오늘의 수업</span><span class="sch-tdc-date">${dateLabel}</span></div>`;
+
+    const suppress = _todaySuppression();
+    if (suppress) {
+      const cat = CATS[suppress.category] || CATS.general;
+      return `${hdr}<div class="sch-tdc-suppress">
+        <div class="sch-tdc-suppress-title">${cat.ico} ${_esc(suppress.title)} 기간이라 정규 수업이 없어요</div>
+        ${suppress.specialNote ? `<div class="sch-tdc-suppress-note">🎤 특강 안내: ${_esc(suppress.specialNote)}</div>` : ''}
+      </div>`;
+    }
+
     const list = _visibleClasses()
       .filter(c => (c.days || []).includes(todayDow))
       .map(c => {
@@ -477,8 +499,7 @@ const ScheduleApp = (() => {
         if (b.startMin === null) return -1;
         return a.startMin - b.startMin;
       });
-    const dateLabel = `${now.getMonth() + 1}월 ${now.getDate()}일 (${todayDow})`;
-    let html = `<div class="sch-tdc-hdr"><span class="sch-tdc-title">📅 오늘의 수업</span><span class="sch-tdc-date">${dateLabel}</span></div>`;
+    let html = hdr;
     if (!list.length) { html += `<div class="sch-tdc-empty">🎈 오늘은 예정된 수업이 없어요</div>`; return html; }
     html += `<div class="sch-tdc-grid">${list.map(({ cls, dt, startMin, endMin }, idx) => {
       const inSession = startMin !== null && endMin !== null && nowMin >= startMin && nowMin <= endMin;
@@ -623,6 +644,7 @@ const ScheduleApp = (() => {
           <div class="sch-item-title">${_esc(s.title)}</div>
           <div class="sch-item-meta">${cat.label} · ${range}${s.notifyEnabled ? ` · 🔔 ${s.notifyTime}` : ''}</div>
           ${s.memo ? `<div class="sch-item-memo">${_esc(s.memo)}</div>` : ''}
+          ${s.suppressClasses ? `<div class="sch-item-suppress-tag">🚫 이 기간 정규 수업 없음${s.specialNote ? ` · 🎤 ${_esc(s.specialNote)}` : ''}</div>` : ''}
         </div>
         ${isAdmin ? `<div class="sch-item-acts">
           <button class="sch-item-ibtn" title="수정" onclick="ScheduleApp.openEditor('${s.id}')">✏️</button>
@@ -786,6 +808,16 @@ const ScheduleApp = (() => {
         </div>
         <div class="f-grp">
           <label class="sch-notify-ck">
+            <input type="checkbox" id="sch-f-suppress" ${s?.suppressClasses ? 'checked' : ''} onchange="document.getElementById('sch-f-note-wrap').style.display=this.checked?'block':'none'">
+            <span>🚫 이 기간 "오늘의 수업"에 정규 반 목록 숨기기 <em>(방학·임시휴강 등 정규 수업이 없을 때 체크)</em></span>
+          </label>
+        </div>
+        <div class="f-grp" id="sch-f-note-wrap" style="display:${s?.suppressClasses ? 'block' : 'none'}">
+          <label class="f-lbl">특강/보충 안내 (선택 — 비워두면 "정규 수업 없음"만 표시)</label>
+          <input class="f-inp" id="sch-f-note" maxlength="60" placeholder="예: 오전 10시 여름 영어캠프" value="${_esc(s?.specialNote || '')}">
+        </div>
+        <div class="f-grp">
+          <label class="sch-notify-ck">
             <input type="checkbox" id="sch-f-notify" ${notify ? 'checked' : ''} onchange="document.getElementById('sch-f-notify-wrap').style.display=this.checked?'flex':'none'">
             <span>🔔 알림 사용 <em>(끄면 조용히 캘린더에만 표시됩니다)</em></span>
           </label>
@@ -827,7 +859,9 @@ const ScheduleApp = (() => {
     const notifyTime = _q('sch-f-time')?.value || '09:00';
     const audience = document.querySelector('#sch-f-aud .ntc-pill.on')?.dataset.v || 'all';
     const memo = _q('sch-f-memo')?.value.trim() || '';
-    const data = { title, memo, category: cat, startDate, endDate, notifyEnabled, notifyTime, audience };
+    const suppressClasses = _q('sch-f-suppress')?.checked || false;
+    const specialNote = _q('sch-f-note')?.value.trim() || '';
+    const data = { title, memo, category: cat, startDate, endDate, notifyEnabled, notifyTime, audience, suppressClasses, specialNote };
     if (_editId) await ScheduleDB.update(_editId, data);
     else await ScheduleDB.add(data);
     closeEditor();

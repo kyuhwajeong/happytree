@@ -118,6 +118,7 @@ const ScheduleDB = (() => {
         startDate: h.date, endDate: h.date,
         notifyEnabled: false, notifyTime: '09:00', notifiedAt: null,
         audience: 'all',
+        suppressClasses: false, specialNote: '',
         createdAt: new Date().toISOString(), createdBy: 'system', seedKey: id,
       };
     });
@@ -148,6 +149,8 @@ const ScheduleDB = (() => {
       notifyTime: data.notifyTime || '09:00',
       notifiedAt: null,
       audience: data.audience || 'all',
+      suppressClasses: !!data.suppressClasses, // ★ true면 이 기간의 "오늘의 수업"에서 정규 반 목록을 숨김 (방학·임시휴강 등)
+      specialNote: (data.specialNote || '').trim(), // ★ 정규 수업 대신 안내할 특강/보충 등 메모
       createdAt: new Date().toISOString(),
       createdBy: (typeof DB !== 'undefined' && DB.getSession) ? (DB.getSession()?.username || '') : '',
     };
