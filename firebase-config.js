@@ -51,29 +51,11 @@ const FireDB = (() => {
   function _saveQueue(q) {
     try { localStorage.setItem(LS_QUEUE, JSON.stringify(q)); } catch {}
   }
-  /* ★ 큐에 올리지 않고 조용히 버릴 경로 — 관리자 전용 모니터링의 세션
-   * 하트비트/행동 로그(hakwon10/monitor/sessions/...)는:
-   *   - 일반 사용자는 존재조차 모르는 부가 기능(관리자만 봄)
-   *   - 자주(수십 초 간격) 갱신되는 휘발성 데이터라 지금 값이 유실돼도
-   *     다음 하트비트가 금방 다시 채워줌
-   *   - 오래되면 _cleanupExpired()로 어차피 자동 삭제됨
-   * → 학원 실제 데이터(성적/진도/교재/직원/급여)와 달리 "재접속 시도 중"
-   *   같은 메시지로 일반 사용자를 신경 쓰이게 할 가치가 없다.
-   * (같은 monitor 경로라도 ip_labels처럼 관리자가 명시적으로 저장한
-   *  설정은 제외 대상이 아님 — 세션 로그만 정확히 걸러낸다) */
-  function _isDisposablePath(path) {
-    return path.startsWith('hakwon10/monitor/sessions/');
-  }
-
   function _enqueue(op, path, val) {
-    if (_isDisposablePath(path)) {
-      console.log(`[FireDB] 🗑 휘발성 모니터링 로그 — 큐 적재 생략:`, path);
-      return;
-    }
     const q = _loadQueue();
     const idx = q.findIndex(x => x.path === path);
-    const item = { op, path, val, ts: Date.now() };
-    if (idx >= 0) q[idx] = item; else q.push(item); // 같은 경로는 최신값으로 덮어씀
+    const item = { op, path, val, ts: Date.now(), failCount: 0, lastError: null, permanent: false };
+    if (idx >= 0) q[idx] = item; else q.push(item); // 같은 경로는 최신값으로 덮어씀 (재시도 이력 초기화)
     _saveQueue(q);
     console.log(`[FireDB] 📥 오프라인 큐 적재 (${op}):`, path);
     _updatePendingBadge();
@@ -81,6 +63,20 @@ const FireDB = (() => {
   function _dequeue(path) {
     _saveQueue(_loadQueue().filter(x => x.path !== path));
     _updatePendingBadge();
+  }
+  // ★ 재시도로 절대 해결되지 않는 오류(권한 거부 등)인지 판별 —
+  //   이런 경우는 "오프라인이라 못 보낸 것"이 아니라 서버가 명시적으로
+  //   거부한 것이므로, 영원히 재시도만 반복하지 않고 사용자에게 실패로 알려야 함.
+  function _isPermanentError(e) {
+    const code = (e && e.code || '').toString().toUpperCase();
+    const msg = (e && e.message || '').toString().toLowerCase();
+    return code.includes('PERMISSION_DENIED') || msg.includes('permission_denied') || msg.includes('permission denied');
+  }
+  // ★ 재시도를 포기하지 않고 계속 시도할 항목만 삭제 대상에서 제외하고,
+  //   사용자가 직접 "삭제"를 누른 경우에만 큐에서 완전히 제거한다.
+  function discardPending(path) {
+    _dequeue(path);
+    console.log('[FireDB] 🗑 사용자가 대기 항목을 삭제함(재시도 중단):', path);
   }
 
   let _flushing = false;
@@ -101,6 +97,16 @@ const FireDB = (() => {
         ok++;
       } catch (e) {
         console.warn('[FireDB] 큐 전송 실패:', item.path, e.message);
+        // ★ 그냥 로그만 남기고 넘어가면 다음에도 똑같이 재시도만 반복됨 —
+        //   실패 횟수와 영구 실패 여부를 큐에 기록해서 UI가 "삭제" 옵션을 보여줄 수 있게 함
+        const q2 = _loadQueue();
+        const idx2 = q2.findIndex(x => x.path === item.path);
+        if (idx2 >= 0) {
+          q2[idx2].failCount = (q2[idx2].failCount || 0) + 1;
+          q2[idx2].lastError = e.message || String(e);
+          q2[idx2].permanent = _isPermanentError(e) || q2[idx2].failCount >= 3;
+          _saveQueue(q2);
+        }
         fail++;
       }
     }
@@ -177,6 +183,14 @@ const FireDB = (() => {
     if (path.startsWith('hakwon10/theme')) {
       return { icon: '🎨', label: '🎨 테마 설정', page: 'manage' };
     }
+    // 일정표 (schedule-db.js: hakwon10/schedules/{id})
+    if (path.startsWith('hakwon10/schedules')) {
+      return { icon: '🗓️', label: '🗓️ 일정표', page: 'dashboard' };
+    }
+    // 공지 알림 (notice-db.js: hakwon10/notices/{id})
+    if (path.startsWith('hakwon10/notices')) {
+      return { icon: '🔔', label: '🔔 공지 알림', page: 'dashboard' };
+    }
     // 알 수 없는 경로 — 원본 그대로 표시
     return { icon: '❓', label: path, page: null };
   }
@@ -217,15 +231,15 @@ const FireDB = (() => {
       r = await _flushQueue();
     }
     if (r.reason === 'offline') {
-      // ★ 여기서 alert()를 띄우던 게 문제였음 — "자동으로 처리됩니다"라고
-      //   말하면서 정작 사용자가 확인 버튼을 눌러야만 넘어가는 모순이었다.
-      //   사용자가 직접 재시도를 눌렀다는 것 자체가 "이미 한참 막혀있었다"는
-      //   신호이므로, 팝업으로 알리는 대신 바로 최후 수단(3단계: 조용한
-      //   새로고침)까지 자동으로 진행한다. 클릭 한 번 더 요구하지 않는다.
+      if (btn) { btn.disabled = false; btn.textContent = '🔄 지금 전체 재시도'; }
       if (navigator.onLine) {
-        _autoReload(); // 내부적으로 5분 쿨다운 체크 — 무한 반복 방지
+        // ★ 폰 인터넷은 정상인데 서버 연결만 안 되는 상황 — 사용자 탓이 아니므로
+        //   "인터넷 확인하라"고 책임을 떠넘기지 않는다. 백그라운드에서 계속
+        //   자동으로 재시도하며, 일정 시간 지나면 스스로 새로고침까지 시도한다.
+        alert('⏳ 서버와 연결을 재수립하는 중입니다.\n잠시 후 자동으로 다시 시도되니 그대로 두셔도 됩니다.');
+      } else {
+        alert('⚠️ 현재 인터넷이 연결되어 있지 않습니다. 연결되면 자동으로 저장됩니다.');
       }
-      if (btn) { btn.disabled = false; btn.textContent = navigator.onLine ? '🔄 재연결 중...' : '📴 인터넷 연결 대기 중'; }
       return;
     }
     if (r.reason === 'already-flushing') {
@@ -254,24 +268,37 @@ const FireDB = (() => {
     panel.onclick = (e) => { if (e.target === panel) panel.remove(); };
 
     const rows = items.map((it, i) => `
-      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #f0f0f0;${it.page ? 'cursor:pointer' : ''}"
-           ${it.page ? `onclick="document.getElementById('fb-pending-panel').remove(); if(typeof App!=='undefined'&&App.go) App.go('${it.page}');"` : ''}>
-        <span style="font-size:18px;flex-shrink:0">${it.icon}</span>
-        <div style="flex:1;min-width:0">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #f0f0f0">
+        <span style="font-size:18px;flex-shrink:0;${it.page ? 'cursor:pointer' : ''}"
+          ${it.page ? `onclick="document.getElementById('fb-pending-panel').remove(); if(typeof App!=='undefined'&&App.go) App.go('${it.page}');"` : ''}>${it.icon}</span>
+        <div style="flex:1;min-width:0;${it.page ? 'cursor:pointer' : ''}"
+          ${it.page ? `onclick="document.getElementById('fb-pending-panel').remove(); if(typeof App!=='undefined'&&App.go) App.go('${it.page}');"` : ''}>
           <div style="font-size:13px;font-weight:700;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${it.label}</div>
-          <div style="font-size:11px;color:#9ca3af;margin-top:1px">${_timeAgo(it.ts)} 저장 시도 · ${it.op==='remove'?'삭제':'저장'}</div>
+          ${it.permanent
+            ? `<div style="font-size:11px;color:#dc2626;margin-top:1px;font-weight:700">❌ 저장 실패 (${it.failCount || 1}회 시도) — 계속 재시도해도 서버가 거부하고 있어요</div>`
+            : `<div style="font-size:11px;color:#9ca3af;margin-top:1px">${_timeAgo(it.ts)} 저장 시도 · ${it.op==='remove'?'삭제':'저장'}</div>`}
         </div>
-        ${it.page ? `<span style="font-size:11px;color:#2563eb;font-weight:700;flex-shrink:0">이동 ›</span>` : ''}
+        ${it.permanent
+          ? `<button onclick="if(confirm('이 항목은 계속 실패하고 있습니다. 재시도를 중단하고 삭제할까요?\\n(서버에는 반영되지 않은 채로 남습니다)')){ FireDB.discardPending('${it.path}'); FireDB._showPendingDetailPublic(); }"
+             style="font-size:11px;color:#dc2626;font-weight:700;flex-shrink:0;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:5px 9px;cursor:pointer">🗑 삭제</button>`
+          : (it.page ? `<span style="font-size:11px;color:#2563eb;font-weight:700;flex-shrink:0">이동 ›</span>` : '')}
       </div>`).join('');
 
+    const permCount = items.filter(it => it.permanent).length;
+    const titleTxt = permCount > 0
+      ? `⏳ 저장 대기 ${items.length}건 (❌ 실패 ${permCount}건)`
+      : `⏳ 서버 저장 대기 중 (${items.length}건)`;
+    const descTxt = permCount > 0
+      ? '실패로 표시된 항목은 서버가 계속 거부하고 있어요. 삭제하거나 그대로 두면 계속 재시도합니다.'
+      : '항목을 탭하면 해당 메뉴로 이동합니다. 인터넷 연결이 되면 자동으로 다시 전송을 시도합니다.';
     panel.innerHTML = `
       <div style="background:#fff;width:100%;max-width:480px;border-radius:16px 16px 0 0;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 -4px 24px rgba(0,0,0,.2)" onclick="event.stopPropagation()">
         <div style="width:36px;height:4px;background:#e5e7eb;border-radius:2px;margin:10px auto 4px"></div>
         <div style="padding:8px 16px 12px;display:flex;align-items:center;justify-content:space-between">
-          <div style="font-size:14px;font-weight:800;color:#111">⏳ 서버 저장 대기 중 (${items.length}건)</div>
+          <div style="font-size:14px;font-weight:800;color:#111">${titleTxt}</div>
           <button onclick="document.getElementById('fb-pending-panel').remove()" style="border:none;background:none;font-size:18px;color:#9ca3af;cursor:pointer;padding:4px">✕</button>
         </div>
-        <div style="font-size:11px;color:#9ca3af;padding:0 16px 8px">항목을 탭하면 해당 메뉴로 이동합니다. 인터넷 연결이 되면 자동으로 다시 전송을 시도합니다.</div>
+        <div style="font-size:11px;color:#9ca3af;padding:0 16px 8px">${descTxt}</div>
         <div style="flex:1;overflow-y:auto">${rows}</div>
         <div style="padding:10px 16px;border-top:1px solid #f0f0f0">
           <button onclick="window._fbRetryFromPanel(this)"
@@ -413,12 +440,9 @@ const FireDB = (() => {
 
   /* ── 재연결 스케줄 (무제한 — 인터넷 있는 한 계속 시도) ──
    *   ★ 단계별 자동 복구 — 사용자가 아무것도 몰라도 되게:
-   *      경과 10초~  : 강제 재연결(goOffline/goOnline)
-   *      경과 30초~  : 앱 인스턴스 재생성(2단계)
-   *      경과 45초~  : (진짜 인터넷은 있는데도 안 되면) 조용히 새로고침(3단계)
-   *   (기존 15/60/120초는 "결국 새로고침해야 풀리는" 상황에서 사용자를
-   *    2분 가까이 방치하게 되어, 체감상 "캐시를 지워야 해결된다"는
-   *    경험과 똑같이 느껴지는 문제가 있었음 — 전체 주기를 크게 단축) */
+   *      경과 15초~  : 강제 재연결(goOffline/goOnline)
+   *      경과 60초~  : 앱 인스턴스 재생성(2단계)
+   *      경과 120초~ : (진짜 인터넷은 있는데도 안 되면) 조용히 새로고침(3단계) */
   function _scheduleRetry() {
     if (_retryTimer || _connected) return;
     const delay = _retryDelay();
@@ -428,9 +452,9 @@ const FireDB = (() => {
       _retryCount++;
       const elapsed = _offlineSince ? Date.now() - _offlineSince : 0;
       console.log(`[FireDB] ⏳ 재연결 대기 ${_retryCount}회차 (경과 ${Math.round(elapsed/1000)}초)`);
-      if (elapsed >= 45000)      _autoReload();
-      else if (elapsed >= 30000) _hardReset();
-      else                       _forceReconnect();
+      if (elapsed >= 120000)      _autoReload();
+      else if (elapsed >= 60000)  _hardReset();
+      else                        _forceReconnect();
       _scheduleRetry(); // 무한 재시도
     }, delay);
   }
@@ -567,17 +591,6 @@ const FireDB = (() => {
       _ok = true;
       console.log('[FireDB] ✅ connected');
 
-      // ★ 이번 수정 이전에 이미 큐에 쌓여있던 휘발성 모니터링 로그 정리
-      //   (앞으로는 _enqueue에서 애초에 안 쌓이지만, 과거에 쌓인 건 별도 정리 필요)
-      {
-        const before = _loadQueue();
-        const after = before.filter(x => !_isDisposablePath(x.path));
-        if (after.length !== before.length) {
-          _saveQueue(after);
-          console.log(`[FireDB] 🧹 기존 큐에서 휘발성 모니터링 로그 ${before.length - after.length}건 정리`);
-        }
-      }
-
       // keepSynced 제거 (v10 compat 미지원) — 실시간 listen()이 연결 유지 대체
 
       _attachConnListener();
@@ -698,5 +711,5 @@ const FireDB = (() => {
   async function syncNow() { await _flushQueue(); return getPendingCount() === 0; }
 
   return { init, ready, isConnected, get, getFromServer, set, update, remove, listen,
-           debounced, transaction, syncNow, getPendingCount, getPendingItems, P };
+           debounced, transaction, syncNow, getPendingCount, getPendingItems, discardPending, _showPendingDetailPublic: _showPendingDetail, P };
 })();
