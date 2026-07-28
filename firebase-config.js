@@ -247,14 +247,9 @@ const FireDB = (() => {
     if (btn) { btn.disabled = true; btn.textContent = '🔄 전송 중...'; }
     let r = await _flushQueue();
     if (r.reason === 'offline') {
-      // 1단계: 소켓 재수립
+      // 소켓 재수립 시도 (앱 인스턴스 재생성은 실시간 구독을 죽이는
+      // 부작용이 있어 제거 — 그래도 안 되면 아래에서 새로고침으로 처리)
       _forceReconnect();
-      await new Promise(res => setTimeout(res, 1500));
-      r = await _flushQueue();
-    }
-    if (r.reason === 'offline') {
-      // 2단계: 그래도 안 되면 앱 인스턴스 재생성까지 자동으로
-      await _hardReset();
       await new Promise(res => setTimeout(res, 1500));
       r = await _flushQueue();
     }
@@ -474,7 +469,15 @@ const FireDB = (() => {
    *    맺어지고 있던 연결의 핸드셰이크를 완성되기도 전에 계속 끊어버리는
    *    문제가 있었음 — 느린 네트워크에서는 이 때문에 영원히 연결이
    *    안 되는 자기방해 루프가 생겼다. 각 단계를 1회성으로 바꾸고,
-   *    그 사이엔 SDK가 스스로 재연결을 완료할 시간을 방해 없이 준다.) */
+   *    그 사이엔 SDK가 스스로 재연결을 완료할 시간을 방해 없이 준다.)
+   *   ★ 2025-xx 추가 수정 — 기존 2단계(앱 인스턴스 재생성)를 제거했다.
+   *     앱 인스턴스를 통째로 교체하면 성적/진도/교재/공지/일정 등 모든
+   *     모듈이 페이지 로드 시 한 번만 걸어둔 FireDB.listen() 실시간
+   *     구독이 죽은 인스턴스에 매달린 채 무효화되는데, 이걸 다시 걸어주는
+   *     코드가 없어서 연결 표시는 살아나도 실시간 데이터 갱신은 조용히
+   *     먹통이 되는 부작용이 있었다. 이제 10초에 가벼운 재연결 → 그래도
+   *     30초까지 안 되면 곧장 새로고침(모든 모듈이 처음부터 깨끗하게
+   *     다시 시작되어 구독이 끊길 일이 없음)으로 단순화한다. */
   let _stage1Done = false; // 강제 재연결 1회 실행 여부
   function _scheduleRetry() {
     if (_retryTimer || _connected) return;
@@ -485,10 +488,8 @@ const FireDB = (() => {
       _retryCount++;
       const elapsed = _offlineSince ? Date.now() - _offlineSince : 0;
       console.log(`[FireDB] ⏳ 재연결 대기 ${_retryCount}회차 (경과 ${Math.round(elapsed/1000)}초)`);
-      if (elapsed >= 45000) {
+      if (elapsed >= 30000) {
         _autoReload();
-      } else if (elapsed >= 30000) {
-        _hardReset();
       } else if (elapsed >= 10000 && !_stage1Done) {
         _stage1Done = true;
         _forceReconnect();
