@@ -537,7 +537,15 @@ const FireDB = (() => {
 
   /* ── 연결 상태 UI 업데이트 ── */
   function _updateConnUI(connected) {
-    if (!connected && Date.now() < _suppressUntil) return;
+    // ★ 핵심 수정 — "초기 4초 억제"는 배너를 잠깐 안 보이게 하는 것으로만
+    //   범위를 좁혔다. 예전엔 이 조건에서 함수 전체가 그냥 종료돼서,
+    //   페이지 로드 직후 4초 안에 끊기면 _offlineSince가 영원히 기록되지
+    //   않았다(Firebase는 상태가 "바뀔 때"만 이벤트를 보내므로 이후에
+    //   다시 기록할 기회도 없음) — 그 결과 재시도 사다리가 항상
+    //   "경과 0초"로 고정되어 30초/45초 단계로 절대 못 올라가는 문제로
+    //   이어졌다. 이제 오프라인 시각 기록과 재시도 스케줄링은 억제
+    //   여부와 무관하게 항상 실행된다.
+    const suppressBanner = !connected && Date.now() < _suppressUntil;
 
     if (connected) {
       const wasOffline = _offlineSince > 0;
@@ -563,11 +571,13 @@ const FireDB = (() => {
       }
 
     } else {
+      // ★ 오프라인 시각 기록·재시도 사다리 가동은 배너 억제와 무관하게
+      //   항상 수행한다 (여기가 예전엔 실행 자체가 안 됐던 부분).
       if (!_offlineSince) {
         _offlineSince = Date.now();
         _scheduleRetry();
       }
-      if (!_offlineShowTimer) {
+      if (!suppressBanner && !_offlineShowTimer) {
         _offlineShowTimer = setTimeout(() => {
           _offlineShowTimer = null;
           if (!_connected) _showOfflineUI();
