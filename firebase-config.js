@@ -498,6 +498,15 @@ const FireDB = (() => {
       console.log(`[FireDB] ⏸ 자동 새로고침 보류 — 쿨다운 중 (약 ${leftSec}초 후 재시도 가능)`);
       return;
     }
+    // ★ index.html의 자동 업데이트 감지와 동일한 기준 — 자동(비-force) 새로고침은
+    //   최근에 화면을 보며 사용 중이었다면(스크롤·클릭 등 포함) 방해하지 않고
+    //   잠시 후 다시 확인한다. 사용자가 직접 누른 재시도(force=true)는
+    //   이미 명시적 의사표시라 예외로 둔다.
+    if (!force && _isRecentlyActive()) {
+      console.log('[FireDB] ⏸ 자동 새로고침 보류 — 사용 중(최근 활동 감지), 8초 후 재확인');
+      setTimeout(() => _autoReload(force), 8000);
+      return;
+    }
     try { sessionStorage.setItem(RELOAD_COOLDOWN_KEY, String(Date.now())); } catch {}
     console.log(`[FireDB] 🔄 ${force ? '사용자 요청' : '장시간 재연결 실패'} — 데이터 보존 신호 전송 후 새로고침`);
     try { window.dispatchEvent(new Event('fb:force-flush-before-reload')); } catch {}
@@ -854,6 +863,20 @@ const FireDB = (() => {
     const el = document.activeElement;
     if (!el) return false;
     return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
+  }
+
+  /* ★ "입력 중"보다 넓은 개념 — 최근에 마우스를 움직이거나 스크롤·클릭·터치를
+   *   했으면 화면을 보며 사용 중인 것으로 본다(예: 교재 탭에서 학생 수행
+   *   현황표를 스크롤하며 지켜보는 중 — 입력은 안 하지만 새로고침되면
+   *   불편함). 완전히 손을 놓고 화면만 응시하는 경우까지는 감지할 방법이
+   *   없지만(브라우저에 아무 신호도 없음), 실제 사용 패턴은 대부분 이걸로
+   *   커버된다. */
+  let _lastActivityAt = Date.now();
+  const _ACTIVITY_EVENTS = ['mousemove','mousedown','wheel','scroll','touchstart','touchmove','keydown'];
+  const _markActive = () => { _lastActivityAt = Date.now(); };
+  _ACTIVITY_EVENTS.forEach(ev => window.addEventListener(ev, _markActive, { passive: true, capture: true }));
+  function _isRecentlyActive(withinMs = 15000) {
+    return _isUserTyping() || (Date.now() - _lastActivityAt) < withinMs;
   }
 
   /* ★ WebSocket이 막힌 환경 대비 — 10초마다 REST로 최신 값을 직접
