@@ -95,8 +95,12 @@ const NoticeDB = (() => {
   async function update(id, patch) {
     const idx = _list.findIndex(n => n.id === id);
     if (idx < 0) return null;
-    const n = { ..._list[idx], ...patch };
-    if (patch.monthDay !== undefined) n.monthDay = Math.min(31, Math.max(1, +patch.monthDay || 1));
+    // ★ patch에 undefined 값이 섞이면 Firebase가 저장을 거부해 연결 상태와
+    //   무관하게 영원히 재시도만 반복하게 된다 — 합치기 전에 제거.
+    const cleanPatch = {};
+    for (const k in patch) { if (patch[k] !== undefined) cleanPatch[k] = patch[k]; }
+    const n = { ..._list[idx], ...cleanPatch };
+    if (cleanPatch.monthDay !== undefined) n.monthDay = Math.min(31, Math.max(1, +cleanPatch.monthDay || 1));
     _list[idx] = n;
     _saveLS(); _fire('notices');
     if (typeof FireDB !== 'undefined') {

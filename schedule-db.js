@@ -164,7 +164,12 @@ const ScheduleDB = (() => {
   async function update(id, patch) {
     const idx = _list.findIndex(x => x.id === id);
     if (idx < 0) return null;
-    const s = { ..._list[idx], ...patch };
+    // ★ patch에 undefined 값이 섞여 있으면 Firebase가 저장 자체를 거부해서
+    //   (연결 상태와 무관하게) 영원히 재시도만 반복하는 상태가 된다.
+    //   합치기 전에 걸러내 로컬 상태와 서버 데이터 모양을 항상 일치시킨다.
+    const cleanPatch = {};
+    for (const k in patch) { if (patch[k] !== undefined) cleanPatch[k] = patch[k]; }
+    const s = { ..._list[idx], ...cleanPatch };
     _list[idx] = s;
     _saveLS(); _fire('schedules');
     if (typeof FireDB !== 'undefined') {
