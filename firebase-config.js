@@ -409,7 +409,7 @@ const FireDB = (() => {
   function _forceReconnect() {
     if (!_db || !_ok) return;
     try {
-      console.log('[FireDB] 🔧 강제 재연결 시도 (goOffline→goOnline)');
+      console.log(`[FireDB] 🔧 강제 재연결 시도 (goOffline→goOnline) — 호출 시점 _stage1Done=${_stage1Done}`);
       _db.goOffline();
       setTimeout(() => { try { _db.goOnline(); } catch (e) { console.warn('[FireDB] goOnline 실패', e); } }, 300);
     } catch (e) { console.warn('[FireDB] 강제 재연결 실패', e); }
@@ -453,7 +453,19 @@ const FireDB = (() => {
     } catch { return true; }
   }
   function _autoReload() {
-    if (!navigator.onLine || !_canAutoReload()) return;
+    if (!navigator.onLine) {
+      console.log('[FireDB] ⏸ 자동 새로고침 보류 — navigator.onLine=false (진짜 오프라인으로 판단, 새로고침해도 의미 없음)');
+      return;
+    }
+    if (!_canAutoReload()) {
+      let leftSec = '?';
+      try {
+        const last = Number(sessionStorage.getItem(RELOAD_COOLDOWN_KEY) || 0);
+        leftSec = Math.max(0, Math.round((5 * 60 * 1000 - (Date.now() - last)) / 1000));
+      } catch {}
+      console.log(`[FireDB] ⏸ 자동 새로고침 보류 — 쿨다운 중 (약 ${leftSec}초 후 재시도 가능)`);
+      return;
+    }
     try { sessionStorage.setItem(RELOAD_COOLDOWN_KEY, String(Date.now())); } catch {}
     console.log('[FireDB] 🔄 장시간 재연결 실패 — 데이터 보존 신호 전송 후 자동 새로고침');
     try { window.dispatchEvent(new Event('fb:force-flush-before-reload')); } catch {}
