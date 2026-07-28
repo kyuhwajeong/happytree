@@ -62,6 +62,18 @@
     return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
   }
 
+  /* ★ "입력 중"보다 넓은 개념 — 최근에 스크롤·클릭·마우스 이동·터치가
+   *   있었으면 화면을 보며 사용 중인 것으로 본다. 예: 교재 탭에서 학생
+   *   수행 현황표를 스크롤하며 지켜보는 중(입력은 없지만 새로고침되면
+   *   불편함). firebase-config.js의 재연결 새로고침과 동일한 기준. */
+  let _lastActivityAt2 = Date.now();
+  ['mousemove','mousedown','wheel','scroll','touchstart','touchmove','keydown'].forEach(ev =>
+    window.addEventListener(ev, () => { _lastActivityAt2 = Date.now(); }, { passive: true, capture: true })
+  );
+  function _isRecentlyActive2(withinMs = 15000) {
+    return _isActivelyTyping() || (Date.now() - _lastActivityAt2) < withinMs;
+  }
+
   async function checkForUpdate(reason) {
     if (checking) return;
     checking = true;
@@ -71,10 +83,10 @@
       if (prev === null) {
         localStorage.setItem(LS_KEY, sig);
       } else if (prev !== sig) {
-        if (_isActivelyTyping()) {
-          // ★ 입력 중이면 방해하지 않는다 — 서명은 아직 갱신하지 않아
+        if (_isRecentlyActive2()) {
+          // ★ 사용 중이면 방해하지 않는다 — 서명은 아직 갱신하지 않아
           //   다음 점검 때도 계속 "변경됨"으로 다시 감지되게 둔다.
-          console.log('[AutoUpdate] 입력 중 — 새로고침 보류, 잠시 후 재확인');
+          console.log('[AutoUpdate] 사용 중(최근 활동 감지) — 새로고침 보류, 잠시 후 재확인');
           checking = false;
           setTimeout(() => checkForUpdate('입력 완료 후 재확인'), 8000);
           return;
