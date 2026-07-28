@@ -107,20 +107,49 @@ const FireDB = (() => {
   }
 
   let _flushing = false;
+  /* ★ REST(HTTPS) 백업 전송 경로 — WebSocket이 막힌 환경 대비
+   *   방금 사용자가 브라우저 주소창에 databaseURL + ".json"을 직접 쳐서
+   *   접속했더니 정상적으로 데이터가 나온 것으로 확인됨: 이 PC에서는
+   *   일반 HTTPS 요청은 완전히 통과되고, WebSocket 프로토콜만 막혀있는
+   *   상태(보안 소프트웨어의 SSL 검사 등에서 흔한 패턴). 그렇다면
+   *   실시간 연결이 영구히 안 되는 환경에서도, 저장만큼은 이 REST
+   *   경로로 우회하면 된다. 사용자가 보안 프로그램을 직접 만질 필요가
+   *   없어진다. */
+  async function _restWrite(op, path, val) {
+    const url = `${FIREBASE_CONFIG.databaseURL}/${path}.json`;
+    const method = op === 'remove' ? 'DELETE' : (op === 'update' ? 'PATCH' : 'PUT');
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: op === 'remove' ? undefined : JSON.stringify(val === undefined ? null : val),
+    });
+    if (!res.ok) throw new Error(`REST ${method} 실패: HTTP ${res.status}`);
+    return true;
+  }
+
   async function _flushQueue() {
     if (_flushing) return { attempted: false, reason: 'already-flushing', ok: 0, fail: 0 };
-    if (!_connected || !_db) return { attempted: false, reason: 'offline', ok: 0, fail: 0 };
+    // ★ WebSocket 연결(_connected) 여부와 무관하게 시도한다 — 진짜 인터넷이
+    //   없을 때만(navigator.onLine=false) 포기한다. WebSocket이 막혀도
+    //   REST 경로로 시도할 기회를 준다.
+    if (!navigator.onLine || !_db) return { attempted: false, reason: 'offline', ok: 0, fail: 0 };
     const q = _loadQueue();
     if (!q.length) return { attempted: false, reason: 'empty', ok: 0, fail: 0 };
     _flushing = true;
-    console.log(`[FireDB] 🔄 오프라인 큐 전송 시작 (${q.length}건)`);
+    console.log(`[FireDB] 🔄 오프라인 큐 전송 시작 (${q.length}건)${_connected ? '' : ' — WebSocket 미연결, REST 경로 사용'}`);
     let ok = 0, fail = 0;
     for (const item of q) {
       try {
         const val = _stripUndefined(item.val); // ★ 예전에 이미 쌓인 항목도 재전송 시점에 정리
-        if (item.op === 'set')    await _db.ref(item.path).set(val);
-        if (item.op === 'update') await _db.ref(item.path).update(val);
-        if (item.op === 'remove') await _db.ref(item.path).remove();
+        if (_connected) {
+          // 정상 상황 — 기존 SDK 경로
+          if (item.op === 'set')    await _db.ref(item.path).set(val);
+          if (item.op === 'update') await _db.ref(item.path).update(val);
+          if (item.op === 'remove') await _db.ref(item.path).remove();
+        } else {
+          // ★ WebSocket 미연결 — REST(HTTPS)로 우회
+          await _restWrite(item.op, item.path, val);
+        }
         _dequeue(item.path); // ★ 항목 하나 성공할 때마다 즉시 배지 갱신(전체 완료를 기다리지 않음)
         ok++;
       } catch (e) {
@@ -626,7 +655,7 @@ const FireDB = (() => {
    *         네이티브 새로고침/캐시삭제 없이도 자동으로 서버 동기화가 보장됨. */
   function _startQueueWatcher() {
     setInterval(() => {
-      if (_connected && getPendingCount() > 0) {
+      if (getPendingCount() > 0) {
         console.log(`[FireDB] 🔁 주기적 큐 점검 — 대기 ${getPendingCount()}건 재전송 시도`);
         _flushQueue();
       }
