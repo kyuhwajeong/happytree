@@ -54,6 +54,14 @@
     return results.sort().join('|');
   }
 
+  /* ★ 입력 중인지 확인 — 활성 입력 요소에 포커스가 있으면 "입력 중"으로 본다.
+   *   자동 새로고침이 하필 타이핑 도중 끼어들어 방해하지 않도록 함. */
+  function _isActivelyTyping() {
+    const el = document.activeElement;
+    if (!el) return false;
+    return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
+  }
+
   async function checkForUpdate(reason) {
     if (checking) return;
     checking = true;
@@ -63,9 +71,23 @@
       if (prev === null) {
         localStorage.setItem(LS_KEY, sig);
       } else if (prev !== sig) {
-        console.log('[AutoUpdate] 서버 파일 변경 감지(' + reason + ') — 자동 새로고침');
+        if (_isActivelyTyping()) {
+          // ★ 입력 중이면 방해하지 않는다 — 서명은 아직 갱신하지 않아
+          //   다음 점검 때도 계속 "변경됨"으로 다시 감지되게 둔다.
+          console.log('[AutoUpdate] 입력 중 — 새로고침 보류, 잠시 후 재확인');
+          checking = false;
+          setTimeout(() => checkForUpdate('입력 완료 후 재확인'), 8000);
+          return;
+        }
+        console.log('[AutoUpdate] 서버 파일 변경 감지(' + reason + ') — 데이터 보존 신호 전송 후 자동 새로고침');
         localStorage.setItem(LS_KEY, sig);
-        location.reload();
+        // ★ firebase-config.js의 자동 새로고침과 동일한 안전장치 —
+        //   각 모듈(성적/진도 등)이 메모리에만 있던 디바운스 대기값을
+        //   로컬에 확실히 반영할 시간을 준 뒤에 새로고침한다. 이미
+        //   로컬(localStorage)에 반영된 오프라인 큐는 새로고침으로
+        //   사라지지 않으므로 재시작 후 자동으로 이어서 전송된다.
+        try { window.dispatchEvent(new Event('fb:force-flush-before-reload')); } catch (e) {}
+        setTimeout(() => location.reload(), 400);
         return;
       }
     } catch (e) { /* 오프라인 등 - 조용히 무시 */ }
