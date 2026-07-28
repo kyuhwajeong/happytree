@@ -254,8 +254,9 @@ const StaffDB = (() => {
     _staff[i] = { ..._staff[i], ...data, updatedAt: _now() };
     _staff[i].status = _staff[i].leaveDate ? '퇴직' : '재직';
     _ls(LS_STAFF, _staff);
-    await FireDB.set(`${FB_STAFF}/${id}`, _staff[i]).catch(console.warn);
-    _fire('staff'); return _staff[i];
+    const savedToServer = await FireDB.set(`${FB_STAFF}/${id}`, _staff[i]).catch(() => false);
+    _fire('staff');
+    return { ..._staff[i], savedToServer: savedToServer === true };
   }
 
   async function deleteStaff(id) {

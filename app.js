@@ -602,8 +602,15 @@ const App = (() => {
         if(canEdit){
           const resize=()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,128)+'px';};
           let _lm=memoVal; resize();
-          ta.addEventListener('input',()=>{resize();_syncDot('saving');_dirtyFields.add(ta);clearTimeout(ta._st);ta._st=setTimeout(()=>{if(ta.value!==_lm){DB.autoSave(cls.id,weekKey,dayName,'memo',ta.value.trim());_lm=ta.value;}_dirtyFields.delete(ta);_syncDot(FireDB.ready()?'on':'off');},1500);});
-          ta.addEventListener('blur',()=>{clearTimeout(ta._st);if(ta.value!==_lm){DB.autoSave(cls.id,weekKey,dayName,'memo',ta.value.trim());_lm=ta.value;_syncDot(FireDB.ready()?'on':'off');}_dirtyFields.delete(ta);});
+          const _doMemoSave = async () => {
+            if (ta.value===_lm) return;
+            const v = ta.value.trim();
+            _lm = ta.value;
+            const confirmed = await DB.autoSave(cls.id,weekKey,dayName,'memo',v);
+            _syncDot(confirmed ? (FireDB.ready()?'on':'off') : 'off'); // ★ 실제 확인 안 되면 'off'로 — ready()만 보고 낙관적으로 표시하지 않음
+          };
+          ta.addEventListener('input',()=>{resize();_syncDot('saving');_dirtyFields.add(ta);clearTimeout(ta._st);ta._st=setTimeout(()=>{ _doMemoSave().finally(()=>_dirtyFields.delete(ta)); },1500);});
+          ta.addEventListener('blur',()=>{clearTimeout(ta._st);_doMemoSave().finally(()=>_dirtyFields.delete(ta));});
         }
         ms.appendChild(ta); card.appendChild(ms);
       }
@@ -831,7 +838,16 @@ const App = (() => {
         if(canEdit){
           const resize=()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,128)+'px';};
           let _lm=memoVal; resize();
-          const _doSave=()=>{ if(ta.value!==_lm){ DB.autoSave(cls.id,weekKey,dayName,'memo',ta.value.trim()); _lm=ta.value; } _dirtyFields.delete(ta); };
+          const _doSave=async ()=>{
+            if (ta.value!==_lm) {
+              const v = ta.value.trim();
+              _lm = ta.value;
+              _syncDot('saving');
+              const confirmed = await DB.autoSave(cls.id,weekKey,dayName,'memo',v);
+              _syncDot(confirmed ? (FireDB.ready()?'on':'off') : 'off'); // ★ 실제 확인 안 되면 'off'
+            }
+            _dirtyFields.delete(ta);
+          };
           ta.addEventListener('input',()=>{resize();_dirtyFields.add(ta);clearTimeout(ta._st);ta._st=setTimeout(_doSave,1500);});
           ta.addEventListener('blur',()=>{clearTimeout(ta._st);_doSave();});
         }
@@ -977,8 +993,32 @@ const App = (() => {
     row.appendChild(right);
     if(canEdit){
       let _lv=val;
-      inp.addEventListener('input',()=>{inp.classList.toggle('filled',inp.value.trim()!=='');row.classList.add('saving');row.classList.remove('saved');_syncDot('saving');_dirtyFields.add(inp);clearTimeout(inp._st);inp._st=setTimeout(()=>{if(inp.value!==_lv){DB.autoSave(clsId,weekKey,dayName,'progress',inp.value.trim(),b.id);_lv=inp.value;if(inp.value)dt.textContent=_fmtDateTime(new Date());}_dirtyFields.delete(inp);row.classList.remove('saving');row.classList.add('saved');_syncDot(FireDB.ready()?'on':'off');setTimeout(()=>row.classList.remove('saved'),1500);},1500);});
-      inp.addEventListener('blur',()=>{clearTimeout(inp._st);if(inp.value!==_lv){DB.autoSave(clsId,weekKey,dayName,'progress',inp.value.trim(),b.id);_lv=inp.value;if(inp.value)dt.textContent=_fmtDateTime(new Date());row.classList.remove('saving');row.classList.add('saved');_syncDot(FireDB.ready()?'on':'off');setTimeout(()=>row.classList.remove('saved'),1500);}_dirtyFields.delete(inp);});
+      const _doProgressSave = async (afterSave) => {
+        if (inp.value===_lv) { afterSave?.(); return; }
+        const valToSave = inp.value.trim();
+        _lv = inp.value;
+        row.classList.remove('saving'); // 낙관적 표시는 유지하되, 확정 여부는 아래서 갱신
+        // ★ 실제 서버 반영 여부를 확인하고 나서 표시를 결정한다 —
+        //   예전엔 DB.autoSave()를 fire-and-forget으로 호출하고 결과를
+        //   확인도 안 한 채 무조건 '저장됨'을 표시해서, 실제로는 로컬
+        //   큐에만 들어간 경우에도 선생님은 "저장됐다"고 믿게 되는
+        //   문제가 있었다(과거 데이터 유실 신고의 원인 중 하나로 추정).
+        const confirmed = await DB.autoSave(clsId,weekKey,dayName,'progress',valToSave,b.id);
+        if (valToSave) dt.textContent = _fmtDateTime(new Date()) + (confirmed ? '' : ' (전송 대기중)');
+        if (confirmed) {
+          row.classList.add('saved');
+          _syncDot(FireDB.ready()?'on':'off');
+          setTimeout(()=>row.classList.remove('saved'),1500);
+        } else {
+          row.classList.add('queued');
+          dt.style.color = '#d97706';
+          _syncDot('off');
+        }
+        if (confirmed && dt.style.color) dt.style.color = '';
+        afterSave?.();
+      };
+      inp.addEventListener('input',()=>{inp.classList.toggle('filled',inp.value.trim()!=='');row.classList.add('saving');row.classList.remove('saved','queued');_syncDot('saving');_dirtyFields.add(inp);clearTimeout(inp._st);inp._st=setTimeout(()=>{ _doProgressSave(()=>{ _dirtyFields.delete(inp); }); },1500);});
+      inp.addEventListener('blur',()=>{clearTimeout(inp._st);_doProgressSave(()=>{ _dirtyFields.delete(inp); });});
     }
     return row;
   }

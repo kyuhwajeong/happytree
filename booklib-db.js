@@ -328,8 +328,10 @@ const BookLibDB = (() => {
     _ls(LS_CHECKS,_checks);
     const path = `${FB_CHECKS}/${ck}/${sk}`;
     // 연결 여부와 무관하게 항상 시도 — 오프라인이면 FireDB.set/remove가 자체 큐잉
-    if (checked) await FireDB.set(path, _checks[ck][sk]).catch(console.warn);
-    else         await FireDB.remove(path).catch(console.warn);
+    let confirmed;
+    if (checked) confirmed = await FireDB.set(path, _checks[ck][sk]).catch(()=>false);
+    else         confirmed = await FireDB.remove(path).catch(()=>false);
+    return confirmed === true; // ★ 서버 반영 확인 여부를 호출부가 알 수 있도록 반환
   }
 
   // ★ 확장 프로그램용: 특정 반+교재의 체크 데이터 전체 초기화
@@ -371,7 +373,8 @@ const BookLibDB = (() => {
     if (!_stamps[ck]) _stamps[ck]={};
     _stamps[ck][chapterId] = ts;
     _ls(LS_STAMPS,_stamps);
-    await FireDB.set(`${FB_STAMPS}/${ck}/${chapterId}`,ts).catch(console.warn);
+    const confirmed = await FireDB.set(`${FB_STAMPS}/${ck}/${chapterId}`,ts).catch(()=>false);
+    return confirmed === true;
   }
 
   async function removeStamp(classId, bookId, chapterId) {
@@ -472,19 +475,21 @@ const BookLibDB = (() => {
   // ★ 메모 DB 저장 (Firebase + localStorage 이중 저장)
   async function saveMemo(classId, bookId, data){
     if (!_isPlainObject(data)) {
-      console.error('[BookLibDB] saveMemo 차단: 비정상 값', typeof data); return;
+      console.error('[BookLibDB] saveMemo 차단: 비정상 값', typeof data); return false;
     }
     const key=classId+'_'+bookId;
     const payload={...data, updatedAt:new Date().toISOString()};
     let jsonStr;
     try { jsonStr = _safeJsonStringify(payload); }
-    catch(e) { console.error('[BookLibDB] saveMemo: 직렬화 실패', e); return; }
+    catch(e) { console.error('[BookLibDB] saveMemo: 직렬화 실패', e); return false; }
 
     try { localStorage.setItem('bl_memo_db_'+key, jsonStr); } catch(e){}
+    let confirmed = false;
     try {
       if(typeof FireDB!=='undefined')
-        await FireDB.set('hakwon10/memos/'+key, payload);
+        confirmed = await FireDB.set('hakwon10/memos/'+key, payload);
     } catch(e) { console.error('[BookLibDB] saveMemo: Firebase 쓰기 실패', e.message||e); }
+    return confirmed === true;
   }
   async function loadMemo(classId, bookId){
     const key=classId+'_'+bookId;

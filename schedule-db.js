@@ -76,6 +76,8 @@ const ScheduleDB = (() => {
   ];
 
   let _list = [];
+  let _updatesPaused = false; // ★ 편집 중 서버 갱신 보류용
+  function pauseUpdates(v) { _updatesPaused = !!v; }
   const _ev = {};
   function _fire(t) { (_ev[t] || []).forEach(f => { try { f(); } catch (e) {} }); }
   function on(t, f) { if (!_ev[t]) _ev[t] = []; _ev[t].push(f); }
@@ -97,6 +99,7 @@ const ScheduleDB = (() => {
       console.warn('[ScheduleDB] 초기 로드 실패, 로컬 캐시 사용:', e.message);
     }
     FireDB.listen(FB_PATH, v => {
+      if (_updatesPaused) return; // ★ 편집 중엔 서버 갱신을 반영하지 않음(입력 내용 보호)
       _list = v ? Object.values(v) : [];
       _saveLS();
       _fire('schedules');
@@ -185,5 +188,5 @@ const ScheduleDB = (() => {
     }
   }
 
-  return { init, on, getAll, getById, getInRange, add, update, remove };
+  return { init, on, getAll, getById, getInRange, add, update, remove, pauseUpdates };
 })();

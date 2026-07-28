@@ -895,21 +895,21 @@ const StudentApp = (() => {
       memo:         g('ed-memo'),
     };
 
-    await StudentDB.updateStudent(id, data);
+    const result = await StudentDB.updateStudent(id, data);
 
     const updated = StudentDB.getAll().find(x => x.id === id);
     const sh = document.getElementById('st-detail-sh');
     if (updated && sh) sh.innerHTML = _detailHTML(updated);
 
     _renderContent();
-    _toast(`✅ ${name} 정보가 수정되었습니다`, 'success');
+    _toast(result?.savedToServer ? `✅ ${name} 정보가 수정되었습니다` : `⏳ ${name} 정보 로컬 저장됨 · 서버 전송 대기 중`, result?.savedToServer ? 'success' : undefined);
   }
 
   /* ──── 빠른 재원 상태 변경 ──── */
   async function quickStatus(id, status) {
     if (!confirm(`'${status}'(으)로 상태를 변경하시겠습니까?`)) return;
 
-    await StudentDB.updateStudent(id, { status });
+    const result = await StudentDB.updateStudent(id, { status });
 
     // 상세 모달 내용만 갱신 (모달 닫지 않음)
     const s  = StudentDB.getAll().find(x => x.id === id);
@@ -917,7 +917,7 @@ const StudentApp = (() => {
     if (s && sh) sh.innerHTML = _detailHTML(s);
 
     _renderContent();
-    _toast(`✅ ${s?.name || ''} → ${status}`, 'success');
+    _toast(result?.savedToServer ? `✅ ${s?.name || ''} → ${status}` : `⏳ ${s?.name || ''} → ${status} (서버 전송 대기 중)`, result?.savedToServer ? 'success' : undefined);
   }
 
   /* ──── 삭제 확인 ──── */
@@ -1200,8 +1200,8 @@ const StudentApp = (() => {
       note = `[수업료] ${calc.year}-${String(calc.month).padStart(2,'0')} 입학(${dateVal}) · ${cls.name}반 · ${calc.remainCount}/${calc.totalCount}일 · ${calc.amountExact.toLocaleString()}원`;
     }
     const memo = s.memo ? `${s.memo}\n${note}` : note;
-    await StudentDB.updateStudent(studentId, { memo });
-    _toast('✅ 학생 메모에 저장되었습니다', 'success');
+    const result = await StudentDB.updateStudent(studentId, { memo });
+    _toast(result?.savedToServer ? '✅ 학생 메모에 저장되었습니다' : '⏳ 로컬에 저장됨 · 서버 전송 대기 중', result?.savedToServer ? 'success' : undefined);
     closeTuitionCalc();
     const detailOv = document.getElementById('st-detail-ov');
     if (detailOv && !detailOv.classList.contains('hidden')) {

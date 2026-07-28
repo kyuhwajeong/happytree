@@ -279,6 +279,7 @@ const NoticeApp = (() => {
    * ═══════════════════════════════════════════════════════════ */
   function openEditor(id = null) {
     _editId = id;
+    NoticeDB.pauseUpdates(true); // ★ 편집 중엔 서버 갱신이 화면을 덮어쓰지 않도록
     const n = id ? NoticeDB.getById(id) : null;
     _q('ntc-editor-ov')?.remove();
     const ov = document.createElement('div');
@@ -371,7 +372,7 @@ const NoticeApp = (() => {
     });
     setTimeout(() => _q('ntc-f-title')?.focus(), 150);
   }
-  function closeEditor() { _q('ntc-editor-ov')?.remove(); _editId = null; }
+  function closeEditor() { _q('ntc-editor-ov')?.remove(); _editId = null; NoticeDB.pauseUpdates(false); }
 
   async function saveEditor() {
     const title = _q('ntc-f-title')?.value.trim();
