@@ -46,12 +46,38 @@ const FireDB = (() => {
    * ══════════════════════════════════════════════════════ */
   const LS_QUEUE = 'hk10b_fbQueue';
   function _loadQueue() {
-    try { return JSON.parse(localStorage.getItem(LS_QUEUE)) || []; } catch { return []; }
+    let q;
+    try { q = JSON.parse(localStorage.getItem(LS_QUEUE)) || []; } catch { return []; }
+    // ★ 최종 방어선 — 큐에 어떤 경로로 들어갔든(과거 버전이 쌓아둔 것 포함),
+    //   읽는 시점에 무조건 한 번 더 걸러낸다. _enqueue()에서 막는 것과
+    //   별개로, 여기서 걸러야 배지·패널 등 큐를 읽는 모든 곳에 예외 없이
+    //   적용되고, 예전에 이미 쌓인 항목도 다음 읽기에서 자동 정리된다.
+    const clean = q.filter(x => !_isDisposablePath(x.path));
+    if (clean.length !== q.length) _saveQueue(clean);
+    return clean;
   }
   function _saveQueue(q) {
     try { localStorage.setItem(LS_QUEUE, JSON.stringify(q)); } catch {}
   }
+  /* ★ 큐에 올리지 않고 조용히 버릴 경로 — 관리자 전용 모니터링의 세션
+   * 하트비트/행동 로그(hakwon10/monitor/sessions/...)는:
+   *   - 일반 사용자는 존재조차 모르는 부가 기능(관리자만 봄)
+   *   - 자주(수십 초 간격) 갱신되는 휘발성 데이터라 지금 값이 유실돼도
+   *     다음 하트비트가 금방 다시 채워줌
+   *   - 오래되면 _cleanupExpired()로 어차피 자동 삭제됨
+   * → 학원 실제 데이터(성적/진도/교재/직원/급여)와 달리 "재접속 시도 중"
+   *   같은 메시지로 일반 사용자를 신경 쓰이게 할 가치가 없다.
+   * (같은 monitor 경로라도 ip_labels처럼 관리자가 명시적으로 저장한
+   *  설정은 제외 대상이 아님 — 세션 로그만 정확히 걸러낸다) */
+  function _isDisposablePath(path) {
+    return path.startsWith('hakwon10/monitor/sessions/');
+  }
+
   function _enqueue(op, path, val) {
+    if (_isDisposablePath(path)) {
+      console.log(`[FireDB] 🗑 휘발성 모니터링 로그 — 큐 적재 생략:`, path);
+      return;
+    }
     const q = _loadQueue();
     const idx = q.findIndex(x => x.path === path);
     const item = { op, path, val, ts: Date.now(), failCount: 0, lastError: null, permanent: false };
@@ -231,15 +257,14 @@ const FireDB = (() => {
       r = await _flushQueue();
     }
     if (r.reason === 'offline') {
-      if (btn) { btn.disabled = false; btn.textContent = '🔄 지금 전체 재시도'; }
+      // ★ alert()로 "자동으로 처리됩니다"라고 말하면서 확인 버튼을 누르게
+      //   하는 건 모순이라 제거했다. 사용자가 직접 재시도를 눌렀다는 것
+      //   자체가 "이미 한참 막혀있었다"는 신호이므로, 팝업 없이 바로
+      //   최후 수단(3단계: 조용한 새로고침)까지 자동으로 진행한다.
       if (navigator.onLine) {
-        // ★ 폰 인터넷은 정상인데 서버 연결만 안 되는 상황 — 사용자 탓이 아니므로
-        //   "인터넷 확인하라"고 책임을 떠넘기지 않는다. 백그라운드에서 계속
-        //   자동으로 재시도하며, 일정 시간 지나면 스스로 새로고침까지 시도한다.
-        alert('⏳ 서버와 연결을 재수립하는 중입니다.\n잠시 후 자동으로 다시 시도되니 그대로 두셔도 됩니다.');
-      } else {
-        alert('⚠️ 현재 인터넷이 연결되어 있지 않습니다. 연결되면 자동으로 저장됩니다.');
+        _autoReload(); // 내부적으로 5분 쿨다운 체크 — 무한 반복 방지
       }
+      if (btn) { btn.disabled = false; btn.textContent = navigator.onLine ? '🔄 재연결 중...' : '📴 인터넷 연결 대기 중'; }
       return;
     }
     if (r.reason === 'already-flushing') {
@@ -440,9 +465,9 @@ const FireDB = (() => {
 
   /* ── 재연결 스케줄 (무제한 — 인터넷 있는 한 계속 시도) ──
    *   ★ 단계별 자동 복구 — 사용자가 아무것도 몰라도 되게:
-   *      경과 15초~  : 강제 재연결(goOffline/goOnline)
-   *      경과 60초~  : 앱 인스턴스 재생성(2단계)
-   *      경과 120초~ : (진짜 인터넷은 있는데도 안 되면) 조용히 새로고침(3단계) */
+   *      경과 10초~  : 강제 재연결(goOffline/goOnline)
+   *      경과 30초~  : 앱 인스턴스 재생성(2단계)
+   *      경과 45초~  : (진짜 인터넷은 있는데도 안 되면) 조용히 새로고침(3단계) */
   function _scheduleRetry() {
     if (_retryTimer || _connected) return;
     const delay = _retryDelay();
@@ -452,9 +477,9 @@ const FireDB = (() => {
       _retryCount++;
       const elapsed = _offlineSince ? Date.now() - _offlineSince : 0;
       console.log(`[FireDB] ⏳ 재연결 대기 ${_retryCount}회차 (경과 ${Math.round(elapsed/1000)}초)`);
-      if (elapsed >= 120000)      _autoReload();
-      else if (elapsed >= 60000)  _hardReset();
-      else                        _forceReconnect();
+      if (elapsed >= 45000)      _autoReload();
+      else if (elapsed >= 30000) _hardReset();
+      else                       _forceReconnect();
       _scheduleRetry(); // 무한 재시도
     }, delay);
   }
