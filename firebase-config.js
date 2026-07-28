@@ -467,9 +467,15 @@ const FireDB = (() => {
 
   /* ── 재연결 스케줄 (무제한 — 인터넷 있는 한 계속 시도) ──
    *   ★ 단계별 자동 복구 — 사용자가 아무것도 몰라도 되게:
-   *      경과 10초~  : 강제 재연결(goOffline/goOnline)
-   *      경과 30초~  : 앱 인스턴스 재생성(2단계)
-   *      경과 45초~  : (진짜 인터넷은 있는데도 안 되면) 조용히 새로고침(3단계) */
+   *      경과 10초~  : 강제 재연결(goOffline/goOnline) — 딱 1번만
+   *      경과 30초~  : 앱 인스턴스 재생성(2단계) — 딱 1번만
+   *      경과 45초~  : (진짜 인터넷은 있는데도 안 되면) 조용히 새로고침(3단계)
+   *   (예전엔 5초마다 매번 강제 재연결을 반복 실행해서, 정상적으로
+   *    맺어지고 있던 연결의 핸드셰이크를 완성되기도 전에 계속 끊어버리는
+   *    문제가 있었음 — 느린 네트워크에서는 이 때문에 영원히 연결이
+   *    안 되는 자기방해 루프가 생겼다. 각 단계를 1회성으로 바꾸고,
+   *    그 사이엔 SDK가 스스로 재연결을 완료할 시간을 방해 없이 준다.) */
+  let _stage1Done = false; // 강제 재연결 1회 실행 여부
   function _scheduleRetry() {
     if (_retryTimer || _connected) return;
     const delay = _retryDelay();
@@ -479,9 +485,16 @@ const FireDB = (() => {
       _retryCount++;
       const elapsed = _offlineSince ? Date.now() - _offlineSince : 0;
       console.log(`[FireDB] ⏳ 재연결 대기 ${_retryCount}회차 (경과 ${Math.round(elapsed/1000)}초)`);
-      if (elapsed >= 45000)      _autoReload();
-      else if (elapsed >= 30000) _hardReset();
-      else                       _forceReconnect();
+      if (elapsed >= 45000) {
+        _autoReload();
+      } else if (elapsed >= 30000) {
+        _hardReset();
+      } else if (elapsed >= 10000 && !_stage1Done) {
+        _stage1Done = true;
+        _forceReconnect();
+      }
+      // ★ 아직 어느 단계도 아니면(10초 미만) 아무것도 안 하고 그냥 기다림
+      //   — SDK 자체 재연결을 방해하지 않는다.
       _scheduleRetry(); // 무한 재시도
     }, delay);
   }
@@ -529,10 +542,11 @@ const FireDB = (() => {
     if (connected) {
       const wasOffline = _offlineSince > 0;
 
-      _offlineSince = 0;
+      // ★ _offlineSince/_retryTimer/_retryCount는 여기서 더 이상 건드리지
+      //   않는다 — 3초간 연결이 실제로 유지되는지 확인한 뒤 _attachConnListener
+      //   에서 리셋한다(위 참고). 여기서 즉시 리셋하면 아주 짧게 반짝였다가
+      //   다시 끊기는 "깜빡임" 상황에서 복구 진행 상태가 계속 날아가 버린다.
       clearTimeout(_offlineShowTimer); _offlineShowTimer = null;
-      clearTimeout(_retryTimer);       _retryTimer = null;
-      _retryCount = 0;
 
       let ind = document.getElementById('fb-conn-ind');
       if (ind?._elapsed) { clearInterval(ind._elapsed); ind._elapsed = null; }
@@ -595,6 +609,7 @@ const FireDB = (() => {
   }
 
   /* ── 초기화 ── */
+  let _connConfirmTimer = null;
   function _attachConnListener() {
     /* 연결 상태 실시간 감지 */
     _db.ref('.info/connected').on('value', snap => {
@@ -602,9 +617,23 @@ const FireDB = (() => {
       _connected = !!snap.val();
       _updateConnUI(_connected);
       if (_connected && !prev) {
-        console.log('[FireDB] 🌐 온라인 복귀');
-        _retryCount = 0; _hardResetTried = false; // ★ 다음 장애 때도 단계별 복구가 다시 작동하도록 리셋
-        setTimeout(_flushQueue, 500); // 재연결 안정화 후 큐 전송
+        console.log('[FireDB] 🌐 온라인 복귀(잠정) — 3초간 유지되는지 확인 중');
+        // ★ 핵심 수정 — 연결이 아주 잠깐 반짝했다가 바로 다시 끊기는
+        //   "깜빡임" 상황에서는 복구 진행 상태를 리셋하지 않는다.
+        //   예전엔 여기서 즉시 _offlineSince/_retryCount/_stage1Done을
+        //   초기화했는데, 연결이 실제로는 계속 불안정한 채로 깜빡이기만
+        //   해도 매번 초기화되어 버려서 30초/45초 단계로 절대 못 올라가고
+        //   "강제 재연결"만 0초 지점에서 무한 반복하는 문제가 있었다.
+        //   3초간 실제로 연결이 유지된 걸 확인한 뒤에야 "진짜 복구됐다"고
+        //   보고 진행 상태를 리셋한다.
+        clearTimeout(_connConfirmTimer);
+        _connConfirmTimer = setTimeout(() => {
+          if (!_connected) return; // 3초 안에 다시 끊겼으면 리셋하지 않음
+          console.log('[FireDB] 🌐 온라인 복귀 확정');
+          _retryCount = 0; _hardResetTried = false; _stage1Done = false;
+          _offlineSince = 0;
+        }, 3000);
+        setTimeout(_flushQueue, 500); // 재연결 안정화 후 큐 전송 시도는 그대로 진행
       }
       if (!_connected) console.log('[FireDB] 📴 연결 끊김 — 8초 후 배너 예정');
     });
@@ -622,26 +651,23 @@ const FireDB = (() => {
 
       _attachConnListener();
 
-      /* ★ 네트워크 복귀 이벤트 (WiFi↔LTE 전환 등) */
+      /* ★ 네트워크 복귀 이벤트 (WiFi↔LTE 전환 등)
+       * — 예전엔 이 이벤트마다 _forceReconnect()를 직접 호출해서
+       *   goOffline/goOnline을 반복 실행했는데, 이 이벤트가 짧은 시간에
+       *   여러 번 발생하면 그때마다 진행 중이던 연결 시도를 방해했다.
+       *   이제는 스케줄러(_scheduleRetry)가 이미 돌고 있으면 그냥 두고,
+       *   안 돌고 있을 때만 새로 깨운다 — 단계별 가드(_stage1Done 등)를
+       *   그대로 존중한다. */
       window.addEventListener('online', () => {
-        console.log('[FireDB] 🌐 navigator.online 감지 → 재연결 시도');
-        _retryCount = 0;
-        clearTimeout(_retryTimer); _retryTimer = null;
-        if (!_connected) { _forceReconnect(); _scheduleRetry(); }
+        console.log('[FireDB] 🌐 navigator.online 감지');
+        if (!_connected) _scheduleRetry();
       });
 
-      /* ★ 탭 백그라운드→포어그라운드 복귀 — 장시간 방치 후에도
-       * 즉시 응답하도록, 연결이 끊겨 있었다면 강제 재연결부터, 이미
-       * 연결돼 있다면 대기 중인 큐가 있는지 바로 확인해 전송 시도.
-       * (장시간 방치 시 소켓이 죽어도 SDK가 스스로 못 살아나는 경우가 있어
-       *  단순 대기가 아니라 goOffline/goOnline으로 명시적으로 흔들어 깨움) */
+      /* ★ 탭 백그라운드→포어그라운드 복귀 */
       document.addEventListener('visibilitychange', () => {
         if (document.hidden) return;
         console.log('[FireDB] 👁 탭 활성화 → 연결 상태 확인');
         if (!_connected) {
-          _retryCount = 0;
-          clearTimeout(_retryTimer); _retryTimer = null;
-          _forceReconnect();
           _scheduleRetry();
         } else if (getPendingCount() > 0) {
           console.log(`[FireDB] 👁 탭 재활성화 시 대기 항목 ${getPendingCount()}건 발견 → 즉시 전송 시도`);
