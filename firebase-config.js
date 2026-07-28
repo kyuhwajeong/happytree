@@ -96,7 +96,8 @@ const FireDB = (() => {
   function _isPermanentError(e) {
     const code = (e && e.code || '').toString().toUpperCase();
     const msg = (e && e.message || '').toString().toLowerCase();
-    return code.includes('PERMISSION_DENIED') || msg.includes('permission_denied') || msg.includes('permission denied');
+    return code.includes('PERMISSION_DENIED') || msg.includes('permission_denied') || msg.includes('permission denied')
+        || msg.includes('contains undefined') || msg.includes('invalid data'); // ★ 데이터 형식 오류 — 재시도로 절대 해결 안 됨
   }
   // ★ 재시도를 포기하지 않고 계속 시도할 항목만 삭제 대상에서 제외하고,
   //   사용자가 직접 "삭제"를 누른 경우에만 큐에서 완전히 제거한다.
@@ -116,8 +117,9 @@ const FireDB = (() => {
     let ok = 0, fail = 0;
     for (const item of q) {
       try {
-        if (item.op === 'set')    await _db.ref(item.path).set(item.val);
-        if (item.op === 'update') await _db.ref(item.path).update(item.val);
+        const val = _stripUndefined(item.val); // ★ 예전에 이미 쌓인 항목도 재전송 시점에 정리
+        if (item.op === 'set')    await _db.ref(item.path).set(val);
+        if (item.op === 'update') await _db.ref(item.path).update(val);
         if (item.op === 'remove') await _db.ref(item.path).remove();
         _dequeue(item.path); // ★ 항목 하나 성공할 때마다 즉시 배지 갱신(전체 완료를 기다리지 않음)
         ok++;
@@ -687,13 +689,31 @@ const FireDB = (() => {
       .then(s => s.exists() ? s.val() : null)
       .catch(e => { console.error('getFromServer', path, e); return null; });
   }
+  /* ★ 어떤 값이든 Firebase에 보내기 전 undefined 필드를 제거한다.
+   *   Firebase는 undefined가 섞인 객체를 절대 저장하지 않고 그 즉시
+   *   예외를 던진다 — 연결 상태와 무관하게 100% 재현되는 오류라, 이걸
+   *   그냥 큐에 넣고 재시도만 반복하면 "영원히 안 되는데 계속 재시도
+   *   중"이라는 상태가 무한히 지속된다(오늘 일정표 사례가 정확히 이것).
+   *   모든 모듈이 각자 조심하는 대신, 쓰기 함수 한 곳에서 근본적으로
+   *   차단해서 이 문제 자체가 다시는 발생할 수 없게 한다. */
+  function _stripUndefined(v) {
+    if (Array.isArray(v)) return v.map(_stripUndefined);
+    if (v && typeof v === 'object') {
+      const out = {};
+      for (const k in v) { if (v[k] !== undefined) out[k] = _stripUndefined(v[k]); }
+      return out;
+    }
+    return v;
+  }
   function set(path, v) {
+    v = _stripUndefined(v);
     if (!ready() || !_connected) { _enqueue('set', path, v); return Promise.resolve(false); }
     return _db.ref(path).set(v)
       .then(() => true)
       .catch(e => { console.error('set', path, e); _enqueue('set', path, v); return false; });
   }
   function update(path, v) {
+    v = _stripUndefined(v);
     if (!ready() || !_connected) { _enqueue('update', path, v); return Promise.resolve(false); }
     return _db.ref(path).update(v)
       .then(() => true)
