@@ -259,7 +259,9 @@ const FireDB = (() => {
       //   자체가 "이미 한참 막혀있었다"는 신호이므로, 팝업 없이 바로
       //   최후 수단(3단계: 조용한 새로고침)까지 자동으로 진행한다.
       if (navigator.onLine) {
-        _autoReload(); // 내부적으로 5분 쿨다운 체크 — 무한 반복 방지
+        // ★ 사용자가 직접 "재시도"까지 눌렀다는 건 명백한 의사표시이므로,
+        //   자동 루프용 5분 쿨다운을 여기서는 무시하고 새로고침한다.
+        _autoReload(true);
       }
       if (btn) { btn.disabled = false; btn.textContent = navigator.onLine ? '🔄 재연결 중...' : '📴 인터넷 연결 대기 중'; }
       return;
@@ -452,12 +454,12 @@ const FireDB = (() => {
       return Date.now() - last > 5 * 60 * 1000;
     } catch { return true; }
   }
-  function _autoReload() {
+  function _autoReload(force) {
     if (!navigator.onLine) {
       console.log('[FireDB] ⏸ 자동 새로고침 보류 — navigator.onLine=false (진짜 오프라인으로 판단, 새로고침해도 의미 없음)');
       return;
     }
-    if (!_canAutoReload()) {
+    if (!force && !_canAutoReload()) {
       let leftSec = '?';
       try {
         const last = Number(sessionStorage.getItem(RELOAD_COOLDOWN_KEY) || 0);
@@ -467,7 +469,7 @@ const FireDB = (() => {
       return;
     }
     try { sessionStorage.setItem(RELOAD_COOLDOWN_KEY, String(Date.now())); } catch {}
-    console.log('[FireDB] 🔄 장시간 재연결 실패 — 데이터 보존 신호 전송 후 자동 새로고침');
+    console.log(`[FireDB] 🔄 ${force ? '사용자 요청' : '장시간 재연결 실패'} — 데이터 보존 신호 전송 후 새로고침`);
     try { window.dispatchEvent(new Event('fb:force-flush-before-reload')); } catch {}
     setTimeout(() => { try { location.reload(); } catch {} }, 500);
   }
