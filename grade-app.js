@@ -1058,6 +1058,19 @@ to{opacity:1;transform:none}}
     window.addEventListener('pagehide', () => { _flushAutoSaveTimers(); });
     // ★ firebase-config.js가 좀비 연결 복구 최후수단(자동 새로고침) 전에 보내는 신호
     window.addEventListener('fb:force-flush-before-reload', () => { _flushAutoSaveTimers(); });
+    // ★ 오프라인 큐에 있던 항목이 나중에 백그라운드에서 실제로 서버에
+    //   반영되면, "⏳ 서버 전송 대기 중"으로 남아있던 표시를 자동으로
+    //   "✅"로 갱신한다 — 사용자가 다시 그 칸을 건드리지 않아도 됨.
+    window.addEventListener('fb:write-confirmed', (e) => {
+      const p = e.detail?.path || '';
+      const m = p.match(/^hakwon10\/grades\/[^/]+\/([^/]+)\//);
+      if (!m) return;
+      const sid = m[1];
+      _st.unconfirmed?.delete(sid);
+      const fixCell = document.querySelector(`#gr-row-${sid} .gs-fix`);
+      const savedEl = fixCell?.querySelector('[data-savedat]');
+      if (savedEl) { savedEl.textContent = '✅ 서버 저장 확인'; savedEl.style.color = 'var(--tx3)'; }
+    });
 
     document.addEventListener('click', _closeCtxMenu);
     console.log('[GradeApp] ✅ v4.1');
@@ -4277,7 +4290,15 @@ to{opacity:1;transform:none}}
     _st.dirty.delete(sid);
     _refreshDirtyUI();
 
-    /* savedAt 표시 갱신 */
+    // ★ 서버 확인 여부를 별도로 추적 — "저장됨"이라고 화면에 표시해놓고
+    //   실제로는 로컬 큐에만 들어간 채(오프라인 등) 서버엔 전달 안 된
+    //   상태를, 선생님이 구분할 방법이 없었던 게 과거 데이터 유실
+    //   사례들의 원인 중 하나로 보인다.
+    if (!_st.unconfirmed) _st.unconfirmed = new Set();
+    if (result?.savedToServer) _st.unconfirmed.delete(sid);
+    else _st.unconfirmed.add(sid);
+
+    /* savedAt 표시 갱신 — 서버 확인 여부를 시각적으로 구분 */
     const fixCell = document.querySelector(`#gr-row-${sid} .gs-fix`);
     if (fixCell) {
       const savedEl = fixCell.querySelector('[data-savedat]') || (() => {
@@ -4285,7 +4306,13 @@ to{opacity:1;transform:none}}
         d.dataset.savedat = '1'; d.style.cssText = 'font-size:8px;color:var(--tx3)';
         fixCell.appendChild(d); return d;
       })();
-      savedEl.textContent = savedAt.slice(5,16);
+      if (result?.savedToServer) {
+        savedEl.textContent = '✅ ' + savedAt.slice(5,16);
+        savedEl.style.color = 'var(--tx3)';
+      } else {
+        savedEl.textContent = '⏳ 서버 전송 대기 중';
+        savedEl.style.color = '#d97706'; // 주황 — 아직 서버 미확인임을 눈에 띄게
+      }
     }
     return result;
   }

@@ -255,13 +255,17 @@ const StudentDB = (() => {
     _ls(LS_KEY, _students);
 
     // ★ 연결 여부와 무관하게 항상 저장 시도 — 오프라인이면 FireDB.set이 자체 큐잉(데이터 유실 방지)
+    let savedToServer = false;
     if (typeof FireDB !== 'undefined') {
-      await FireDB.set(`${FB_PATH}/${id}`, _students[idx]).catch(e =>
-        console.warn('[StudentDB] update FB error', e)
-      );
+      savedToServer = await FireDB.set(`${FB_PATH}/${id}`, _students[idx]).catch(e => {
+        console.warn('[StudentDB] update FB error', e);
+        return false;
+      });
     }
     _fire('students');
-    return _students[idx];
+    // ★ 기존 호출부는 그대로 레코드 객체를 쓸 수 있고(하위 호환),
+    //   새로 확인이 필요한 곳은 .savedToServer로 실제 서버 반영 여부를 알 수 있다.
+    return { ..._students[idx], savedToServer: savedToServer === true };
   }
 
   /** 학생 삭제 */

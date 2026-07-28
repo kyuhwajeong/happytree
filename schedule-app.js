@@ -774,6 +774,7 @@ const ScheduleApp = (() => {
    * ═══════════════════════════════════════════════════════════ */
   function openEditor(id = null, prefillDate = null) {
     _editId = id;
+    ScheduleDB.pauseUpdates(true); // ★ 편집 중엔 서버 갱신이 화면을 덮어쓰지 않도록
     const s = id ? ScheduleDB.getById(id) : null;
     _q('sch-editor-ov')?.remove();
     const ov = document.createElement('div');
@@ -846,7 +847,7 @@ const ScheduleApp = (() => {
     });
     setTimeout(() => _q('sch-f-title')?.focus(), 150);
   }
-  function closeEditor() { _q('sch-editor-ov')?.remove(); _editId = null; }
+  function closeEditor() { _q('sch-editor-ov')?.remove(); _editId = null; ScheduleDB.pauseUpdates(false); }
 
   async function saveEditor() {
     const title = _q('sch-f-title')?.value.trim();

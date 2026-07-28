@@ -151,6 +151,7 @@ const FireDB = (() => {
           await _restWrite(item.op, item.path, val);
         }
         _dequeue(item.path); // ★ 항목 하나 성공할 때마다 즉시 배지 갱신(전체 완료를 기다리지 않음)
+        try { window.dispatchEvent(new CustomEvent('fb:write-confirmed', { detail: { path: item.path } })); } catch {}
         ok++;
       } catch (e) {
         console.warn('[FireDB] 큐 전송 실패:', item.path, e.message);
@@ -734,6 +735,8 @@ const FireDB = (() => {
       _startKeepAlive();
       /* ★ 주기적 큐 자동 전송 시작 */
       _startQueueWatcher();
+      /* ★ WebSocket이 막힌 환경 대비 — REST 폴링 백업 시작 */
+      _startRestPollFallback();
       /* ★ 이전 세션에서 넘어온 대기 항목이 있으면 즉시 배지로 알림 */
       _updatePendingBadge();
 
@@ -813,13 +816,70 @@ const FireDB = (() => {
       .then(r => ({ committed: r.committed, snapshot: r.snapshot ? r.snapshot.val() : null }))
       .catch(e => { console.error('transaction', path, e); return { committed:false, snapshot:null }; });
   }
+  /* ★ REST(HTTPS) 조회 — WebSocket 폴백용 */
+  async function _restGet(path) {
+    const url = `${FIREBASE_CONFIG.databaseURL}/${path}.json`;
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`REST GET 실패: HTTP ${res.status}`);
+    return res.json();
+  }
+
+  /* ★ listen()으로 등록된 실시간 구독 목록 — WebSocket이 막힌 환경에서
+   *   대신 주기적으로 REST 폴링해서 같은 콜백에 새 값을 넣어주기 위함 */
+  const _listenRegistry = [];
+
   function listen(path, cb) {
     if (!ready()) return () => {};
+    const entry = { path, cb, lastValueJSON: undefined };
+    _listenRegistry.push(entry);
     const ref = _db.ref(path);
-    ref.on('value', s => cb(s.exists() ? s.val() : null),
-      e => console.error('listen', path, e));
-    return () => ref.off('value');
+    ref.on('value', s => {
+      const v = s.exists() ? s.val() : null;
+      entry.lastValueJSON = JSON.stringify(v); // ★ WebSocket으로 이미 받은 값은 폴링이 중복 전달하지 않도록 기록
+      cb(v);
+    }, e => console.error('listen', path, e));
+    return () => {
+      ref.off('value');
+      const i = _listenRegistry.indexOf(entry);
+      if (i >= 0) _listenRegistry.splice(i, 1);
+    };
   }
+
+  /* ★ 지금 입력 중인지 확인 — 폴링으로 받은 값을 입력 도중에 덮어써서
+   *   방금 친 내용이 사라지거나 바뀌어 보이는 사고를 막기 위함.
+   *   (grade-app.js처럼 자체적으로 "편집 중이면 건너뛰기" 방어가 있는
+   *    화면은 원래도 안전하지만, 일정표·공지처럼 그런 방어가 없는
+   *    화면까지 이 폴링 하나로 공통 보호한다.) */
+  function _isUserTyping() {
+    const el = document.activeElement;
+    if (!el) return false;
+    return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
+  }
+
+  /* ★ WebSocket이 막힌 환경 대비 — 10초마다 REST로 최신 값을 직접
+   *   가져와서, 실제로 값이 달라졌을 때만 등록된 콜백에 전달한다.
+   *   완전한 "즉시성"은 아니지만(최대 10초 지연), 새로고침 없이도
+   *   다른 기기의 변경사항이 화면에 반영되게 해준다. */
+  function _startRestPollFallback() {
+    setInterval(async () => {
+      if (_connected || document.hidden || !_listenRegistry.length) return;
+      if (_isUserTyping()) {
+        console.log('[FireDB] ⏸ 입력 중 — 이번 폴링 반영 보류(다음 주기에 재확인)');
+        return; // ★ lastValueJSON을 갱신하지 않으므로 다음 주기에 다시 시도됨(유실 아님)
+      }
+      for (const entry of _listenRegistry.slice()) {
+        try {
+          const v = await _restGet(entry.path);
+          const json = JSON.stringify(v);
+          if (json !== entry.lastValueJSON) {
+            entry.lastValueJSON = json;
+            entry.cb(v);
+          }
+        } catch (e) { /* 개별 경로 실패는 조용히 무시하고 다음 주기에 재시도 */ }
+      }
+    }, 10000);
+  }
+
   function debounced(path, val, delay = 700) {
     clearTimeout(_q[path]);
     _q[path] = setTimeout(async () => {

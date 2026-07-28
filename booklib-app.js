@@ -2286,14 +2286,14 @@ const BooklibApp = (() => {
     if(_stamps[chId]){
       /* ③ 스탬프 해제 → stampInfo 함께 삭제 */
       delete _stamps[chId];
-      await BookLibDB.removeStamp(cid,bid,chId);
+      const confirmed = await BookLibDB.removeStamp(cid,bid,chId);
       if(BookLibDB.removeStampInfo) await BookLibDB.removeStampInfo(cid,bid,chId);
-      _toast('📍 스탬프 해제');
+      _toast(confirmed ? '📍 스탬프 해제' : '📍 스탬프 해제 (서버 전송 대기 중)');
     } else {
       const now=new Date();
       const ts=`${now.toISOString().slice(0,10)} ${now.toTimeString().slice(0,5)}`;
       _stamps[chId]=ts;
-      await BookLibDB.setStamp(cid,bid,chId,ts);
+      const confirmed = await BookLibDB.setStamp(cid,bid,chId,ts);
       /* ② 스탬프 생성 당시 미수행 통계 수집 → DB 저장 */
       if(BookLibDB.setStampInfo){
         try{
@@ -2313,7 +2313,9 @@ const BooklibApp = (() => {
           });
         }catch(e){console.warn('[stampInfo]',e);}
       }
-      _toast(`📍 ${_fmtStamp(ts)}`,'success');
+      // ★ 서버 미확인 시 "대기 중"임을 명확히 알림 — 확인 없이 성공으로
+      //   단정 짓지 않는다(과거 데이터 유실 사례의 원인 패턴과 동일).
+      _toast(confirmed ? `📍 ${_fmtStamp(ts)}` : `📍 ${_fmtStamp(ts)} (서버 전송 대기 중)`, confirmed ? 'success' : undefined);
     }
     _refreshBody();
   }
@@ -2322,7 +2324,11 @@ const BooklibApp = (() => {
     const wasUndone=cell.classList.contains('undone'),nowUndone=!wasUndone;
     cell.classList.toggle('undone',nowUndone);
     const mark=cell.querySelector('.bl-cm');if(mark)mark.textContent=nowUndone?'✕':'';
-    await BookLibDB.setCheck(classId,bookId,studentId,chapterId,nowUndone,[]);
+    const confirmed = await BookLibDB.setCheck(classId,bookId,studentId,chapterId,nowUndone,[]);
+    // ★ 서버 미확인(오프라인 큐 대기)이면 눈에 띄게 표시 — "체크했는데 실은
+    //   서버에 반영이 안 갔더라"는 상황을 선생님이 바로 알 수 있게 한다.
+    cell.style.outline = confirmed ? '' : '2px solid #d97706';
+    cell.title = confirmed ? '' : '서버 전송 대기 중 — 연결되면 자동으로 반영됩니다';
     if(!nowUndone){const bads=cell.querySelector('.bl-sub-badges');if(bads)bads.remove();}
     _refreshStatsBar();_refreshStuHdr(studentId,classId,bookId);
     if(nowUndone&&chType!=='none')_showSubPopup(cell,classId,bookId,studentId,chapterId,chType);
@@ -2549,7 +2555,7 @@ const BooklibApp = (() => {
       }
     }
   }
-  function _saveMemo(val){
+  async function _saveMemo(val){
     const clsId=_st.matrixClassId, bkId=_st.matrixBookId;
     if(!clsId||!bkId) return;
     const now=new Date().toISOString();
@@ -2558,12 +2564,13 @@ const BooklibApp = (() => {
     const data={text:val, checked:checked, updatedAt:now};
     // ★ DB 저장 (localStorage 캐시 포함) — booklib-db.saveMemo가 bl_memo_db_ 키로 관리
     //    (구버전 bl_memo_ 키는 더 이상 사용하지 않음)
+    let confirmed = false;
     if(typeof BookLibDB!=='undefined'&&BookLibDB.saveMemo){
-      BookLibDB.saveMemo(clsId, bkId, data).catch(()=>{});
+      confirmed = await BookLibDB.saveMemo(clsId, bkId, data).catch(()=>false);
     }
-    // 날짜시간 업데이트
+    // 날짜시간 업데이트 — 서버 미확인이면 그 사실도 같이 표시
     const dtDiv=document.getElementById('bl-memo-dt');
-    if(dtDiv) dtDiv.textContent='수정: '+new Date(now).toLocaleString('ko-KR');
+    if(dtDiv) dtDiv.textContent='수정: '+new Date(now).toLocaleString('ko-KR')+(confirmed?'':' (전송 대기중)');
   }
   async function _restoreMemoState(){
     const ck=document.getElementById('bl-memo-ck');
