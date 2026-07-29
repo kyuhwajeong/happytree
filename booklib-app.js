@@ -2237,7 +2237,7 @@ const BooklibApp = (() => {
   function _refreshBody(){
     const mb=document.getElementById('bl-mbody'); if(!mb)return;
     // ★ 스크롤 위치 보존: innerHTML 교체 전 현재 스크롤 저장
-    const tbl=mb.querySelector('.bl-mtbl-wrap');
+    const tbl=mb.querySelector('.bl-mwrap');
     const scrollTop=tbl?tbl.scrollTop:0;
     const scrollLeft=tbl?tbl.scrollLeft:0;
     mb.innerHTML=_matrixHTML();
@@ -2270,7 +2270,7 @@ const BooklibApp = (() => {
       }
     });
     // ★ 교체 후 동일 위치 복원 (rAF 2회로 렌더링 완료 후 복원)
-    const newTbl=mb.querySelector('.bl-mtbl-wrap');
+    const newTbl=mb.querySelector('.bl-mwrap');
     if(newTbl){
       requestAnimationFrame(()=>{
         requestAnimationFrame(()=>{
@@ -2468,7 +2468,7 @@ const BooklibApp = (() => {
     if(show){
       if(!pad){
         pad=document.createElement('div'); pad.id='bl-memo-pad';
-        pad.style.cssText='position:fixed;right:16px;bottom:100px;width:300px;border-radius:14px;background:var(--card);border:1.5px solid var(--a40);box-shadow:0 8px 30px rgba(0,0,0,.15);z-index:200;overflow:hidden';
+        pad.style.cssText='position:fixed;right:16px;bottom:100px;width:300px;max-width:calc(100vw - 32px);border-radius:14px;background:var(--card);border:1.5px solid var(--a40);box-shadow:0 8px 30px rgba(0,0,0,.15);z-index:200;overflow:hidden';
         const cls=(_getCls(clsId)||{}).name||'';
         const bkName=(BookLibDB.getBookById(bkId)||{}).name||'';
         const hdrDiv=document.createElement('div');
