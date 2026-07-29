@@ -46,33 +46,33 @@ const DashboardApp = (() => {
    * 같은 문구, 자정 지나면 다음 문구)하므로 네트워크 의존이 없다.
    * ═══════════════════════════════════════════════════════════ */
   const QUOTES = [
-    { q: '시작이 반이다.', a: '아리스토텔레스' },
-    { q: '오늘 할 수 있는 일에 최선을 다하라. 그러면 내일은 더 나아져 있을 것이다.', a: '헬렌 켈러' },
-    { q: '실패는 성공의 어머니다.', a: '토마스 에디슨' },
-    { q: '나는 실패한 적이 없다. 단지 작동하지 않는 방법을 만 가지 발견했을 뿐이다.', a: '토마스 에디슨' },
-    { q: '어제로부터 배우고, 오늘을 살고, 내일을 희망하라.', a: '아인슈타인' },
-    { q: '가장 큰 위험은 위험 없는 삶이다.', a: '헬렌 켈러' },
-    { q: '할 수 있다고 믿든 할 수 없다고 믿든, 믿는 대로 될 것이다.', a: '헨리 포드' },
-    { q: '천 리 길도 한 걸음부터.', a: '노자' },
-    { q: '배우고 때때로 익히면 또한 기쁘지 아니한가.', a: '공자' },
-    { q: '중요한 것은 멈추지 않는 것이다.', a: '아인슈타인' },
-    { q: '오늘 걷지 않으면 내일은 뛰어야 한다.', a: '작자 미상' },
-    { q: '작은 발걸음이라도 앞으로 나아가는 것이 중요하다.', a: '마틴 루터 킹' },
-    { q: '피할 수 없다면 즐겨라.', a: '로버트 엘리엇' },
-    { q: '노력하는 사람은 즐기는 사람을 이길 수 없다.', a: '공자' },
-    { q: '어려움 속에 기회가 있다.', a: '아인슈타인' },
-    { q: '자신을 믿어라. 그러면 무엇을 해야 할지 알게 될 것이다.', a: '괴테' },
-    { q: '오늘 하루도 최선을 다한 나에게 박수를.', a: '작자 미상' },
-    { q: '느리더라도 멈추지만 않는다면 괜찮다.', a: '공자' },
-    { q: '꿈을 이루는 방법은 그것을 향해 걷는 것뿐이다.', a: '월트 디즈니' },
-    { q: '진짜 실패는 시도하지 않는 것이다.', a: '조지 버나드 쇼' },
-    { q: '포기하지 않는 한 진 것이 아니다.', a: '작자 미상' },
-    { q: '지금 이 순간을 최선을 다해 살아라.', a: '틱낫한' },
-    { q: '남과 비교하지 말고 어제의 나와 비교하라.', a: '작자 미상' },
-    { q: '작은 습관이 큰 결과를 만든다.', a: '제임스 클리어' },
-    { q: '너 자신이 되어라, 다른 사람은 이미 있다.', a: '오스카 와일드' },
-    { q: '높이 나는 새가 멀리 본다.', a: '리처드 바크' },
-    { q: '준비된 자에게 기회가 온다.', a: '루이 파스퇴르' },
+    { q: '시작이 반이다.', a: '아리스토텔레스', en: 'Well begun is half done.' },
+    { q: '오늘 할 수 있는 일에 최선을 다하라. 그러면 내일은 더 나아져 있을 것이다.', a: '헬렌 켈러', en: 'Do the best you can today, and tomorrow will be better.' },
+    { q: '실패는 성공의 어머니다.', a: '토마스 에디슨', en: 'Failure is the mother of success.' },
+    { q: '나는 실패한 적이 없다. 단지 작동하지 않는 방법을 만 가지 발견했을 뿐이다.', a: '토마스 에디슨', en: "I have not failed. I've just found 10,000 ways that won't work." },
+    { q: '어제로부터 배우고, 오늘을 살고, 내일을 희망하라.', a: '아인슈타인', en: 'Learn from yesterday, live for today, hope for tomorrow.' },
+    { q: '가장 큰 위험은 위험 없는 삶이다.', a: '헬렌 켈러', en: 'Life is either a daring adventure or nothing at all.' },
+    { q: '할 수 있다고 믿든 할 수 없다고 믿든, 믿는 대로 될 것이다.', a: '헨리 포드', en: "Whether you think you can, or you think you can't – you're right." },
+    { q: '천 리 길도 한 걸음부터.', a: '노자', en: 'A journey of a thousand miles begins with a single step.' },
+    { q: '배우고 때때로 익히면 또한 기쁘지 아니한가.', a: '공자', en: 'Is it not a joy to learn and practice what one has learned?' },
+    { q: '중요한 것은 멈추지 않는 것이다.', a: '아인슈타인', en: 'The important thing is not to stop questioning.' },
+    { q: '오늘 걷지 않으면 내일은 뛰어야 한다.', a: '작자 미상', en: 'If you don\u2019t walk today, you\u2019ll have to run tomorrow.' },
+    { q: '작은 발걸음이라도 앞으로 나아가는 것이 중요하다.', a: '마틴 루터 킹', en: 'If you can\u2019t fly, run. If you can\u2019t run, walk. But whatever you do, keep moving forward.' },
+    { q: '피할 수 없다면 즐겨라.', a: '로버트 엘리엇', en: "If you can't fight it, join it and enjoy it." },
+    { q: '노력하는 사람은 즐기는 사람을 이길 수 없다.', a: '공자', en: 'Those who enjoy it will always surpass those who merely work hard.' },
+    { q: '어려움 속에 기회가 있다.', a: '아인슈타인', en: 'In the middle of difficulty lies opportunity.' },
+    { q: '자신을 믿어라. 그러면 무엇을 해야 할지 알게 될 것이다.', a: '괴테', en: 'Trust yourself and you will know how to live.' },
+    { q: '오늘 하루도 최선을 다한 나에게 박수를.', a: '작자 미상', en: 'A round of applause for myself for doing my best today.' },
+    { q: '느리더라도 멈추지만 않는다면 괜찮다.', a: '공자', en: 'It does not matter how slowly you go, as long as you do not stop.' },
+    { q: '꿈을 이루는 방법은 그것을 향해 걷는 것뿐이다.', a: '월트 디즈니', en: 'The way to get started is to quit talking and begin doing.' },
+    { q: '진짜 실패는 시도하지 않는 것이다.', a: '조지 버나드 쇼', en: 'A life spent making mistakes is more useful than a life spent doing nothing.' },
+    { q: '포기하지 않는 한 진 것이 아니다.', a: '작자 미상', en: "It's not over until you give up." },
+    { q: '지금 이 순간을 최선을 다해 살아라.', a: '틱낫한', en: 'The present moment is the only moment available to us.' },
+    { q: '남과 비교하지 말고 어제의 나와 비교하라.', a: '작자 미상', en: 'Don\u2019t compare yourself to others, compare yourself to who you were yesterday.' },
+    { q: '작은 습관이 큰 결과를 만든다.', a: '제임스 클리어', en: 'Small habits make a big difference.' },
+    { q: '너 자신이 되어라, 다른 사람은 이미 있다.', a: '오스카 와일드', en: 'Be yourself; everyone else is already taken.' },
+    { q: '높이 나는 새가 멀리 본다.', a: '리처드 바크', en: 'The bird that flies highest sees the farthest.' },
+    { q: '준비된 자에게 기회가 온다.', a: '루이 파스퇴르', en: 'Chance favors the prepared mind.' },
   ];
   const QUOTE_API = 'https://korean-advice-open-api.vercel.app/api/advice';
   const QUOTE_CACHE_KEY = 'db_live_quote';
@@ -86,7 +86,7 @@ const DashboardApp = (() => {
     const start = new Date(now.getFullYear(), 0, 0);
     const dayOfYear = Math.floor((now - start) / 86400000);
     const item = QUOTES[dayOfYear % QUOTES.length];
-    return { q: item.q, a: item.a };
+    return { q: item.q, a: item.a, en: item.en };
   }
   function _getCachedLiveQuote() {
     try {
@@ -95,6 +95,9 @@ const DashboardApp = (() => {
     } catch (e) {}
     return null;
   }
+  function _saveLiveQuoteCache(item) {
+    try { sessionStorage.setItem(QUOTE_CACHE_KEY, JSON.stringify(item)); } catch (e) {}
+  }
   async function _fetchLiveQuote() {
     try {
       const res = await fetch(QUOTE_API, { cache: 'no-store' });
@@ -102,45 +105,61 @@ const DashboardApp = (() => {
       const data = await res.json();
       if (!data?.message) throw new Error('bad payload');
       const item = { q: data.message, a: data.author || '작자 미상', ts: Date.now() };
-      try { sessionStorage.setItem(QUOTE_CACHE_KEY, JSON.stringify(item)); } catch (e) {}
+      _saveLiveQuoteCache(item);
       return item;
     } catch (e) { return null; } // ★ 오프라인 등으로 실패해도 조용히 넘어가고 로컬 대비 목록을 그대로 보여줌
+  }
+  // ★ 영어가 아직 없으면(주로 실시간 명언) GeminiAI로 번역해서 채운다 —
+  //   로컬 27개는 이미 영어 원문이 있어 AI 호출 자체가 안 일어난다.
+  //   번역 성공 시 캐시에도 같이 저장해서 같은 명언을 다시 번역하지 않는다.
+  async function _ensureEnglish(item) {
+    if (!item || item.en) return item;
+    if (typeof GeminiAI === 'undefined' || !GeminiAI.translateToEnglish) return item;
+    try {
+      const en = await GeminiAI.translateToEnglish(item.q);
+      if (en) { item.en = en; if (item.ts) _saveLiveQuoteCache(item); }
+    } catch (e) { /* 번역 실패해도 한글은 이미 떠 있으니 조용히 넘어감 */ }
+    return item;
   }
   function _renderQuoteInto(item) {
     const el = _q('db-quote-banner');
     if (!el || !item) return;
-    const t = el.querySelector('.db-quote-text'), au = el.querySelector('.db-quote-author');
+    const t = el.querySelector('.db-quote-text'), au = el.querySelector('.db-quote-author'), en = el.querySelector('.db-quote-en');
     if (t) t.textContent = item.q;
     if (au) au.textContent = '— ' + item.a;
+    if (en) { en.textContent = item.en || ''; en.style.display = item.en ? '' : 'none'; }
     el.dataset.quoteAuthor = item.a; el.dataset.quoteText = item.q;
   }
   function _quoteBannerHtml() {
     const initial = _getCachedLiveQuote() || _localFallbackQuote();
-    return `<div class="db-quote-banner" id="db-quote-banner"
+    return `<div class="db-quote-inline" id="db-quote-banner"
         data-quote-author="${_esc(initial.a)}" data-quote-text="${_esc(initial.q)}"
         onclick="DashboardApp._openQuoteSearch()" title="눌러서 더 알아보기">
-      <span class="db-quote-mark">"</span>
-      <div class="db-quote-body">
-        <div class="db-quote-text">${_esc(initial.q)}</div>
-        <div class="db-quote-author">— ${_esc(initial.a)}</div>
-      </div>
-      <button class="db-quote-refresh" onclick="event.stopPropagation();DashboardApp._refreshQuote()" title="다른 명언 보기">🔄</button>
+      <div class="db-quote-kr"><span class="db-quote-text">${_esc(initial.q)}</span><span class="db-quote-author"> — ${_esc(initial.a)}</span></div>
+      <div class="db-quote-en" style="${initial.en ? '' : 'display:none'}">${_esc(initial.en || '')}</div>
     </div>`;
   }
   // ★ 화면엔 일단(캐시 또는 오프라인 대비 문구로) 즉시 표시하고, 실시간
   //   명언을 백그라운드에서 가져와 준비되면 그 자리에서 자연스럽게
   //   교체한다 — 렌더링이 네트워크 응답을 기다리며 멈추지 않는다.
   async function _initQuote() {
-    if (_getCachedLiveQuote()) return; // 캐시가 아직 신선하면 이미 그걸로 렌더된 상태
-    const live = await _fetchLiveQuote();
-    if (live) _renderQuoteInto(live);
+    let item = _getCachedLiveQuote();
+    if (!item) {
+      item = await _fetchLiveQuote();
+      if (item) _renderQuoteInto(item);
+    }
+    // ★ 영어가 아직 없으면(주로 실시간 명언) 번역 시도 — 다 되면 그 자리에서 채워짐
+    const withEn = await _ensureEnglish(item || _localFallbackQuote());
+    _renderQuoteInto(withEn);
   }
   function _refreshQuote() {
     const el = _q('db-quote-banner');
     el?.classList.add('loading');
-    _fetchLiveQuote().then(live => {
+    _fetchLiveQuote().then(async live => {
+      const item = live || _localFallbackQuote();
       el?.classList.remove('loading');
-      _renderQuoteInto(live || _localFallbackQuote());
+      _renderQuoteInto(item);
+      _renderQuoteInto(await _ensureEnglish(item));
     });
   }
   function _openQuoteSearch() {
@@ -161,16 +180,14 @@ const DashboardApp = (() => {
     if (_cssInjected) return; _cssInjected = true;
     const s = document.createElement('style');
     s.textContent = `
-.db-quote-banner{margin:0 14px 12px;padding:12px 16px;border-radius:14px;
-  background:linear-gradient(135deg,var(--a10),transparent);border:1px solid var(--a20);
-  display:flex;align-items:flex-start;gap:10px;cursor:pointer;transition:opacity .15s}
-.db-quote-banner.loading{opacity:.5}
-.db-quote-mark{font-size:26px;line-height:.7;font-weight:900;color:var(--a);opacity:.55;font-family:Georgia,serif;flex-shrink:0;margin-top:2px}
-.db-quote-body{min-width:0;flex:1}
-.db-quote-text{font-size:12.5px;font-weight:700;color:var(--tx);line-height:1.5}
-.db-quote-author{font-size:10.5px;font-weight:600;color:var(--tx3);margin-top:4px}
-.db-quote-refresh{flex-shrink:0;border:none;background:transparent;font-size:14px;opacity:.4;cursor:pointer;padding:2px 4px;border-radius:6px}
-.db-quote-refresh:hover{opacity:.9;background:var(--a10)}
+.db-quote-inline{flex:0 1 260px;min-width:0;margin:0 14px 0 4px;padding-right:2px;cursor:pointer;transition:opacity .15s}
+.db-quote-inline.loading{opacity:.4}
+.db-quote-kr{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.db-quote-kr::before{content:'"';font-family:Georgia,serif;color:var(--tx3);opacity:.6;margin-right:2px}
+.db-quote-inline .db-quote-text{font-size:11.5px;font-style:italic;font-weight:500;color:var(--tx3)}
+.db-quote-inline .db-quote-author{font-size:10.5px;font-style:italic;color:var(--tx3);opacity:.75}
+.db-quote-en{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+  font-family:'Dancing Script',cursive;font-size:15px;font-weight:500;color:var(--a);opacity:.7;margin-top:1px;padding-left:2px}
 .db-body{flex:1;overflow-y:auto;padding:12px 14px 90px;display:flex;flex-direction:column;gap:14px}
 .db-sec{background:var(--surf);border:1px solid var(--bdr);border-radius:16px;padding:14px}
 .db-sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
@@ -296,12 +313,12 @@ const DashboardApp = (() => {
             <div class="ph-sub">${dateStr}</div>
           </div>
         </div>
+        ${_quoteBannerHtml()}
         <div class="phr">
           <button class="db-reorder-btn" onclick="DashboardApp.openReorder()" title="화면 구성 순서 변경">≡</button>
           <button id="db-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>
         </div>
       </div>
-      ${_quoteBannerHtml()}
       <div class="db-body">${html}</div>`;
   }
 
