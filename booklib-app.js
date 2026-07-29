@@ -4228,6 +4228,11 @@ const BooklibApp = (() => {
       // ★ 성적 반영 (xlsx와 완전 동일)
       const res = await _processCsv(rows);
 
+      // ★ "마지막 업데이트" 시각 기록 — 대시보드에서 언제 반영했는지 보여줌
+      if (typeof BookLibDB !== 'undefined' && BookLibDB.setLastSync) {
+        BookLibDB.setLastSync(clsId || null, bkId, new Date().toISOString()).catch(() => {});
+      }
+
       return { ok: true, done: res.done, undone: res.undone, stampTitle: res.stampTitle, noDataChapters: res.noDataChapters };
     } catch(e) {
       console.error('[_applyClassCardData]', e);
