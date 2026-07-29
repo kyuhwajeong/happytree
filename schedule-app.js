@@ -213,7 +213,20 @@ const ScheduleApp = (() => {
   function _parseEnrollDate(raw) {
     const s = (raw || '').toString().trim();
     if (!s) return null;
-    const m = s.match(/^(\d{2,4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+    // ★ 구분자 없는 8자리(YYYYMMDD) 또는 6자리(YYMMDD) 형식 — 예: "20251109"
+    let m = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+    if (m) {
+      const y = +m[1], mo = +m[2], d = +m[3];
+      if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) return { y, m: mo, d };
+    }
+    m = s.match(/^(\d{2})(\d{2})(\d{2})$/);
+    if (m) {
+      const y = (Number(m[1]) < 50 ? 2000 : 1900) + Number(m[1]);
+      const mo = +m[2], d = +m[3];
+      if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) return { y, m: mo, d };
+    }
+    // ★ 구분자가 있는 형식 — "2024.3.5", "2024/03/05", "24-3-5" 등
+    m = s.match(/^(\d{2,4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
     if (!m) return null;
     let [, y, mo, d] = m;
     y = y.length === 2 ? (Number(y) < 50 ? '20' + y : '19' + y) : y; // 2자리 연도 보정
