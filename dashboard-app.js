@@ -231,6 +231,8 @@ const DashboardApp = (() => {
 .db-stu-badge{display:inline-flex;align-items:center;gap:3px;background:var(--surf2);border:1px solid var(--bdr);border-radius:999px;padding:3px 8px;font-size:10.5px;font-weight:600;color:var(--tx2)}
 .db-stu-badge b{color:#ef4444;font-weight:800}
 .db-stu-badge.more{color:var(--tx3)}
+.db-book-sync{margin-top:7px;padding-top:6px;border-top:1px dashed var(--bdr);font-size:10px;font-weight:600;color:var(--tx3)}
+.db-book-sync.none{opacity:.55;font-style:italic}
 .db-more-note{text-align:center;font-size:10.5px;color:var(--tx3);margin-top:8px}
     `;
     document.head.appendChild(s);
@@ -421,7 +423,8 @@ const DashboardApp = (() => {
         perStu.sort((a, b) => b.count - a.count);
         // ★ 미수행 0건인 교재도 포함 — "오늘의 수업" 리뷰용 그리드라
         //   문제 있는 것만 골라 보여주는 게 아니라 그날 반의 교재 현황을 전부 보여준다.
-        out.push({ cls, book, total, perStu });
+        const lastSync = BookLibDB.getLastSync ? BookLibDB.getLastSync(cls.id, book.id) : null;
+        out.push({ cls, book, total, perStu, lastSync });
       });
     });
     out.sort((a, b) => b.total - a.total);
@@ -524,15 +527,35 @@ const DashboardApp = (() => {
         : `<div class="db-empty-mini">🎉 미수행 항목이 없습니다</div>`}
     </div>`;
   }
+  // ★ "3시간 전", "어제 14:20", "10/5 09:11" 식으로 언제 마지막 업데이트했는지 표시
+  function _fmtSyncTime(iso) {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    const now = new Date();
+    const diffMs = now - d;
+    const diffMin = Math.floor(diffMs / 60000);
+    const isToday = d.toDateString() === now.toDateString();
+    const y = new Date(now); y.setDate(y.getDate() - 1);
+    const isYesterday = d.toDateString() === y.toDateString();
+    const hhmm = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    if (diffMin < 1) return '방금';
+    if (diffMin < 60) return `${diffMin}분 전`;
+    if (isToday) return `오늘 ${hhmm}`;
+    if (isYesterday) return `어제 ${hhmm}`;
+    return `${d.getMonth() + 1}/${d.getDate()} ${hhmm}`;
+  }
   function _bookCardHtml(r) {
     const stuHtml = r.perStu.slice(0, 5).map(s => `<span class="db-stu-badge">${_esc(s.name)}<b>${s.count}</b></span>`).join('');
     const moreStu = r.perStu.length > 5 ? `<span class="db-stu-badge more">+${r.perStu.length - 5}명</span>` : '';
+    const syncLabel = _fmtSyncTime(r.lastSync);
     return `<div class="db-book-card" onclick="DashboardApp.goMatrix('${r.cls.id}','${r.book.id}')">
       <div class="db-book-card-top">
         <span class="db-book-name">${_esc(r.book.name)}</span>
         ${r.total > 0 ? `<span class="db-book-badge warn">미수행 ${r.total}</span>` : `<span class="db-book-badge ok">✓ 완료</span>`}
       </div>
       <div class="db-stu-list">${stuHtml}${moreStu}</div>
+      <div class="db-book-sync${syncLabel ? '' : ' none'}">🕐 ${syncLabel ? `${_esc(syncLabel)} 업데이트` : '업데이트 기록 없음'}</div>
     </div>`;
   }
 

@@ -21,9 +21,11 @@ const BookLibDB = (() => {
   const LS_BOOKS  = 'hk10b_booklib';
   const LS_CHECKS = 'hk10b_bookcheck';
   const LS_STAMPS = 'hk10b_bookstamps';
+  const LS_LASTSYNC = 'hk10b_bookLastSync';
   const FB_BOOKS  = 'hakwon10/booklib';
   const FB_CHECKS = 'hakwon10/bookcheck';
   const FB_STAMPS = 'hakwon10/bookstamps';
+  const FB_LASTSYNC = 'hakwon10/bookLastSync';
 
   const _lg  = k     => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
   const _ls  = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
@@ -39,6 +41,7 @@ const BookLibDB = (() => {
   let _books  = [];
   let _checks = {};
   let _stamps = {};
+  let _lastSync = {};
   let _mlsn   = {};
   let _slsn   = {};
 
@@ -82,21 +85,33 @@ const BookLibDB = (() => {
     _books  = _lg(LS_BOOKS)  || [];
     _checks = _lg(LS_CHECKS) || {};
     _stamps = _lg(LS_STAMPS) || {};
+    _lastSync = _lg(LS_LASTSYNC) || {};
     if (!_fb()) { console.log('[BookLibDB] offline'); return; }
     try {
-      const [bS,cS,sS] = await Promise.all([
+      const [bS,cS,sS,lsS] = await Promise.all([
         FireDB.get(FB_BOOKS).catch(()=>null),
         FireDB.get(FB_CHECKS).catch(()=>null),
         FireDB.get(FB_STAMPS).catch(()=>null),
+        FireDB.get(FB_LASTSYNC).catch(()=>null),
       ]);
       if (bS) { _books = Object.values(bS); _ls(LS_BOOKS,_books); }
       if (cS) { _checks = cS; _ls(LS_CHECKS,_checks); }
       if (sS) { _stamps = sS; _ls(LS_STAMPS,_stamps); }
+      if (lsS) { _lastSync = lsS; _ls(LS_LASTSYNC,_lastSync); }
     } catch(e) { console.warn('[BookLibDB] init',e); }
     FireDB.listen(FB_BOOKS, v => {
       const nd = v ? Object.values(v) : [];
       if (JSON.stringify(nd) !== JSON.stringify(_books)) {
         _books = nd; _ls(LS_BOOKS,_books); _fire('books');
+      }
+    });
+
+    // ★ FB_LASTSYNC 전역 리스너: 다른 기기에서 ClassCard 동기화했을 때도
+    //   이 화면의 "마지막 업데이트" 표시가 실시간으로 갱신되게 함
+    FireDB.listen(FB_LASTSYNC, v => {
+      if (!v) return;
+      if (JSON.stringify(v) !== JSON.stringify(_lastSync)) {
+        _lastSync = v; _ls(LS_LASTSYNC, _lastSync); _fire('lastSync');
       }
     });
 
@@ -377,6 +392,18 @@ const BookLibDB = (() => {
     return confirmed === true;
   }
 
+  // ★ 반+교재별 "마지막 업데이트(ClassCard 동기화)" 시각 — 대시보드에서
+  //   언제 마지막으로 반영했는지 보여줘서 같은 날 중복으로 또 돌리는 걸
+  //   방지하기 위함.
+  async function setLastSync(classId, bookId, ts) {
+    const ck = _ck(classId, bookId);
+    _lastSync[ck] = ts;
+    _ls(LS_LASTSYNC, _lastSync);
+    const confirmed = await FireDB.set(`${FB_LASTSYNC}/${ck}`, ts).catch(() => false);
+    return confirmed === true;
+  }
+  const getLastSync = (cid, bid) => _lastSync[_ck(cid, bid)] || null;
+
   async function removeStamp(classId, bookId, chapterId) {
     const ck = _ck(classId,bookId);
     if (_stamps[ck]) { delete _stamps[ck][chapterId]; _ls(LS_STAMPS,_stamps); }
@@ -516,6 +543,7 @@ const BookLibDB = (() => {
     getMatrixChecks, getRawCheck, isChecked, getCheckParsed, getSubTasks,
     setCheck, setSubTasks, clearChecks, listenMatrix,
     getStamps, setStamp, removeStamp, listenStamps,
+    setLastSync, getLastSync,
     detectChapterType, getSubtaskOptions, SUBTASKS,
     _parseCheck, _serCheck,
     saveClassExempts, loadClassExempts,
