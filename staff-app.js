@@ -2349,27 +2349,58 @@ const StaffApp = (() => {
       </div>`;
   }
 
-  /* SVG 바 차트 */
+  /* SVG 바 차트 — 고급스럽고 조화로운 단일 그라데이션 스타일 */
   function _annualBarChart(monthTotals) {
-    const max    = Math.max(...monthTotals, 1);
-    const LABELS = ['1','2','3','4','5','6','7','8','9','10','11','12'];
-    const COLORS = ['#3b82f6','#06b6d4','#10b981','#84cc16','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1','#22c55e'];
-    const bW = 16, gap = 5, padL = 4, cH = 72;
-    const tW = (bW + gap) * 12 - gap + padL * 2;
+    const max = Math.max(...monthTotals, 1);
+    const peakIdx = monthTotals.indexOf(Math.max(...monthTotals));
+    const LABELS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+
+    // ★ 넉넉한 좌표계로 설계 — 아래 wrapper의 max-width 제약과 맞물려
+    //   화면 폭에 상관없이 글자 크기가 일정하게 유지된다(예전엔 좁은
+    //   화면 기준 좌표를 매우 넓은 카드에 100% 확대해서 글자가 거대하게
+    //   뭉개져 보이는 버그가 있었음).
+    const bW = 34, gap = 14, padL = 30, padR = 10, cH = 180, padT = 28, padB = 30;
+    const tW = padL + (bW + gap) * 12 - gap + padR;
+    const totalH = padT + cH + padB;
+
+    const gridLines = [0, .25, .5, .75, 1].map(f => {
+      const y = padT + cH * (1 - f);
+      return `<line x1="${padL - 6}" y1="${y}" x2="${tW - padR}" y2="${y}" stroke="var(--bdr2)" stroke-width="1" stroke-dasharray="${f===0?'0':'2,4'}" opacity="${f===0?0.6:0.35}"/>`;
+    }).join('');
+
     const bars = monthTotals.map((v, i) => {
-      const bh = v > 0 ? Math.max(4, Math.round(v / max * cH)) : 0;
-      const x  = padL + i * (bW + gap), y = cH - bh;
-      return `<g>
-        <rect x="${x}" y="${y}" width="${bW}" height="${bh}" rx="3" fill="${COLORS[i]}" opacity=".85"/>
-        ${v>0?`<text x="${x+bW/2}" y="${y-3}" text-anchor="middle" font-size="7" fill="var(--tx3)">${Math.round(v/10000)}만</text>`:''}
-        <text x="${x+bW/2}" y="${cH+11}" text-anchor="middle" font-size="8" fill="var(--tx3)">${LABELS[i]}</text>
+      const bh = v > 0 ? Math.max(3, Math.round(v / max * cH)) : 0;
+      const x  = padL + i * (bW + gap), y = padT + cH - bh;
+      const isPeak = i === peakIdx && v > 0;
+      return `<g class="sf-bar-g" style="animation-delay:${i * 45}ms">
+        <rect x="${x}" y="${padT + cH - bh}" width="${bW}" height="${bh}" rx="6"
+              fill="${isPeak ? 'url(#sfBarPeak)' : 'url(#sfBar)'}"/>
+        ${v > 0 ? `<text x="${x + bW/2}" y="${y - 8}" text-anchor="middle" font-size="12" font-weight="${isPeak?800:600}" fill="${isPeak?'var(--a)':'var(--tx2)'}">${Math.round(v/10000)}만</text>` : ''}
+        <text x="${x + bW/2}" y="${padT + cH + 20}" text-anchor="middle" font-size="11" font-weight="${isPeak?800:500}" fill="${isPeak?'var(--a)':'var(--tx3)'}">${LABELS[i]}</text>
       </g>`;
     }).join('');
-    return `<svg viewBox="0 0 ${tW} ${cH+16}" style="width:100%;height:auto;display:block">
-      <line x1="${padL}" y1="0" x2="${padL}" y2="${cH}" stroke="var(--bdr2)" stroke-width="1"/>
-      <line x1="${padL}" y1="${cH}" x2="${tW-padL}" y2="${cH}" stroke="var(--bdr2)" stroke-width="1"/>
-      ${bars}
-    </svg>`;
+
+    return `
+    <div style="max-width:640px;margin:0 auto">
+      <svg viewBox="0 0 ${tW} ${totalH}" style="width:100%;height:auto;display:block;overflow:visible">
+        <defs>
+          <linearGradient id="sfBar" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"  stop-color="var(--a)" stop-opacity=".55"/>
+            <stop offset="100%" stop-color="var(--a)" stop-opacity=".22"/>
+          </linearGradient>
+          <linearGradient id="sfBarPeak" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"  stop-color="var(--a)" stop-opacity="1"/>
+            <stop offset="100%" stop-color="var(--a)" stop-opacity=".65"/>
+          </linearGradient>
+        </defs>
+        <style>
+          .sf-bar-g{opacity:0;animation:sfBarIn .5s ease-out forwards}
+          @keyframes sfBarIn{from{opacity:0;transform:scaleY(.6);transform-origin:bottom}to{opacity:1;transform:scaleY(1)}}
+        </style>
+        ${gridLines}
+        ${bars}
+      </svg>
+    </div>`;
   }
 
   /* ── Excel 다운로드 (월별/연간 분기) ── */

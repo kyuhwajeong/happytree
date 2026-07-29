@@ -926,7 +926,7 @@ to{opacity:1;transform:none}}
 .gbk-dna-empty{font-size:11px;color:var(--tx3);font-style:italic;}
 
 .gbk-dna-popup-wrap{display:inline-flex;position:relative;}
-.gbk-dna-popup{position:fixed;z-index:9999;background:var(--card);border:1.5px solid var(--a40);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.22);padding:14px 16px;width:360px;max-height:300px;overflow-y:auto;display:none;}
+.gbk-dna-popup{position:fixed;z-index:9999;background:var(--card);border:1.5px solid var(--a40);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.22);padding:14px 16px;width:360px;max-width:calc(100vw - 32px);max-height:300px;overflow-y:auto;display:none;}
 .gbk-dna-popup.show{display:block;animation:gbkDnaFade .15s ease;}
 .gbk-dna-popup::-webkit-scrollbar{width:3px;}
 .gbk-dna-popup::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:2px;}
