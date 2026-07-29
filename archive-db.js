@@ -8,8 +8,8 @@
  */
 const ArchiveDB = (() => {
   // ★★★ Cloudflare Worker 배포 후 아래 2줄을 실제 값으로 바꿔주세요 ★★★
-  const WORKER_BASE   = 'https://YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev';
-  const UPLOAD_TOKEN  = 'YOUR-SECRET-TOKEN'; // Worker의 UPLOAD_TOKEN과 반드시 동일해야 함
+  const WORKER_BASE   = 'https://delicate-dream-791b.kuha0879.workers.dev';
+  const UPLOAD_TOKEN  = 'happytree2026-archive-key-hjyjkh';
 
   const LS_KEY = 'hk10b_archive';
   const FB_PATH = 'hakwon10/archive';
