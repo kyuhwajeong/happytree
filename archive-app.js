@@ -18,6 +18,7 @@ const ArchiveApp = (() => {
   const _isImg = ext => ['png','jpg','jpeg','gif','webp','svg'].includes((ext||'').toLowerCase());
   const _isPdf = ext => (ext||'').toLowerCase() === 'pdf';
   const _isXlsx = ext => ['xlsx','xls'].includes((ext||'').toLowerCase());
+  const _isOffice = ext => ['ppt','pptx','doc','docx'].includes((ext||'').toLowerCase());
 
   let _curCategory = '전체';
   let _cssInjected = false;
@@ -190,7 +191,7 @@ const ArchiveApp = (() => {
     _renderPreviewBody(f);
   }
   function _previewLoadingHtml(f) {
-    if (_isImg(f.ext) || _isPdf(f.ext)) return '';
+    if (_isImg(f.ext) || _isPdf(f.ext) || _isOffice(f.ext)) return '';
     return `<div class="ar-prev-none">⏳ 불러오는 중...</div>`;
   }
   async function _renderPreviewBody(f) {
@@ -203,6 +204,14 @@ const ArchiveApp = (() => {
     }
     if (_isPdf(f.ext)) {
       body.innerHTML = `<iframe src="${url}"></iframe>`;
+      return;
+    }
+    // ★ 파워포인트/워드 — 마이크로소프트 무료 온라인 뷰어로 미리보기.
+    //   이 뷰어는 파일 주소를 자기네 서버에서 직접 가져가야 해서, 반드시
+    //   외부에서 접근 가능한 주소여야 한다(Worker의 GET은 인증 없이 열려있어 조건 충족).
+    if (_isOffice(f.ext)) {
+      const viewerUrl = `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(url)}`;
+      body.innerHTML = `<iframe src="${viewerUrl}"></iframe>`;
       return;
     }
     if (_isXlsx(f.ext)) {
