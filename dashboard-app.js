@@ -71,13 +71,19 @@ const DashboardApp = (() => {
 .db-reorder-arrow:disabled{opacity:.35;pointer-events:none}
 
 /* 교재 학습 현황 */
-.db-book-row{background:var(--card2);border:1px solid var(--bdr);border-radius:12px;padding:10px 11px;margin-bottom:7px;cursor:pointer;transition:all .15s}
-.db-book-row:last-child{margin-bottom:0}
-.db-book-row:active{transform:scale(.98)}
-.db-book-row-top{display:flex;align-items:center;gap:6px;margin-bottom:7px;flex-wrap:wrap}
+.db-day-tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:11px;scrollbar-width:none}
+.db-day-tabs::-webkit-scrollbar{display:none}
+.db-day-tab{flex-shrink:0;padding:6px 12px;border-radius:999px;border:1px solid var(--bdr);background:var(--card2);color:var(--tx2);font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s}
+.db-day-tab.on{background:var(--a);border-color:var(--a);color:#fff}
+.db-book-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.db-book-card{background:var(--card2);border:1px solid var(--bdr);border-radius:12px;padding:11px;cursor:pointer;transition:all .15s}
+.db-book-card:active{transform:scale(.98)}
+.db-book-card-top{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px}
 .db-book-cls{font-size:11px;font-weight:800;color:var(--a);background:var(--a10);border-radius:7px;padding:2px 7px}
-.db-book-name{font-size:12.5px;font-weight:700;color:var(--tx);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.db-book-total{font-size:11px;font-weight:800;color:#ef4444;white-space:nowrap}
+.db-book-name{font-size:12.5px;font-weight:700;color:var(--tx);margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.db-book-badge{font-size:10.5px;font-weight:800;white-space:nowrap;border-radius:999px;padding:2px 8px}
+.db-book-badge.warn{color:#ef4444;background:rgba(239,68,68,.1)}
+.db-book-badge.ok{color:#059669;background:rgba(5,150,105,.1)}
 .db-stu-list{display:flex;flex-wrap:wrap;gap:5px}
 .db-stu-badge{display:inline-flex;align-items:center;gap:3px;background:var(--surf2);border:1px solid var(--bdr);border-radius:999px;padding:3px 8px;font-size:10.5px;font-weight:600;color:var(--tx2)}
 .db-stu-badge b{color:#ef4444;font-weight:800}
@@ -245,10 +251,10 @@ const DashboardApp = (() => {
     chs.forEach(ch => { if (stamps[ch.id] && ch.order > lo) { lo = ch.order; lchId = ch.id; } });
     return lchId ? { chId: lchId, order: lo } : null;
   }
-  function _computeBookStatus() {
+  function _computeBookStatusForClasses(classes) {
     if (typeof BookLibDB === 'undefined' || typeof StudentDB === 'undefined') return [];
     const out = [];
-    _visibleClasses().forEach(cls => {
+    classes.forEach(cls => {
       const books = (BookLibDB.getBooksForClass(cls.id) || []).filter(b => !b.archived);
       books.forEach(book => {
         const chs = book.chapters || [];
@@ -267,40 +273,67 @@ const DashboardApp = (() => {
           if (uc > 0) perStu.push({ id: s.id, name: s.name, count: uc });
           total += uc;
         });
-        if (total > 0) { perStu.sort((a, b) => b.count - a.count); out.push({ cls, book, total, perStu }); }
+        perStu.sort((a, b) => b.count - a.count);
+        // ★ 미수행 0건인 교재도 포함 — "오늘의 수업" 리뷰용 그리드라
+        //   문제 있는 것만 골라 보여주는 게 아니라 그날 반의 교재 현황을 전부 보여준다.
+        out.push({ cls, book, total, perStu });
       });
     });
     out.sort((a, b) => b.total - a.total);
     return out;
   }
+  function _computeBookStatus() { return _computeBookStatusForClasses(_visibleClasses()); }
+
+  /* ★ 오늘(offset 0)부터 앞으로 일주일 안에서, 실제로 수업이 있는 날짜만
+   *   골라 탭 목록을 만든다. 수업이 없는 날은 탭 자체를 만들지 않는다. */
+  function _classesForDayOffset(offset) {
+    const d = new Date(); d.setDate(d.getDate() + offset);
+    const dow = DAYS_KO[d.getDay()];
+    return _visibleClasses().filter(c => (c.days || []).includes(dow));
+  }
+  function _bookDayTabs() {
+    const tabs = [];
+    for (let off = 0; off <= 6; off++) {
+      const classes = _classesForDayOffset(off);
+      if (!classes.length) continue;
+      const d = new Date(); d.setDate(d.getDate() + off);
+      const label = off === 0 ? '오늘' : off === 1 ? '내일' : `${d.getMonth() + 1}/${d.getDate()}(${DAYS_KO[d.getDay()]})`;
+      tabs.push({ off, label });
+    }
+    return tabs;
+  }
+  let _bookDayOffset = 0;
+  function _selectBookDay(off) {
+    _bookDayOffset = off;
+    const sec = _q('db-book-sec');
+    if (sec) sec.outerHTML = _bookStatusSectionHtml();
+  }
   function _bookStatusSectionHtml() {
     if (!_canSee('booklib')) return '';
     if (typeof BookLibDB === 'undefined' || typeof StudentDB === 'undefined') return '';
-    const rows = _computeBookStatus();
-    if (!rows.length) {
-      return `<div class="db-sec">
-        <div class="db-sec-hdr"><div class="db-sec-title">📊 교재 학습 현황</div>
-          <button class="db-mini-btn ghost" onclick="App.go('booklib')">전체보기</button></div>
-        <div class="db-empty-mini">🎉 미수행 항목이 없습니다</div>
-      </div>`;
-    }
-    const top = rows.slice(0, 8);
-    return `<div class="db-sec">
+    const tabs = _bookDayTabs();
+    // ★ 앞으로 일주일간 예정된 수업이 아예 없으면 섹션 자체를 숨긴다
+    if (!tabs.length) return '';
+    if (!tabs.find(t => t.off === _bookDayOffset)) _bookDayOffset = tabs[0].off;
+    const rows = _computeBookStatusForClasses(_classesForDayOffset(_bookDayOffset));
+    return `<div class="db-sec" id="db-book-sec">
       <div class="db-sec-hdr"><div class="db-sec-title">📊 교재 학습 현황</div>
         <button class="db-mini-btn ghost" onclick="App.go('booklib')">전체보기</button></div>
-      ${top.map(r => _bookRowHtml(r)).join('')}
-      ${rows.length > top.length ? `<div class="db-more-note">외 ${rows.length - top.length}건 더 있어요 · 교재 탭에서 전체 확인</div>` : ''}
+      <div class="db-day-tabs">${tabs.map(t => `<button class="db-day-tab${t.off === _bookDayOffset ? ' on' : ''}" onclick="DashboardApp._selectBookDay(${t.off})">${t.label}</button>`).join('')}</div>
+      ${rows.length
+        ? `<div class="db-book-grid">${rows.map(r => _bookCardHtml(r)).join('')}</div>`
+        : `<div class="db-empty-mini">🎉 미수행 항목이 없습니다</div>`}
     </div>`;
   }
-  function _bookRowHtml(r) {
-    const stuHtml = r.perStu.slice(0, 6).map(s => `<span class="db-stu-badge">${_esc(s.name)}<b>${s.count}</b></span>`).join('');
-    const moreStu = r.perStu.length > 6 ? `<span class="db-stu-badge more">+${r.perStu.length - 6}명</span>` : '';
-    return `<div class="db-book-row" onclick="DashboardApp.goMatrix('${r.cls.id}','${r.book.id}')">
-      <div class="db-book-row-top">
+  function _bookCardHtml(r) {
+    const stuHtml = r.perStu.slice(0, 5).map(s => `<span class="db-stu-badge">${_esc(s.name)}<b>${s.count}</b></span>`).join('');
+    const moreStu = r.perStu.length > 5 ? `<span class="db-stu-badge more">+${r.perStu.length - 5}명</span>` : '';
+    return `<div class="db-book-card" onclick="DashboardApp.goMatrix('${r.cls.id}','${r.book.id}')">
+      <div class="db-book-card-top">
         <span class="db-book-cls">${_esc(r.cls.name)}반</span>
-        <span class="db-book-name">${_esc(r.book.name)}</span>
-        <span class="db-book-total">미수행 ${r.total}건</span>
+        ${r.total > 0 ? `<span class="db-book-badge warn">미수행 ${r.total}</span>` : `<span class="db-book-badge ok">✓ 완료</span>`}
       </div>
+      <div class="db-book-name">${_esc(r.book.name)}</div>
       <div class="db-stu-list">${stuHtml}${moreStu}</div>
     </div>`;
   }
@@ -327,5 +360,5 @@ const DashboardApp = (() => {
     if (typeof BooklibApp !== 'undefined' && BooklibApp.goToMatrix) BooklibApp.goToMatrix(clsId, bkId);
   }
 
-  return { init, render, goMatrix, _refreshBadges, openReorder, _saveReorder };
+  return { init, render, goMatrix, _refreshBadges, openReorder, _saveReorder, _selectBookDay };
 })();
