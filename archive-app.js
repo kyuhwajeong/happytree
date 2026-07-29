@@ -13,12 +13,19 @@ const ArchiveApp = (() => {
   };
   const _fmtDate = iso => { const d = new Date(iso); return isNaN(d) ? '' : `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`; };
   const _ICONS = { pdf:'📕', xlsx:'📗', xls:'📗', csv:'📗', ppt:'📙', pptx:'📙', doc:'📘', docx:'📘',
-    png:'🖼️', jpg:'🖼️', jpeg:'🖼️', gif:'🖼️', webp:'🖼️', zip:'🗜️', txt:'📄' };
+    hwp:'📃', hwpx:'📃',
+    png:'🖼️', jpg:'🖼️', jpeg:'🖼️', gif:'🖼️', webp:'🖼️', zip:'🗜️', txt:'📄',
+    mp4:'🎬', avi:'🎬', mov:'🎬', mkv:'🎬', webm:'🎬', wmv:'🎬',
+    mp3:'🎵', wav:'🎵', m4a:'🎵', ogg:'🎵', aac:'🎵', flac:'🎵' };
   const _iconFor = ext => _ICONS[(ext||'').toLowerCase()] || '📄';
   const _isImg = ext => ['png','jpg','jpeg','gif','webp','svg'].includes((ext||'').toLowerCase());
   const _isPdf = ext => (ext||'').toLowerCase() === 'pdf';
   const _isXlsx = ext => ['xlsx','xls'].includes((ext||'').toLowerCase());
   const _isOffice = ext => ['ppt','pptx','doc','docx'].includes((ext||'').toLowerCase());
+  const _isVideo = ext => ['mp4','avi','mov','mkv','webm','wmv','m4v'].includes((ext||'').toLowerCase());
+  const _isAudio = ext => ['mp3','wav','m4a','ogg','aac','flac'].includes((ext||'').toLowerCase());
+  const _isHwp = ext => ['hwp','hwpx'].includes((ext||'').toLowerCase());
+  const _isCsv = ext => (ext||'').toLowerCase() === 'csv';
 
   let _curCategory = '전체';
   let _cssInjected = false;
@@ -27,14 +34,33 @@ const ArchiveApp = (() => {
     if (_cssInjected) return; _cssInjected = true;
     const s = document.createElement('style');
     s.textContent = `
-.ar-cats{display:flex;gap:6px;overflow-x:auto;padding:10px 14px;scrollbar-width:none;flex-shrink:0}
+.ar-storage{margin:8px 14px 0}
+.ar-storage-bar{height:6px;border-radius:4px;background:var(--card2);overflow:hidden}
+.ar-storage-fill{height:100%;background:var(--a);border-radius:4px;transition:width .3s}
+.ar-storage.warn .ar-storage-fill{background:#f59e0b}
+.ar-storage.over .ar-storage-fill{background:#ef4444}
+.ar-storage-text{font-size:10.5px;color:var(--tx3);margin-top:4px}
+.ar-storage.warn .ar-storage-text{color:#f59e0b;font-weight:700}
+.ar-storage.over .ar-storage-text{color:#ef4444;font-weight:700}
+.ar-card-check{position:absolute;top:8px;left:8px;font-size:16px;line-height:1;z-index:1}
+.ar-card.selected{border-color:var(--a);background:var(--a10)}
+.ar-select-bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--bdr);
+  padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:8px;z-index:60;box-shadow:0 -4px 16px rgba(0,0,0,.08)}
+.ar-select-count{font-size:12px;font-weight:700;color:var(--tx2);flex:1}
+.ar-select-bar .ar-btn{padding:9px 14px;font-size:12.5px}
+.ar-search-wrap{position:relative;margin:0 14px 10px}
+.ar-search-inp{width:100%;box-sizing:border-box;padding:9px 34px 9px 12px;border-radius:12px;border:1px solid var(--bdr);background:var(--card2);color:var(--tx);font-size:12.5px;font-family:inherit}
+.ar-search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:transparent;color:var(--tx3);font-size:13px;cursor:pointer;padding:4px}
+.ar-cats{display:flex;gap:6px;overflow-x:auto;padding:0 14px 10px;scrollbar-width:none;flex-shrink:0}
 .ar-cats::-webkit-scrollbar{display:none}
 .ar-cat-tab{flex-shrink:0;padding:7px 13px;border-radius:999px;border:1px solid var(--bdr);background:var(--card2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
 .ar-cat-tab.on{background:var(--a);border-color:var(--a);color:#fff}
 .ar-body{flex:1;overflow-y:auto;padding:0 14px 90px}
 .ar-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
-.ar-card{background:var(--card);border:1px solid var(--bdr);border-radius:14px;padding:12px;cursor:pointer;transition:transform .1s}
+.ar-card{background:var(--card);border:1px solid var(--bdr);border-radius:14px;padding:12px;cursor:pointer;transition:transform .1s;position:relative}
 .ar-card:active{transform:scale(.97)}
+.ar-card-pin{position:absolute;top:8px;right:8px;border:none;background:transparent;font-size:16px;cursor:pointer;line-height:1;padding:2px;opacity:.5}
+.ar-card-pin.on{opacity:1}
 .ar-card-ico{font-size:30px;margin-bottom:8px}
 .ar-card-name{font-size:12.5px;font-weight:700;color:var(--tx);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.35;min-height:34px}
 .ar-card-meta{font-size:10px;color:var(--tx3);margin-top:6px;display:flex;justify-content:space-between;gap:4px}
@@ -47,6 +73,10 @@ const ArchiveApp = (() => {
 @media (min-width:640px){ .ar-ov{align-items:center} }
 .ar-sheet{background:var(--card);width:100%;max-width:520px;max-height:88vh;border-radius:20px 20px 0 0;overflow-y:auto;padding:18px}
 @media (min-width:640px){ .ar-sheet{border-radius:20px} }
+.ar-prev-sheet.fullscreen{max-width:98vw!important;width:98vw;max-height:96vh;height:96vh;display:flex;flex-direction:column}
+.ar-prev-sheet.fullscreen .ar-prev-body{flex:1;height:auto}
+.ar-prev-sheet.fullscreen .ar-prev-body iframe,.ar-prev-sheet.fullscreen .ar-prev-body img,.ar-prev-sheet.fullscreen .ar-prev-body video{max-height:none;height:100%}
+.ar-prev-sheet.fullscreen .ar-prev-table-wrap{max-height:none;height:100%}
 .ar-sheet-title{font-size:15px;font-weight:800;color:var(--tx);margin-bottom:14px}
 .ar-field{margin-bottom:12px}
 .ar-field label{display:block;font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:5px}
@@ -63,6 +93,14 @@ const ArchiveApp = (() => {
 .ar-prev-name{font-size:14px;font-weight:800;color:var(--tx);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ar-prev-acts{display:flex;gap:6px;flex-shrink:0}
 .ar-prev-icobtn{width:32px;height:32px;border-radius:9px;border:1px solid var(--bdr);background:var(--card2);cursor:pointer;font-size:14px}
+.ar-conv-wrap{position:relative}
+.ar-conv-menu{position:absolute;top:38px;right:0;background:var(--card);border:1px solid var(--bdr);border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.15);padding:4px;z-index:10;min-width:110px}
+.ar-conv-menu.hidden{display:none}
+.ar-conv-menu button{display:block;width:100%;text-align:left;padding:8px 10px;border:none;background:transparent;color:var(--tx);font-size:12px;border-radius:7px;cursor:pointer}
+.ar-conv-menu button:hover{background:var(--card2)}
+.ar-hwp-wrap{width:100%;overflow-y:auto;max-height:70vh;padding:10px;display:flex;flex-direction:column;gap:10px;align-items:center;background:#f0f0f0}
+.ar-hwp-page{background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15);max-width:100%}
+.ar-hwp-page svg{max-width:100%;height:auto;display:block}
 .ar-prev-body{background:var(--surf2);border-radius:12px;overflow:hidden;min-height:200px;display:flex;align-items:center;justify-content:center}
 .ar-prev-body img{max-width:100%;max-height:70vh;display:block}
 .ar-prev-body iframe{width:100%;height:70vh;border:none}
@@ -75,29 +113,116 @@ const ArchiveApp = (() => {
     document.head.appendChild(s);
   }
 
+  let _searchQuery = '';
+  let _selectMode = false;
+  let _selectedIds = new Set();
+  const STORAGE_LIMIT_BYTES = 10 * 1024 * 1024 * 1024; // ★ Backblaze B2 무료 한도 10GB 기준
+
+  function _storageUsageHtml() {
+    const totalBytes = ArchiveDB.getAll().reduce((s, f) => s + (f.size || 0), 0);
+    const pct = Math.min(100, (totalBytes / STORAGE_LIMIT_BYTES) * 100);
+    const over = totalBytes >= STORAGE_LIMIT_BYTES, warn = pct >= 80;
+    return `<div class="ar-storage${over ? ' over' : warn ? ' warn' : ''}">
+      <div class="ar-storage-bar"><div class="ar-storage-fill" style="width:${pct}%"></div></div>
+      <div class="ar-storage-text">${_fmtSize(totalBytes)} / 10GB 사용 중${over ? ' · ⚠️ 무료 한도를 초과했어요, 확인이 필요합니다' : warn ? ' · ⚠️ 한도에 가까워지고 있어요' : ''}</div>
+    </div>`;
+  }
+
   function _shellHtml() {
     const cats = ['전체', ...ArchiveDB.CATEGORIES];
     return `
       <div class="ph">
         <div class="phl"><div class="ph-title">📁 자료실</div></div>
+        <div class="phr"><button class="db-mini-btn${_selectMode ? '' : ' ghost'}" onclick="ArchiveApp._toggleSelectMode()">${_selectMode ? '✕ 선택 취소' : '☑️ 선택'}</button></div>
+      </div>
+      ${_storageUsageHtml()}
+      <div class="ar-search-wrap">
+        <input type="text" id="ar-search-inp" class="ar-search-inp" placeholder="🔍 파일명, 제목, 설명으로 검색..."
+          value="${_esc(_searchQuery)}" oninput="ArchiveApp._onSearchInput(this.value)">
+        ${_searchQuery ? `<button class="ar-search-clear" onclick="ArchiveApp._onSearchInput('')">✕</button>` : ''}
       </div>
       <div class="ar-cats">${cats.map(c => `<button class="ar-cat-tab${c===_curCategory?' on':''}" onclick="ArchiveApp._selectCategory('${c}')">${_esc(c)}</button>`).join('')}</div>
       <div class="ar-body" id="ar-body">${_gridHtml()}</div>
-      <button class="ar-fab" onclick="ArchiveApp.openUpload()" title="파일 올리기">＋</button>`;
+      ${_selectMode ? _selectBarHtml() : `<button class="ar-fab" onclick="ArchiveApp.openUpload()" title="파일 올리기">＋</button>`}`;
+  }
+
+  function _selectBarHtml() {
+    return `<div class="ar-select-bar" id="ar-select-bar">
+      <span class="ar-select-count">${_selectedIds.size}개 선택됨</span>
+      <button class="ar-btn ghost" style="flex:0" onclick="ArchiveApp._selectAllVisible()">전체선택</button>
+      <button class="ar-btn primary" style="flex:0" onclick="ArchiveApp._downloadSelectedZip()" ${_selectedIds.size ? '' : 'disabled'}>⬇️ ZIP으로 백업</button>
+    </div>`;
+  }
+  function _refreshSelectBar() {
+    const bar = _q('ar-select-bar');
+    if (bar) bar.outerHTML = _selectBarHtml();
+  }
+  function _toggleSelectMode() {
+    _selectMode = !_selectMode;
+    if (!_selectMode) _selectedIds.clear();
+    render();
+  }
+  function _toggleSelect(id) {
+    if (_selectedIds.has(id)) _selectedIds.delete(id); else _selectedIds.add(id);
+    _refreshGrid();
+    _refreshSelectBar();
+  }
+  function _selectAllVisible() {
+    let items = _curCategory === '전체' ? ArchiveDB.getAll() : ArchiveDB.getByCategory(_curCategory);
+    if (_searchQuery) items = items.filter(f => _matchesSearch(f, _searchQuery));
+    items.forEach(f => _selectedIds.add(f.id));
+    _refreshGrid();
+    _refreshSelectBar();
+  }
+
+  // ★ 검색 — 파일명(표시 이름·원본 파일명)과 설명까지 전부 대상으로,
+  //   검색어를 띄어쓰기로 나눠 각 단어가 어디든 포함되면 매칭(순서·위치 무관)
+  //   되게 해서 "정확히 같은 제목"이 아니어도 느슨하게 잘 찾아지도록 한다.
+  function _matchesSearch(f, query) {
+    if (!query) return true;
+    const words = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    if (!words.length) return true;
+    const haystack = `${f.name} ${f.originalName} ${f.description || ''}`.toLowerCase();
+    return words.every(w => haystack.includes(w));
+  }
+  function _onSearchInput(v) {
+    _searchQuery = v;
+    const body = _q('ar-body');
+    if (body) body.innerHTML = _gridHtml();
+    const clearBtn = document.querySelector('.ar-search-clear');
+    const wrap = document.querySelector('.ar-search-wrap');
+    if (wrap) {
+      const existing = wrap.querySelector('.ar-search-clear');
+      if (v && !existing) { const b = document.createElement('button'); b.className='ar-search-clear'; b.textContent='✕'; b.onclick=()=>ArchiveApp._onSearchInput(''); wrap.appendChild(b); }
+      if (!v && existing) existing.remove();
+    }
   }
 
   function _gridHtml() {
-    const items = _curCategory === '전체' ? ArchiveDB.getAll() : ArchiveDB.getByCategory(_curCategory);
+    let items = _curCategory === '전체' ? ArchiveDB.getAll() : ArchiveDB.getByCategory(_curCategory);
+    if (_searchQuery) items = items.filter(f => _matchesSearch(f, _searchQuery));
     if (!items.length) {
-      return `<div class="ar-empty"><div class="ar-empty-ico">🗂️</div>등록된 자료가 없습니다<br>오른쪽 아래 + 버튼으로 올려보세요</div>`;
+      return _searchQuery
+        ? `<div class="ar-empty"><div class="ar-empty-ico">🔍</div>"${_esc(_searchQuery)}"와(과) 일치하는 자료가 없습니다</div>`
+        : `<div class="ar-empty"><div class="ar-empty-ico">🗂️</div>등록된 자료가 없습니다<br>오른쪽 아래 + 버튼으로 올려보세요</div>`;
     }
     return `<div class="ar-grid">${items.map(f => `
-      <div class="ar-card" onclick="ArchiveApp.openPreview('${f.id}')">
+      <div class="ar-card${_selectMode && _selectedIds.has(f.id) ? ' selected' : ''}" onclick="${_selectMode ? `ArchiveApp._toggleSelect('${f.id}')` : `ArchiveApp.openPreview('${f.id}')`}">
+        ${_selectMode
+          ? `<span class="ar-card-check">${_selectedIds.has(f.id) ? '✅' : '⬜'}</span>`
+          : `<button class="ar-card-pin${f.pinned ? ' on' : ''}" onclick="event.stopPropagation();ArchiveApp._togglePin('${f.id}')" title="${f.pinned ? '대시보드에서 빼기' : '대시보드에 썸네일로 표시'}">${f.pinned ? '⭐' : '☆'}</button>`}
         <div class="ar-card-ico">${_iconFor(f.ext)}</div>
         <div class="ar-card-name">${_esc(f.name)}</div>
         <div class="ar-card-meta"><span>${_fmtSize(f.size)}</span><span>${_fmtDate(f.uploadedAt)}</span></div>
         <span class="ar-card-cat">${_esc(f.category)}</span>
       </div>`).join('')}</div>`;
+  }
+
+  async function _togglePin(id) {
+    const f = ArchiveDB.getById(id);
+    if (!f) return;
+    await ArchiveDB.updateFile(id, { pinned: !f.pinned });
+    _refreshGrid();
   }
 
   function render() {
@@ -171,12 +296,21 @@ const ArchiveApp = (() => {
   async function openPreview(id) {
     const f = ArchiveDB.getById(id);
     if (!f) return;
+    const convOpts = _convertOptionsFor(f.ext);
     const ov = document.createElement('div');
     ov.className = 'ar-ov'; ov.id = 'ar-preview-ov';
-    ov.innerHTML = `<div class="ar-sheet" style="max-width:680px">
+    ov.innerHTML = `<div class="ar-sheet ar-prev-sheet" id="ar-prev-sheet" style="max-width:680px">
       <div class="ar-prev-hdr">
         <div class="ar-prev-name">${_iconFor(f.ext)} ${_esc(f.name)}</div>
         <div class="ar-prev-acts">
+          ${convOpts.length ? `<div class="ar-conv-wrap">
+            <button class="ar-prev-icobtn" onclick="ArchiveApp._toggleConvertMenu()" title="다른 형식으로 다운로드">🔄</button>
+            <div class="ar-conv-menu hidden" id="ar-conv-menu">
+              ${convOpts.map(e => `<button onclick="ArchiveApp._convertAndDownload('${id}','${e}')">.${e}로 저장</button>`).join('')}
+            </div>
+          </div>` : ''}
+          <button class="ar-prev-icobtn" onclick="ArchiveApp._printPreview()" title="인쇄">🖨️</button>
+          <button class="ar-prev-icobtn" onclick="ArchiveApp._toggleFullscreen()" title="전체화면">⛶</button>
           <button class="ar-prev-icobtn" onclick="ArchiveApp.openEdit('${id}')" title="수정">✏️</button>
           <button class="ar-prev-icobtn" onclick="ArchiveApp._confirmDelete('${id}')" title="삭제">🗑️</button>
           <a class="ar-prev-icobtn" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none" href="${ArchiveDB.getFileUrl(f.r2Key)}" download="${_esc(f.originalName)}" title="다운로드">⬇️</a>
@@ -190,8 +324,192 @@ const ArchiveApp = (() => {
     ov.onclick = e => { if (e.target === ov) ov.remove(); };
     _renderPreviewBody(f);
   }
+  function _toggleConvertMenu() { _q('ar-conv-menu')?.classList.toggle('hidden'); }
+  function _printPreview() {
+    const body = _q('ar-prev-body');
+    if (!body) return;
+    const img = body.querySelector('img'), iframe = body.querySelector('iframe');
+    if (iframe) { iframe.contentWindow?.print(); return; }
+    if (img) {
+      const w = window.open('', '_blank');
+      w.document.write(`<html><body style="margin:0"><img src="${img.src}" style="max-width:100%" onload="window.print()"></body></html>`);
+      w.document.close();
+      return;
+    }
+    window.print(); // 표(엑셀) 등 — 페이지 전체 인쇄로 대체
+  }
+  // ★ 형식 변환 다운로드 — 실제로 브라우저 안에서 안정적으로 가능한
+  //   범위만 지원한다(이미지 상호변환, 엑셀↔CSV). 워드/파워포인트/PDF를
+  //   다른 포맷으로 바꾸는 건 진짜 변환 엔진이 있어야 해서 무료로는
+  //   지원하지 않는다 — 여기서 옵션 자체를 아예 안 보여주는 것으로 정직하게 처리.
+  function _convertOptionsFor(ext) {
+    ext = (ext || '').toLowerCase();
+    if (_isImg(ext) && ext !== 'svg') return ['png', 'jpg', 'webp', 'pdf'].filter(e => e !== ext);
+    if (_isXlsx(ext)) return ['csv', 'pdf'];
+    if (_isCsv(ext)) return ['xlsx', 'pdf'];
+    return [];
+  }
+  async function _convertAndDownload(id, targetExt) {
+    const f = ArchiveDB.getById(id);
+    if (!f) return;
+    _q('ar-conv-menu')?.classList.add('hidden');
+    const url = ArchiveDB.getFileUrl(f.r2Key);
+    const baseName = f.name.replace(/\.[^.]+$/, '');
+    const busyToast = () => { if (typeof App !== 'undefined' && App._toast) App._toast('⏳ 변환 중...', '', 15000); };
+    try {
+      if (_isImg(f.ext) && targetExt === 'pdf') {
+        busyToast();
+        if (typeof window.jspdf === 'undefined') { if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ PDF 변환 라이브러리를 불러오지 못했습니다'); return; }
+        const res = await fetch(url);
+        const blob = await res.blob();
+        const bitmap = await createImageBitmap(blob);
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width; canvas.height = bitmap.height;
+        canvas.getContext('2d').drawImage(bitmap, 0, 0);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+        // ★ 이미지 비율에 맞춰 PDF 페이지 크기를 그대로 잡는다(A4로 억지로 맞추지 않음)
+        const orientation = bitmap.width >= bitmap.height ? 'l' : 'p';
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [bitmap.width, bitmap.height] });
+        pdf.addImage(dataUrl, 'JPEG', 0, 0, bitmap.width, bitmap.height);
+        pdf.save(`${baseName}.pdf`);
+        return;
+      }
+      if (_isImg(f.ext)) {
+        const res = await fetch(url);
+        const blob = await res.blob();
+        const bitmap = await createImageBitmap(blob);
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width; canvas.height = bitmap.height;
+        const ctx = canvas.getContext('2d');
+        if (targetExt === 'jpg') { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height); } // JPG는 투명 배경 지원 안 하므로 흰 배경 채움
+        ctx.drawImage(bitmap, 0, 0);
+        const mime = targetExt === 'jpg' ? 'image/jpeg' : targetExt === 'webp' ? 'image/webp' : 'image/png';
+        canvas.toBlob(outBlob => _downloadBlob(outBlob, `${baseName}.${targetExt}`), mime, 0.92);
+        return;
+      }
+      if (typeof XLSX === 'undefined') { if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ 변환 라이브러리를 불러오지 못했습니다'); return; }
+      if ((_isXlsx(f.ext) || _isCsv(f.ext)) && targetExt === 'pdf') {
+        busyToast();
+        if (typeof window.jspdf === 'undefined' || typeof html2canvas === 'undefined') {
+          if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ PDF 변환 라이브러리를 불러오지 못했습니다'); return;
+        }
+        const res = await fetch(url);
+        const wb = _isCsv(f.ext) ? XLSX.read(await res.text(), { type: 'string' }) : XLSX.read(await res.arrayBuffer(), { type: 'array' });
+        const html = XLSX.utils.sheet_to_html(wb.Sheets[wb.SheetNames[0]]);
+        await _tableToPdf(html, baseName);
+        return;
+      }
+      if (_isXlsx(f.ext) && targetExt === 'csv') {
+        const res = await fetch(url);
+        const wb = XLSX.read(await res.arrayBuffer(), { type: 'array' });
+        const csv = XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]);
+        _downloadBlob(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }), `${baseName}.csv`); // ★ BOM 붙여서 엑셀에서 한글 깨짐 방지
+        return;
+      }
+      if (_isCsv(f.ext) && targetExt === 'xlsx') {
+        const res = await fetch(url);
+        const wb = XLSX.read(await res.text(), { type: 'string' });
+        const out = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+        _downloadBlob(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${baseName}.xlsx`);
+        return;
+      }
+    } catch (e) {
+      if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ 변환 실패: ' + (e.message || '알 수 없는 오류'));
+    }
+  }
+  // ★ 엑셀/CSV 표를 PDF로 — 화면 밖에 실제로 그려서(html2canvas로 캡처해야
+  //   하므로) 캡처한 뒤 바로 지운다. 표가 한 페이지보다 길면 여러 페이지로 나눈다.
+  async function _tableToPdf(tableHtml, baseName) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;padding:16px;width:1000px';
+    wrap.innerHTML = tableHtml;
+    const table = wrap.querySelector('table');
+    if (table) { table.style.borderCollapse = 'collapse'; table.style.width = '100%'; table.style.fontSize = '13px';
+      wrap.querySelectorAll('td,th').forEach(c => { c.style.border = '1px solid #ccc'; c.style.padding = '4px 8px'; }); }
+    document.body.appendChild(wrap);
+    try {
+      const canvas = await html2canvas(wrap, { backgroundColor: '#fff', scale: 2 });
+      const { jsPDF } = window.jspdf;
+      const pageW = 595, pageH = 842; // A4 (pt 단위, 72dpi 기준)
+      const imgW = pageW, imgH = (canvas.height * imgW) / canvas.width;
+      const pdf = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
+      if (imgH <= pageH) {
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, imgW, imgH);
+      } else {
+        // ★ 세로로 긴 표 — 캔버스를 페이지 높이만큼씩 잘라서 여러 페이지에 나눠 담는다
+        const pagePxH = Math.floor((canvas.width * pageH) / pageW);
+        let renderedPx = 0, first = true;
+        while (renderedPx < canvas.height) {
+          const sliceH = Math.min(pagePxH, canvas.height - renderedPx);
+          const sliceCanvas = document.createElement('canvas');
+          sliceCanvas.width = canvas.width; sliceCanvas.height = sliceH;
+          sliceCanvas.getContext('2d').drawImage(canvas, 0, renderedPx, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+          if (!first) pdf.addPage(); first = false;
+          pdf.addImage(sliceCanvas.toDataURL('image/png'), 'PNG', 0, 0, imgW, (sliceH * imgW) / canvas.width);
+          renderedPx += sliceH;
+        }
+      }
+      pdf.save(`${baseName}.pdf`);
+    } finally {
+      wrap.remove();
+    }
+  }
+  function _downloadBlob(blob, filename) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+  async function _downloadSelectedZip() {
+    if (!_selectedIds.size) return;
+    if (typeof JSZip === 'undefined') { if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ ZIP 라이브러리를 불러오지 못했습니다'); return; }
+    const ids = [..._selectedIds];
+    const zip = new JSZip();
+    const usedNames = new Set();
+    let failCount = 0;
+    for (let i = 0; i < ids.length; i++) {
+      const f = ArchiveDB.getById(ids[i]);
+      if (!f) continue;
+      if (typeof App !== 'undefined' && App._toast) App._toast(`📦 압축 준비 중... (${i + 1}/${ids.length})`, '', 60000);
+      try {
+        const res = await fetch(ArchiveDB.getFileUrl(f.r2Key));
+        if (!res.ok) throw new Error('fetch failed');
+        const blob = await res.blob();
+        // ★ 같은 이름 파일이 여러 개 선택됐을 수 있어 중복 시 번호를 붙임
+        let name = f.originalName || f.name;
+        if (usedNames.has(name)) {
+          const dot = name.lastIndexOf('.');
+          const base = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : '';
+          let n = 2; while (usedNames.has(`${base}(${n})${ext}`)) n++;
+          name = `${base}(${n})${ext}`;
+        }
+        usedNames.add(name);
+        zip.file(name, blob);
+      } catch (e) {
+        failCount++;
+        console.warn('[ArchiveApp] ZIP 포함 실패:', f.name, e);
+      }
+    }
+    if (typeof App !== 'undefined' && App._toast) App._toast('📦 압축 파일 생성 중...', '', 30000);
+    try {
+      const content = await zip.generateAsync({ type: 'blob' });
+      const dateStr = new Date().toISOString().slice(0, 10);
+      _downloadBlob(content, `자료실_백업_${dateStr}.zip`);
+      if (typeof App !== 'undefined' && App._toast) {
+        App._toast(failCount ? `✅ 백업 완료 (${failCount}개 실패)` : '✅ 백업 완료', 'success');
+      }
+    } catch (e) {
+      if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ 압축 파일 생성 실패: ' + (e.message || ''));
+    }
+  }
+  function _toggleFullscreen() {
+    const sheet = _q('ar-prev-sheet');
+    if (sheet) sheet.classList.toggle('fullscreen');
+  }
   function _previewLoadingHtml(f) {
-    if (_isImg(f.ext) || _isPdf(f.ext) || _isOffice(f.ext)) return '';
+    if (_isImg(f.ext) || _isPdf(f.ext) || _isOffice(f.ext) || _isVideo(f.ext) || _isAudio(f.ext) || _isHwp(f.ext)) return '';
     return `<div class="ar-prev-none">⏳ 불러오는 중...</div>`;
   }
   async function _renderPreviewBody(f) {
@@ -200,6 +518,49 @@ const ArchiveApp = (() => {
     const url = ArchiveDB.getFileUrl(f.r2Key);
     if (_isImg(f.ext)) {
       body.innerHTML = `<img src="${url}" alt="${_esc(f.name)}">`;
+      return;
+    }
+    if (_isVideo(f.ext)) {
+      body.innerHTML = `<video src="${url}" controls style="max-width:100%;max-height:70vh"></video>`;
+      return;
+    }
+    if (_isAudio(f.ext)) {
+      body.innerHTML = `<div style="padding:40px 20px;width:100%;text-align:center">
+        <div style="font-size:44px;margin-bottom:16px">🎵</div>
+        <audio src="${url}" controls style="width:100%;max-width:400px"></audio>
+      </div>`;
+      return;
+    }
+    // ★ HWP/HWPX — rhwp(오픈소스, MIT 라이선스, WASM 기반) 미리보기.
+    //   완전히 브라우저 안에서만 처리되고 파일이 외부 서버로 전송되지
+    //   않는다. 다만 비교적 신생 프로젝트라 일부 문서에서 렌더링이 실패할
+    //   수 있어, 실패 시 조용히 "다운로드로 확인" 안내로 넘어간다.
+    if (_isHwp(f.ext)) {
+      body.innerHTML = `<div class="ar-prev-none">⏳ 한글 문서를 불러오는 중...</div>`;
+      try {
+        if (!globalThis.measureTextWidth) {
+          globalThis.measureTextWidth = (font, text) => {
+            const ctx = document.createElement('canvas').getContext('2d');
+            ctx.font = font;
+            return ctx.measureText(text).width;
+          };
+        }
+        const rhwp = await import('https://esm.sh/@rhwp/core');
+        await rhwp.default();
+        const res = await fetch(url);
+        const buf = new Uint8Array(await res.arrayBuffer());
+        const doc = new rhwp.HwpDocument(buf);
+        let pagesHtml = '';
+        for (let i = 0; i < 200; i++) { // ★ 페이지 수를 미리 알 방법이 없어 실패할 때까지 순서대로 렌더링
+          try { pagesHtml += `<div class="ar-hwp-page">${doc.renderPageSvg(i)}</div>`; }
+          catch (e) { break; }
+        }
+        if (!pagesHtml) throw new Error('렌더링된 페이지가 없습니다');
+        body.innerHTML = `<div class="ar-hwp-wrap">${pagesHtml}</div>`;
+      } catch (e) {
+        console.warn('[ArchiveApp] HWP 미리보기 실패', e);
+        body.innerHTML = `<div class="ar-prev-none">⚠️ 이 한글 문서는 미리보기가 지원되지 않아요<br>다운로드 버튼(⬇️)으로 받아서 확인해 주세요</div>`;
+      }
       return;
     }
     if (_isPdf(f.ext)) {
@@ -214,12 +575,13 @@ const ArchiveApp = (() => {
       body.innerHTML = `<iframe src="${viewerUrl}"></iframe>`;
       return;
     }
-    if (_isXlsx(f.ext)) {
+    if (_isXlsx(f.ext) || _isCsv(f.ext)) {
       if (typeof XLSX === 'undefined') { body.innerHTML = `<div class="ar-prev-none">엑셀 미리보기 라이브러리를 불러오지 못했습니다</div>`; return; }
       try {
         const res = await fetch(url);
-        const buf = await res.arrayBuffer();
-        const wb = XLSX.read(buf, { type: 'array' });
+        let wb;
+        if (_isCsv(f.ext)) { wb = XLSX.read(await res.text(), { type: 'string' }); }
+        else { wb = XLSX.read(await res.arrayBuffer(), { type: 'array' }); }
         const ws = wb.Sheets[wb.SheetNames[0]];
         const html = XLSX.utils.sheet_to_html(ws, { editable: false });
         body.innerHTML = `<div class="ar-prev-table-wrap">${html.replace('<table', '<table class="ar-prev-table"')}</div>`;
@@ -290,9 +652,11 @@ const ArchiveApp = (() => {
   }
 
   return {
-    init, render, _selectCategory,
+    init, render, _selectCategory, _onSearchInput, _togglePin,
     openUpload, _closeUpload, _onPickFile, _submitUpload,
     openPreview, openEdit, _closeEdit, _submitEdit,
-    _confirmDelete,
+    _confirmDelete, _toggleFullscreen, _printPreview,
+    _toggleConvertMenu, _convertAndDownload,
+    _toggleSelectMode, _toggleSelect, _selectAllVisible, _downloadSelectedZip,
   };
 })();
