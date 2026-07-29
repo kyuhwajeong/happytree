@@ -507,6 +507,12 @@ const FireDB = (() => {
       setTimeout(() => _autoReload(force), 8000);
       return;
     }
+    // ★ index.html의 자동 업데이트 감지도 독립적으로 새로고침을 실행할 수
+    //   있는데, 둘 다 "탭 활성화" 시점에 반응하다 보니 드물게 거의 동시에
+    //   겹쳐서 두 번 새로고침되는 것처럼 보일 수 있었다. 전역 잠금을
+    //   공유해서 둘 중 먼저 판단한 쪽만 실제로 새로고침하도록 막는다.
+    if (window.__appReloading) { console.log('[FireDB] ⏸ 이미 다른 경로에서 새로고침 진행 중 — 중복 실행 방지'); return; }
+    window.__appReloading = true;
     try { sessionStorage.setItem(RELOAD_COOLDOWN_KEY, String(Date.now())); } catch {}
     console.log(`[FireDB] 🔄 ${force ? '사용자 요청' : '장시간 재연결 실패'} — 데이터 보존 신호 전송 후 새로고침`);
     try { window.dispatchEvent(new Event('fb:force-flush-before-reload')); } catch {}
