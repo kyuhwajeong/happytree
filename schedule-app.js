@@ -207,22 +207,49 @@ const ScheduleApp = (() => {
     return map;
   }
   // 학생 입학 기념일: 매년 같은 월-일에 "N년차"로 반복 표시
+  let _enrollDbgDone = false;
+  // ★ 엑셀 일괄 업로드로 들어온 입학일은 '2024.3.5', '2024/03/05', '24-3-5'처럼
+  //   형식이 제각각일 수 있어, 구분자·자릿수에 상관없이 최대한 인식한다.
+  function _parseEnrollDate(raw) {
+    const s = (raw || '').toString().trim();
+    if (!s) return null;
+    const m = s.match(/^(\d{2,4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+    if (!m) return null;
+    let [, y, mo, d] = m;
+    y = y.length === 2 ? (Number(y) < 50 ? '20' + y : '19' + y) : y; // 2자리 연도 보정
+    y = +y; mo = +mo; d = +d;
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    return { y, m: mo, d };
+  }
   function _buildEnrollMap(year, month) {
     const map = {};
-    if (typeof StudentDB === 'undefined') return map;
+    if (typeof StudentDB === 'undefined') { if (!_enrollDbgDone) console.warn('[ScheduleApp] 입학기념일: StudentDB를 찾을 수 없음(로드 순서 확인 필요)'); return map; }
     const dim = new Date(year, month, 0).getDate();
-    (StudentDB.getAll ? StudentDB.getAll() : []).forEach(s => {
-      if (s.status && s.status !== '재원') return; // 재원생만 표시
-      const ed = (s.enrollDate || '').trim();
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(ed)) return;
-      const [ey, em, edd] = ed.split('-').map(Number);
-      if (em !== month || year < ey) return; // 이 달이 아니거나 입학 전 연도면 제외
+    const all = StudentDB.getAll ? StudentDB.getAll() : [];
+    let skippedStatus = 0, skippedNoDate = 0, skippedBadFormat = 0, matched = 0;
+    all.forEach(s => {
+      if (s.status && s.status !== '재원') { skippedStatus++; return; } // 재원생만 표시
+      if (!(s.enrollDate || '').toString().trim()) { skippedNoDate++; return; }
+      const parsed = _parseEnrollDate(s.enrollDate);
+      if (!parsed) { skippedBadFormat++; return; }
+      const { y: ey, m: em, d: edd } = parsed;
+      if (em !== month || year < ey) return; // 이 달이 아니거나 입학 전 연도면 제외(정상 스킵, 오류 아님)
+      matched++;
       const day = Math.min(edd, dim);
       const dateStr = `${year}-${_pad(month)}-${_pad(day)}`;
       const years = year - ey; // 입학한 해=0(신입), 1년 지난 첫 기념일=1, 그다음=2...
       const isNew = years === 0;
       (map[dateStr] = map[dateStr] || []).push({ ...s, years, isNew });
     });
+    // ★ 진단 로그 — 콘솔에 딱 한 번만 찍어서 원인을 바로 알 수 있게 함
+    if (!_enrollDbgDone) {
+      _enrollDbgDone = true;
+      console.info(`[ScheduleApp] 입학기념일 진단 — 전체 ${all.length}명 / 재원아님 ${skippedStatus} / 입학일없음 ${skippedNoDate} / 형식인식실패 ${skippedBadFormat} / 이번달 매칭 ${matched}`);
+      if (skippedBadFormat > 0) {
+        console.info('[ScheduleApp] 형식 인식 실패한 enrollDate 샘플:',
+          all.filter(s => (s.enrollDate || '').toString().trim() && !_parseEnrollDate(s.enrollDate)).slice(0, 5).map(s => s.enrollDate));
+      }
+    }
     return map;
   }
   function _mergedEnrollMap(days) {

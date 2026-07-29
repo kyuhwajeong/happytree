@@ -187,7 +187,7 @@ const DashboardApp = (() => {
 .db-quote-inline .db-quote-text{font-size:11.5px;font-style:italic;font-weight:500;color:var(--tx3)}
 .db-quote-inline .db-quote-author{font-size:10.5px;font-style:italic;color:var(--tx3);opacity:.75}
 .db-quote-en{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
-  font-family:'Dancing Script',cursive;font-size:15px;font-weight:500;color:var(--a);opacity:.7;margin-top:1px;padding-left:2px}
+  font-family:var(--font);font-size:11px;font-style:italic;font-weight:500;letter-spacing:.1px;color:var(--a);opacity:.75;margin-top:1px;padding-left:2px}
 .db-body{flex:1;overflow-y:auto;padding:12px 14px 90px;display:flex;flex-direction:column;gap:14px}
 .db-sec{background:var(--surf);border:1px solid var(--bdr);border-radius:16px;padding:14px}
 .db-sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
