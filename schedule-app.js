@@ -53,6 +53,18 @@ const ScheduleApp = (() => {
     const s = document.createElement('style');
     s.textContent = `
 .sch-cal-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.sch-resizable-wrap{position:relative;overflow:auto;min-width:340px;min-height:280px;max-width:100%;padding:2px;border:1px solid transparent;border-radius:10px;}
+.sch-resizable-wrap:hover,.sch-resizable-wrap.resizing{border-color:var(--bdr2);}
+.sch-resize-hint{position:absolute;right:6px;bottom:4px;font-size:12px;color:var(--tx3);opacity:.4;pointer-events:none;line-height:1;z-index:1;}
+.sch-resize-handle{position:absolute;z-index:5;}
+.sch-resize-handle.rh-n,.sch-resize-handle.rh-s{left:8px;right:8px;height:7px;}
+.sch-resize-handle.rh-e,.sch-resize-handle.rh-w{top:8px;bottom:8px;width:7px;}
+.sch-resize-handle.rh-n{top:-3px;} .sch-resize-handle.rh-s{bottom:-3px;}
+.sch-resize-handle.rh-e{right:-3px;} .sch-resize-handle.rh-w{left:-3px;}
+.sch-resize-handle.rh-ne,.sch-resize-handle.rh-nw,.sch-resize-handle.rh-se,.sch-resize-handle.rh-sw{width:14px;height:14px;}
+.sch-resize-handle.rh-ne{top:-4px;right:-4px;} .sch-resize-handle.rh-nw{top:-4px;left:-4px;}
+.sch-resize-handle.rh-se{bottom:-4px;right:-4px;} .sch-resize-handle.rh-sw{bottom:-4px;left:-4px;}
+.sch-resizable-wrap:hover .sch-resize-handle:hover,.sch-resizable-wrap.resizing .sch-resize-handle{background:var(--a20);border-radius:4px;}
 .sch-cal-title{font-size:13.5px;font-weight:800;color:var(--tx)}
 .sch-cal-navs{display:flex;align-items:center;gap:4px}
 .sch-nav-btn{width:26px;height:26px;border-radius:8px;background:var(--card2);border:1px solid var(--bdr);display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer;color:var(--tx2)}
@@ -345,6 +357,114 @@ const ScheduleApp = (() => {
     return { tracks, overflowByDay };
   }
 
+  /* ★ 달력 위젯 크기 — 사용자가 모서리를 드래그해서 상하좌우로 자유롭게
+   *   조절할 수 있게 하고, 선택한 크기는 다음에 다시 열어도 유지되도록
+   *   저장한다. 브라우저 기본 resize 기능은 오른쪽 아래 모서리 하나만
+   *   지원해서, 4면 전부(상하좌우) 마우스로 드래그할 수 있도록 직접
+   *   구현했다(마우스 + 터치 모두 지원). */
+  const WIDGET_SIZE_KEY = 'sch_widget_size';
+  const RESIZE_MIN_W = 340, RESIZE_MIN_H = 280;
+
+  function _restoreWidgetSize() {
+    const wrap = _q('sch-resizable-wrap');
+    if (!wrap) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(WIDGET_SIZE_KEY) || 'null');
+      if (saved && saved.w && saved.h) {
+        wrap.style.width      = saved.w + 'px';
+        wrap.style.height     = saved.h + 'px';
+        wrap.style.marginLeft = (saved.ml || 0) + 'px';
+        wrap.style.marginTop  = (saved.mt || 0) + 'px';
+      }
+    } catch (e) {}
+  }
+  function _saveWidgetSize(wrap) {
+    try {
+      localStorage.setItem(WIDGET_SIZE_KEY, JSON.stringify({
+        w:  Math.round(wrap.offsetWidth),
+        h:  Math.round(wrap.offsetHeight),
+        ml: Math.round(parseFloat(wrap.style.marginLeft) || 0),
+        mt: Math.round(parseFloat(wrap.style.marginTop)  || 0),
+      }));
+    } catch (e) {}
+  }
+
+  /* ★ 4면 + 4모서리 드래그 리사이즈 핸들 — 오른쪽/아래는 일반적으로
+   *   너비/높이만 늘리고(왼쪽 위는 고정), 왼쪽/위는 반대편(오른쪽/아래)
+   *   위치가 화면상 고정된 채로 왼쪽/위 방향으로 자라나도록 margin을
+   *   함께 보정한다. */
+  const _RESIZE_DIRS = [
+    { cls: 'n',  cursor: 'ns-resize',   x: 0, y: -1 },
+    { cls: 's',  cursor: 'ns-resize',   x: 0, y:  1 },
+    { cls: 'e',  cursor: 'ew-resize',   x: 1, y:  0 },
+    { cls: 'w',  cursor: 'ew-resize',   x: -1, y: 0 },
+    { cls: 'ne', cursor: 'nesw-resize', x: 1, y: -1 },
+    { cls: 'nw', cursor: 'nwse-resize', x: -1, y: -1 },
+    { cls: 'se', cursor: 'nwse-resize', x: 1, y:  1 },
+    { cls: 'sw', cursor: 'nesw-resize', x: -1, y: 1 },
+  ];
+  function _bindWidgetResizeSave() {
+    const wrap = _q('sch-resizable-wrap');
+    if (!wrap || wrap._resizeBound) return;
+    wrap._resizeBound = true;
+
+    // 핸들 요소 생성(없으면)
+    if (!wrap.querySelector('.sch-resize-handle')) {
+      _RESIZE_DIRS.forEach(d => {
+        const h = document.createElement('div');
+        h.className = `sch-resize-handle rh-${d.cls}`;
+        h.style.cursor = d.cursor;
+        wrap.appendChild(h);
+        _bindHandleDrag(h, wrap, d);
+      });
+    }
+  }
+  function _bindHandleDrag(handle, wrap, dir) {
+    function start(e) {
+      e.preventDefault(); e.stopPropagation();
+      const isTouch = e.type === 'touchstart';
+      const p0 = isTouch ? e.touches[0] : e;
+      const startX = p0.clientX, startY = p0.clientY;
+      const startW = wrap.offsetWidth, startH = wrap.offsetHeight;
+      const startML = parseFloat(wrap.style.marginLeft) || 0;
+      const startMT = parseFloat(wrap.style.marginTop)  || 0;
+      wrap.classList.add('resizing');
+
+      function move(ev) {
+        const p = isTouch ? ev.touches[0] : ev;
+        const dx = p.clientX - startX, dy = p.clientY - startY;
+        if (dir.x === 1) { // 오른쪽으로 드래그 → 너비만 증가
+          wrap.style.width = Math.max(RESIZE_MIN_W, startW + dx) + 'px';
+        } else if (dir.x === -1) { // 왼쪽으로 드래그 → 너비 증가 + 왼쪽으로 자람(오른쪽 끝 고정)
+          const newW = Math.max(RESIZE_MIN_W, startW - dx);
+          wrap.style.width = newW + 'px';
+          wrap.style.marginLeft = (startML - (newW - startW)) + 'px';
+        }
+        if (dir.y === 1) { // 아래로 드래그 → 높이만 증가
+          wrap.style.height = Math.max(RESIZE_MIN_H, startH + dy) + 'px';
+        } else if (dir.y === -1) { // 위로 드래그 → 높이 증가 + 위로 자람(아래쪽 끝 고정)
+          const newH = Math.max(RESIZE_MIN_H, startH - dy);
+          wrap.style.height = newH + 'px';
+          wrap.style.marginTop = (startMT - (newH - startH)) + 'px';
+        }
+      }
+      function end() {
+        wrap.classList.remove('resizing');
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', end);
+        document.removeEventListener('touchmove', move);
+        document.removeEventListener('touchend', end);
+        _saveWidgetSize(wrap);
+      }
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', end);
+      document.addEventListener('touchmove', move, { passive: false });
+      document.addEventListener('touchend', end);
+    }
+    handle.addEventListener('mousedown', start);
+    handle.addEventListener('touchstart', start, { passive: false });
+  }
+
   function renderMiniCalendar(containerId) {
     if (typeof ScheduleDB === 'undefined') return;
     _mountId = containerId;
@@ -409,31 +529,36 @@ const ScheduleApp = (() => {
     const dowHtml = DAYS_KO.map((d, i) => `<div class="sch-dow${i === 0 ? ' sun' : ''}${i === 6 ? ' sat' : ''}">${d}</div>`).join('');
 
     el.innerHTML = `
-      <div class="sch-cal-hdr">
-        <div class="sch-cal-title">${year}년 ${month}월</div>
-        <div class="sch-cal-navs">
-          <button class="sch-today-btn" onclick="ScheduleApp._goToday()">오늘</button>
-          <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(-1)">‹</button>
-          <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(1)">›</button>
-        </div>
-      </div>
-      <div class="sch-widget-layout">
-        <div class="sch-cal-col">
-          <div class="sch-dow-row">${dowHtml}</div>
-          ${weeksHtml}
-          <div class="sch-legend">
-            ${Object.values(CATS).map(c => `<span class="sch-legend-item"><span class="sch-legend-dot" style="background:${c.color}"></span>${c.ico} ${c.label}</span>`).join('')}
-            <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${PAY_COLOR}"></span>💰 급여일</span>
-            <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${WORK_COLOR}"></span>👤 근무기록</span>
-            <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${NOTICE_COLOR}"></span>🔔 공지</span>
+      <div id="sch-resizable-wrap" class="sch-resizable-wrap">
+        <div class="sch-resize-hint" title="테두리를 드래그해서 상하좌우로 크기를 조절할 수 있어요">⤡</div>
+        <div class="sch-cal-hdr">
+          <div class="sch-cal-title">${year}년 ${month}월</div>
+          <div class="sch-cal-navs">
+            <button class="sch-today-btn" onclick="ScheduleApp._goToday()">오늘</button>
+            <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(-1)">‹</button>
+            <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(1)">›</button>
           </div>
         </div>
-        <div class="sch-tdc-col">
-          <div id="sch-selday-panel">${_selDayPanelHtml(_selDate || todayStr)}</div>
+        <div class="sch-widget-layout">
+          <div class="sch-cal-col">
+            <div class="sch-dow-row">${dowHtml}</div>
+            ${weeksHtml}
+            <div class="sch-legend">
+              ${Object.values(CATS).map(c => `<span class="sch-legend-item"><span class="sch-legend-dot" style="background:${c.color}"></span>${c.ico} ${c.label}</span>`).join('')}
+              <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${PAY_COLOR}"></span>💰 급여일</span>
+              <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${WORK_COLOR}"></span>👤 근무기록</span>
+              <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${NOTICE_COLOR}"></span>🔔 공지</span>
+            </div>
+          </div>
+          <div class="sch-tdc-col">
+            <div id="sch-selday-panel">${_selDayPanelHtml(_selDate || todayStr)}</div>
+          </div>
         </div>
-      </div>
-      <div class="sch-today-divider"></div>
-      <div class="sch-today-section">${_todayClassesHtml()}</div>`;
+        <div class="sch-today-divider"></div>
+        <div class="sch-today-section">${_todayClassesHtml()}</div>
+      </div>`;
+    _restoreWidgetSize();
+    _bindWidgetResizeSave();
 
     // ★ 근무 빠른 등록 폼의 분류(일반/수업) 토글 버튼 바인딩 (innerHTML로 삽입되므로 렌더 후 별도 연결 필요)
     const waType = _q('sch-wa-type');
