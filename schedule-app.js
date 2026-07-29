@@ -28,7 +28,7 @@ const ScheduleApp = (() => {
     'vacation-winter': { ico: '❄️', label: '겨울방학', color: '#0ea5e9' },
     'holiday':         { ico: '🎌', label: '공휴일',   color: '#ef4444' },
   };
-  const PAY_COLOR = '#22c55e', NOTICE_COLOR = '#a855f7', WORK_COLOR = '#0891b2';
+  const PAY_COLOR = '#22c55e', NOTICE_COLOR = '#a855f7', WORK_COLOR = '#0891b2', ENROLL_COLOR = '#f59e0b';
   const DAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
   let _mountId = null;
@@ -206,6 +206,35 @@ const ScheduleApp = (() => {
     });
     return map;
   }
+  // 학생 입학 기념일: 매년 같은 월-일에 "N년차"로 반복 표시
+  function _buildEnrollMap(year, month) {
+    const map = {};
+    if (typeof StudentDB === 'undefined') return map;
+    const dim = new Date(year, month, 0).getDate();
+    (StudentDB.getAll ? StudentDB.getAll() : []).forEach(s => {
+      if (s.status && s.status !== '재원') return; // 재원생만 표시
+      const ed = (s.enrollDate || '').trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(ed)) return;
+      const [ey, em, edd] = ed.split('-').map(Number);
+      if (em !== month || year < ey) return; // 이 달이 아니거나 입학 전 연도면 제외
+      const day = Math.min(edd, dim);
+      const dateStr = `${year}-${_pad(month)}-${_pad(day)}`;
+      const years = year - ey; // 입학한 해=0(신입), 1년 지난 첫 기념일=1, 그다음=2...
+      const isNew = years === 0;
+      (map[dateStr] = map[dateStr] || []).push({ ...s, years, isNew });
+    });
+    return map;
+  }
+  function _mergedEnrollMap(days) {
+    const map = {};
+    _uniqueYM(days).forEach(({ y, m }) => { const em = _buildEnrollMap(y, m); Object.keys(em).forEach(k => { map[k] = (map[k] || []).concat(em[k]); }); });
+    return map;
+  }
+  function _enrollLabel(s) {
+    const nick = (s.nickname || '').trim();
+    const nameFull = nick ? `${s.name}(${nick})` : s.name;
+    return `${s.isNew ? '[입학]' : `[${s.years}Y]`} ${nameFull}`;
+  }
   function _buildNoticeMap(year, month) {
     const map = {};
     if (typeof NoticeDB === 'undefined') return map;
@@ -303,6 +332,12 @@ const ScheduleApp = (() => {
       const list = payMap[dateStr];
       const label = list.length > 1 ? `💰 급여일 ${list.length}명` : `💰 ${list[0].name} 급여일`;
       events.push({ title: label, color: PAY_COLOR, startDate: dateStr, endDate: dateStr, onclick: `ScheduleApp.openDayDetail('${dateStr}')` });
+    });
+    const enrollMap = _mergedEnrollMap(days);
+    Object.keys(enrollMap).forEach(dateStr => {
+      const list = enrollMap[dateStr];
+      const label = list.length > 1 ? `🎓 입학기념일 ${list.length}명` : `🎓 ${_enrollLabel(list[0])}`;
+      events.push({ title: label, color: ENROLL_COLOR, startDate: dateStr, endDate: dateStr, onclick: `ScheduleApp.openDayDetail('${dateStr}')` });
     });
     const noticeMap = _mergedNoticeMap(days);
     Object.keys(noticeMap).forEach(dateStr => {
@@ -556,6 +591,7 @@ const ScheduleApp = (() => {
                 <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${PAY_COLOR}"></span>💰 급여일</span>
                 <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${WORK_COLOR}"></span>👤 근무기록</span>
                 <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${NOTICE_COLOR}"></span>🔔 공지</span>
+                <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${ENROLL_COLOR}"></span>🎓 입학기념일</span>
               </div>
             </div>
           </div>
@@ -745,6 +781,12 @@ const ScheduleApp = (() => {
     if (_mountId) renderMiniCalendar(_mountId);
   }
 
+  // ★ 입학 기념일 항목 클릭 → 학생 탭으로 전환 후 해당 학생 상세 화면 오픈
+  function _goStudentDetail(studentId) {
+    if (typeof App !== 'undefined' && App.go) App.go('students');
+    if (typeof StudentApp !== 'undefined' && StudentApp.openDetail) StudentApp.openDetail(studentId);
+  }
+
   /* ═══════════════════════════════════════════════════════════
    * 일자 상세 — 캘린더 우측에 항상 표시 (기본값: 오늘). 팝업 없음.
    * ═══════════════════════════════════════════════════════════ */
@@ -763,6 +805,7 @@ const ScheduleApp = (() => {
     const scheds = _schedulesOn(dateStr);
     const [y, m] = dateStr.split('-').map(Number);
     const paydays = (_buildPaydayMap(y, m)[dateStr]) || [];
+    const enrollAnns = (_buildEnrollMap(y, m)[dateStr]) || [];
     const workStaff = (typeof StaffDB === 'undefined') ? [] :
       (StaffDB.getActive ? StaffDB.getActive() : []).filter(s => (StaffDB.getWorkDay ? StaffDB.getWorkDay(s.id, dateStr) : []).length > 0);
     const notices = (_buildNoticeMap(y, m)[dateStr]) || [];
@@ -829,6 +872,23 @@ const ScheduleApp = (() => {
             <div class="sch-item-meta">예상 지급액 ₩${won}</div>
           </div>
           <span class="sch-badge ${saved ? 'ok' : 'warn'}">${saved ? '확정' : '미확정'}</span>
+        </div>`;
+      }).join('');
+      html += `</div>`;
+    }
+
+    if (enrollAnns.length) {
+      html += `<div class="sch-detail-sec"><div class="sch-detail-sec-title">🎓 학생 입학 기념일</div>`;
+      html += enrollAnns.map(s => {
+        const nick = (s.nickname || '').trim();
+        const nameFull = nick ? `${_esc(s.name)}(${_esc(nick)})` : _esc(s.name);
+        const tag = s.isNew ? '[입학]' : `[${s.years}Y]`;
+        return `<div class="sch-item-row sch-item-clickable" onclick="ScheduleApp._goStudentDetail('${s.id}')">
+          <span class="sch-item-ico">🎓</span>
+          <div class="sch-item-body">
+            <div class="sch-item-title"><span style="color:${ENROLL_COLOR}">${tag}</span> ${nameFull}</div>
+            <div class="sch-item-meta">입학일 ${_esc(s.enrollDate)}</div>
+          </div>
         </div>`;
       }).join('');
       html += `</div>`;
@@ -1066,6 +1126,6 @@ const ScheduleApp = (() => {
     openDayDetail, closeDayDetail,
     openEditor, closeEditor, saveEditor, deleteItem,
     openWorkQuickAdd, closeWorkQuickAdd, saveWorkQuickAdd,
-    _navMonth, _goToday,
+    _navMonth, _goToday, _goStudentDetail,
   };
 })();

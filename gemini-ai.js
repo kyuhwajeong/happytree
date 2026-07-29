@@ -347,6 +347,14 @@ const GeminiAI = (() => {
   }
 
   /* ══ 6. 연결 테스트 ════════════════════════════════════════ */
+  // ★ 오늘의 명언(대시보드) 영어 번역용 — 짧고 품격있는 한 문장 번역만 반환
+  async function translateToEnglish(koreanText) {
+    const prompt = '다음 한국어 명언을 자연스럽고 품격있는 영어 한 문장으로 번역해줘. '
+      + '설명이나 따옴표 없이 번역문 한 줄만 출력해:\n\n' + koreanText;
+    const out = await _call(prompt);
+    return out.replace(/\n+/g, ' ').trim();
+  }
+
   async function testConnection() {
     try {
       var r = await _call('"OK"라고만 답해주세요.');
@@ -370,6 +378,6 @@ const GeminiAI = (() => {
     loadPinsFromDB, listenPinsFromDB,
     getBookPins, addBookPin, removeBookPin, clearBookPins, getMergedPins,
     getAnalysisCache, setAnalysisCache, clearStyleCache,
-    testConnection, status,
+    testConnection, status, translateToEnglish,
   };
 })();
