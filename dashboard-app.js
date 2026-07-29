@@ -315,6 +315,35 @@ const DashboardApp = (() => {
     const sec = _q('db-book-sec');
     if (sec) sec.outerHTML = _bookStatusSectionHtml();
   }
+  /* ★ 확장 프로그램(htdev-extension) 연동용 — 지금 선택된 날짜 탭 기준으로
+   *   업데이트가 필요한 {반, 교재} 목록을 정리해서 이벤트로 내보낸다.
+   *   확장 프로그램이 이 이벤트를 받아서 ClassCard 페이지들을 순회하며
+   *   BooklibApp._applyClassCardData(clsId, bkId, rows)를 각각 호출해주는
+   *   쪽을 구현해야 실제로 "한 번에 전부 업데이트"가 완성된다 — 이 웹앱
+   *   쪽에서는 "무엇을 업데이트해야 하는지" 목록을 만들어 신호를 보내는
+   *   부분까지만 준비할 수 있다(ClassCard 스크래핑 자체는 확장 프로그램의
+   *   역할이라 이 소스에서 직접 처리할 수 없음). */
+  function _todayUpdateTargets() {
+    if (typeof BookLibDB === 'undefined') return [];
+    const classes = _classesForDayOffset(_bookDayOffset);
+    const targets = [];
+    classes.forEach(cls => {
+      const books = (BookLibDB.getBooksForClass(cls.id) || []).filter(b => !b.archived);
+      books.forEach(book => targets.push({ clsId: cls.id, clsName: cls.name, bookId: book.id, bookName: book.name }));
+    });
+    return targets;
+  }
+  function _requestBulkUpdate() {
+    const targets = _todayUpdateTargets();
+    if (!targets.length) {
+      if (typeof App !== 'undefined' && App._toast) App._toast('업데이트할 교재가 없습니다');
+      return;
+    }
+    try {
+      window.dispatchEvent(new CustomEvent('htdev:bulkSyncRequest', { detail: { targets } }));
+    } catch (e) {}
+    if (typeof App !== 'undefined' && App._toast) App._toast(`📤 ${targets.length}건 업데이트 요청을 보냈습니다`, 'success');
+  }
   function _bookStatusSectionHtml() {
     if (!_canSee('booklib')) return '';
     if (typeof BookLibDB === 'undefined' || typeof StudentDB === 'undefined') return '';
@@ -341,7 +370,10 @@ const DashboardApp = (() => {
 
     return `<div class="db-sec" id="db-book-sec">
       <div class="db-sec-hdr"><div class="db-sec-title">📊 교재 학습 현황</div>
-        <button class="db-mini-btn ghost" onclick="App.go('booklib')">전체보기</button></div>
+        <div style="display:flex;gap:6px">
+          <button class="db-mini-btn" onclick="DashboardApp._requestBulkUpdate()" title="이 날짜의 모든 반을 한 번에 업데이트 요청">🔄 일괄 업데이트</button>
+          <button class="db-mini-btn ghost" onclick="App.go('booklib')">전체보기</button>
+        </div></div>
       <div class="db-day-tabs">${tabs.map(t => `<button class="db-day-tab${t.off === _bookDayOffset ? ' on' : ''}" onclick="DashboardApp._selectBookDay(${t.off})">${t.label}</button>`).join('')}</div>
       ${groups.length
         ? `<div class="db-cls-groups">${groups.map(g => `<div class="db-cls-group">
@@ -388,5 +420,5 @@ const DashboardApp = (() => {
     if (typeof BooklibApp !== 'undefined' && BooklibApp.goToMatrix) BooklibApp.goToMatrix(clsId, bkId);
   }
 
-  return { init, render, goMatrix, _refreshBadges, openReorder, _saveReorder, _selectBookDay };
+  return { init, render, goMatrix, _refreshBadges, openReorder, _saveReorder, _selectBookDay, _requestBulkUpdate, _todayUpdateTargets };
 })();
