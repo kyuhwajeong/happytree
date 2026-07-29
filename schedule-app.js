@@ -57,15 +57,15 @@ const ScheduleApp = (() => {
 .sch-resizable-inner{overflow:auto;width:100%;height:100%;padding:2px;border:1px solid transparent;border-radius:10px;box-sizing:border-box;}
 .sch-resizable-wrap:hover .sch-resizable-inner,.sch-resizable-wrap.resizing .sch-resizable-inner{border-color:var(--bdr2);}
 .sch-resize-hint{position:absolute;right:6px;bottom:4px;font-size:12px;color:var(--tx3);opacity:.4;pointer-events:none;line-height:1;z-index:1;}
-.sch-resize-handle{position:absolute;z-index:5;}
-.sch-resize-handle.rh-n,.sch-resize-handle.rh-s{left:8px;right:8px;height:7px;}
-.sch-resize-handle.rh-e,.sch-resize-handle.rh-w{top:8px;bottom:8px;width:7px;}
-.sch-resize-handle.rh-n{top:-3px;} .sch-resize-handle.rh-s{bottom:-3px;}
-.sch-resize-handle.rh-e{right:-3px;} .sch-resize-handle.rh-w{left:-3px;}
-.sch-resize-handle.rh-ne,.sch-resize-handle.rh-nw,.sch-resize-handle.rh-se,.sch-resize-handle.rh-sw{width:14px;height:14px;}
-.sch-resize-handle.rh-ne{top:-4px;right:-4px;} .sch-resize-handle.rh-nw{top:-4px;left:-4px;}
-.sch-resize-handle.rh-se{bottom:-4px;right:-4px;} .sch-resize-handle.rh-sw{bottom:-4px;left:-4px;}
-.sch-resize-handle:hover,.sch-resizable-wrap.resizing .sch-resize-handle{background:var(--a20);border-radius:4px;}
+.sch-widget-resize-handle{position:absolute;z-index:5;}
+.sch-widget-resize-handle.rh-n,.sch-widget-resize-handle.rh-s{left:8px;right:8px;height:7px;}
+.sch-widget-resize-handle.rh-e,.sch-widget-resize-handle.rh-w{top:8px;bottom:8px;width:7px;}
+.sch-widget-resize-handle.rh-n{top:-3px;} .sch-widget-resize-handle.rh-s{bottom:-3px;}
+.sch-widget-resize-handle.rh-e{right:-3px;} .sch-widget-resize-handle.rh-w{left:-3px;}
+.sch-widget-resize-handle.rh-ne,.sch-widget-resize-handle.rh-nw,.sch-widget-resize-handle.rh-se,.sch-widget-resize-handle.rh-sw{width:14px;height:14px;}
+.sch-widget-resize-handle.rh-ne{top:-4px;right:-4px;} .sch-widget-resize-handle.rh-nw{top:-4px;left:-4px;}
+.sch-widget-resize-handle.rh-se{bottom:-4px;right:-4px;} .sch-widget-resize-handle.rh-sw{bottom:-4px;left:-4px;}
+.sch-widget-resize-handle:hover,.sch-resizable-wrap.resizing .sch-widget-resize-handle{background:var(--a20);border-radius:4px;}
 .sch-cal-title{font-size:13.5px;font-weight:800;color:var(--tx)}
 .sch-cal-navs{display:flex;align-items:center;gap:4px}
 .sch-nav-btn{width:26px;height:26px;border-radius:8px;background:var(--card2);border:1px solid var(--bdr);display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer;color:var(--tx2)}
@@ -376,6 +376,7 @@ const ScheduleApp = (() => {
         wrap.style.height     = saved.h + 'px';
         wrap.style.marginLeft = (saved.ml || 0) + 'px';
         wrap.style.marginTop  = (saved.mt || 0) + 'px';
+        _applyContentZoom(wrap);
       }
     } catch (e) {}
   }
@@ -410,15 +411,25 @@ const ScheduleApp = (() => {
     wrap._resizeBound = true;
 
     // 핸들 요소 생성(없으면)
-    if (!wrap.querySelector('.sch-resize-handle')) {
+    if (!wrap.querySelector('.sch-widget-resize-handle')) {
       _RESIZE_DIRS.forEach(d => {
         const h = document.createElement('div');
-        h.className = `sch-resize-handle rh-${d.cls}`;
+        h.className = `sch-widget-resize-handle rh-${d.cls}`;
         h.style.cursor = d.cursor;
         wrap.appendChild(h);
         _bindHandleDrag(h, wrap, d);
       });
     }
+  }
+  function _applyContentZoom(wrap) {
+    const inner = wrap.querySelector('.sch-resizable-inner');
+    if (!inner) return;
+    // ★ 기준 너비(500px) 대비 현재 너비 비율만큼 안쪽 콘텐츠(글자·숫자 포함 전체)를
+    //   확대/축소한다 — 상자만 커지고 속은 그대로인 게 아니라, 실제로 글자
+    //   크기도 같이 커지고 작아지도록.
+    const BASELINE_W = 500;
+    const ratio = Math.max(0.75, Math.min(1.8, wrap.offsetWidth / BASELINE_W));
+    inner.style.zoom = ratio;
   }
   function _bindHandleDrag(handle, wrap, dir) {
     function start(e) {
@@ -448,6 +459,7 @@ const ScheduleApp = (() => {
           wrap.style.height = newH + 'px';
           wrap.style.marginTop = (startMT - (newH - startH)) + 'px';
         }
+        _applyContentZoom(wrap);
       }
       function end() {
         wrap.classList.remove('resizing');
