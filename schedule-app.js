@@ -117,6 +117,7 @@ const ScheduleApp = (() => {
 .sch-tdc-time2{font-size:10px;font-weight:700;color:var(--a);margin-bottom:1px;white-space:nowrap}
 .sch-tdc-card.now .sch-tdc-time2{color:#ef4444}
 .sch-tdc-name2{font-size:12.5px;font-weight:800;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sch-tdc-stucnt{font-size:10.5px;font-weight:600;color:var(--tx3);margin-left:2px}
 .sch-tdc-empty{text-align:center;color:var(--tx3);font-size:12px;padding:24px 10px;background:var(--card2);border-radius:12px;border:1px dashed var(--bdr2)}
 .sch-tdc-suppress{background:var(--a10);border:1px solid var(--a40);border-radius:12px;padding:14px}
 .sch-tdc-suppress-title{font-size:12.5px;font-weight:700;color:var(--tx);text-align:center}
@@ -487,6 +488,7 @@ const ScheduleApp = (() => {
       </div>`;
     }
 
+    const byClass = (typeof StudentDB !== 'undefined' && StudentDB.getStats) ? (StudentDB.getStats().byClass || {}) : {};
     const list = _visibleClasses()
       .filter(c => (c.days || []).includes(todayDow))
       .map(c => {
@@ -504,11 +506,12 @@ const ScheduleApp = (() => {
     html += `<div class="sch-tdc-grid">${list.map(({ cls, dt, startMin, endMin }, idx) => {
       const inSession = startMin !== null && endMin !== null && nowMin >= startMin && nowMin <= endMin;
       const timeTxt = dt ? _fmtTime(dt) : '시간 미정';
+      const stuCount = byClass[(cls.name || '').trim()] || 0;
       return `<div class="sch-tdc-card${inSession ? ' now' : ''}" onclick="App.goClass('${cls.id}')">
         <span class="sch-tdc-num">${idx + 1}</span>
         <div class="sch-tdc-info">
           <div class="sch-tdc-time2">${_esc(timeTxt)}${inSession ? ' · 진행중' : ''}</div>
-          <div class="sch-tdc-name2">${_esc(cls.name)}반</div>
+          <div class="sch-tdc-name2">${_esc(cls.name)}반 <span class="sch-tdc-stucnt">👤 ${stuCount}명</span></div>
         </div>
       </div>`;
     }).join('')}</div>`;
