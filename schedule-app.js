@@ -58,13 +58,9 @@ const ScheduleApp = (() => {
 .sch-resizable-wrap:hover .sch-resizable-inner,.sch-resizable-wrap.resizing .sch-resizable-inner{border-color:var(--bdr2);}
 .sch-resize-hint{position:absolute;right:6px;bottom:4px;font-size:12px;color:var(--tx3);opacity:.4;pointer-events:none;line-height:1;z-index:1;}
 .sch-widget-resize-handle{position:absolute;z-index:5;}
-.sch-widget-resize-handle.rh-n,.sch-widget-resize-handle.rh-s{left:8px;right:8px;height:7px;}
-.sch-widget-resize-handle.rh-e,.sch-widget-resize-handle.rh-w{top:8px;bottom:8px;width:7px;}
-.sch-widget-resize-handle.rh-n{top:-3px;} .sch-widget-resize-handle.rh-s{bottom:-3px;}
-.sch-widget-resize-handle.rh-e{right:-3px;} .sch-widget-resize-handle.rh-w{left:-3px;}
-.sch-widget-resize-handle.rh-ne,.sch-widget-resize-handle.rh-nw,.sch-widget-resize-handle.rh-se,.sch-widget-resize-handle.rh-sw{width:14px;height:14px;}
-.sch-widget-resize-handle.rh-ne{top:-4px;right:-4px;} .sch-widget-resize-handle.rh-nw{top:-4px;left:-4px;}
-.sch-widget-resize-handle.rh-se{bottom:-4px;right:-4px;} .sch-widget-resize-handle.rh-sw{bottom:-4px;left:-4px;}
+.sch-widget-resize-handle.rh-s{left:8px;right:8px;height:7px;bottom:-3px;}
+.sch-widget-resize-handle.rh-e{top:8px;bottom:8px;width:7px;right:-3px;}
+.sch-widget-resize-handle.rh-se{width:14px;height:14px;bottom:-4px;right:-4px;}
 .sch-widget-resize-handle:hover,.sch-resizable-wrap.resizing .sch-widget-resize-handle{background:var(--a20);border-radius:4px;}
 .sch-cal-title{font-size:13.5px;font-weight:800;color:var(--tx)}
 .sch-cal-navs{display:flex;align-items:center;gap:4px}
@@ -396,14 +392,9 @@ const ScheduleApp = (() => {
    *   위치가 화면상 고정된 채로 왼쪽/위 방향으로 자라나도록 margin을
    *   함께 보정한다. */
   const _RESIZE_DIRS = [
-    { cls: 'n',  cursor: 'ns-resize',   x: 0, y: -1 },
-    { cls: 's',  cursor: 'ns-resize',   x: 0, y:  1 },
-    { cls: 'e',  cursor: 'ew-resize',   x: 1, y:  0 },
-    { cls: 'w',  cursor: 'ew-resize',   x: -1, y: 0 },
-    { cls: 'ne', cursor: 'nesw-resize', x: 1, y: -1 },
-    { cls: 'nw', cursor: 'nwse-resize', x: -1, y: -1 },
-    { cls: 'se', cursor: 'nwse-resize', x: 1, y:  1 },
-    { cls: 'sw', cursor: 'nesw-resize', x: -1, y: 1 },
+    { cls: 's', cursor: 'ns-resize', x: 0, y:  1 },
+    { cls: 'e', cursor: 'ew-resize', x: 1, y:  0 },
+    { cls: 'se', cursor: 'nwse-resize', x: 1, y: 1 },
   ];
   function _bindWidgetResizeSave() {
     const wrap = _q('sch-resizable-wrap');
@@ -542,36 +533,36 @@ const ScheduleApp = (() => {
     const dowHtml = DAYS_KO.map((d, i) => `<div class="sch-dow${i === 0 ? ' sun' : ''}${i === 6 ? ' sat' : ''}">${d}</div>`).join('');
 
     el.innerHTML = `
-      <div id="sch-resizable-wrap" class="sch-resizable-wrap">
-        <div class="sch-resize-hint" title="테두리를 드래그해서 상하좌우로 크기를 조절할 수 있어요">⤡</div>
-        <div class="sch-resizable-inner">
-        <div class="sch-cal-hdr">
-          <div class="sch-cal-title">${year}년 ${month}월</div>
-          <div class="sch-cal-navs">
-            <button class="sch-today-btn" onclick="ScheduleApp._goToday()">오늘</button>
-            <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(-1)">‹</button>
-            <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(1)">›</button>
-          </div>
+      <div class="sch-cal-hdr">
+        <div class="sch-cal-title">${year}년 ${month}월</div>
+        <div class="sch-cal-navs">
+          <button class="sch-today-btn" onclick="ScheduleApp._goToday()">오늘</button>
+          <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(-1)">‹</button>
+          <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(1)">›</button>
         </div>
-        <div class="sch-widget-layout">
-          <div class="sch-cal-col">
-            <div class="sch-dow-row">${dowHtml}</div>
-            ${weeksHtml}
-            <div class="sch-legend">
-              ${Object.values(CATS).map(c => `<span class="sch-legend-item"><span class="sch-legend-dot" style="background:${c.color}"></span>${c.ico} ${c.label}</span>`).join('')}
-              <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${PAY_COLOR}"></span>💰 급여일</span>
-              <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${WORK_COLOR}"></span>👤 근무기록</span>
-              <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${NOTICE_COLOR}"></span>🔔 공지</span>
+      </div>
+      <div class="sch-widget-layout">
+        <div class="sch-cal-col">
+          <div id="sch-resizable-wrap" class="sch-resizable-wrap">
+            <div class="sch-resize-hint" title="오른쪽/아래쪽 테두리를 드래그해서 달력 크기를 조절할 수 있어요">⤡</div>
+            <div class="sch-resizable-inner">
+              <div class="sch-dow-row">${dowHtml}</div>
+              ${weeksHtml}
+              <div class="sch-legend">
+                ${Object.values(CATS).map(c => `<span class="sch-legend-item"><span class="sch-legend-dot" style="background:${c.color}"></span>${c.ico} ${c.label}</span>`).join('')}
+                <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${PAY_COLOR}"></span>💰 급여일</span>
+                <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${WORK_COLOR}"></span>👤 근무기록</span>
+                <span class="sch-legend-item"><span class="sch-legend-dot" style="background:${NOTICE_COLOR}"></span>🔔 공지</span>
+              </div>
             </div>
           </div>
-          <div class="sch-tdc-col">
-            <div id="sch-selday-panel">${_selDayPanelHtml(_selDate || todayStr)}</div>
-          </div>
         </div>
-        <div class="sch-today-divider"></div>
-        <div class="sch-today-section">${_todayClassesHtml()}</div>
+        <div class="sch-tdc-col">
+          <div id="sch-selday-panel">${_selDayPanelHtml(_selDate || todayStr)}</div>
         </div>
-      </div>`;
+      </div>
+      <div class="sch-today-divider"></div>
+      <div class="sch-today-section">${_todayClassesHtml()}</div>`;
     _restoreWidgetSize();
     _bindWidgetResizeSave();
 
