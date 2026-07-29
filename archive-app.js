@@ -82,8 +82,9 @@ const ArchiveApp = (() => {
 .ar-field label{display:block;font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:5px}
 .ar-field input[type=text],.ar-field textarea,.ar-field select{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--bdr);background:var(--surf);color:var(--tx);font-size:13px;font-family:inherit}
 .ar-field textarea{resize:vertical;min-height:60px}
-.ar-drop{border:2px dashed var(--bdr2);border-radius:12px;padding:22px;text-align:center;color:var(--tx3);font-size:12.5px;cursor:pointer}
+.ar-drop{border:2px dashed var(--bdr2);border-radius:12px;padding:22px;text-align:center;color:var(--tx3);font-size:12.5px;cursor:pointer;transition:all .12s}
 .ar-drop.has-file{border-color:var(--a);color:var(--tx);font-weight:700}
+.ar-drop.dragover{border-color:var(--a);background:var(--a10);color:var(--a);font-weight:700}
 .ar-btn-row{display:flex;gap:8px;margin-top:16px}
 .ar-btn{flex:1;padding:11px;border-radius:12px;border:none;font-size:13px;font-weight:800;cursor:pointer}
 .ar-btn.primary{background:var(--a);color:#fff}
@@ -260,6 +261,27 @@ const ArchiveApp = (() => {
     </div>`;
     document.body.appendChild(ov);
     ov.onclick = e => { if (e.target === ov) _closeUpload(); };
+
+    // ★ 드래그 앤 드롭 — 지금까지 클릭해서 파일 선택창 여는 것만 되고
+    //   실제 끌어다 놓기는 처리가 아예 없었다. dragover에서 하이라이트,
+    //   drop에서 파일을 받도록 이벤트를 직접 연결한다.
+    const dropEl = _q('ar-drop');
+    if (dropEl) {
+      ['dragenter', 'dragover'].forEach(ev => dropEl.addEventListener(ev, e => {
+        e.preventDefault(); e.stopPropagation();
+        dropEl.classList.add('dragover');
+      }));
+      ['dragleave', 'dragend'].forEach(ev => dropEl.addEventListener(ev, e => {
+        e.preventDefault(); e.stopPropagation();
+        dropEl.classList.remove('dragover');
+      }));
+      dropEl.addEventListener('drop', e => {
+        e.preventDefault(); e.stopPropagation();
+        dropEl.classList.remove('dragover');
+        const file = e.dataTransfer?.files?.[0];
+        if (file) _onPickFile(file);
+      });
+    }
   }
   function _closeUpload() { _q('ar-upload-ov')?.remove(); }
   function _onPickFile(file) {
