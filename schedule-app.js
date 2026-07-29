@@ -67,8 +67,8 @@ const ScheduleApp = (() => {
 .sch-nav-btn{width:26px;height:26px;border-radius:8px;background:var(--card2);border:1px solid var(--bdr);display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer;color:var(--tx2)}
 .sch-today-btn{padding:5px 9px;border-radius:8px;background:var(--card2);border:1px solid var(--bdr);font-size:10.5px;font-weight:700;color:var(--tx2);cursor:pointer}
 .sch-widget-layout{display:flex;flex-wrap:wrap;gap:18px}
-.sch-cal-col{flex:1 1 250px;min-width:230px}
-.sch-tdc-col{flex:1.15 1 220px;min-width:210px;border-left:1px solid var(--bdr);padding-left:16px;display:flex;flex-direction:column}
+.sch-cal-col{flex:0 0 auto;min-width:230px}
+.sch-tdc-col{flex:1 1 auto;min-width:210px;border-left:1px solid var(--bdr);padding-left:16px;display:flex;flex-direction:column}
 .sch-selday-hint{text-align:center;color:var(--tx3);font-size:11.5px;line-height:1.6;padding:22px 8px;background:var(--card2);border-radius:12px}
 .sch-selday-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .sch-selday-title{font-size:12px;font-weight:800;color:var(--tx)}
