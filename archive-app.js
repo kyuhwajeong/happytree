@@ -222,7 +222,8 @@ const ArchiveApp = (() => {
   async function _togglePin(id) {
     const f = ArchiveDB.getById(id);
     if (!f) return;
-    await ArchiveDB.updateFile(id, { pinned: !f.pinned });
+    const result = await ArchiveDB.updateFile(id, { pinned: !f.pinned });
+    console.log(`[ArchiveApp] 즐겨찾기 ${result?.pinned ? 'ON' : 'OFF'} — 서버 반영: ${result?.savedToServer}`, result);
     _refreshGrid();
   }
 

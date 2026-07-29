@@ -9,7 +9,7 @@
 const ArchiveDB = (() => {
   // ★★★ Cloudflare Worker 배포 후 아래 2줄을 실제 값으로 바꿔주세요 ★★★
   const WORKER_BASE   = 'https://delicate-dream-791b.kuha0879.workers.dev';
-  const UPLOAD_TOKEN  = 'happytree2026-archive-key-hjyjkh';
+  const UPLOAD_TOKEN  = '★여기에-Cloudflare에-넣으신-UPLOAD_TOKEN-값을-그대로-붙여넣으세요★';
 
   const LS_KEY = 'hk10b_archive';
   const FB_PATH = 'hakwon10/archive';
@@ -33,7 +33,7 @@ const ArchiveDB = (() => {
 
   async function init() {
     _list = _lg(LS_KEY) || [];
-    if (typeof FireDB === 'undefined') return;
+    if (typeof FireDB === 'undefined') { console.warn('[ArchiveDB] FireDB 없음 — 초기화 중단'); return; }
     try {
       const data = await FireDB.get(FB_PATH);
       if (data) { _list = Object.values(data); _saveLS(); }
@@ -46,6 +46,13 @@ const ArchiveDB = (() => {
         _list = nd; _saveLS(); _fire('archive');
       }
     });
+
+    // ★ Worker 주소가 아직 예시값 그대로 남아있으면 실제 업로드/미리보기가
+    //   전부 실패하므로, 콘솔에서 바로 알아챌 수 있게 눈에 띄게 경고한다.
+    if (WORKER_BASE.includes('YOUR-WORKER-NAME') || UPLOAD_TOKEN.includes('여기에')) {
+      console.warn('[ArchiveDB] ⚠️ WORKER_BASE 또는 UPLOAD_TOKEN이 아직 예시값입니다 — archive-db.js 상단을 실제 값으로 채워주세요');
+    }
+    console.log(`[ArchiveDB] ✅ ready, files: ${_list.length}, pinned: ${_list.filter(f => f.pinned).length}`);
   }
 
   function getAll() { return _list.slice().sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || '')); }
