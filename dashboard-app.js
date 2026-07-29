@@ -75,19 +75,20 @@ const DashboardApp = (() => {
 .db-day-tabs::-webkit-scrollbar{display:none}
 .db-day-tab{flex-shrink:0;padding:6px 12px;border-radius:999px;border:1px solid var(--bdr);background:var(--card2);color:var(--tx2);font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s}
 .db-day-tab.on{background:var(--a);border-color:var(--a);color:#fff}
-.db-cls-group{margin-bottom:14px}
-.db-cls-group:last-child{margin-bottom:0}
-.db-cls-group-hdr{display:flex;align-items:center;gap:8px;margin-bottom:7px;padding-left:2px}
+/* ★ 반 그룹을 세로로 쌓지 않고 가로로 나란히 채워서(auto-fit) 스크롤 빈도를 줄인다 —
+ *   auto-fill과 달리 auto-fit은 아이템 수가 적어도 남는 칸 없이 꽉 채운다 */
+.db-cls-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;align-items:start}
+.db-cls-group{background:var(--card2);border:1px solid var(--bdr);border-radius:12px;padding:11px}
+.db-cls-group-hdr{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .db-cls-group-name{font-size:12.5px;font-weight:800;color:var(--tx)}
 .db-cls-group-name::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--a);margin-right:6px;vertical-align:middle}
 .db-cls-group-time{font-size:10.5px;font-weight:600;color:var(--tx3)}
-.db-book-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
-.db-book-card{background:var(--card2);border:1px solid var(--bdr);border-radius:12px;padding:11px;cursor:pointer;transition:all .15s}
+.db-book-list{display:flex;flex-direction:column;gap:7px}
+.db-book-card{background:var(--surf);border:1px solid var(--bdr);border-radius:9px;padding:8px 10px;cursor:pointer;transition:all .15s}
 .db-book-card:active{transform:scale(.98)}
 .db-book-card-top{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px}
-.db-book-cls{font-size:11px;font-weight:800;color:var(--a);background:var(--a10);border-radius:7px;padding:2px 7px}
-.db-book-name{font-size:12.5px;font-weight:700;color:var(--tx);margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.db-book-badge{font-size:10.5px;font-weight:800;white-space:nowrap;border-radius:999px;padding:2px 8px}
+.db-book-name{font-size:12px;font-weight:700;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.db-book-badge{font-size:10.5px;font-weight:800;white-space:nowrap;border-radius:999px;padding:2px 8px;flex-shrink:0}
 .db-book-badge.warn{color:#ef4444;background:rgba(239,68,68,.1)}
 .db-book-badge.ok{color:#059669;background:rgba(5,150,105,.1)}
 .db-stu-list{display:flex;flex-wrap:wrap;gap:5px}
@@ -343,13 +344,13 @@ const DashboardApp = (() => {
         <button class="db-mini-btn ghost" onclick="App.go('booklib')">전체보기</button></div>
       <div class="db-day-tabs">${tabs.map(t => `<button class="db-day-tab${t.off === _bookDayOffset ? ' on' : ''}" onclick="DashboardApp._selectBookDay(${t.off})">${t.label}</button>`).join('')}</div>
       ${groups.length
-        ? groups.map(g => `<div class="db-cls-group">
+        ? `<div class="db-cls-groups">${groups.map(g => `<div class="db-cls-group">
             <div class="db-cls-group-hdr">
               <span class="db-cls-group-name">${_esc(g.cls.name)}반</span>
               ${g.timeLabel ? `<span class="db-cls-group-time">🕐 ${g.timeLabel}</span>` : ''}
             </div>
-            <div class="db-book-grid">${g.items.map(r => _bookCardHtml(r)).join('')}</div>
-          </div>`).join('')
+            <div class="db-book-list">${g.items.map(r => _bookCardHtml(r)).join('')}</div>
+          </div>`).join('')}</div>`
         : `<div class="db-empty-mini">🎉 미수행 항목이 없습니다</div>`}
     </div>`;
   }
