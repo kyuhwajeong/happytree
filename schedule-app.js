@@ -796,7 +796,7 @@ const ScheduleApp = (() => {
     html += `<div class="sch-detail-sec">
       <div class="sch-detail-sec-title-row">
         <div class="sch-detail-sec-title">👤 근무 기록</div>
-        ${isAdmin ? `<button class="sch-mini-add-btn" onclick="ScheduleApp.${_workAddFor === dateStr ? 'closeWorkQuickAdd' : `openWorkQuickAdd('${dateStr}')`}">${_workAddFor === dateStr ? '✕ 취소' : '➕ 등록'}</button>` : ''}
+        ${isAdmin ? `<button class="sch-mini-add-btn" onclick="ScheduleApp.${_workAddFor === dateStr ? 'closeWorkQuickAdd()' : `openWorkQuickAdd('${dateStr}')`}">${_workAddFor === dateStr ? '✕ 취소' : '➕ 등록'}</button>` : ''}
       </div>`;
     html += workStaff.length ? workStaff.map(s => {
       const info = _dayWorkInfo(s.id, dateStr);
