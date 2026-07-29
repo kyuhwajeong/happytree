@@ -75,6 +75,12 @@ const DashboardApp = (() => {
 .db-day-tabs::-webkit-scrollbar{display:none}
 .db-day-tab{flex-shrink:0;padding:6px 12px;border-radius:999px;border:1px solid var(--bdr);background:var(--card2);color:var(--tx2);font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s}
 .db-day-tab.on{background:var(--a);border-color:var(--a);color:#fff}
+.db-cls-group{margin-bottom:14px}
+.db-cls-group:last-child{margin-bottom:0}
+.db-cls-group-hdr{display:flex;align-items:center;gap:8px;margin-bottom:7px;padding-left:2px}
+.db-cls-group-name{font-size:12.5px;font-weight:800;color:var(--tx)}
+.db-cls-group-name::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--a);margin-right:6px;vertical-align:middle}
+.db-cls-group-time{font-size:10.5px;font-weight:600;color:var(--tx3)}
 .db-book-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
 .db-book-card{background:var(--card2);border:1px solid var(--bdr);border-radius:12px;padding:11px;cursor:pointer;transition:all .15s}
 .db-book-card:active{transform:scale(.98)}
@@ -315,13 +321,35 @@ const DashboardApp = (() => {
     // ★ 앞으로 일주일간 예정된 수업이 아예 없으면 섹션 자체를 숨긴다
     if (!tabs.length) return '';
     if (!tabs.find(t => t.off === _bookDayOffset)) _bookDayOffset = tabs[0].off;
+    const dow = DAYS_KO[(() => { const d = new Date(); d.setDate(d.getDate() + _bookDayOffset); return d.getDay(); })()];
     const rows = _computeBookStatusForClasses(_classesForDayOffset(_bookDayOffset));
+
+    // ★ 반별로 그룹핑 — 반 순서는 그날 수업 시작 시간 순으로 정렬
+    const groups = [];
+    const idx = new Map();
+    rows.forEach(r => {
+      if (!idx.has(r.cls.id)) { idx.set(r.cls.id, groups.length); groups.push({ cls: r.cls, items: [] }); }
+      groups[idx.get(r.cls.id)].items.push(r);
+    });
+    groups.forEach(g => {
+      const dt = g.cls.dayTimes?.[dow];
+      g.timeLabel = dt?.start ? (dt.end ? `${dt.start}~${dt.end}` : dt.start) : '';
+      g.startMin = dt?.start ? (+dt.start.split(':')[0]) * 60 + (+dt.start.split(':')[1]) : 9999;
+    });
+    groups.sort((a, b) => a.startMin - b.startMin || a.cls.name.localeCompare(b.cls.name));
+
     return `<div class="db-sec" id="db-book-sec">
       <div class="db-sec-hdr"><div class="db-sec-title">📊 교재 학습 현황</div>
         <button class="db-mini-btn ghost" onclick="App.go('booklib')">전체보기</button></div>
       <div class="db-day-tabs">${tabs.map(t => `<button class="db-day-tab${t.off === _bookDayOffset ? ' on' : ''}" onclick="DashboardApp._selectBookDay(${t.off})">${t.label}</button>`).join('')}</div>
-      ${rows.length
-        ? `<div class="db-book-grid">${rows.map(r => _bookCardHtml(r)).join('')}</div>`
+      ${groups.length
+        ? groups.map(g => `<div class="db-cls-group">
+            <div class="db-cls-group-hdr">
+              <span class="db-cls-group-name">${_esc(g.cls.name)}반</span>
+              ${g.timeLabel ? `<span class="db-cls-group-time">🕐 ${g.timeLabel}</span>` : ''}
+            </div>
+            <div class="db-book-grid">${g.items.map(r => _bookCardHtml(r)).join('')}</div>
+          </div>`).join('')
         : `<div class="db-empty-mini">🎉 미수행 항목이 없습니다</div>`}
     </div>`;
   }
@@ -330,10 +358,9 @@ const DashboardApp = (() => {
     const moreStu = r.perStu.length > 5 ? `<span class="db-stu-badge more">+${r.perStu.length - 5}명</span>` : '';
     return `<div class="db-book-card" onclick="DashboardApp.goMatrix('${r.cls.id}','${r.book.id}')">
       <div class="db-book-card-top">
-        <span class="db-book-cls">${_esc(r.cls.name)}반</span>
+        <span class="db-book-name">${_esc(r.book.name)}</span>
         ${r.total > 0 ? `<span class="db-book-badge warn">미수행 ${r.total}</span>` : `<span class="db-book-badge ok">✓ 완료</span>`}
       </div>
-      <div class="db-book-name">${_esc(r.book.name)}</div>
       <div class="db-stu-list">${stuHtml}${moreStu}</div>
     </div>`;
   }
