@@ -53,14 +53,14 @@ const ScheduleApp = (() => {
     const s = document.createElement('style');
     s.textContent = `
 .sch-cal-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.sch-resizable-wrap{position:relative;min-width:340px;min-height:280px;max-width:100%;}
-.sch-resizable-inner{overflow:auto;width:100%;height:100%;padding:2px;border:1px solid transparent;border-radius:10px;box-sizing:border-box;}
-.sch-resizable-wrap:hover .sch-resizable-inner,.sch-resizable-wrap.resizing .sch-resizable-inner{border-color:var(--bdr2);}
-.sch-resize-hint{position:absolute;right:6px;bottom:4px;font-size:12px;color:var(--tx3);opacity:.4;pointer-events:none;line-height:1;z-index:1;}
+.sch-resizable-wrap{position:relative;display:inline-block;max-width:100%;padding:2px;border:1px solid transparent;border-radius:10px;}
+.sch-resizable-wrap:hover,.sch-resizable-wrap.resizing{border-color:var(--bdr2);}
+.sch-zoom-inner{transform-origin:top left;}
+.sch-resize-hint{position:absolute;right:2px;bottom:0px;font-size:12px;color:var(--tx3);opacity:.4;pointer-events:none;line-height:1;z-index:1;}
 .sch-widget-resize-handle{position:absolute;z-index:5;}
-.sch-widget-resize-handle.rh-s{left:8px;right:8px;height:7px;bottom:-3px;}
-.sch-widget-resize-handle.rh-e{top:8px;bottom:8px;width:7px;right:-3px;}
-.sch-widget-resize-handle.rh-se{width:14px;height:14px;bottom:-4px;right:-4px;}
+.sch-widget-resize-handle.rh-s{left:8px;right:8px;height:9px;bottom:-5px;}
+.sch-widget-resize-handle.rh-e{top:8px;bottom:8px;width:9px;right:-5px;}
+.sch-widget-resize-handle.rh-se{width:16px;height:16px;bottom:-6px;right:-6px;}
 .sch-widget-resize-handle:hover,.sch-resizable-wrap.resizing .sch-widget-resize-handle{background:var(--a20);border-radius:4px;}
 .sch-cal-title{font-size:13.5px;font-weight:800;color:var(--tx)}
 .sch-cal-navs{display:flex;align-items:center;gap:4px}
@@ -354,111 +354,114 @@ const ScheduleApp = (() => {
     return { tracks, overflowByDay };
   }
 
-  /* ★ 달력 위젯 크기 — 사용자가 모서리를 드래그해서 상하좌우로 자유롭게
-   *   조절할 수 있게 하고, 선택한 크기는 다음에 다시 열어도 유지되도록
-   *   저장한다. 브라우저 기본 resize 기능은 오른쪽 아래 모서리 하나만
-   *   지원해서, 4면 전부(상하좌우) 마우스로 드래그할 수 있도록 직접
-   *   구현했다(마우스 + 터치 모두 지원). */
-  const WIDGET_SIZE_KEY = 'sch_widget_size';
-  const RESIZE_MIN_W = 340, RESIZE_MIN_H = 280;
+  /* ★ 달력 확대/축소 — 오른쪽 또는 아래쪽 테두리를 드래그하면 달력 내용
+   *   (요일줄+주간칸+범례) 전체가 그 자리에서 확대/축소된다(CSS zoom).
+   *   박스 크기만 커지고 속은 그대로인 게 아니라 실제로 글자·칸 크기가
+   *   커진다. 스크롤은 절대 생기지 않는다(overflow:visible, 고정
+   *   px 크기 없음) — 늘어난 만큼 레이아웃이 자연스럽게 다시 흐른다.
+   *   달력이 커지면 같은 줄에 있는 오른쪽 "이 날의 일정" 패널은 남는
+   *   공간이 줄어드는데, 그 패널 쪽은 ResizeObserver로 실제 렌더링된
+   *   폭 변화를 그대로 감지해서 자기 글자 크기(zoom)를 자동으로 맞춘다
+   *   — 달력 쪽 드래그와 상세 패널 쪽 축소가 늘 같이 맞물려 움직인다. */
+  const CAL_ZOOM_KEY = 'sch_cal_zoom';
+  const ZOOM_MIN = 0.7, ZOOM_MAX = 2.2;
+  let _tdcBaseW = 0; // 상세 패널의 "줌 1.0" 기준 폭(최초 측정값)
+
+  function _getSavedCalZoom() {
+    const v = parseFloat(localStorage.getItem(CAL_ZOOM_KEY));
+    return (v && v >= ZOOM_MIN && v <= ZOOM_MAX) ? v : 1;
+  }
+  function _setCalZoom(z) {
+    z = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+    const calZoomEl = _q('sch-cal-zoom');
+    if (calZoomEl) calZoomEl.style.zoom = z;
+    try { localStorage.setItem(CAL_ZOOM_KEY, String(z)); } catch (e) {}
+    return z;
+  }
 
   function _restoreWidgetSize() {
-    const wrap = _q('sch-resizable-wrap');
-    if (!wrap) return;
-    try {
-      const saved = JSON.parse(localStorage.getItem(WIDGET_SIZE_KEY) || 'null');
-      if (saved && saved.w && saved.h) {
-        wrap.style.width      = saved.w + 'px';
-        wrap.style.height     = saved.h + 'px';
-        wrap.style.marginLeft = (saved.ml || 0) + 'px';
-        wrap.style.marginTop  = (saved.mt || 0) + 'px';
-        _applyContentZoom(wrap);
-      }
-    } catch (e) {}
-  }
-  function _saveWidgetSize(wrap) {
-    try {
-      localStorage.setItem(WIDGET_SIZE_KEY, JSON.stringify({
-        w:  Math.round(wrap.offsetWidth),
-        h:  Math.round(wrap.offsetHeight),
-        ml: Math.round(parseFloat(wrap.style.marginLeft) || 0),
-        mt: Math.round(parseFloat(wrap.style.marginTop)  || 0),
-      }));
-    } catch (e) {}
+    _setCalZoom(_getSavedCalZoom());
   }
 
-  /* ★ 4면 + 4모서리 드래그 리사이즈 핸들 — 오른쪽/아래는 일반적으로
-   *   너비/높이만 늘리고(왼쪽 위는 고정), 왼쪽/위는 반대편(오른쪽/아래)
-   *   위치가 화면상 고정된 채로 왼쪽/위 방향으로 자라나도록 margin을
-   *   함께 보정한다. */
-  const _RESIZE_DIRS = [
-    { cls: 's', cursor: 'ns-resize', x: 0, y:  1 },
-    { cls: 'e', cursor: 'ew-resize', x: 1, y:  0 },
-    { cls: 'se', cursor: 'nwse-resize', x: 1, y: 1 },
-  ];
+  /* ★ 상세 패널 자동 맞춤 — 달력이 커져서 옆 칸이 좁아지면, 그 좁아진
+   *   실제 폭을 감지해서 상세 패널 글자도 같이 줄어들게(반대로 넓어지면
+   *   같이 커지게) 한다. 원인(달력 드래그)과 결과(옆 칸 축소)를 직접
+   *   계산하지 않고, "지금 실제로 렌더링된 폭이 얼마인가"만 관찰해서
+   *   반응하므로 화면 크기 변화 등 다른 원인으로 좁아져도 항상 맞다. */
+  function _bindTdcAutoZoom() {
+    const tdcCol  = document.querySelector('.sch-tdc-col');
+    const tdcZoom = _q('sch-tdc-zoom');
+    if (!tdcCol || !tdcZoom || typeof ResizeObserver === 'undefined') return;
+    if (tdcCol._roBound) return;
+    tdcCol._roBound = true;
+
+    let raf = null;
+    const ro = new ResizeObserver(entries => {
+      const w = entries[0]?.contentRect?.width;
+      if (!w) return;
+      if (!_tdcBaseW) {
+        // ★ 첫 측정값을 "줌 1.0 기준 폭"으로 삼는다(현재 줌을 역보정)
+        const curZoom = parseFloat(tdcZoom.style.zoom) || 1;
+        _tdcBaseW = w / curZoom;
+        return;
+      }
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const ratio = Math.max(ZOOM_MIN, Math.min(1.15, w / _tdcBaseW));
+        tdcZoom.style.zoom = ratio;
+      });
+    });
+    ro.observe(tdcCol);
+  }
+
   function _bindWidgetResizeSave() {
     const wrap = _q('sch-resizable-wrap');
     if (!wrap || wrap._resizeBound) return;
     wrap._resizeBound = true;
 
-    // 핸들 요소 생성(없으면)
     if (!wrap.querySelector('.sch-widget-resize-handle')) {
-      _RESIZE_DIRS.forEach(d => {
+      [
+        { cls: 'e',  cursor: 'ew-resize',   axis: 'x' },
+        { cls: 's',  cursor: 'ns-resize',   axis: 'y' },
+        { cls: 'se', cursor: 'nwse-resize', axis: 'xy' },
+      ].forEach(d => {
         const h = document.createElement('div');
         h.className = `sch-widget-resize-handle rh-${d.cls}`;
         h.style.cursor = d.cursor;
         wrap.appendChild(h);
-        _bindHandleDrag(h, wrap, d);
+        _bindHandleDrag(h, d.axis);
       });
     }
+    _bindTdcAutoZoom();
   }
-  function _applyContentZoom(wrap) {
-    const inner = wrap.querySelector('.sch-resizable-inner');
-    if (!inner) return;
-    // ★ 기준 너비(500px) 대비 현재 너비 비율만큼 안쪽 콘텐츠(글자·숫자 포함 전체)를
-    //   확대/축소한다 — 상자만 커지고 속은 그대로인 게 아니라, 실제로 글자
-    //   크기도 같이 커지고 작아지도록.
-    const BASELINE_W = 500;
-    const ratio = Math.max(0.75, Math.min(1.8, wrap.offsetWidth / BASELINE_W));
-    inner.style.zoom = ratio;
-  }
-  function _bindHandleDrag(handle, wrap, dir) {
+
+  function _bindHandleDrag(handle, axis) {
     function start(e) {
       e.preventDefault(); e.stopPropagation();
       const isTouch = e.type === 'touchstart';
       const p0 = isTouch ? e.touches[0] : e;
       const startX = p0.clientX, startY = p0.clientY;
-      const startW = wrap.offsetWidth, startH = wrap.offsetHeight;
-      const startML = parseFloat(wrap.style.marginLeft) || 0;
-      const startMT = parseFloat(wrap.style.marginTop)  || 0;
-      wrap.classList.add('resizing');
+      const startZoom = _getSavedCalZoom();
+      const wrap = _q('sch-resizable-wrap');
+      wrap?.classList.add('resizing');
 
       function move(ev) {
         const p = isTouch ? ev.touches[0] : ev;
         const dx = p.clientX - startX, dy = p.clientY - startY;
-        if (dir.x === 1) { // 오른쪽으로 드래그 → 너비만 증가
-          wrap.style.width = Math.max(RESIZE_MIN_W, startW + dx) + 'px';
-        } else if (dir.x === -1) { // 왼쪽으로 드래그 → 너비 증가 + 왼쪽으로 자람(오른쪽 끝 고정)
-          const newW = Math.max(RESIZE_MIN_W, startW - dx);
-          wrap.style.width = newW + 'px';
-          wrap.style.marginLeft = (startML - (newW - startW)) + 'px';
-        }
-        if (dir.y === 1) { // 아래로 드래그 → 높이만 증가
-          wrap.style.height = Math.max(RESIZE_MIN_H, startH + dy) + 'px';
-        } else if (dir.y === -1) { // 위로 드래그 → 높이 증가 + 위로 자람(아래쪽 끝 고정)
-          const newH = Math.max(RESIZE_MIN_H, startH - dy);
-          wrap.style.height = newH + 'px';
-          wrap.style.marginTop = (startMT - (newH - startH)) + 'px';
-        }
-        _applyContentZoom(wrap);
+        // ★ 오른쪽/아래로 끌수록 확대, 왼쪽/위로 끌수록 축소 — 두 축을
+        //   합쳐서 하나의 배율로 반영한다(200px 드래그 ≈ 배율 1.0 변화)
+        let delta = 0;
+        if (axis === 'x')  delta = dx / 200;
+        if (axis === 'y')  delta = dy / 200;
+        if (axis === 'xy') delta = (dx + dy) / 2 / 200;
+        _setCalZoom(startZoom + delta);
       }
       function end() {
-        wrap.classList.remove('resizing');
+        wrap?.classList.remove('resizing');
         document.removeEventListener('mousemove', move);
         document.removeEventListener('mouseup', end);
         document.removeEventListener('touchmove', move);
         document.removeEventListener('touchend', end);
-        _saveWidgetSize(wrap);
       }
       document.addEventListener('mousemove', move);
       document.addEventListener('mouseup', end);
@@ -544,8 +547,8 @@ const ScheduleApp = (() => {
       <div class="sch-widget-layout">
         <div class="sch-cal-col">
           <div id="sch-resizable-wrap" class="sch-resizable-wrap">
-            <div class="sch-resize-hint" title="오른쪽/아래쪽 테두리를 드래그해서 달력 크기를 조절할 수 있어요">⤡</div>
-            <div class="sch-resizable-inner">
+            <div class="sch-resize-hint" title="오른쪽/아래쪽 테두리를 드래그해서 달력을 확대·축소할 수 있어요 — 오른쪽 상세 패널은 자동으로 맞춰집니다">⤡</div>
+            <div id="sch-cal-zoom" class="sch-zoom-inner">
               <div class="sch-dow-row">${dowHtml}</div>
               ${weeksHtml}
               <div class="sch-legend">
@@ -558,7 +561,9 @@ const ScheduleApp = (() => {
           </div>
         </div>
         <div class="sch-tdc-col">
-          <div id="sch-selday-panel">${_selDayPanelHtml(_selDate || todayStr)}</div>
+          <div id="sch-tdc-zoom" class="sch-zoom-inner">
+            <div id="sch-selday-panel">${_selDayPanelHtml(_selDate || todayStr)}</div>
+          </div>
         </div>
       </div>
       <div class="sch-today-divider"></div>
