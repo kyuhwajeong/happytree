@@ -23,6 +23,7 @@ const DashboardApp = (() => {
   const SECTION_DEFS = [
     { key: 'schedule', ico: '🗓️', lbl: '일정표' },
     { key: 'books',    ico: '📊', lbl: '교재 학습 현황' },
+    { key: 'archive',  ico: '📁', lbl: '자료실 즐겨찾기' },
   ];
   const LS_ORDER = 'hk10b_dashboardOrder';
   function _getSectionOrder() {
@@ -37,6 +38,7 @@ const DashboardApp = (() => {
   const _SECTION_HTML = {
     schedule: () => _scheduleSectionHtml(),
     books:    () => _bookStatusSectionHtml(),
+    archive:  () => _archiveThumbsSectionHtml(),
   };
   const DAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -180,6 +182,12 @@ const DashboardApp = (() => {
     if (_cssInjected) return; _cssInjected = true;
     const s = document.createElement('style');
     s.textContent = `
+.db-ar-thumbs{display:flex;gap:10px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.db-ar-thumbs::-webkit-scrollbar{display:none}
+.db-ar-thumb{flex-shrink:0;width:84px;cursor:pointer}
+.db-ar-thumb img{width:84px;height:84px;object-fit:cover;border-radius:12px;border:1px solid var(--bdr);display:block}
+.db-ar-thumb-ico{width:84px;height:84px;border-radius:12px;border:1px solid var(--bdr);background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:32px}
+.db-ar-thumb-name{font-size:10.5px;font-weight:600;color:var(--tx2);margin-top:5px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .db-quote-inline{flex:0 1 260px;min-width:0;margin:0 14px 0 4px;padding-right:2px;cursor:pointer;transition:opacity .15s}
 .db-quote-inline.loading{opacity:.4}
 .db-quote-kr{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
@@ -575,11 +583,45 @@ const DashboardApp = (() => {
   }
 
   /* ═══════════════════════════════════════════════════════════
+   * 자료실 즐겨찾기 — 자료실에서 ⭐ 체크한 파일을 썸네일로 표시
+   * ═══════════════════════════════════════════════════════════ */
+  const _AR_IMG_EXT = ['png','jpg','jpeg','gif','webp'];
+  function _archiveThumbsSectionHtml() {
+    if (typeof ArchiveDB === 'undefined') return '';
+    const items = ArchiveDB.getAll().filter(f => f.pinned);
+    if (!items.length) return ''; // ★ 즐겨찾기한 자료가 없으면 섹션 자체를 숨김
+    return `<div class="db-sec">
+      <div class="db-sec-hdr"><div class="db-sec-title">📁 자료실 즐겨찾기</div>
+        <button class="db-mini-btn ghost" onclick="App.go('archive')">전체보기</button></div>
+      <div class="db-ar-thumbs">${items.map(f => {
+        const isImg = _AR_IMG_EXT.includes((f.ext || '').toLowerCase());
+        const inner = isImg
+          ? `<img src="${ArchiveDB.getFileUrl(f.r2Key)}" alt="${_esc(f.name)}">`
+          : `<div class="db-ar-thumb-ico">${_archiveIconFor(f.ext)}</div>`;
+        return `<div class="db-ar-thumb" onclick="DashboardApp.goArchivePreview('${f.id}')" title="${_esc(f.name)}">
+          ${inner}
+          <div class="db-ar-thumb-name">${_esc(f.name)}</div>
+        </div>`;
+      }).join('')}</div>
+    </div>`;
+  }
+  function _archiveIconFor(ext) {
+    const m = { pdf:'📕', xlsx:'📗', xls:'📗', csv:'📗', ppt:'📙', pptx:'📙', doc:'📘', docx:'📘',
+      zip:'🗜️', txt:'📄', mp4:'🎬', avi:'🎬', mov:'🎬', mkv:'🎬', webm:'🎬', wmv:'🎬',
+      mp3:'🎵', wav:'🎵', m4a:'🎵', ogg:'🎵', aac:'🎵', flac:'🎵' };
+    return m[(ext || '').toLowerCase()] || '📄';
+  }
+  function goArchivePreview(id) {
+    if (typeof App !== 'undefined' && App.go) App.go('archive');
+    if (typeof ArchiveApp !== 'undefined' && ArchiveApp.openPreview) ArchiveApp.openPreview(id);
+  }
+
+  /* ═══════════════════════════════════════════════════════════
    * 이동 액션
    * ═══════════════════════════════════════════════════════════ */
   function goMatrix(clsId, bkId) {
     if (typeof BooklibApp !== 'undefined' && BooklibApp.goToMatrix) BooklibApp.goToMatrix(clsId, bkId);
   }
 
-  return { init, render, goMatrix, _refreshBadges, openReorder, _saveReorder, _selectBookDay, _requestBulkUpdate, _todayUpdateTargets, _refreshQuote, _openQuoteSearch };
+  return { init, render, goMatrix, goArchivePreview, _refreshBadges, openReorder, _saveReorder, _selectBookDay, _requestBulkUpdate, _todayUpdateTargets, _refreshQuote, _openQuoteSearch };
 })();
