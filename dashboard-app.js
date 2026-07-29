@@ -40,6 +40,115 @@ const DashboardApp = (() => {
   };
   const DAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
+  /* ═══════════════════════════════════════════════════════════
+   * 오늘의 명언 — 학생들에게 힘이 되는 짧은 격언을 매일 하나씩 보여준다.
+   * 외부 API 없이 자체 목록에서 날짜 기준으로 고정 선택(같은 날엔 항상
+   * 같은 문구, 자정 지나면 다음 문구)하므로 네트워크 의존이 없다.
+   * ═══════════════════════════════════════════════════════════ */
+  const QUOTES = [
+    { q: '시작이 반이다.', a: '아리스토텔레스' },
+    { q: '오늘 할 수 있는 일에 최선을 다하라. 그러면 내일은 더 나아져 있을 것이다.', a: '헬렌 켈러' },
+    { q: '실패는 성공의 어머니다.', a: '토마스 에디슨' },
+    { q: '나는 실패한 적이 없다. 단지 작동하지 않는 방법을 만 가지 발견했을 뿐이다.', a: '토마스 에디슨' },
+    { q: '어제로부터 배우고, 오늘을 살고, 내일을 희망하라.', a: '아인슈타인' },
+    { q: '가장 큰 위험은 위험 없는 삶이다.', a: '헬렌 켈러' },
+    { q: '할 수 있다고 믿든 할 수 없다고 믿든, 믿는 대로 될 것이다.', a: '헨리 포드' },
+    { q: '천 리 길도 한 걸음부터.', a: '노자' },
+    { q: '배우고 때때로 익히면 또한 기쁘지 아니한가.', a: '공자' },
+    { q: '중요한 것은 멈추지 않는 것이다.', a: '아인슈타인' },
+    { q: '오늘 걷지 않으면 내일은 뛰어야 한다.', a: '작자 미상' },
+    { q: '작은 발걸음이라도 앞으로 나아가는 것이 중요하다.', a: '마틴 루터 킹' },
+    { q: '피할 수 없다면 즐겨라.', a: '로버트 엘리엇' },
+    { q: '노력하는 사람은 즐기는 사람을 이길 수 없다.', a: '공자' },
+    { q: '어려움 속에 기회가 있다.', a: '아인슈타인' },
+    { q: '자신을 믿어라. 그러면 무엇을 해야 할지 알게 될 것이다.', a: '괴테' },
+    { q: '오늘 하루도 최선을 다한 나에게 박수를.', a: '작자 미상' },
+    { q: '느리더라도 멈추지만 않는다면 괜찮다.', a: '공자' },
+    { q: '꿈을 이루는 방법은 그것을 향해 걷는 것뿐이다.', a: '월트 디즈니' },
+    { q: '진짜 실패는 시도하지 않는 것이다.', a: '조지 버나드 쇼' },
+    { q: '포기하지 않는 한 진 것이 아니다.', a: '작자 미상' },
+    { q: '지금 이 순간을 최선을 다해 살아라.', a: '틱낫한' },
+    { q: '남과 비교하지 말고 어제의 나와 비교하라.', a: '작자 미상' },
+    { q: '작은 습관이 큰 결과를 만든다.', a: '제임스 클리어' },
+    { q: '너 자신이 되어라, 다른 사람은 이미 있다.', a: '오스카 와일드' },
+    { q: '높이 나는 새가 멀리 본다.', a: '리처드 바크' },
+    { q: '준비된 자에게 기회가 온다.', a: '루이 파스퇴르' },
+  ];
+  const QUOTE_API = 'https://korean-advice-open-api.vercel.app/api/advice';
+  const QUOTE_CACHE_KEY = 'db_live_quote';
+  const QUOTE_REFRESH_MS = 4 * 60 * 60 * 1000; // ★ 4시간마다 자동으로 새 명언(그 사이엔 캐시 재사용)
+
+  // ★ 오프라인이거나 API 응답이 없을 때만 쓰는 최소한의 대비용 목록 —
+  //   온라인일 땐 실시간으로 계속 새 명언을 가져오므로 이 목록 크기와
+  //   무관하게 사실상 무한히 다양한 명언이 표시된다.
+  function _localFallbackQuote() {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 0);
+    const dayOfYear = Math.floor((now - start) / 86400000);
+    const item = QUOTES[dayOfYear % QUOTES.length];
+    return { q: item.q, a: item.a };
+  }
+  function _getCachedLiveQuote() {
+    try {
+      const c = JSON.parse(sessionStorage.getItem(QUOTE_CACHE_KEY) || 'null');
+      if (c && c.ts && Date.now() - c.ts < QUOTE_REFRESH_MS) return c;
+    } catch (e) {}
+    return null;
+  }
+  async function _fetchLiveQuote() {
+    try {
+      const res = await fetch(QUOTE_API, { cache: 'no-store' });
+      if (!res.ok) throw new Error('bad status');
+      const data = await res.json();
+      if (!data?.message) throw new Error('bad payload');
+      const item = { q: data.message, a: data.author || '작자 미상', ts: Date.now() };
+      try { sessionStorage.setItem(QUOTE_CACHE_KEY, JSON.stringify(item)); } catch (e) {}
+      return item;
+    } catch (e) { return null; } // ★ 오프라인 등으로 실패해도 조용히 넘어가고 로컬 대비 목록을 그대로 보여줌
+  }
+  function _renderQuoteInto(item) {
+    const el = _q('db-quote-banner');
+    if (!el || !item) return;
+    const t = el.querySelector('.db-quote-text'), au = el.querySelector('.db-quote-author');
+    if (t) t.textContent = item.q;
+    if (au) au.textContent = '— ' + item.a;
+    el.dataset.quoteAuthor = item.a; el.dataset.quoteText = item.q;
+  }
+  function _quoteBannerHtml() {
+    const initial = _getCachedLiveQuote() || _localFallbackQuote();
+    return `<div class="db-quote-banner" id="db-quote-banner"
+        data-quote-author="${_esc(initial.a)}" data-quote-text="${_esc(initial.q)}"
+        onclick="DashboardApp._openQuoteSearch()" title="눌러서 더 알아보기">
+      <span class="db-quote-mark">"</span>
+      <div class="db-quote-body">
+        <div class="db-quote-text">${_esc(initial.q)}</div>
+        <div class="db-quote-author">— ${_esc(initial.a)}</div>
+      </div>
+      <button class="db-quote-refresh" onclick="event.stopPropagation();DashboardApp._refreshQuote()" title="다른 명언 보기">🔄</button>
+    </div>`;
+  }
+  // ★ 화면엔 일단(캐시 또는 오프라인 대비 문구로) 즉시 표시하고, 실시간
+  //   명언을 백그라운드에서 가져와 준비되면 그 자리에서 자연스럽게
+  //   교체한다 — 렌더링이 네트워크 응답을 기다리며 멈추지 않는다.
+  async function _initQuote() {
+    if (_getCachedLiveQuote()) return; // 캐시가 아직 신선하면 이미 그걸로 렌더된 상태
+    const live = await _fetchLiveQuote();
+    if (live) _renderQuoteInto(live);
+  }
+  function _refreshQuote() {
+    const el = _q('db-quote-banner');
+    el?.classList.add('loading');
+    _fetchLiveQuote().then(live => {
+      el?.classList.remove('loading');
+      _renderQuoteInto(live || _localFallbackQuote());
+    });
+  }
+  function _openQuoteSearch() {
+    const el = _q('db-quote-banner');
+    const q = encodeURIComponent(`${el?.dataset.quoteAuthor || ''} ${el?.dataset.quoteText || ''}`.trim());
+    window.open(`https://www.google.com/search?q=${q}`, '_blank', 'noopener');
+  }
+
   function _esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function _q(id) { return document.getElementById(id); }
   function _isActive() { return !!_q('page-dashboard')?.classList.contains('on'); }
@@ -52,6 +161,16 @@ const DashboardApp = (() => {
     if (_cssInjected) return; _cssInjected = true;
     const s = document.createElement('style');
     s.textContent = `
+.db-quote-banner{margin:0 14px 12px;padding:12px 16px;border-radius:14px;
+  background:linear-gradient(135deg,var(--a10),transparent);border:1px solid var(--a20);
+  display:flex;align-items:flex-start;gap:10px;cursor:pointer;transition:opacity .15s}
+.db-quote-banner.loading{opacity:.5}
+.db-quote-mark{font-size:26px;line-height:.7;font-weight:900;color:var(--a);opacity:.55;font-family:Georgia,serif;flex-shrink:0;margin-top:2px}
+.db-quote-body{min-width:0;flex:1}
+.db-quote-text{font-size:12.5px;font-weight:700;color:var(--tx);line-height:1.5}
+.db-quote-author{font-size:10.5px;font-weight:600;color:var(--tx3);margin-top:4px}
+.db-quote-refresh{flex-shrink:0;border:none;background:transparent;font-size:14px;opacity:.4;cursor:pointer;padding:2px 4px;border-radius:6px}
+.db-quote-refresh:hover{opacity:.9;background:var(--a10)}
 .db-body{flex:1;overflow-y:auto;padding:12px 14px 90px;display:flex;flex-direction:column;gap:14px}
 .db-sec{background:var(--surf);border:1px solid var(--bdr);border-radius:16px;padding:14px}
 .db-sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
@@ -150,6 +269,7 @@ const DashboardApp = (() => {
     pg.innerHTML = _shell();
     if (typeof LOGO !== 'undefined') { const li = _q('db-logo'); if (li) li.src = LOGO.small; }
     _refreshBadges();
+    _initQuote(); // ★ 백그라운드에서 실시간 명언 가져와서 자리 있으면 교체(렌더는 안 기다림)
     // ★ 일정표(캘린더)는 별도 모듈(ScheduleApp)이 렌더링 — 오류가 나도 대시보드 나머지는 정상 동작
     if (typeof ScheduleApp !== 'undefined' && _q('sch-mini-cal')) {
       try { ScheduleApp.renderMiniCalendar('sch-mini-cal'); } catch (e) { console.warn('[DashboardApp] ScheduleApp 렌더 실패', e); }
@@ -181,6 +301,7 @@ const DashboardApp = (() => {
           <button id="db-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>
         </div>
       </div>
+      ${_quoteBannerHtml()}
       <div class="db-body">${html}</div>`;
   }
 
@@ -420,5 +541,5 @@ const DashboardApp = (() => {
     if (typeof BooklibApp !== 'undefined' && BooklibApp.goToMatrix) BooklibApp.goToMatrix(clsId, bkId);
   }
 
-  return { init, render, goMatrix, _refreshBadges, openReorder, _saveReorder, _selectBookDay, _requestBulkUpdate, _todayUpdateTargets };
+  return { init, render, goMatrix, _refreshBadges, openReorder, _saveReorder, _selectBookDay, _requestBulkUpdate, _todayUpdateTargets, _refreshQuote, _openQuoteSearch };
 })();
