@@ -53,8 +53,9 @@ const ScheduleApp = (() => {
     const s = document.createElement('style');
     s.textContent = `
 .sch-cal-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.sch-resizable-wrap{position:relative;overflow:auto;min-width:340px;min-height:280px;max-width:100%;padding:2px;border:1px solid transparent;border-radius:10px;}
-.sch-resizable-wrap:hover,.sch-resizable-wrap.resizing{border-color:var(--bdr2);}
+.sch-resizable-wrap{position:relative;min-width:340px;min-height:280px;max-width:100%;}
+.sch-resizable-inner{overflow:auto;width:100%;height:100%;padding:2px;border:1px solid transparent;border-radius:10px;box-sizing:border-box;}
+.sch-resizable-wrap:hover .sch-resizable-inner,.sch-resizable-wrap.resizing .sch-resizable-inner{border-color:var(--bdr2);}
 .sch-resize-hint{position:absolute;right:6px;bottom:4px;font-size:12px;color:var(--tx3);opacity:.4;pointer-events:none;line-height:1;z-index:1;}
 .sch-resize-handle{position:absolute;z-index:5;}
 .sch-resize-handle.rh-n,.sch-resize-handle.rh-s{left:8px;right:8px;height:7px;}
@@ -64,7 +65,7 @@ const ScheduleApp = (() => {
 .sch-resize-handle.rh-ne,.sch-resize-handle.rh-nw,.sch-resize-handle.rh-se,.sch-resize-handle.rh-sw{width:14px;height:14px;}
 .sch-resize-handle.rh-ne{top:-4px;right:-4px;} .sch-resize-handle.rh-nw{top:-4px;left:-4px;}
 .sch-resize-handle.rh-se{bottom:-4px;right:-4px;} .sch-resize-handle.rh-sw{bottom:-4px;left:-4px;}
-.sch-resizable-wrap:hover .sch-resize-handle:hover,.sch-resizable-wrap.resizing .sch-resize-handle{background:var(--a20);border-radius:4px;}
+.sch-resize-handle:hover,.sch-resizable-wrap.resizing .sch-resize-handle{background:var(--a20);border-radius:4px;}
 .sch-cal-title{font-size:13.5px;font-weight:800;color:var(--tx)}
 .sch-cal-navs{display:flex;align-items:center;gap:4px}
 .sch-nav-btn{width:26px;height:26px;border-radius:8px;background:var(--card2);border:1px solid var(--bdr);display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer;color:var(--tx2)}
@@ -531,6 +532,7 @@ const ScheduleApp = (() => {
     el.innerHTML = `
       <div id="sch-resizable-wrap" class="sch-resizable-wrap">
         <div class="sch-resize-hint" title="테두리를 드래그해서 상하좌우로 크기를 조절할 수 있어요">⤡</div>
+        <div class="sch-resizable-inner">
         <div class="sch-cal-hdr">
           <div class="sch-cal-title">${year}년 ${month}월</div>
           <div class="sch-cal-navs">
@@ -556,6 +558,7 @@ const ScheduleApp = (() => {
         </div>
         <div class="sch-today-divider"></div>
         <div class="sch-today-section">${_todayClassesHtml()}</div>
+        </div>
       </div>`;
     _restoreWidgetSize();
     _bindWidgetResizeSave();
