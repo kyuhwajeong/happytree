@@ -229,6 +229,9 @@
     <button class="bni hidden" id="nav-staff-btn" data-pg="staff" onclick="App.go('staff')">
       <span class="ico">👩‍💼</span>직원
     </button>
+    <button class="bni hidden" id="nav-archive-btn" data-pg="archive" onclick="App.go('archive')">
+      <span class="ico">📁</span>자료실
+    </button>
     <span class="ver-lbl">v10</span>
   </nav>
 
@@ -314,6 +317,7 @@
 
   <!-- 직원 관리 PAGE -->
   <div id="page-staff" class="page"></div>
+  <div id="page-archive" class="page"></div>
 
   <!-- 성적 관리 PAGE -->
   <div id="page-grade" class="page"></div>
@@ -592,6 +596,8 @@
 <script src="booklib-app.js"></script>
 <script src="staff-db.js"></script>
 <script src="staff-app.js"></script>
+<script src="archive-db.js"></script>
+<script src="archive-app.js"></script>
 <script src="gemini-ai.js"></script>
 <script src="grade-db.js"></script>
 <script src="grade-app.js"></script>
