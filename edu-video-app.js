@@ -1,0 +1,381 @@
+/**
+ * edu-video-app.js — 영문 교육자료 화면
+ * 유튜브 영상을 주제별로 등록/재생하고, 대본에서 AI로 단어를 추출해
+ * 이미지가 포함된 학습 워크시트 PDF를 만들어준다.
+ */
+const EduVideoApp = (() => {
+  const _q = id => document.getElementById(id);
+  const _esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+  // ★★★ Unsplash 가입 후(무료, 카드 불필요) 아래 값을 실제 Access Key로 바꿔주세요 ★★★
+  // https://unsplash.com/developers → New Application → Access Key 복사
+  const UNSPLASH_ACCESS_KEY = 'YOUR-UNSPLASH-ACCESS-KEY';
+
+  let _curTopic = null; // null = 전체
+  let _cssInjected = false;
+
+  function _css() {
+    if (_cssInjected) return; _cssInjected = true;
+    const s = document.createElement('style');
+    s.textContent = `
+.ev-cats{display:flex;gap:6px;overflow-x:auto;padding:10px 14px;scrollbar-width:none;flex-shrink:0}
+.ev-cats::-webkit-scrollbar{display:none}
+.ev-cat-tab{flex-shrink:0;padding:7px 13px;border-radius:999px;border:1px solid var(--bdr);background:var(--card2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+.ev-cat-tab.on{background:var(--a);border-color:var(--a);color:#fff}
+.ev-cat-tab.add{border-style:dashed}
+.ev-body{flex:1;overflow-y:auto;padding:0 14px 90px}
+.ev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
+.ev-card{background:var(--card);border:1px solid var(--bdr);border-radius:14px;overflow:hidden;cursor:pointer;transition:transform .1s}
+.ev-card:active{transform:scale(.97)}
+.ev-card-thumb{width:100%;aspect-ratio:16/9;object-fit:cover;background:var(--surf2);display:block;position:relative}
+.ev-card-body{padding:10px}
+.ev-card-title{font-size:12.5px;font-weight:700;color:var(--tx);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.35;min-height:34px}
+.ev-card-meta{display:flex;justify-content:space-between;align-items:center;margin-top:6px}
+.ev-card-topic{font-size:9.5px;font-weight:700;color:var(--a);background:var(--a10);border-radius:6px;padding:2px 6px}
+.ev-card-words{font-size:9.5px;color:var(--tx3)}
+.ev-empty{text-align:center;padding:60px 20px;color:var(--tx3)}
+.ev-empty-ico{font-size:44px;margin-bottom:10px;opacity:.6}
+.ev-fab{position:fixed;right:18px;bottom:86px;width:54px;height:54px;border-radius:50%;background:var(--a);color:#fff;
+  border:none;font-size:24px;box-shadow:0 6px 18px var(--a40);cursor:pointer;z-index:60;display:flex;align-items:center;justify-content:center}
+.ev-ov{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:flex-end;justify-content:center}
+@media (min-width:640px){ .ev-ov{align-items:center} }
+.ev-sheet{background:var(--card);width:100%;max-width:560px;max-height:90vh;border-radius:20px 20px 0 0;overflow-y:auto;padding:18px}
+@media (min-width:640px){ .ev-sheet{border-radius:20px} }
+.ev-sheet-title{font-size:15px;font-weight:800;color:var(--tx);margin-bottom:14px}
+.ev-field{margin-bottom:12px}
+.ev-field label{display:block;font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:5px}
+.ev-field input,.ev-field textarea,.ev-field select{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--bdr);background:var(--surf);color:var(--tx);font-size:13px;font-family:inherit}
+.ev-field textarea{resize:vertical;min-height:80px}
+.ev-btn-row{display:flex;gap:8px;margin-top:16px}
+.ev-btn{flex:1;padding:11px;border-radius:12px;border:none;font-size:13px;font-weight:800;cursor:pointer}
+.ev-btn.primary{background:var(--a);color:#fff}
+.ev-btn.ghost{background:var(--card2);color:var(--tx2);border:1px solid var(--bdr)}
+.ev-btn.warn{background:linear-gradient(135deg,#f59e0b,#f97316);color:#fff}
+.ev-btn:disabled{opacity:.5;cursor:default}
+.ev-play-wrap{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden;margin-bottom:14px}
+.ev-play-wrap iframe{width:100%;height:100%;border:none}
+.ev-detail-topic{font-size:10.5px;font-weight:700;color:var(--a);background:var(--a10);border-radius:7px;padding:2px 8px;display:inline-block;margin-bottom:6px}
+.ev-detail-title{font-size:15px;font-weight:800;color:var(--tx);margin-bottom:12px}
+.ev-script-box{background:var(--surf2);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--tx2);line-height:1.6;max-height:140px;overflow-y:auto;white-space:pre-wrap;margin-bottom:12px}
+.ev-word-list{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.ev-word-item{display:flex;align-items:baseline;gap:8px;background:var(--surf2);border-radius:9px;padding:8px 10px}
+.ev-word-en{font-weight:800;color:var(--tx);font-size:13px}
+.ev-word-pos{font-size:10px;color:var(--tx3)}
+.ev-word-kr{font-size:12px;color:var(--tx2);flex:1}
+.ev-progress{font-size:12px;color:var(--a);text-align:center;margin-top:8px}`;
+    document.head.appendChild(s);
+  }
+
+  function _shellHtml() {
+    const topics = EduVideoDB.getTopics();
+    return `
+      <div class="ph"><div class="phl"><div class="ph-title">🎬 영문 교육자료</div></div></div>
+      <div class="ev-cats">
+        <button class="ev-cat-tab${_curTopic===null?' on':''}" onclick="EduVideoApp._selectTopic(null)">전체</button>
+        ${topics.map(t => `<button class="ev-cat-tab${_curTopic===t?' on':''}" onclick="EduVideoApp._selectTopic('${_esc(t)}')">${_esc(t)}</button>`).join('')}
+        <button class="ev-cat-tab add" onclick="EduVideoApp._promptNewTopic()">＋ 주제</button>
+      </div>
+      <div class="ev-body" id="ev-body">${_gridHtml()}</div>
+      <button class="ev-fab" onclick="EduVideoApp.openAdd()" title="영상 추가">＋</button>`;
+  }
+
+  function _gridHtml() {
+    const items = _curTopic === null ? EduVideoDB.getAll() : EduVideoDB.getByTopic(_curTopic);
+    if (!items.length) {
+      return `<div class="ev-empty"><div class="ev-empty-ico">🎬</div>등록된 영상이 없습니다<br>오른쪽 아래 + 버튼으로 유튜브 링크를 추가해보세요</div>`;
+    }
+    return `<div class="ev-grid">${items.map(v => `
+      <div class="ev-card" onclick="EduVideoApp.openDetail('${v.id}')">
+        <img class="ev-card-thumb" src="https://img.youtube.com/vi/${v.youtubeId}/hqdefault.jpg" alt="">
+        <div class="ev-card-body">
+          <div class="ev-card-title">${_esc(v.title)}</div>
+          <div class="ev-card-meta">
+            <span class="ev-card-topic">${_esc(v.topic)}</span>
+            ${v.words?.length ? `<span class="ev-card-words">단어 ${v.words.length}개</span>` : ''}
+          </div>
+        </div>
+      </div>`).join('')}</div>`;
+  }
+
+  function render() {
+    _css();
+    const pg = _q('page-eduvideo'); if (!pg) return;
+    pg.innerHTML = _shellHtml();
+  }
+  function _refreshGrid() { const b = _q('ev-body'); if (b) b.innerHTML = _gridHtml(); }
+  function _selectTopic(t) { _curTopic = t; render(); }
+  async function _promptNewTopic() {
+    const name = prompt('새 주제 이름을 입력하세요 (예: 동물, 음식)');
+    if (!name?.trim()) return;
+    await EduVideoDB.addTopic(name.trim());
+    render();
+  }
+
+  /* ═══════════════ 영상 추가 ═══════════════ */
+  function openAdd() {
+    const topics = EduVideoDB.getTopics();
+    const ov = document.createElement('div');
+    ov.className = 'ev-ov'; ov.id = 'ev-add-ov';
+    ov.innerHTML = `<div class="ev-sheet">
+      <div class="ev-sheet-title">🎬 교육 영상 추가</div>
+      <div class="ev-field"><label>제목</label><input type="text" id="ev-title-inp" placeholder="예: My Furniture at Home"></div>
+      <div class="ev-field"><label>유튜브 링크</label><input type="text" id="ev-url-inp" placeholder="https://www.youtube.com/watch?v=..."></div>
+      <div class="ev-field"><label>주제</label>
+        <select id="ev-topic-inp">${topics.map(t => `<option value="${_esc(t)}">${_esc(t)}</option>`).join('')}</select>
+      </div>
+      <div class="ev-field">
+        <label>대본/스크립트 (선택 — 넣으면 AI 단어 추출 및 PDF 워크시트 생성 가능)</label>
+        <textarea id="ev-script-inp" placeholder="유튜브 영상 하단 '...' → '스크립트 표시'에서 복사해서 붙여넣으세요"></textarea>
+      </div>
+      <div id="ev-add-progress"></div>
+      <div class="ev-btn-row">
+        <button class="ev-btn ghost" onclick="EduVideoApp._closeAdd()">취소</button>
+        <button class="ev-btn primary" id="ev-add-submit" onclick="EduVideoApp._submitAdd()">추가</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target === ov) _closeAdd(); };
+  }
+  function _closeAdd() { _q('ev-add-ov')?.remove(); }
+  async function _submitAdd() {
+    const url = _q('ev-url-inp')?.value?.trim();
+    const btn = _q('ev-add-submit');
+    const prog = _q('ev-add-progress');
+    if (!url) { alert('유튜브 링크를 입력해 주세요'); return; }
+    btn.disabled = true; btn.textContent = '추가 중...';
+    try {
+      const result = await EduVideoDB.addVideo({
+        title: _q('ev-title-inp')?.value?.trim(),
+        youtubeUrl: url,
+        topic: _q('ev-topic-inp')?.value,
+        script: _q('ev-script-inp')?.value,
+        createdBy: (typeof DB !== 'undefined' && DB.getSession) ? (DB.getSession()?.name || '') : '',
+      });
+      _closeAdd();
+      _refreshGrid();
+      if (typeof App !== 'undefined' && App._toast) App._toast(result.savedToServer ? '✅ 추가 완료' : '⏳ 추가됨 · 서버 반영 대기 중');
+    } catch (e) {
+      btn.disabled = false; btn.textContent = '추가';
+      if (prog) prog.innerHTML = `<div class="ev-progress" style="color:#ef4444">⚠️ ${_esc(e.message || '알 수 없는 오류')}</div>`;
+    }
+  }
+
+  /* ═══════════════ 상세(재생 + 단어 추출) ═══════════════ */
+  function openDetail(id) {
+    const v = EduVideoDB.getById(id);
+    if (!v) return;
+    const ov = document.createElement('div');
+    ov.className = 'ev-ov'; ov.id = 'ev-detail-ov';
+    ov.innerHTML = `<div class="ev-sheet" style="max-width:640px">
+      <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:8px">
+        <button class="ev-btn ghost" style="flex:0;padding:6px 10px" onclick="EduVideoApp._confirmDeleteVideo('${id}')" title="삭제">🗑️</button>
+        <button class="ev-btn ghost" style="flex:0;padding:6px 10px" onclick="document.getElementById('ev-detail-ov').remove()">✕</button>
+      </div>
+      <div class="ev-play-wrap"><iframe src="https://www.youtube.com/embed/${v.youtubeId}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>
+      <span class="ev-detail-topic">${_esc(v.topic)}</span>
+      <div class="ev-detail-title">${_esc(v.title)}</div>
+      ${v.script ? `<div class="ev-field"><label>대본</label><div class="ev-script-box">${_esc(v.script)}</div></div>` : `<div class="ev-progress" style="color:var(--tx3)">대본이 없어서 단어 추출·PDF 생성은 이용할 수 없어요. 수정에서 대본을 추가해보세요.</div>`}
+      <div id="ev-words-area">${_wordsAreaHtml(v)}</div>
+      <div class="ev-btn-row">
+        <button class="ev-btn ghost" onclick="EduVideoApp.openEditScript('${id}')">✏️ 대본 수정</button>
+        ${v.script ? `<button class="ev-btn warn" id="ev-extract-btn" onclick="EduVideoApp._extractWords('${id}')">🤖 AI로 단어 추출</button>` : ''}
+        ${v.words?.length ? `<button class="ev-btn primary" onclick="EduVideoApp._makePdf('${id}')">📄 PDF 워크시트</button>` : ''}
+      </div>
+      <div id="ev-detail-progress"></div>
+    </div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  }
+  function _wordsAreaHtml(v) {
+    if (!v.words?.length) return '';
+    return `<div class="ev-word-list">${v.words.map(w => `
+      <div class="ev-word-item">
+        <span class="ev-word-en">${_esc(w.word)}</span>
+        <span class="ev-word-pos">${_esc(w.pos || '')}</span>
+        <span class="ev-word-kr">${_esc(w.meaning)}</span>
+      </div>`).join('')}</div>`;
+  }
+
+  async function _extractWords(id) {
+    const v = EduVideoDB.getById(id);
+    if (!v?.script) return;
+    if (typeof GeminiAI === 'undefined' || !GeminiAI.extractVocabulary) {
+      if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ AI 기능을 불러오지 못했습니다'); return;
+    }
+    const btn = _q('ev-extract-btn'), prog = _q('ev-detail-progress');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ 추출 중...'; }
+    if (prog) prog.innerHTML = `<div class="ev-progress">🤖 AI가 대본에서 단어를 뽑고 있어요...</div>`;
+    try {
+      const words = await GeminiAI.extractVocabulary(v.script, v.topic);
+      const result = await EduVideoDB.updateVideo(id, { words });
+      const area = _q('ev-words-area');
+      if (area) area.innerHTML = _wordsAreaHtml(result);
+      if (prog) prog.innerHTML = `<div class="ev-progress">✅ ${words.length}개 단어 추출 완료</div>`;
+      if (btn) btn.remove();
+      // ★ PDF 버튼이 없었다면 새로 보여준다(단어가 이번에 처음 생겼을 수 있으므로)
+      if (!document.querySelector('.ev-btn-row .ev-btn.primary')) {
+        const row = document.querySelector('.ev-btn-row');
+        if (row) row.insertAdjacentHTML('beforeend', `<button class="ev-btn primary" onclick="EduVideoApp._makePdf('${id}')">📄 PDF 워크시트</button>`);
+      }
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.textContent = '🤖 AI로 단어 추출'; }
+      if (prog) prog.innerHTML = `<div class="ev-progress" style="color:#ef4444">⚠️ 추출 실패: ${_esc(e.message || '알 수 없는 오류')}</div>`;
+    }
+  }
+
+  /* ═══════════════ 대본 수정 ═══════════════ */
+  function openEditScript(id) {
+    const v = EduVideoDB.getById(id);
+    if (!v) return;
+    _q('ev-detail-ov')?.remove();
+    const ov = document.createElement('div');
+    ov.className = 'ev-ov'; ov.id = 'ev-edit-ov';
+    ov.innerHTML = `<div class="ev-sheet">
+      <div class="ev-sheet-title">✏️ 정보 수정</div>
+      <div class="ev-field"><label>제목</label><input type="text" id="ev-edit-title" value="${_esc(v.title)}"></div>
+      <div class="ev-field"><label>주제</label>
+        <select id="ev-edit-topic">${EduVideoDB.getTopics().map(t => `<option value="${_esc(t)}"${t===v.topic?' selected':''}>${_esc(t)}</option>`).join('')}</select>
+      </div>
+      <div class="ev-field"><label>대본</label><textarea id="ev-edit-script" style="min-height:160px">${_esc(v.script || '')}</textarea></div>
+      <div class="ev-btn-row">
+        <button class="ev-btn ghost" onclick="document.getElementById('ev-edit-ov').remove()">취소</button>
+        <button class="ev-btn primary" onclick="EduVideoApp._submitEditScript('${id}')">저장</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  }
+  async function _submitEditScript(id) {
+    const newScript = _q('ev-edit-script')?.value?.trim();
+    const oldV = EduVideoDB.getById(id);
+    const scriptChanged = oldV && newScript !== oldV.script;
+    await EduVideoDB.updateVideo(id, {
+      title: _q('ev-edit-title')?.value?.trim(),
+      topic: _q('ev-edit-topic')?.value,
+      script: newScript,
+      // ★ 대본이 바뀌면 예전 단어 목록은 더 이상 안 맞을 수 있으니 초기화
+      ...(scriptChanged ? { words: [] } : {}),
+    });
+    _q('ev-edit-ov')?.remove();
+    _refreshGrid();
+    if (typeof App !== 'undefined' && App._toast) App._toast('✅ 저장 완료' + (scriptChanged ? ' · 단어를 다시 추출해주세요' : ''));
+  }
+
+  /* ═══════════════ 삭제 ═══════════════ */
+  function _confirmDeleteVideo(id) {
+    const v = EduVideoDB.getById(id);
+    if (!v) return;
+    if (!confirm(`"${v.title}"을(를) 삭제할까요?`)) return;
+    EduVideoDB.deleteVideo(id).then(() => {
+      _q('ev-detail-ov')?.remove();
+      _refreshGrid();
+    });
+  }
+
+  /* ═══════════════ PDF 워크시트 생성 (단어 + 이미지 + 뜻 + 예문 + 문제) ═══════════════ */
+  async function _fetchUnsplashImage(query) {
+    if (UNSPLASH_ACCESS_KEY.includes('YOUR-UNSPLASH')) return null;
+    try {
+      const res = await fetch(`https://api.unsplash.com/photos/random?query=${encodeURIComponent(query)}&orientation=squarish&client_id=${UNSPLASH_ACCESS_KEY}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const imgUrl = data?.urls?.small;
+      if (!imgUrl) return null;
+      const imgRes = await fetch(imgUrl);
+      const blob = await imgRes.blob();
+      return await new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) { return null; }
+  }
+
+  async function _makePdf(id) {
+    const v = EduVideoDB.getById(id);
+    if (!v?.words?.length) return;
+    if (typeof window.jspdf === 'undefined') {
+      if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ PDF 라이브러리를 불러오지 못했습니다'); return;
+    }
+    const prog = _q('ev-detail-progress');
+    const hasUnsplash = !UNSPLASH_ACCESS_KEY.includes('YOUR-UNSPLASH');
+    if (prog) prog.innerHTML = `<div class="ev-progress">📄 워크시트 준비 중... (0/${v.words.length})</div>`;
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
+    const pageW = 595, margin = 40;
+    let y = margin;
+
+    pdf.setFontSize(18);
+    pdf.text(v.title, margin, y); y += 22;
+    pdf.setFontSize(10);
+    pdf.setTextColor(120);
+    pdf.text(`주제: ${v.topic}  ·  ${new Date().toLocaleDateString('ko-KR')}`, margin, y);
+    pdf.setTextColor(0);
+    y += 26;
+
+    const cardW = (pageW - margin * 2 - 16) / 2, cardH = 118, imgSize = 56;
+    let col = 0;
+    for (let i = 0; i < v.words.length; i++) {
+      const w = v.words[i];
+      if (prog) prog.innerHTML = `<div class="ev-progress">📄 워크시트 준비 중... (${i + 1}/${v.words.length})</div>`;
+      if (y + cardH > 800) { pdf.addPage(); y = margin; col = 0; }
+      const x = margin + col * (cardW + 16);
+
+      pdf.setDrawColor(220); pdf.roundedRect(x, y, cardW, cardH, 6, 6);
+      const img = hasUnsplash ? await _fetchUnsplashImage(w.word) : null;
+      if (img) { try { pdf.addImage(img, 'JPEG', x + 8, y + 8, imgSize, imgSize); } catch (e) {} }
+      const textX = x + (img ? imgSize + 16 : 12);
+      pdf.setFontSize(13); pdf.setFont(undefined, 'bold');
+      pdf.text(w.word, textX, y + 22);
+      pdf.setFontSize(9); pdf.setFont(undefined, 'normal'); pdf.setTextColor(140);
+      pdf.text(w.pos || '', textX, y + 34);
+      pdf.setTextColor(0);
+      pdf.setFontSize(11);
+      pdf.text(w.meaning, textX, y + 50);
+      pdf.setFontSize(8.5); pdf.setTextColor(90);
+      const exLines = pdf.splitTextToSize(w.example || '', cardW - (img ? imgSize + 24 : 24));
+      pdf.text(exLines.slice(0, 3), textX, y + 66);
+      pdf.setTextColor(0);
+
+      col++;
+      if (col >= 2) { col = 0; y += cardH + 12; }
+    }
+    if (col === 1) y += cardH + 12;
+
+    // ★ 빈칸 채우기 문제 페이지 — 예문에서 단어를 지우고 채워보게
+    pdf.addPage(); y = margin;
+    pdf.setFontSize(15); pdf.text('📝 빈칸 채우기 (Fill in the blank)', margin, y); y += 24;
+    pdf.setFontSize(11);
+    v.words.forEach((w, i) => {
+      if (!w.example) return;
+      if (y > 780) { pdf.addPage(); y = margin; }
+      const blanked = w.example.replace(new RegExp(w.word, 'gi'), '_______');
+      const lines = pdf.splitTextToSize(`${i + 1}. ${blanked}`, pageW - margin * 2);
+      pdf.text(lines, margin, y);
+      y += lines.length * 16 + 10;
+    });
+
+    // ★ 단어-뜻 매칭 문제 페이지
+    pdf.addPage(); y = margin;
+    pdf.setFontSize(15); pdf.text('🔗 단어-뜻 연결하기 (Matching)', margin, y); y += 24;
+    pdf.setFontSize(11);
+    const shuffledMeanings = [...v.words].sort(() => Math.random() - 0.5);
+    v.words.forEach((w, i) => {
+      pdf.text(`${i + 1}. ${w.word}`, margin, y + i * 22);
+      pdf.text(`${String.fromCharCode(97 + i)}. ${shuffledMeanings[i].meaning}`, margin + 260, y + i * 22);
+    });
+
+    pdf.save(`${v.title.replace(/[^\w가-힣 ]/g, '')}_워크시트.pdf`);
+    if (prog) prog.innerHTML = `<div class="ev-progress">✅ PDF가 다운로드되었습니다${hasUnsplash ? '' : ' (이미지 API 미설정 — 이미지 없이 생성됨)'}</div>`;
+  }
+
+  return {
+    init: async () => { if (typeof EduVideoDB !== 'undefined') await EduVideoDB.init(); },
+    render, _selectTopic, _promptNewTopic,
+    openAdd, _closeAdd, _submitAdd,
+    openDetail, _extractWords, openEditScript, _submitEditScript, _confirmDeleteVideo,
+    _makePdf,
+  };
+})();

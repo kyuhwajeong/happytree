@@ -51,6 +51,13 @@
         return path + ':' + (res.headers.get('etag') || res.headers.get('last-modified') || '');
       } catch (e) { return path + ':err'; }
     }));
+    // ★ vercel.json의 헤더 설정(CSP 등)은 개별 스크립트 파일이 아니라서
+    //   위 감시망에 안 잡힌다 — 문서 자체의 응답 헤더를 별도로 같이
+    //   확인해서, CSP만 바뀐 배포도 "변경 감지"로 잡히게 한다.
+    try {
+      const docRes = await fetch(location.pathname, { method: 'HEAD', cache: 'no-store' });
+      results.push('__csp__:' + (docRes.headers.get('content-security-policy') || ''));
+    } catch (e) { results.push('__csp__:err'); }
     return results.sort().join('|');
   }
 
@@ -187,6 +194,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="style.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
@@ -232,6 +240,9 @@
     </button>
     <button class="bni hidden" id="nav-archive-btn" data-pg="archive" onclick="App.go('archive')">
       <span class="ico">📁</span>자료실
+    </button>
+    <button class="bni hidden" id="nav-eduvideo-btn" data-pg="eduvideo" onclick="App.go('eduvideo')">
+      <span class="ico">🎬</span>교육자료
     </button>
     <span class="ver-lbl">v10</span>
   </nav>
@@ -319,6 +330,7 @@
   <!-- 직원 관리 PAGE -->
   <div id="page-staff" class="page"></div>
   <div id="page-archive" class="page"></div>
+  <div id="page-eduvideo" class="page"></div>
 
   <!-- 성적 관리 PAGE -->
   <div id="page-grade" class="page"></div>
@@ -600,6 +612,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="archive-db.js"></script>
 <script src="archive-app.js"></script>
+<script src="edu-video-db.js"></script>
+<script src="edu-video-app.js"></script>
 <script src="gemini-ai.js"></script>
 <script src="grade-db.js"></script>
 <script src="grade-app.js"></script>
