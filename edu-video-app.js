@@ -118,18 +118,20 @@ const EduVideoApp = (() => {
       </div>`).join('')}</div>`;
   }
 
+  let _mountId = 'page-eduvideo'; // ★ render()가 마지막으로 그렸던 위치를 기억 — 내부 재렌더링 때 이걸 재사용
   function render(containerId) {
+    _mountId = containerId || _mountId;
     _css();
-    const pg = _q(containerId || 'page-eduvideo'); if (!pg) return;
+    const pg = _q(_mountId); if (!pg) return;
     pg.innerHTML = _shellHtml();
   }
   function _refreshGrid() { const b = _q('ev-body'); if (b) b.innerHTML = _gridHtml(); }
-  function _selectTopic(t) { _curTopic = t; render(); }
+  function _selectTopic(t) { _curTopic = t; render(_mountId); }
   async function _promptNewTopic() {
     const name = prompt('새 주제 이름을 입력하세요 (예: 동물, 음식)');
     if (!name?.trim()) return;
     await EduVideoDB.addTopic(name.trim());
-    render();
+    render(_mountId);
   }
 
   /* ═══════════════ AI 추천 (유튜브 실제 검색 + Gemini 큐레이션) ═══════════════ */
