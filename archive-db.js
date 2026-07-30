@@ -31,7 +31,37 @@ const ArchiveDB = (() => {
   let _updatesPaused = false; // 편집 중 서버 갱신 보류용 (일정표/공지 모듈과 동일 패턴)
   function pauseUpdates(v) { _updatesPaused = !!v; }
 
-  const CATEGORIES = ['공지/양식', '학사자료', '교재자료', '행정서류', '기타'];
+  const DEFAULT_CATEGORIES = ['공지/양식', '학사자료', '교재자료', '행정서류', '기타'];
+  const LS_CATS = 'hk10b_archiveCategories';
+  const FB_CATS_PATH = 'hakwon10/archiveCategories';
+  const PROTECTED_CATEGORY = '기타'; // ★ 마지막 안전망 — 삭제 시 갈 곳이 없어지지 않도록 이 하나는 항상 남겨둠
+  let _categories = _lg(LS_CATS) || DEFAULT_CATEGORIES.slice();
+
+  function getCategories() { return _categories.slice(); }
+  async function addCategory(name) {
+    name = (name || '').trim();
+    if (!name || _categories.includes(name)) return _categories.slice();
+    _categories.push(name);
+    _ls(LS_CATS, _categories);
+    if (typeof FireDB !== 'undefined') await FireDB.set(FB_CATS_PATH, _categories).catch(() => {});
+    _fire('categories');
+    return _categories.slice();
+  }
+  // ★ 분류를 지우면, 그 분류를 쓰던 게시물들은 자동으로 "기타"로 옮겨진다
+  //   (분류가 없어져서 화면에서 아예 안 보이게 되는 걸 방지)
+  async function removeCategory(name) {
+    if (name === PROTECTED_CATEGORY) return { ok: false, error: `"${PROTECTED_CATEGORY}"는 삭제할 수 없습니다` };
+    if (!_categories.includes(name)) return { ok: false, error: '없는 분류입니다' };
+    const affected = _list.filter(p => p.category === name);
+    for (const p of affected) {
+      await updateFile(p.id, { category: PROTECTED_CATEGORY });
+    }
+    _categories = _categories.filter(c => c !== name);
+    _ls(LS_CATS, _categories);
+    if (typeof FireDB !== 'undefined') await FireDB.set(FB_CATS_PATH, _categories).catch(() => {});
+    _fire('categories');
+    return { ok: true, movedCount: affected.length };
+  }
 
   // ★ 옛날(파일 1개짜리) 게시물을 files[] 구조로 변환 — 하위호환
   function _normalize(rec) {
@@ -53,6 +83,8 @@ const ArchiveDB = (() => {
     try {
       const data = await FireDB.get(FB_PATH);
       if (data) { _list = _normalizeAll(Object.values(data)); _saveLS(); }
+      const catData = await FireDB.get(FB_CATS_PATH);
+      if (Array.isArray(catData) && catData.length) { _categories = catData; _ls(LS_CATS, _categories); }
     } catch (e) { console.warn('[ArchiveDB] init', e); }
 
     FireDB.listen(FB_PATH, v => {
@@ -60,6 +92,11 @@ const ArchiveDB = (() => {
       const nd = _normalizeAll(v ? Object.values(v) : []);
       if (JSON.stringify(nd) !== JSON.stringify(_list)) {
         _list = nd; _saveLS(); _fire('archive');
+      }
+    });
+    FireDB.listen(FB_CATS_PATH, v => {
+      if (Array.isArray(v) && JSON.stringify(v) !== JSON.stringify(_categories)) {
+        _categories = v; _ls(LS_CATS, _categories); _fire('categories');
       }
     });
 
@@ -257,6 +294,6 @@ const ArchiveDB = (() => {
     getAll, getById, getByCategory, getFileUrl,
     createPost, addFilesToPost, removeFileFromPost, replaceFileContent,
     updateFile, deletePost, deleteFile,
-    CATEGORIES,
+    getCategories, addCategory, removeCategory,
   };
 })();
