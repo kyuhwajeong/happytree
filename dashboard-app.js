@@ -188,14 +188,14 @@ const DashboardApp = (() => {
 .db-ar-thumb img{width:84px;height:84px;object-fit:cover;border-radius:12px;border:1px solid var(--bdr);display:block}
 .db-ar-thumb-ico{width:84px;height:84px;border-radius:12px;border:1px solid var(--bdr);background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:32px}
 .db-ar-thumb-name{font-size:10.5px;font-weight:600;color:var(--tx2);margin-top:5px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.db-quote-inline{flex:0 1 260px;min-width:0;margin:0 14px 0 4px;padding-right:2px;cursor:pointer;transition:opacity .15s}
+.db-quote-inline{flex:1 1 auto;min-width:80px;margin:0 10px;cursor:pointer;transition:opacity .15s}
 .db-quote-inline.loading{opacity:.4}
-.db-quote-kr{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.db-quote-kr{white-space:normal;line-height:1.4}
 .db-quote-kr::before{content:'"';font-family:Georgia,serif;color:var(--tx3);opacity:.6;margin-right:2px}
 .db-quote-inline .db-quote-text{font-size:11.5px;font-style:italic;font-weight:500;color:var(--tx3)}
 .db-quote-inline .db-quote-author{font-size:10.5px;font-style:italic;color:var(--tx3);opacity:.75}
-.db-quote-en{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
-  font-family:var(--font);font-size:11px;font-style:italic;font-weight:500;letter-spacing:.1px;color:var(--a);opacity:.75;margin-top:1px;padding-left:2px}
+.db-quote-en{white-space:normal;line-height:1.4;
+  font-family:var(--font);font-size:11px;font-style:italic;font-weight:500;letter-spacing:.1px;color:var(--a);opacity:.75;margin-top:2px;padding-left:2px}
 .db-body{flex:1;overflow-y:auto;padding:12px 14px 90px;display:flex;flex-direction:column;gap:14px}
 .db-sec{background:var(--surf);border:1px solid var(--bdr);border-radius:16px;padding:14px}
 .db-sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
