@@ -20,9 +20,10 @@ const EduVideoApp = (() => {
     if (_cssInjected) return; _cssInjected = true;
     const s = document.createElement('style');
     s.textContent = `
-.ev-toolbar{display:flex;justify-content:flex-end;padding:10px 14px 0}
-.ev-cats{display:flex;gap:6px;overflow-x:auto;padding:10px 14px;scrollbar-width:none;flex-shrink:0}
+.ev-cats-row{display:flex;align-items:center;gap:8px;padding:10px 14px;flex-shrink:0}
+.ev-cats{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;flex:1;min-width:0}
 .ev-cats::-webkit-scrollbar{display:none}
+.ev-rec-btn{flex-shrink:0;white-space:nowrap}
 .ev-cat-tab{flex-shrink:0;padding:7px 13px;border-radius:999px;border:1px solid var(--bdr);background:var(--card2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
 .ev-cat-tab.on{background:var(--a);border-color:var(--a);color:#fff}
 .ev-cat-tab.add{border-style:dashed}
@@ -87,13 +88,13 @@ const EduVideoApp = (() => {
   function _shellHtml() {
     const topics = EduVideoDB.getTopics();
     return `
-      <div class="ev-toolbar">
-        <button class="db-mini-btn" onclick="EduVideoApp.openRecommend()">🤖 AI 추천</button>
-      </div>
-      <div class="ev-cats">
-        <button class="ev-cat-tab${_curTopic===null?' on':''}" onclick="EduVideoApp._selectTopic(null)">전체</button>
-        ${topics.map(t => `<button class="ev-cat-tab${_curTopic===t?' on':''}" onclick="EduVideoApp._selectTopic('${_esc(t)}')">${_esc(t)}</button>`).join('')}
-        <button class="ev-cat-tab add" onclick="EduVideoApp._promptNewTopic()">＋ 주제</button>
+      <div class="ev-cats-row">
+        <div class="ev-cats">
+          <button class="ev-cat-tab${_curTopic===null?' on':''}" onclick="EduVideoApp._selectTopic(null)">전체</button>
+          ${topics.map(t => `<button class="ev-cat-tab${_curTopic===t?' on':''}" onclick="EduVideoApp._selectTopic('${_esc(t)}')">${_esc(t)}</button>`).join('')}
+          <button class="ev-cat-tab add" onclick="EduVideoApp._promptNewTopic()">＋ 주제</button>
+        </div>
+        <button class="db-mini-btn ev-rec-btn" onclick="EduVideoApp.openRecommend()">🤖 AI 추천</button>
       </div>
       <div class="ev-body" id="ev-body">${_gridHtml()}</div>
       <button class="ev-fab" onclick="EduVideoApp.openAdd()" title="영상 추가">＋</button>`;
