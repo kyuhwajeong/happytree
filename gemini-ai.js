@@ -373,6 +373,32 @@ ${script.slice(0, 4000)}`;
     return arr.filter(w => w && w.word && w.meaning);
   }
 
+  // ★ 영문 교육자료 - 유튜브 추천용: 주제에 맞는 좋은 영어 검색어를 만들어준다
+  async function generateSearchQueries(topic) {
+    const prompt = `초등학생 영어 교육용 유튜브 영상을 찾고 싶다. 주제: "${topic}".
+이 주제로 원어민이 만든 초등학생용 영어 학습 영상을 찾기 좋은 영어 검색어를 2~3개 만들어줘.
+설명 없이 검색어만 한 줄에 하나씩 출력해(따옴표 없이).`;
+    const out = await _call(prompt);
+    return out.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 3);
+  }
+  // ★ 실제 유튜브 검색 결과(제목/설명/채널) 중 초등 영어교육에 적합한 것을 골라 순위 매김
+  async function curateVideos(topic, candidates) {
+    const list = candidates.map((c, i) => `${i}. 제목: ${c.title}\n   채널: ${c.channelTitle}\n   설명: ${(c.description || '').slice(0, 150)}`).join('\n');
+    const prompt = `아래는 유튜브 검색 결과 목록이다(주제: "${topic}", 초등학생 영어 교육용 영상을 찾는 중).
+이 중에서 초등학생 영어 학습에 적합한 것을 최대 5개 골라서, 아래 JSON 배열 형식으로만 출력해줘.
+설명 없이 JSON만 출력. 부적절하거나 관련 없는 건 제외해.
+
+형식: [{"index":번호,"reason":"이 영상을 추천하는 이유(한 문장, 한글)"}]
+
+목록:
+${list}`;
+    const out = await _call(prompt, '', 1024);
+    const cleaned = out.replace(/```json|```/g, '').trim();
+    const arr = JSON.parse(cleaned);
+    if (!Array.isArray(arr)) throw new Error('예상치 못한 응답 형식');
+    return arr.filter(r => typeof r.index === 'number' && candidates[r.index]).map(r => ({ ...candidates[r.index], reason: r.reason || '' }));
+  }
+
   async function testConnection() {
     try {
       var r = await _call('"OK"라고만 답해주세요.');
@@ -397,5 +423,6 @@ ${script.slice(0, 4000)}`;
     getBookPins, addBookPin, removeBookPin, clearBookPins, getMergedPins,
     getAnalysisCache, setAnalysisCache, clearStyleCache,
     testConnection, status, translateToEnglish, extractVocabulary,
+    generateSearchQueries, curateVideos,
   };
 })();

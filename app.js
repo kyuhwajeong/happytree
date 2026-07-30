@@ -23,8 +23,7 @@ const App = (() => {
     { pg:'grade',    ico:'📝', lbl:'성적',  adminOnly:true  },
     { pg:'students', ico:'👨‍🎓', lbl:'학생', adminOnly:true  },
     { pg:'staff',    ico:'👩‍💼', lbl:'직원', adminOnly:true  },
-    { pg:'archive',  ico:'📁', lbl:'자료실', adminOnly:true  },
-    { pg:'eduvideo', ico:'🎬', lbl:'교육자료', adminOnly:true  },
+    { pg:'archive',  ico:'📁', lbl:'콘텐츠', adminOnly:true  },
   ];
   const LS_NAV_ORDER = 'hk10b_nav_order';
 
@@ -269,7 +268,6 @@ const App = (() => {
     if(page==='students'&&!DB.isAdmin())  {_showLogin();return;}
     if(page==='staff'   &&!DB.isAdmin())  {_showLogin();return;}
     if(page==='archive' &&!DB.isAdmin())  {_showLogin();return;}
-    if(page==='eduvideo'&&!DB.isAdmin())  {_showLogin();return;}
     // ★ 교재·성적: admin은 항상 허용, 비관리자는 allowedMenus 포함 여부로 판단
     if(page==='booklib'&&!DB.isAdmin()){
       const _am=(DB.getSession()?.allowedMenus)||[];
@@ -292,7 +290,6 @@ const App = (() => {
     if(page==='booklib' &&typeof BooklibApp!=='undefined') BooklibApp.render();
     if(page==='staff'   &&typeof StaffApp  !=='undefined') StaffApp.render();
     if(page==='archive' &&typeof ArchiveApp!=='undefined') ArchiveApp.render();
-    if(page==='eduvideo'&&typeof EduVideoApp!=='undefined') EduVideoApp.render();
     if(page==='grade'   &&typeof GradeApp  !=='undefined') GradeApp.render();
     // ★ render() 이후 호출해야 동적으로 생성된 로그아웃 버튼이 DOM에 존재함
     _refreshAuthUI();
@@ -325,7 +322,6 @@ const App = (() => {
     if(S.page==='booklib' ){go('operate');return;}
     if(S.page==='staff'   ){go('operate');return;}
     if(S.page==='archive' ){go('operate');return;}
-    if(S.page==='eduvideo'){go('operate');return;}
     if(S.page==='grade'   ){go('operate');return;}
     if(S.page==='operate' ){go('dashboard');return;}
     history.pushState({pg:'dashboard'},'');

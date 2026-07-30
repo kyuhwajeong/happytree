@@ -23,7 +23,7 @@ const DashboardApp = (() => {
   const SECTION_DEFS = [
     { key: 'schedule', ico: '🗓️', lbl: '일정표' },
     { key: 'books',    ico: '📊', lbl: '교재 학습 현황' },
-    { key: 'archive',  ico: '📁', lbl: '자료실 즐겨찾기' },
+    { key: 'archive',  ico: '📁', lbl: '콘텐츠 즐겨찾기' },
   ];
   const LS_ORDER = 'hk10b_dashboardOrder';
   function _getSectionOrder() {
@@ -591,7 +591,7 @@ const DashboardApp = (() => {
     const items = ArchiveDB.getAll().filter(f => f.pinned);
     if (!items.length) return ''; // ★ 즐겨찾기한 자료가 없으면 섹션 자체를 숨김
     return `<div class="db-sec">
-      <div class="db-sec-hdr"><div class="db-sec-title">📁 자료실 즐겨찾기</div>
+      <div class="db-sec-hdr"><div class="db-sec-title">📁 콘텐츠 즐겨찾기</div>
         <button class="db-mini-btn ghost" onclick="App.go('archive')">전체보기</button></div>
       <div class="db-ar-thumbs">${items.map(f => {
         const isImg = _AR_IMG_EXT.includes((f.ext || '').toLowerCase());
