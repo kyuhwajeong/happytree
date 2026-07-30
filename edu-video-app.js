@@ -11,7 +11,7 @@ const EduVideoApp = (() => {
   // https://unsplash.com/developers → New Application → Access Key 복사
   const UNSPLASH_ACCESS_KEY = 'YOUR-UNSPLASH-ACCESS-KEY';
   // ★★★ Google Cloud Console에서 YouTube Data API v3 활성화 후(무료, 카드 불필요) 실제 키로 바꿔주세요 ★★★
-  const YOUTUBE_API_KEY = 'AIzaSyCbbS4jkWNUyyO83AdzCwagUKYQJJKtsKY';
+  const YOUTUBE_API_KEY = 'YOUR-YOUTUBE-API-KEY';
 
   let _curTopic = null; // null = 전체
   let _cssInjected = false;
@@ -481,6 +481,28 @@ const EduVideoApp = (() => {
     } catch (e) { return null; }
   }
 
+  // ★ jsPDF 기본 폰트는 한글을 지원하지 않아 깨진 글자로 나온다(알려진 제약).
+  //   나눔고딕 폰트를 한 번만 받아서(세션 중 캐시) PDF에 심어 넣는다.
+  const KOREAN_FONT_URL = 'https://raw.githubusercontent.com/google/fonts/main/ofl/nanumgothic/NanumGothic-Regular.ttf';
+  let _koreanFontBase64 = null;
+  async function _ensureKoreanFont(pdf) {
+    if (!_koreanFontBase64) {
+      const res = await fetch(KOREAN_FONT_URL);
+      if (!res.ok) throw new Error('한글 폰트를 불러오지 못했습니다');
+      const buf = await res.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let binary = '';
+      const chunk = 8192;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+      }
+      _koreanFontBase64 = btoa(binary);
+    }
+    pdf.addFileToVFS('NanumGothic.ttf', _koreanFontBase64);
+    pdf.addFont('NanumGothic.ttf', 'NanumGothic', 'normal');
+    pdf.setFont('NanumGothic'); // ★ 이후 모든 텍스트(영어 단어 포함)에 이 폰트 적용 — 나눔고딕은 영문도 지원해서 따로 안 바꿔도 됨
+  }
+
   async function _makePdf(id) {
     const v = EduVideoDB.getById(id);
     if (!v?.words?.length) return;
@@ -489,10 +511,18 @@ const EduVideoApp = (() => {
     }
     const prog = _q('ev-detail-progress');
     const hasUnsplash = !UNSPLASH_ACCESS_KEY.includes('YOUR-UNSPLASH');
-    if (prog) prog.innerHTML = `<div class="ev-progress">📄 워크시트 준비 중... (0/${v.words.length})</div>`;
+    if (prog) prog.innerHTML = `<div class="ev-progress">📄 한글 폰트 준비 중...</div>`;
 
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
+    try {
+      await _ensureKoreanFont(pdf);
+    } catch (e) {
+      if (prog) prog.innerHTML = `<div class="ev-progress" style="color:#ef4444">⚠️ 한글 폰트를 불러오지 못했습니다 — 인터넷 연결을 확인해주세요</div>`;
+      return;
+    }
+    if (prog) prog.innerHTML = `<div class="ev-progress">📄 워크시트 준비 중... (0/${v.words.length})</div>`;
+
     const pageW = 595, margin = 40;
     let y = margin;
 
@@ -516,9 +546,10 @@ const EduVideoApp = (() => {
       const img = hasUnsplash ? await _fetchUnsplashImage(w.word) : null;
       if (img) { try { pdf.addImage(img, 'JPEG', x + 8, y + 8, imgSize, imgSize); } catch (e) {} }
       const textX = x + (img ? imgSize + 16 : 12);
-      pdf.setFontSize(13); pdf.setFont(undefined, 'bold');
+      // ★ 굵게(bold) 스타일은 따로 안 심어서 못 씀 — 크기 차이로 시각적 강조를 대신함
+      pdf.setFontSize(14);
       pdf.text(w.word, textX, y + 22);
-      pdf.setFontSize(9); pdf.setFont(undefined, 'normal'); pdf.setTextColor(140);
+      pdf.setFontSize(9); pdf.setTextColor(140);
       pdf.text(w.pos || '', textX, y + 34);
       pdf.setTextColor(0);
       pdf.setFontSize(11);
