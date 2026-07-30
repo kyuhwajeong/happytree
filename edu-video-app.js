@@ -13,6 +13,7 @@ const EduVideoApp = (() => {
   // ★★★ Google Cloud Console에서 YouTube Data API v3 활성화 후(무료, 카드 불필요) 실제 키로 바꿔주세요 ★★★
   const YOUTUBE_API_KEY = 'AIzaSyCbbS4jkWNUyyO83AdzCwagUKYQJJKtsKY';
 
+
   let _curTopic = null; // null = 전체
   let _cssInjected = false;
 
@@ -64,6 +65,8 @@ const EduVideoApp = (() => {
 .ev-detail-title{font-size:15px;font-weight:800;color:var(--tx);margin-bottom:12px}
 .ev-script-box{background:var(--surf2);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--tx2);line-height:1.6;max-height:140px;overflow-y:auto;white-space:pre-wrap;margin-bottom:12px}
 .ev-word-list{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.ev-img-chk-row{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--tx2);margin-bottom:10px;cursor:pointer}
+.ev-img-chk-row input{width:15px;height:15px;flex-shrink:0;cursor:pointer}
 .ev-word-item{display:flex;align-items:baseline;gap:8px;background:var(--surf2);border-radius:9px;padding:8px 10px}
 .ev-word-en{font-weight:800;color:var(--tx);font-size:13px}
 .ev-word-pos{font-size:10px;color:var(--tx3)}
@@ -352,6 +355,9 @@ const EduVideoApp = (() => {
       <div class="ev-detail-title">${_esc(v.title)}</div>
       ${v.script ? `<div class="ev-field"><label>대본</label><div class="ev-script-box">${_esc(v.script)}</div></div>` : `<div class="ev-progress" style="color:var(--tx3)">대본이 없어서 단어 추출·PDF 생성은 이용할 수 없어요. 수정에서 대본을 추가해보세요.</div>`}
       <div id="ev-words-area">${_wordsAreaHtml(v)}</div>
+      ${v.words?.length ? `<label class="ev-img-chk-row">
+        <input type="checkbox" id="ev-pdf-img-chk" checked> 워크시트에 단어별 관련 이미지 포함하기 (무료 이미지 사이트에서 가져옴)
+      </label>` : ''}
       <div class="ev-btn-row">
         <button class="ev-btn ghost" onclick="EduVideoApp.openEditScript('${id}')">✏️ 대본 수정</button>
         ${v.script ? `<button class="ev-btn warn" id="ev-extract-btn" onclick="EduVideoApp._extractWords('${id}')">🤖 AI로 단어 추출</button>` : ''}
@@ -391,7 +397,14 @@ const EduVideoApp = (() => {
       // ★ PDF 버튼이 없었다면 새로 보여준다(단어가 이번에 처음 생겼을 수 있으므로)
       if (!document.querySelector('.ev-btn-row .ev-btn.primary')) {
         const row = document.querySelector('.ev-btn-row');
-        if (row) row.insertAdjacentHTML('beforeend', `<button class="ev-btn primary" onclick="EduVideoApp._makePdf('${id}')">📄 PDF 워크시트</button>`);
+        if (row) {
+          if (!_q('ev-pdf-img-chk')) {
+            row.insertAdjacentHTML('beforebegin', `<label class="ev-img-chk-row">
+              <input type="checkbox" id="ev-pdf-img-chk" checked> 워크시트에 단어별 관련 이미지 포함하기 (무료 이미지 사이트에서 가져옴)
+            </label>`);
+          }
+          row.insertAdjacentHTML('beforeend', `<button class="ev-btn primary" onclick="EduVideoApp._makePdf('${id}')">📄 PDF 워크시트</button>`);
+        }
       }
     } catch (e) {
       if (btn) { btn.disabled = false; btn.textContent = '🤖 AI로 단어 추출'; }
@@ -504,7 +517,8 @@ const EduVideoApp = (() => {
       if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ PDF 라이브러리를 불러오지 못했습니다'); return;
     }
     const prog = _q('ev-detail-progress');
-    const hasUnsplash = !UNSPLASH_ACCESS_KEY.includes('YOUR-UNSPLASH');
+    const wantsImages = _q('ev-pdf-img-chk')?.checked !== false; // 체크박스가 없으면(과거 문서 등) 기본은 포함
+    const hasUnsplash = wantsImages && !UNSPLASH_ACCESS_KEY.includes('YOUR-UNSPLASH');
     if (prog) prog.innerHTML = `<div class="ev-progress">📄 한글 폰트 준비 중...</div>`;
 
     const { jsPDF } = window.jspdf;
@@ -584,7 +598,8 @@ const EduVideoApp = (() => {
     });
 
     pdf.save(`${v.title.replace(/[^\w가-힣 ]/g, '')}_워크시트.pdf`);
-    if (prog) prog.innerHTML = `<div class="ev-progress">✅ PDF가 다운로드되었습니다${hasUnsplash ? '' : ' (이미지 API 미설정 — 이미지 없이 생성됨)'}</div>`;
+    const noImgReason = !wantsImages ? ' (이미지 미포함 선택)' : !hasUnsplash ? ' (이미지 API 미설정 — 이미지 없이 생성됨)' : '';
+    if (prog) prog.innerHTML = `<div class="ev-progress">✅ PDF가 다운로드되었습니다${noImgReason}</div>`;
   }
 
   return {
