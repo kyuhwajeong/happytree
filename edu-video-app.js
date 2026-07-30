@@ -483,40 +483,14 @@ const EduVideoApp = (() => {
 
   // ★ jsPDF 기본 폰트는 한글을 지원하지 않아 깨진 글자로 나온다(알려진 제약).
   //   나눔고딕 폰트를 한 번만 받아서(세션 중 캐시) PDF에 심어 넣는다.
-  const KOREAN_FONT_URLS = [
-    'https://raw.githubusercontent.com/google/fonts/main/ofl/nanumgothic/NanumGothic-Regular.ttf',
-    'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/nanumgothic/NanumGothic-Regular.ttf', // ★ 위가 특정 네트워크 환경에서 막힐 경우의 대체 경로
-  ];
-  let _koreanFontBase64 = null;
+  // ★ 나눔고딕 폰트를 사이트 자체 파일(nanum-gothic-base64.js)에서 직접 가져온다.
+  //   외부 CDN(GitHub, jsDelivr)이 일부 네트워크 환경에서 차단되는 것을
+  //   확인해서, 아예 외부 요청이 필요 없도록 폰트를 사이트에 내장했다.
   async function _ensureKoreanFont(pdf) {
-    if (!_koreanFontBase64) {
-      let lastErr = null;
-      for (const url of KOREAN_FONT_URLS) {
-        try {
-          console.log('[EduVideoApp] 한글 폰트 시도:', url);
-          const res = await fetch(url);
-          console.log('[EduVideoApp] 폰트 응답:', res.status);
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const buf = await res.arrayBuffer();
-          console.log('[EduVideoApp] 폰트 크기:', buf.byteLength, 'bytes');
-          const bytes = new Uint8Array(buf);
-          let binary = '';
-          const chunk = 8192;
-          for (let i = 0; i < bytes.length; i += chunk) {
-            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
-          }
-          _koreanFontBase64 = btoa(binary);
-          console.log('[EduVideoApp] base64 변환 완료');
-          lastErr = null;
-          break;
-        } catch (e) {
-          console.warn('[EduVideoApp] 이 경로 실패, 다음 경로 시도:', url, e.message || e);
-          lastErr = e;
-        }
-      }
-      if (!_koreanFontBase64) throw lastErr || new Error('모든 경로에서 폰트를 받지 못했습니다');
+    if (typeof NANUM_GOTHIC_BASE64 === 'undefined') {
+      throw new Error('폰트 파일(nanum-gothic-base64.js)이 로드되지 않았습니다');
     }
-    pdf.addFileToVFS('NanumGothic.ttf', _koreanFontBase64);
+    pdf.addFileToVFS('NanumGothic.ttf', NANUM_GOTHIC_BASE64);
     pdf.addFont('NanumGothic.ttf', 'NanumGothic', 'normal');
     pdf.setFont('NanumGothic'); // ★ 이후 모든 텍스트(영어 단어 포함)에 이 폰트 적용 — 나눔고딕은 영문도 지원해서 따로 안 바꿔도 됨
   }
