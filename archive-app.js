@@ -113,7 +113,7 @@ const ArchiveApp = (() => {
 .ar-drop.has-file{border-color:var(--a);color:var(--tx);font-weight:700}
 .ar-drop.dragover{border-color:var(--a);background:var(--a10);color:var(--a);font-weight:700}
 .ar-btn-row{display:flex;gap:8px;margin-top:16px}
-.ar-btn{flex:1;padding:11px;border-radius:12px;border:none;font-size:13px;font-weight:800;cursor:pointer}
+.ar-btn{flex:1;padding:11px;border-radius:12px;border:none;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap}
 .ar-btn.primary{background:var(--a);color:#fff}
 .ar-btn.ghost{background:var(--card2);color:var(--tx2);border:1px solid var(--bdr)}
 .ar-btn.danger{background:rgba(239,68,68,.1);color:#ef4444}
@@ -225,8 +225,8 @@ const ArchiveApp = (() => {
   function _selectBarHtml() {
     return `<div class="ar-select-bar" id="ar-select-bar">
       <span class="ar-select-count">${_selectedIds.size}개 선택됨</span>
-      <button class="ar-btn ghost" style="flex:0" onclick="ArchiveApp._selectAllVisible()">전체선택</button>
-      <button class="ar-btn primary" style="flex:0" onclick="ArchiveApp._downloadSelectedZip()" ${_selectedIds.size ? '' : 'disabled'}>⬇️ ZIP으로 백업</button>
+      <button class="ar-btn ghost" style="flex:0 0 auto" onclick="ArchiveApp._selectAllVisible()">전체선택</button>
+      <button class="ar-btn primary" style="flex:0 0 auto" onclick="ArchiveApp._downloadSelectedZip()" ${_selectedIds.size ? '' : 'disabled'}>⬇️ ZIP으로 백업</button>
     </div>`;
   }
   function _refreshSelectBar() {
@@ -585,8 +585,8 @@ const ArchiveApp = (() => {
       </div>
       <div class="ar-file-select-bar">
         <span class="ar-file-select-count">${_previewSelectedKeys.size}개 선택됨</span>
-        <button class="ar-btn ghost" style="flex:0;padding:6px 12px;font-size:11.5px" onclick="ArchiveApp._selectAllFilesInPreview()">전체선택</button>
-        <button class="ar-btn primary" style="flex:0;padding:6px 12px;font-size:11.5px" onclick="ArchiveApp._downloadSelectedFilesInPost()" ${_previewSelectedKeys.size ? '' : 'disabled'}>⬇️ 선택한 파일 받기</button>
+        <button class="ar-btn ghost" style="flex:0 0 auto;padding:6px 12px;font-size:11.5px" onclick="ArchiveApp._selectAllFilesInPreview()">전체선택</button>
+        <button class="ar-btn primary" style="flex:0 0 auto;padding:6px 12px;font-size:11.5px" onclick="ArchiveApp._downloadSelectedFilesInPost()" ${_previewSelectedKeys.size ? '' : 'disabled'}>⬇️ 선택한 파일 받기</button>
       </div>` : `<div class="ar-file-switch-single"><button class="ar-file-tab add" onclick="ArchiveApp._addMoreFiles('${post.id}')" title="파일 추가">＋ 파일 추가</button></div>`}
       <div class="ar-prev-body" id="ar-prev-body">${_previewLoadingHtml(f)}</div>
       ${post.description ? `<div class="ar-desc-view">${_esc(post.description)}</div>` : ''}
@@ -1003,7 +1003,7 @@ const ArchiveApp = (() => {
       <div class="ar-field">
         <label>첨부 파일 (${f.files?.length || 0}개)</label>
         <div id="ar-edit-files">${_editFilesListHtml(id)}</div>
-        <button type="button" class="ar-btn ghost" style="margin-top:8px;flex:0;padding:8px 14px;font-size:12px" onclick="ArchiveApp._addMoreFilesInEdit('${id}')">＋ 파일 추가</button>
+        <button type="button" class="ar-btn ghost" style="margin-top:8px;flex:0 0 auto;padding:8px 14px;font-size:12px" onclick="ArchiveApp._addMoreFilesInEdit('${id}')">＋ 파일 추가</button>
       </div>
       <div class="ar-btn-row">
         <button class="ar-btn ghost" onclick="ArchiveApp._closeEdit()">취소</button>

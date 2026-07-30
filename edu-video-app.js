@@ -13,7 +13,6 @@ const EduVideoApp = (() => {
   // ★★★ Google Cloud Console에서 YouTube Data API v3 활성화 후(무료, 카드 불필요) 실제 키로 바꿔주세요 ★★★
   const YOUTUBE_API_KEY = 'AIzaSyCbbS4jkWNUyyO83AdzCwagUKYQJJKtsKY';
 
-
   let _curTopic = null; // null = 전체
   let _cssInjected = false;
 
@@ -54,7 +53,7 @@ const EduVideoApp = (() => {
 .ev-guide-box b{color:var(--tx)}
 .ev-yt-open-btn{display:inline-block;margin-top:6px;padding:5px 10px;border-radius:8px;background:#fff;border:1px solid var(--a40);color:var(--a);font-size:11px;font-weight:700;text-decoration:none}
 .ev-btn-row{display:flex;gap:8px;margin-top:16px}
-.ev-btn{flex:1;padding:11px;border-radius:12px;border:none;font-size:13px;font-weight:800;cursor:pointer}
+.ev-btn{flex:1;padding:11px;border-radius:12px;border:none;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap}
 .ev-btn.primary{background:var(--a);color:#fff}
 .ev-btn.ghost{background:var(--card2);color:var(--tx2);border:1px solid var(--bdr)}
 .ev-btn.warn{background:linear-gradient(135deg,#f59e0b,#f97316);color:#fff}
@@ -347,8 +346,8 @@ const EduVideoApp = (() => {
     ov.className = 'ev-ov'; ov.id = 'ev-detail-ov';
     ov.innerHTML = `<div class="ev-sheet" style="max-width:640px">
       <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:8px">
-        <button class="ev-btn ghost" style="flex:0;padding:6px 10px" onclick="EduVideoApp._confirmDeleteVideo('${id}')" title="삭제">🗑️</button>
-        <button class="ev-btn ghost" style="flex:0;padding:6px 10px" onclick="document.getElementById('ev-detail-ov').remove()">✕</button>
+        <button class="ev-btn ghost" style="flex:0 0 auto;padding:6px 10px" onclick="EduVideoApp._confirmDeleteVideo('${id}')" title="삭제">🗑️</button>
+        <button class="ev-btn ghost" style="flex:0 0 auto;padding:6px 10px" onclick="document.getElementById('ev-detail-ov').remove()">✕</button>
       </div>
       <div class="ev-play-wrap"><iframe src="https://www.youtube.com/embed/${v.youtubeId}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>
       <span class="ev-detail-topic">${_esc(v.topic)}</span>
