@@ -101,7 +101,8 @@ const ArchiveApp = (() => {
 .ar-sheet{background:var(--card);width:100%;max-width:520px;max-height:88vh;border-radius:20px 20px 0 0;overflow-y:auto;padding:18px}
 @media (min-width:640px){ .ar-sheet{border-radius:20px} }
 .ar-prev-sheet.fullscreen{max-width:98vw!important;width:98vw;max-height:96vh;height:96vh;display:flex;flex-direction:column}
-.ar-prev-sheet.fullscreen .ar-prev-body{flex:1;height:auto}
+.ar-prev-sheet.fullscreen #ar-prev-inner{display:flex;flex-direction:column;flex:1;min-height:0}
+.ar-prev-sheet.fullscreen .ar-prev-body{flex:1;height:auto;min-height:0}
 .ar-prev-sheet.fullscreen .ar-prev-body iframe,.ar-prev-sheet.fullscreen .ar-prev-body img,.ar-prev-sheet.fullscreen .ar-prev-body video{max-height:none;height:100%}
 .ar-prev-sheet.fullscreen .ar-prev-table-wrap{max-height:none;height:100%}
 .ar-sheet-title{font-size:15px;font-weight:800;color:var(--tx);margin-bottom:14px}
@@ -136,6 +137,11 @@ const ArchiveApp = (() => {
 .ar-prev-table-wrap{width:100%;max-height:70vh;overflow:auto;padding:8px}
 .ar-prev-table{border-collapse:collapse;font-size:11.5px;width:100%}
 .ar-prev-table td,.ar-prev-table th{border:1px solid var(--bdr);padding:5px 8px;white-space:nowrap;color:var(--tx)}
+.ar-prev-table[contenteditable] td{cursor:text;outline:none}
+.ar-prev-table[contenteditable] td:focus{background:var(--a10);box-shadow:inset 0 0 0 2px var(--a)}
+.ar-xlsx-tabs{display:flex;flex-wrap:wrap;gap:6px;padding:8px 8px 0}
+.ar-xlsx-toolbar{display:flex;align-items:center;gap:8px;padding:8px}
+.ar-xlsx-edit-hint{font-size:11px;color:var(--a);font-weight:700}
 .ar-prev-none{padding:40px;text-align:center;color:var(--tx3);font-size:13px}
 .ar-desc-view{font-size:12.5px;color:var(--tx2);margin-top:10px;line-height:1.5;white-space:pre-wrap}
 .ar-card-multi{position:absolute;bottom:8px;right:8px;background:var(--a);color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:999px;z-index:1}
@@ -537,12 +543,14 @@ const ArchiveApp = (() => {
   /* ═══════════════ 미리보기 ═══════════════ */
   let _previewPost = null, _previewFileIdx = 0;
   let _previewSelectedKeys = new Set(); // ★ 게시물 안에서 원하는 파일만 골라 받기용
+  let _xlsxWb = null, _xlsxSheetIdx = 0, _xlsxEditMode = false; // ★ 엑셀 다중 시트 · 편집 상태
   function _currentPreviewFile() { return _previewPost?.files?.[_previewFileIdx] || null; }
 
   async function openPreview(id) {
     const post = ArchiveDB.getById(id);
     if (!post || !post.files?.length) return;
     _previewPost = post; _previewFileIdx = 0; _previewSelectedKeys = new Set();
+    _xlsxWb = null; _xlsxSheetIdx = 0; _xlsxEditMode = false;
     const ov = document.createElement('div');
     ov.className = 'ar-ov'; ov.id = 'ar-preview-ov';
     ov.innerHTML = `<div class="ar-sheet ar-prev-sheet" id="ar-prev-sheet" style="max-width:680px"><div id="ar-prev-inner"></div></div>`;
@@ -595,6 +603,7 @@ const ArchiveApp = (() => {
   }
   function _switchPreviewFile(idx) {
     _previewFileIdx = idx;
+    _xlsxWb = null; _xlsxSheetIdx = 0; _xlsxEditMode = false;
     _renderPreviewModal();
   }
   function _toggleFileSelect(r2Key) {
@@ -974,15 +983,84 @@ const ArchiveApp = (() => {
         let wb;
         if (_isCsv(f.ext)) { wb = XLSX.read(await res.text(), { type: 'string' }); }
         else { wb = XLSX.read(await res.arrayBuffer(), { type: 'array' }); }
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const html = XLSX.utils.sheet_to_html(ws, { editable: false });
-        body.innerHTML = `<div class="ar-prev-table-wrap">${html.replace('<table', '<table class="ar-prev-table"')}</div>`;
+        _xlsxWb = wb; _xlsxSheetIdx = 0;
+        _renderXlsxSheet();
       } catch (e) {
         body.innerHTML = `<div class="ar-prev-none">⚠️ 미리보기를 불러오지 못했습니다<br><span style="font-size:11px">${_esc(e.message)}</span></div>`;
       }
       return;
     }
     body.innerHTML = `<div class="ar-prev-none">이 형식은 미리보기를 지원하지 않아요<br>다운로드 버튼(⬇️)으로 받아서 확인해 주세요</div>`;
+  }
+
+  // ★ 엑셀 시트 렌더링 — 시트가 여러 개면 탭으로 전환 가능, 편집 모드에선
+  //   셀을 직접 고쳐 쓸 수 있고 저장하면 실제 파일에 반영된다.
+  function _renderXlsxSheet() {
+    const body = _q('ar-prev-body');
+    if (!body || !_xlsxWb) return;
+    const sheetNames = _xlsxWb.SheetNames;
+    const ws = _xlsxWb.Sheets[sheetNames[_xlsxSheetIdx]];
+    const html = XLSX.utils.sheet_to_html(ws, { editable: false });
+    const tableHtml = html.replace('<table', `<table class="ar-prev-table"${_xlsxEditMode ? ' contenteditable="true"' : ''}`);
+    body.innerHTML = `
+      ${sheetNames.length > 1 ? `<div class="ar-xlsx-tabs">${sheetNames.map((name, i) => `
+        <button class="ar-file-tab${i === _xlsxSheetIdx ? ' on' : ''}" onclick="ArchiveApp._switchXlsxSheet(${i})">${_esc(name)}</button>`).join('')}</div>` : ''}
+      <div class="ar-xlsx-toolbar">
+        ${_xlsxEditMode
+          ? `<span class="ar-xlsx-edit-hint">✏️ 편집 중 — 셀을 클릭해서 직접 고칠 수 있어요</span>
+             <button class="ar-btn ghost" style="flex:0 0 auto;padding:6px 12px;font-size:11.5px" onclick="ArchiveApp._cancelXlsxEdit()">취소</button>
+             <button class="ar-btn primary" style="flex:0 0 auto;padding:6px 12px;font-size:11.5px" onclick="ArchiveApp._saveXlsxEdit()">💾 저장</button>`
+          : `<button class="ar-btn ghost" style="flex:0 0 auto;padding:6px 12px;font-size:11.5px;margin-left:auto" onclick="ArchiveApp._startXlsxEdit()">✏️ 편집</button>`}
+      </div>
+      <div class="ar-prev-table-wrap" id="ar-xlsx-table-wrap">${tableHtml}</div>`;
+  }
+  function _switchXlsxSheet(idx) {
+    _xlsxSheetIdx = idx;
+    _xlsxEditMode = false;
+    _renderXlsxSheet();
+  }
+  function _startXlsxEdit() {
+    _xlsxEditMode = true;
+    _renderXlsxSheet();
+  }
+  function _cancelXlsxEdit() {
+    _xlsxEditMode = false;
+    _renderXlsxSheet(); // ★ 워크북 원본에서 다시 그려서 편집 내용 버림
+  }
+  // ★ 표(HTML table)에서 지금 화면에 보이는 값을 읽어서 시트를 다시 만들고,
+  //   워크북에 반영한 뒤 실제 파일로 다시 업로드한다. 기본적인 값 편집만
+  //   지원하고 수식·서식까지는 지원하지 않는다(HTML 표 기반의 한계).
+  async function _saveXlsxEdit() {
+    const wrap = _q('ar-xlsx-table-wrap');
+    const table = wrap?.querySelector('table');
+    if (!table || !_xlsxWb) return;
+    const f = _currentPreviewFile();
+    const post = _previewPost;
+    if (!f || !post) return;
+    const prog = _q('ar-detail-progress');
+    if (prog) prog.innerHTML = `<div class="ar-progress">💾 저장 중...</div>`;
+    try {
+      const newWs = XLSX.utils.table_to_sheet(table);
+      _xlsxWb.Sheets[_xlsxWb.SheetNames[_xlsxSheetIdx]] = newWs;
+      const isCsv = _isCsv(f.ext);
+      let blob;
+      if (isCsv) {
+        const csv = XLSX.utils.sheet_to_csv(newWs);
+        blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+      } else {
+        const out = XLSX.write(_xlsxWb, { type: 'array', bookType: 'xlsx' });
+        blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      }
+      const result = await ArchiveDB.replaceFileContent(post.id, f.r2Key, blob);
+      if (!result.ok) throw new Error(result.error || '저장 실패');
+      _previewPost = result.post;
+      _xlsxEditMode = false;
+      _refreshGrid();
+      if (prog) prog.innerHTML = `<div class="ar-progress">✅ 저장되었습니다</div>`;
+      _renderXlsxSheet();
+    } catch (e) {
+      if (prog) prog.innerHTML = `<div class="ar-progress" style="color:#ef4444">⚠️ 저장 실패: ${_esc(e.message || '알 수 없는 오류')}</div>`;
+    }
   }
 
   /* ═══════════════ 수정 ═══════════════ */
@@ -1102,6 +1180,7 @@ const ArchiveApp = (() => {
     openEdit, _closeEdit, _submitEdit,
     _removeFileInEdit, _addMoreFilesInEdit,
     _confirmDelete, _toggleFullscreen, _printPreview,
+    _switchXlsxSheet, _startXlsxEdit, _cancelXlsxEdit, _saveXlsxEdit,
     _toggleConvertMenu, _convertAndDownload,
     _toggleSelectMode, _toggleSelect, _selectAllVisible, _downloadSelectedZip, _downloadPostZip,
   };

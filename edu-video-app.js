@@ -77,6 +77,8 @@ const EduVideoApp = (() => {
 .ev-rec-title{font-size:12.5px;font-weight:700;color:var(--tx);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3}
 .ev-rec-channel{font-size:10.5px;color:var(--tx3);margin-top:2px}
 .ev-rec-cc{color:#059669;font-weight:700}
+.ev-rec-nocc{color:#f59e0b;font-weight:700}
+.ev-rec-warn{font-size:10px;color:#f59e0b;margin-top:3px;line-height:1.4}
 .ev-rec-reason{font-size:10.5px;color:var(--a);margin-top:4px;line-height:1.4}
 .ev-rec-add-btn{margin-top:6px;padding:4px 10px;border-radius:8px;border:none;background:var(--a);color:#fff;font-size:10.5px;font-weight:700;cursor:pointer}`;
     document.head.appendChild(s);
@@ -130,22 +132,29 @@ const EduVideoApp = (() => {
   }
 
   /* ═══════════════ AI 추천 (유튜브 실제 검색 + Gemini 큐레이션) ═══════════════ */
-  async function _searchYoutube(query) {
+  async function _searchYoutubeRaw(query) {
     if (YOUTUBE_API_KEY.includes('YOUR-YOUTUBE')) throw new Error('유튜브 API 키가 설정되지 않았습니다');
     const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=8&safeSearch=strict&relevanceLanguage=en&order=relevance&q=${encodeURIComponent(query)}&key=${YOUTUBE_API_KEY}`;
     const res = await fetch(url);
     if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error(`유튜브 검색 실패 (HTTP ${res.status}) ${t.slice(0, 100)}`); }
     const data = await res.json();
-    const candidates = (data.items || []).map(it => ({
+    return (data.items || []).map(it => ({
       youtubeId: it.id.videoId,
       title: it.snippet.title,
       channelTitle: it.snippet.channelTitle,
       description: it.snippet.description,
       thumbnail: it.snippet.thumbnails?.medium?.url || it.snippet.thumbnails?.default?.url,
     }));
-    // ★ 자막 있는 영상만 남긴다 — "스크립트 표시"가 아예 안 뜨는 영상을
-    //   추천에서 미리 걸러내서, 나중에 대본을 못 구해 헛수고하는 걸 방지
-    return await _filterCaptioned(candidates);
+  }
+  async function _searchYoutube(query) {
+    return await _filterCaptioned(await _searchYoutubeRaw(query));
+  }
+  // ★ 후보들을 자막 있음/없음으로 나눠서 각각 돌려준다(둘 다 필요할 때 씀)
+  async function _splitByCaption(candidates) {
+    if (!candidates.length) return { captioned: [], uncaptioned: [] };
+    const captionedList = await _filterCaptioned(candidates);
+    const captionedIds = new Set(captionedList.map(c => c.youtubeId));
+    return { captioned: captionedList, uncaptioned: candidates.filter(c => !captionedIds.has(c.youtubeId)) };
   }
   async function _filterCaptioned(candidates) {
     if (!candidates.length) return candidates;
@@ -181,8 +190,12 @@ const EduVideoApp = (() => {
     document.body.appendChild(ov);
     ov.onclick = e => { if (e.target === ov) ov.remove(); };
   }
+  let _recUncaptionedPool = []; // ★ "더보기"를 누르기 전까지 대기시켜두는 자막 없는 후보들
+  let _recTopic = '';
+
   async function _runRecommend() {
     const topic = _q('ev-rec-topic')?.value;
+    _recTopic = topic;
     const btn = _q('ev-rec-search-btn'), prog = _q('ev-rec-progress'), results = _q('ev-rec-results');
     if (results) results.innerHTML = '';
     btn.disabled = true;
@@ -191,33 +204,72 @@ const EduVideoApp = (() => {
       prog.innerHTML = `<div class="ev-progress">🤖 검색어를 만드는 중...</div>`;
       const queries = await GeminiAI.generateSearchQueries(topic);
       prog.innerHTML = `<div class="ev-progress">🔍 유튜브에서 검색 중...</div>`;
-      let candidates = [];
+      let allCandidates = [];
       for (const q of queries) {
-        const found = await _searchYoutube(q);
-        candidates = candidates.concat(found);
+        const found = await _searchYoutubeRaw(q);
+        allCandidates = allCandidates.concat(found);
       }
       // ★ 중복 제거
       const seen = new Set();
-      candidates = candidates.filter(c => { if (seen.has(c.youtubeId)) return false; seen.add(c.youtubeId); return true; });
-      if (!candidates.length) { prog.innerHTML = `<div class="ev-progress" style="color:#ef4444">⚠️ 자막 있는 검색 결과가 없습니다 — 다른 주제로 시도해보세요</div>`; btn.disabled = false; return; }
-      prog.innerHTML = `<div class="ev-progress">🤖 AI가 ${candidates.length}개 중에서 고르는 중...</div>`;
-      const curated = await GeminiAI.curateVideos(topic, candidates);
+      allCandidates = allCandidates.filter(c => { if (seen.has(c.youtubeId)) return false; seen.add(c.youtubeId); return true; });
+      if (!allCandidates.length) { prog.innerHTML = `<div class="ev-progress" style="color:#ef4444">⚠️ 검색 결과가 없습니다 — 다른 주제로 시도해보세요</div>`; btn.disabled = false; return; }
+
+      prog.innerHTML = `<div class="ev-progress">📝 자막 여부 확인 중...</div>`;
+      const { captioned, uncaptioned } = await _splitByCaption(allCandidates);
+      _recUncaptionedPool = uncaptioned; // ★ 나중에 "더보기" 누르면 여기서 꺼내 씀
+
+      if (!captioned.length) {
+        prog.innerHTML = `<div class="ev-progress" style="color:#f59e0b">⚠️ 자막 있는 영상이 없어서, 자막 없는 영상 위주로 보여드립니다</div>`;
+        await _appendMoreResults(true); // ★ 처음부터 자막없음으로 대체
+        btn.disabled = false;
+        return;
+      }
+      prog.innerHTML = `<div class="ev-progress">🤖 AI가 ${captioned.length}개 중에서 고르는 중...</div>`;
+      const curated = await GeminiAI.curateVideos(topic, captioned);
       if (!curated.length) { prog.innerHTML = `<div class="ev-progress" style="color:#ef4444">⚠️ 적합한 영상을 찾지 못했습니다 — 다른 주제로 시도해보세요</div>`; btn.disabled = false; return; }
-      prog.innerHTML = `<div class="ev-progress">✅ ${curated.length}개 추천 (전부 자막 확인됨)</div>`;
-      results.innerHTML = curated.map((v, i) => `
-        <div class="ev-rec-card">
-          <img class="ev-rec-thumb" src="${v.thumbnail}" alt="">
-          <div class="ev-rec-body">
-            <div class="ev-rec-title">${_esc(v.title)}</div>
-            <div class="ev-rec-channel">${_esc(v.channelTitle)} · <span class="ev-rec-cc">✅ 자막 있음</span></div>
-            <div class="ev-rec-reason">💡 ${_esc(v.reason)}</div>
-            <button class="ev-rec-add-btn" data-yid="${_esc(v.youtubeId)}" data-title="${_esc(v.title)}" data-topic="${_esc(topic)}" onclick="EduVideoApp._addFromRecommend(this)">이 영상으로 등록</button>
-          </div>
-        </div>`).join('');
+      prog.innerHTML = `<div class="ev-progress">✅ ${curated.length}개 추천 (자막 있음 우선)</div>`;
+      results.innerHTML = curated.map(v => _recCardHtml(v, true)).join('') + _moreBtnHtml();
     } catch (e) {
       prog.innerHTML = `<div class="ev-progress" style="color:#ef4444">⚠️ ${_esc(e.message || '알 수 없는 오류')}</div>`;
     }
     btn.disabled = false;
+  }
+  function _recCardHtml(v, hasCaption) {
+    return `<div class="ev-rec-card">
+      <img class="ev-rec-thumb" src="${v.thumbnail}" alt="">
+      <div class="ev-rec-body">
+        <div class="ev-rec-title">${_esc(v.title)}</div>
+        <div class="ev-rec-channel">${_esc(v.channelTitle)} · <span class="${hasCaption ? 'ev-rec-cc' : 'ev-rec-nocc'}">${hasCaption ? '✅ 자막 있음' : '⚠️ 자막 없음'}</span></div>
+        <div class="ev-rec-reason">💡 ${_esc(v.reason || '')}</div>
+        ${!hasCaption ? `<div class="ev-rec-warn">자막이 없어서 AI 단어 추출·PDF 워크시트는 자동으로 안 돼요. 영상 재생용으로만 등록됩니다.</div>` : ''}
+        <button class="ev-rec-add-btn" data-yid="${_esc(v.youtubeId)}" data-title="${_esc(v.title)}" data-topic="${_esc(_recTopic)}" onclick="EduVideoApp._addFromRecommend(this)">이 영상으로 등록</button>
+      </div>
+    </div>`;
+  }
+  function _moreBtnHtml() {
+    if (!_recUncaptionedPool.length) return '';
+    return `<button class="ev-btn ghost" id="ev-more-btn" style="width:100%;margin-top:6px" onclick="EduVideoApp._loadMoreRecommend()">더보기 (자막 없는 영상도 보기)</button>`;
+  }
+  async function _loadMoreRecommend() {
+    const moreBtn = _q('ev-more-btn');
+    if (moreBtn) { moreBtn.disabled = true; moreBtn.textContent = '⏳ 불러오는 중...'; }
+    await _appendMoreResults(false);
+  }
+  // ★ 자막 없는 풀에서 AI 큐레이션해서 결과 목록 뒤에 이어붙인다
+  async function _appendMoreResults(replaceAll) {
+    const results = _q('ev-rec-results');
+    const pool = _recUncaptionedPool;
+    _recUncaptionedPool = []; // ★ 한 번 쓰면 비움(같은 걸 두 번 더보기 하지 않게)
+    if (!pool.length) { _q('ev-more-btn')?.remove(); return; }
+    try {
+      const curated = await GeminiAI.curateVideos(_recTopic, pool);
+      const html = curated.map(v => _recCardHtml(v, false)).join('');
+      if (replaceAll) { results.innerHTML = html; }
+      else { _q('ev-more-btn')?.remove(); results.insertAdjacentHTML('beforeend', html); }
+    } catch (e) {
+      _q('ev-more-btn')?.remove();
+      if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ 추가 추천 실패: ' + (e.message || ''));
+    }
   }
   function _addFromRecommend(btn) {
     const { yid, title, topic } = btn.dataset;
@@ -604,7 +656,7 @@ const EduVideoApp = (() => {
   return {
     init: async () => { if (typeof EduVideoDB !== 'undefined') await EduVideoDB.init(); },
     render, _selectTopic, _promptNewTopic,
-    openRecommend, _runRecommend, _addFromRecommend,
+    openRecommend, _runRecommend, _addFromRecommend, _loadMoreRecommend,
     openAdd, _closeAdd, _submitAdd,
     openDetail, _extractWords, openEditScript, _submitEditScript, _confirmDeleteVideo,
     _makePdf,

@@ -196,6 +196,28 @@ const ArchiveDB = (() => {
     return { ok: true };
   }
 
+  // ★ 파일 내용을 그대로 덮어쓰기(같은 r2Key) — 예: 엑셀 편집 후 저장
+  async function replaceFileContent(postId, r2Key, blob, meta = {}) {
+    const idx = _list.findIndex(x => x.id === postId);
+    if (idx < 0) return { ok: false, error: '게시물을 찾을 수 없습니다' };
+    const fIdx = _list[idx].files.findIndex(f => f.r2Key === r2Key);
+    if (fIdx < 0) return { ok: false, error: '파일을 찾을 수 없습니다' };
+    try {
+      await _uploadToWorker(r2Key, blob);
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+    const newFiles = _list[idx].files.slice();
+    newFiles[fIdx] = { ...newFiles[fIdx], size: blob.size, ...meta };
+    const rec = { ..._list[idx], files: newFiles, updatedAt: _now() };
+    _list[idx] = rec;
+    _saveLS(); _fire('archive');
+    if (typeof FireDB !== 'undefined') {
+      await FireDB.set(`${FB_PATH}/${postId}`, rec).catch(e => console.warn('[ArchiveDB] 저장 실패', e));
+    }
+    return { ok: true, post: rec };
+  }
+
   // Update — 메타데이터만 수정(제목/설명/분류/즐겨찾기 등). files[] 직접 수정은 지양.
   async function updateFile(id, patch) {
     const idx = _list.findIndex(x => x.id === id);
@@ -233,7 +255,7 @@ const ArchiveDB = (() => {
   return {
     init, on, pauseUpdates,
     getAll, getById, getByCategory, getFileUrl,
-    createPost, addFilesToPost, removeFileFromPost,
+    createPost, addFilesToPost, removeFileFromPost, replaceFileContent,
     updateFile, deletePost, deleteFile,
     CATEGORIES,
   };
