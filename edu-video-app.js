@@ -10,6 +10,8 @@ const EduVideoApp = (() => {
   // ★★★ Unsplash 가입 후(무료, 카드 불필요) 아래 값을 실제 Access Key로 바꿔주세요 ★★★
   // https://unsplash.com/developers → New Application → Access Key 복사
   const UNSPLASH_ACCESS_KEY = 'YOUR-UNSPLASH-ACCESS-KEY';
+  // ★★★ Google Cloud Console에서 YouTube Data API v3 활성화 후(무료, 카드 불필요) 실제 키로 바꿔주세요 ★★★
+  const YOUTUBE_API_KEY = 'YOUR-YOUTUBE-API-KEY';
 
   let _curTopic = null; // null = 전체
   let _cssInjected = false;
@@ -18,6 +20,7 @@ const EduVideoApp = (() => {
     if (_cssInjected) return; _cssInjected = true;
     const s = document.createElement('style');
     s.textContent = `
+.ev-toolbar{display:flex;justify-content:flex-end;padding:10px 14px 0}
 .ev-cats{display:flex;gap:6px;overflow-x:auto;padding:10px 14px;scrollbar-width:none;flex-shrink:0}
 .ev-cats::-webkit-scrollbar{display:none}
 .ev-cat-tab{flex-shrink:0;padding:7px 13px;border-radius:999px;border:1px solid var(--bdr);background:var(--card2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
@@ -62,14 +65,23 @@ const EduVideoApp = (() => {
 .ev-word-en{font-weight:800;color:var(--tx);font-size:13px}
 .ev-word-pos{font-size:10px;color:var(--tx3)}
 .ev-word-kr{font-size:12px;color:var(--tx2);flex:1}
-.ev-progress{font-size:12px;color:var(--a);text-align:center;margin-top:8px}`;
+.ev-progress{font-size:12px;color:var(--a);text-align:center;margin-top:8px}
+.ev-rec-card{display:flex;gap:10px;background:var(--surf2);border-radius:12px;padding:10px;margin-bottom:8px;cursor:pointer}
+.ev-rec-thumb{width:100px;aspect-ratio:16/9;object-fit:cover;border-radius:8px;flex-shrink:0}
+.ev-rec-body{min-width:0}
+.ev-rec-title{font-size:12.5px;font-weight:700;color:var(--tx);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3}
+.ev-rec-channel{font-size:10.5px;color:var(--tx3);margin-top:2px}
+.ev-rec-reason{font-size:10.5px;color:var(--a);margin-top:4px;line-height:1.4}
+.ev-rec-add-btn{margin-top:6px;padding:4px 10px;border-radius:8px;border:none;background:var(--a);color:#fff;font-size:10.5px;font-weight:700;cursor:pointer}`;
     document.head.appendChild(s);
   }
 
   function _shellHtml() {
     const topics = EduVideoDB.getTopics();
     return `
-      <div class="ph"><div class="phl"><div class="ph-title">🎬 영문 교육자료</div></div></div>
+      <div class="ev-toolbar">
+        <button class="db-mini-btn" onclick="EduVideoApp.openRecommend()">🤖 AI 추천</button>
+      </div>
       <div class="ev-cats">
         <button class="ev-cat-tab${_curTopic===null?' on':''}" onclick="EduVideoApp._selectTopic(null)">전체</button>
         ${topics.map(t => `<button class="ev-cat-tab${_curTopic===t?' on':''}" onclick="EduVideoApp._selectTopic('${_esc(t)}')">${_esc(t)}</button>`).join('')}
@@ -97,9 +109,9 @@ const EduVideoApp = (() => {
       </div>`).join('')}</div>`;
   }
 
-  function render() {
+  function render(containerId) {
     _css();
-    const pg = _q('page-eduvideo'); if (!pg) return;
+    const pg = _q(containerId || 'page-eduvideo'); if (!pg) return;
     pg.innerHTML = _shellHtml();
   }
   function _refreshGrid() { const b = _q('ev-body'); if (b) b.innerHTML = _gridHtml(); }
@@ -111,7 +123,91 @@ const EduVideoApp = (() => {
     render();
   }
 
-  /* ═══════════════ 영상 추가 ═══════════════ */
+  /* ═══════════════ AI 추천 (유튜브 실제 검색 + Gemini 큐레이션) ═══════════════ */
+  async function _searchYoutube(query) {
+    if (YOUTUBE_API_KEY.includes('YOUR-YOUTUBE')) throw new Error('유튜브 API 키가 설정되지 않았습니다');
+    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=6&safeSearch=strict&relevanceLanguage=en&order=relevance&q=${encodeURIComponent(query)}&key=${YOUTUBE_API_KEY}`;
+    const res = await fetch(url);
+    if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error(`유튜브 검색 실패 (HTTP ${res.status}) ${t.slice(0, 100)}`); }
+    const data = await res.json();
+    return (data.items || []).map(it => ({
+      youtubeId: it.id.videoId,
+      title: it.snippet.title,
+      channelTitle: it.snippet.channelTitle,
+      description: it.snippet.description,
+      thumbnail: it.snippet.thumbnails?.medium?.url || it.snippet.thumbnails?.default?.url,
+    }));
+  }
+
+  function openRecommend() {
+    const topics = EduVideoDB.getTopics();
+    const ov = document.createElement('div');
+    ov.className = 'ev-ov'; ov.id = 'ev-rec-ov';
+    ov.innerHTML = `<div class="ev-sheet">
+      <div class="ev-sheet-title">🤖 AI 영상 추천</div>
+      <div class="ev-field"><label>주제</label>
+        <select id="ev-rec-topic">${topics.map(t => `<option value="${_esc(t)}"${t===_curTopic?' selected':''}>${_esc(t)}</option>`).join('')}</select>
+      </div>
+      <div id="ev-rec-progress"></div>
+      <div id="ev-rec-results"></div>
+      <div class="ev-btn-row">
+        <button class="ev-btn ghost" onclick="document.getElementById('ev-rec-ov').remove()">닫기</button>
+        <button class="ev-btn primary" id="ev-rec-search-btn" onclick="EduVideoApp._runRecommend()">🔍 추천 받기</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  }
+  async function _runRecommend() {
+    const topic = _q('ev-rec-topic')?.value;
+    const btn = _q('ev-rec-search-btn'), prog = _q('ev-rec-progress'), results = _q('ev-rec-results');
+    if (results) results.innerHTML = '';
+    btn.disabled = true;
+    if (typeof GeminiAI === 'undefined') { if (prog) prog.innerHTML = `<div class="ev-progress" style="color:#ef4444">⚠️ AI 기능을 불러오지 못했습니다</div>`; btn.disabled = false; return; }
+    try {
+      prog.innerHTML = `<div class="ev-progress">🤖 검색어를 만드는 중...</div>`;
+      const queries = await GeminiAI.generateSearchQueries(topic);
+      prog.innerHTML = `<div class="ev-progress">🔍 유튜브에서 검색 중...</div>`;
+      let candidates = [];
+      for (const q of queries) {
+        const found = await _searchYoutube(q);
+        candidates = candidates.concat(found);
+      }
+      // ★ 중복 제거
+      const seen = new Set();
+      candidates = candidates.filter(c => { if (seen.has(c.youtubeId)) return false; seen.add(c.youtubeId); return true; });
+      if (!candidates.length) { prog.innerHTML = `<div class="ev-progress" style="color:#ef4444">⚠️ 검색 결과가 없습니다</div>`; btn.disabled = false; return; }
+      prog.innerHTML = `<div class="ev-progress">🤖 AI가 ${candidates.length}개 중에서 고르는 중...</div>`;
+      const curated = await GeminiAI.curateVideos(topic, candidates);
+      if (!curated.length) { prog.innerHTML = `<div class="ev-progress" style="color:#ef4444">⚠️ 적합한 영상을 찾지 못했습니다 — 다른 주제로 시도해보세요</div>`; btn.disabled = false; return; }
+      prog.innerHTML = `<div class="ev-progress">✅ ${curated.length}개 추천</div>`;
+      results.innerHTML = curated.map((v, i) => `
+        <div class="ev-rec-card">
+          <img class="ev-rec-thumb" src="${v.thumbnail}" alt="">
+          <div class="ev-rec-body">
+            <div class="ev-rec-title">${_esc(v.title)}</div>
+            <div class="ev-rec-channel">${_esc(v.channelTitle)}</div>
+            <div class="ev-rec-reason">💡 ${_esc(v.reason)}</div>
+            <button class="ev-rec-add-btn" data-yid="${_esc(v.youtubeId)}" data-title="${_esc(v.title)}" data-topic="${_esc(topic)}" onclick="EduVideoApp._addFromRecommend(this)">이 영상으로 등록</button>
+          </div>
+        </div>`).join('');
+    } catch (e) {
+      prog.innerHTML = `<div class="ev-progress" style="color:#ef4444">⚠️ ${_esc(e.message || '알 수 없는 오류')}</div>`;
+    }
+    btn.disabled = false;
+  }
+  function _addFromRecommend(btn) {
+    const { yid, title, topic } = btn.dataset;
+    _q('ev-rec-ov')?.remove();
+    openAdd();
+    setTimeout(() => {
+      if (_q('ev-title-inp')) _q('ev-title-inp').value = title;
+      if (_q('ev-url-inp')) _q('ev-url-inp').value = `https://www.youtube.com/watch?v=${yid}`;
+      if (_q('ev-topic-inp')) _q('ev-topic-inp').value = topic;
+    }, 0);
+  }
+
+  /* ═══════════════ 영상 추가(직접 입력) ═══════════════ */
   function openAdd() {
     const topics = EduVideoDB.getTopics();
     const ov = document.createElement('div');
@@ -374,6 +470,7 @@ const EduVideoApp = (() => {
   return {
     init: async () => { if (typeof EduVideoDB !== 'undefined') await EduVideoDB.init(); },
     render, _selectTopic, _promptNewTopic,
+    openRecommend, _runRecommend, _addFromRecommend,
     openAdd, _closeAdd, _submitAdd,
     openDetail, _extractWords, openEditScript, _submitEditScript, _confirmDeleteVideo,
     _makePdf,

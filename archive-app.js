@@ -62,6 +62,12 @@ const ArchiveApp = (() => {
   padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:8px;z-index:60;box-shadow:0 -4px 16px rgba(0,0,0,.08)}
 .ar-select-count{font-size:12px;font-weight:700;color:var(--tx2);flex:1}
 .ar-select-bar .ar-btn{padding:9px 14px;font-size:12.5px}
+.ar-tool-tabs{display:flex;gap:8px;padding:4px 14px 12px;border-bottom:1px solid var(--bdr);overflow-x:auto;scrollbar-width:none}
+.ar-tool-tabs::-webkit-scrollbar{display:none}
+.ar-tool-tab{flex-shrink:0;padding:8px 14px;border-radius:10px 10px 0 0;border:none;background:transparent;color:var(--tx3);font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ar-tool-tab.on{color:var(--a);border-bottom-color:var(--a)}
+.ar-tool-body{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.ar-toolbar{display:flex;justify-content:flex-end;gap:8px;padding:10px 14px 0;flex-shrink:0}
 .ar-search-wrap{position:relative;margin:0 14px 10px}
 .ar-search-inp{width:100%;box-sizing:border-box;padding:9px 34px 9px 12px;border-radius:12px;border:1px solid var(--bdr);background:var(--card2);color:var(--tx);font-size:12.5px;font-family:inherit}
 .ar-search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:transparent;color:var(--tx3);font-size:13px;cursor:pointer;padding:4px}
@@ -151,18 +157,34 @@ const ArchiveApp = (() => {
     </div>`;
   }
 
+  // ★ 자료실을 여러 도구를 담는 허브로 확장 — 새 도구가 생기면 이 배열에
+  //   한 줄만 추가하면 된다(예: PDF 병합/분할, 포맷 뷰어·편집기 등).
+  //   각 도구는 mount(containerId)만 구현하면 이 구조에 바로 편입된다.
+  const TOOL_TABS = [
+    { key: 'files',           ico: '📁', lbl: '파일',        mount: (cid) => { const el = _q(cid); if (el) el.innerHTML = _filesTabHtml(); } },
+    { key: 'video-worksheet', ico: '🎬', lbl: '영상 워크시트', mount: (cid) => { if (typeof EduVideoApp !== 'undefined') EduVideoApp.render(cid); } },
+  ];
+  let _activeTool = 'files';
+  function _selectTool(key) { _activeTool = key; render(); }
+
   function _shellHtml() {
-    const cats = ['전체', ...ArchiveDB.CATEGORIES];
     return `
       <div class="ph">
-        <div class="phl"><div class="ph-title">📁 자료실</div></div>
-        <div class="phr">
-          <div class="ar-view-toggle">
-            <button class="${_viewMode==='grid'?'on':''}" onclick="ArchiveApp._setViewMode('grid')" title="그리드로 보기">▦</button>
-            <button class="${_viewMode==='list'?'on':''}" onclick="ArchiveApp._setViewMode('list')" title="리스트로 보기">☰</button>
-          </div>
-          <button class="db-mini-btn${_selectMode ? '' : ' ghost'}" onclick="ArchiveApp._toggleSelectMode()">${_selectMode ? '✕ 선택 취소' : '☑️ 선택'}</button>
+        <div class="phl"><div class="ph-title">📁 콘텐츠</div></div>
+      </div>
+      <div class="ar-tool-tabs">${TOOL_TABS.map(t => `<button class="ar-tool-tab${_activeTool===t.key?' on':''}" onclick="ArchiveApp._selectTool('${t.key}')">${t.ico} ${t.lbl}</button>`).join('')}</div>
+      <div class="ar-tool-body" id="ar-tool-body"></div>`;
+  }
+
+  function _filesTabHtml() {
+    const cats = ['전체', ...ArchiveDB.CATEGORIES];
+    return `
+      <div class="ar-toolbar">
+        <div class="ar-view-toggle">
+          <button class="${_viewMode==='grid'?'on':''}" onclick="ArchiveApp._setViewMode('grid')" title="그리드로 보기">▦</button>
+          <button class="${_viewMode==='list'?'on':''}" onclick="ArchiveApp._setViewMode('list')" title="리스트로 보기">☰</button>
         </div>
+        <button class="db-mini-btn${_selectMode ? '' : ' ghost'}" onclick="ArchiveApp._toggleSelectMode()">${_selectMode ? '✕ 선택 취소' : '☑️ 선택'}</button>
       </div>
       ${_storageUsageHtml()}
       <div class="ar-search-wrap">
@@ -285,6 +307,8 @@ const ArchiveApp = (() => {
     _css();
     const pg = _q('page-archive'); if (!pg) return;
     pg.innerHTML = _shellHtml();
+    const tab = TOOL_TABS.find(t => t.key === _activeTool) || TOOL_TABS[0];
+    tab.mount('ar-tool-body');
   }
   function _refreshGrid() { const b = _q('ar-body'); if (b) b.innerHTML = _gridHtml(); }
   function _selectCategory(c) { _curCategory = c; render(); }
@@ -666,7 +690,7 @@ const ArchiveApp = (() => {
     try {
       const content = await zip.generateAsync({ type: 'blob' });
       const dateStr = new Date().toISOString().slice(0, 10);
-      _downloadBlob(content, `자료실_백업_${dateStr}.zip`);
+      _downloadBlob(content, `콘텐츠_백업_${dateStr}.zip`);
       if (typeof App !== 'undefined' && App._toast) {
         App._toast(failCount ? `✅ 백업 완료 (${failCount}개 실패)` : '✅ 백업 완료', 'success');
       }
@@ -822,7 +846,7 @@ const ArchiveApp = (() => {
   }
 
   return {
-    init, render, _selectCategory, _onSearchInput, _togglePin, _setViewMode,
+    init, render, _selectCategory, _onSearchInput, _togglePin, _setViewMode, _selectTool,
     openUpload, _closeUpload, _onPickFile, _submitUpload,
     openPreview, openEdit, _closeEdit, _submitEdit,
     _confirmDelete, _toggleFullscreen, _printPreview,
