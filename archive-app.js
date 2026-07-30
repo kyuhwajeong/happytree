@@ -12,6 +12,9 @@ const ArchiveApp = (() => {
     return `${(b / 1024 / 1024).toFixed(1)}MB`;
   };
   const _fmtDate = iso => { const d = new Date(iso); return isNaN(d) ? '' : `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`; };
+  // ★ 게시물(post)은 files[] 배열을 갖는다 — 대표 파일(첫 번째)과 전체 용량 헬퍼
+  const _primaryFile = p => (p.files && p.files[0]) || {};
+  const _postSize = p => (p.files || []).reduce((s, f) => s + (f.size || 0), 0);
   const _ICONS = { pdf:'📕', xlsx:'📗', xls:'📗', csv:'📗', ppt:'📙', pptx:'📙', doc:'📘', docx:'📘',
     hwp:'📃', hwpx:'📃',
     png:'🖼️', jpg:'🖼️', jpeg:'🖼️', gif:'🖼️', webp:'🖼️', zip:'🗜️', txt:'📄',
@@ -131,6 +134,20 @@ const ArchiveApp = (() => {
 .ar-prev-table td,.ar-prev-table th{border:1px solid var(--bdr);padding:5px 8px;white-space:nowrap;color:var(--tx)}
 .ar-prev-none{padding:40px;text-align:center;color:var(--tx3);font-size:13px}
 .ar-desc-view{font-size:12.5px;color:var(--tx2);margin-top:10px;line-height:1.5;white-space:pre-wrap}
+.ar-card-multi{position:absolute;bottom:8px;right:8px;background:var(--a);color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:999px;z-index:1}
+.ar-lrow-multi{font-size:9.5px;font-weight:700;color:var(--a);background:var(--a10);border-radius:6px;padding:1px 5px;margin-left:4px}
+.ar-file-switch{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:6px;border-bottom:1px solid var(--bdr);scrollbar-width:none}
+.ar-file-switch::-webkit-scrollbar{display:none}
+.ar-file-switch-single{margin-bottom:6px}
+.ar-file-tab{flex-shrink:0;padding:6px 11px;border-radius:999px;border:1px solid var(--bdr);background:var(--card2);color:var(--tx2);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis}
+.ar-file-tab.on{background:var(--a);border-color:var(--a);color:#fff}
+.ar-file-tab.add{border-style:dashed;color:var(--a)}
+.ar-picked-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.ar-picked-item{display:flex;align-items:center;gap:8px;background:var(--surf2);border-radius:9px;padding:7px 10px;font-size:11.5px}
+.ar-picked-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx)}
+.ar-picked-size{color:var(--tx3);font-size:10.5px;flex-shrink:0}
+.ar-picked-item button{border:none;background:transparent;color:var(--tx3);cursor:pointer;font-size:13px;flex-shrink:0;padding:2px 4px}
+.ar-picked-item button:hover{color:#ef4444}
 .ar-progress{font-size:12px;color:var(--a);text-align:center;margin-top:8px}`;
     document.head.appendChild(s);
   }
@@ -148,7 +165,7 @@ const ArchiveApp = (() => {
   }
 
   function _storageUsageHtml() {
-    const totalBytes = ArchiveDB.getAll().reduce((s, f) => s + (f.size || 0), 0);
+    const totalBytes = ArchiveDB.getAll().reduce((s, p) => s + _postSize(p), 0);
     const pct = Math.min(100, (totalBytes / STORAGE_LIMIT_BYTES) * 100);
     const over = totalBytes >= STORAGE_LIMIT_BYTES, warn = pct >= 80;
     return `<div class="ar-storage${over ? ' over' : warn ? ' warn' : ''}">
@@ -233,7 +250,8 @@ const ArchiveApp = (() => {
     if (!query) return true;
     const words = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
     if (!words.length) return true;
-    const haystack = `${f.name} ${f.originalName} ${f.description || ''} ${f.contentText || ''}`.toLowerCase();
+    const filesText = (f.files || []).map(x => `${x.originalName || ''} ${x.contentText || ''}`).join(' ');
+    const haystack = `${f.name} ${f.description || ''} ${filesText}`.toLowerCase();
     return words.every(w => haystack.includes(w));
   }
   function _onSearchInput(v) {
@@ -260,39 +278,40 @@ const ArchiveApp = (() => {
     return _viewMode === 'list' ? _listRowsHtml(items) : _gridCardsHtml(items);
   }
   function _gridCardsHtml(items) {
-    return `<div class="ar-grid">${items.map(f => `
+    return `<div class="ar-grid">${items.map(f => { const pf = _primaryFile(f); const n = f.files?.length || 0; return `
       <div class="ar-card${_selectMode && _selectedIds.has(f.id) ? ' selected' : ''}" onclick="${_selectMode ? `ArchiveApp._toggleSelect('${f.id}')` : `ArchiveApp.openPreview('${f.id}')`}">
         ${_selectMode
           ? `<span class="ar-card-check">${_selectedIds.has(f.id) ? '✅' : '⬜'}</span>`
           : `<button class="ar-card-pin${f.pinned ? ' on' : ''}" onclick="event.stopPropagation();ArchiveApp._togglePin('${f.id}')" title="${f.pinned ? '대시보드에서 빼기' : '대시보드에 썸네일로 표시'}">${f.pinned ? '⭐' : '☆'}</button>`}
-        ${f.thumbnail ? `<img class="ar-card-thumb" src="${f.thumbnail}" alt="">`
-          : _isImg(f.ext) ? `<img class="ar-card-thumb" src="${ArchiveDB.getFileUrl(f.r2Key)}" alt="">`
-          : `<div class="ar-card-ico">${_iconFor(f.ext)}</div>`}
+        ${n > 1 ? `<span class="ar-card-multi">📎 ${n}</span>` : ''}
+        ${pf.thumbnail ? `<img class="ar-card-thumb" src="${pf.thumbnail}" alt="">`
+          : _isImg(pf.ext) ? `<img class="ar-card-thumb" src="${ArchiveDB.getFileUrl(pf.r2Key)}" alt="">`
+          : `<div class="ar-card-ico">${_iconFor(pf.ext)}</div>`}
         <div class="ar-card-name">${_esc(f.name)}</div>
-        <div class="ar-card-meta"><span>${_fmtSize(f.size)}</span><span>${_fmtDate(f.uploadedAt)}</span></div>
+        <div class="ar-card-meta"><span>${_fmtSize(_postSize(f))}</span><span>${_fmtDate(f.uploadedAt)}</span></div>
         <span class="ar-card-cat">${_esc(f.category)}</span>
-      </div>`).join('')}</div>`;
+      </div>`; }).join('')}</div>`;
   }
   // ★ 리스트형 — 한 줄에 더 많은 정보(설명 미리보기 포함)를 보여줘서
   //   여러 파일을 빠르게 훑어보는 용도에 적합하다.
   function _listRowsHtml(items) {
-    return `<div class="ar-list">${items.map(f => `
+    return `<div class="ar-list">${items.map(f => { const pf = _primaryFile(f); const n = f.files?.length || 0; return `
       <div class="ar-lrow${_selectMode && _selectedIds.has(f.id) ? ' selected' : ''}" onclick="${_selectMode ? `ArchiveApp._toggleSelect('${f.id}')` : `ArchiveApp.openPreview('${f.id}')`}">
         ${_selectMode
           ? `<span class="ar-lrow-check">${_selectedIds.has(f.id) ? '✅' : '⬜'}</span>`
-          : (f.thumbnail || _isImg(f.ext))
-            ? `<img class="ar-lrow-thumb" src="${f.thumbnail || ArchiveDB.getFileUrl(f.r2Key)}" alt="">`
-            : `<span class="ar-lrow-ico">${_iconFor(f.ext)}</span>`}
+          : (pf.thumbnail || _isImg(pf.ext))
+            ? `<img class="ar-lrow-thumb" src="${pf.thumbnail || ArchiveDB.getFileUrl(pf.r2Key)}" alt="">`
+            : `<span class="ar-lrow-ico">${_iconFor(pf.ext)}</span>`}
         <div class="ar-lrow-body">
           <div class="ar-lrow-top">
-            <span class="ar-lrow-name">${_esc(f.name)}</span>
+            <span class="ar-lrow-name">${_esc(f.name)}${n > 1 ? ` <span class="ar-lrow-multi">📎${n}</span>` : ''}</span>
             <span class="ar-card-cat">${_esc(f.category)}</span>
           </div>
           ${f.description ? `<div class="ar-lrow-desc">${_esc(f.description)}</div>` : ''}
-          <div class="ar-lrow-meta">${_fmtSize(f.size)} · ${_fmtDate(f.uploadedAt)}</div>
+          <div class="ar-lrow-meta">${_fmtSize(_postSize(f))} · ${_fmtDate(f.uploadedAt)}</div>
         </div>
         ${_selectMode ? '' : `<button class="ar-card-pin${f.pinned ? ' on' : ''}" onclick="event.stopPropagation();ArchiveApp._togglePin('${f.id}')" title="${f.pinned ? '대시보드에서 빼기' : '대시보드에 썸네일로 표시'}">${f.pinned ? '⭐' : '☆'}</button>`}
-      </div>`).join('')}</div>`;
+      </div>`; }).join('')}</div>`;
   }
 
   async function _togglePin(id) {
@@ -314,20 +333,21 @@ const ArchiveApp = (() => {
   function _selectCategory(c) { _curCategory = c; render(); }
 
   /* ═══════════════ 업로드 ═══════════════ */
-  let _pickedFile = null;
+  let _pickedFiles = [];
 
   function openUpload() {
-    _pickedFile = null;
+    _pickedFiles = [];
     const ov = document.createElement('div');
     ov.className = 'ar-ov'; ov.id = 'ar-upload-ov';
     ov.innerHTML = `<div class="ar-sheet">
       <div class="ar-sheet-title">📤 자료 올리기</div>
       <div class="ar-field">
-        <label>파일 선택</label>
-        <div class="ar-drop" id="ar-drop" onclick="document.getElementById('ar-file-inp').click()">파일을 선택하거나 여기를 눌러주세요</div>
-        <input type="file" id="ar-file-inp" style="display:none" onchange="ArchiveApp._onPickFile(this.files[0])">
+        <label>파일 선택 (여러 개 선택·드래그 가능)</label>
+        <div class="ar-drop" id="ar-drop" onclick="document.getElementById('ar-file-inp').click()">파일을 선택하거나 여러 개를 끌어다 놓으세요</div>
+        <input type="file" id="ar-file-inp" multiple style="display:none" onchange="ArchiveApp._onPickFiles(this.files)">
+        <div id="ar-picked-list"></div>
       </div>
-      <div class="ar-field"><label>표시할 이름</label><input type="text" id="ar-name-inp" placeholder="예: 2026년 여름방학 안내문"></div>
+      <div class="ar-field"><label>표시할 이름 (게시물 제목)</label><input type="text" id="ar-name-inp" placeholder="예: 2026년 여름방학 안내문"></div>
       <div class="ar-field"><label>분류</label>
         <select id="ar-cat-inp">${ArchiveDB.CATEGORIES.map(c => `<option value="${_esc(c)}">${_esc(c)}</option>`).join('')}</select>
       </div>
@@ -341,9 +361,7 @@ const ArchiveApp = (() => {
     document.body.appendChild(ov);
     ov.onclick = e => { if (e.target === ov) _closeUpload(); };
 
-    // ★ 드래그 앤 드롭 — 지금까지 클릭해서 파일 선택창 여는 것만 되고
-    //   실제 끌어다 놓기는 처리가 아예 없었다. dragover에서 하이라이트,
-    //   drop에서 파일을 받도록 이벤트를 직접 연결한다.
+    // ★ 드래그 앤 드롭 — 여러 파일을 한 번에 끌어다 놓을 수 있다
     const dropEl = _q('ar-drop');
     if (dropEl) {
       ['dragenter', 'dragover'].forEach(ev => dropEl.addEventListener(ev, e => {
@@ -357,19 +375,35 @@ const ArchiveApp = (() => {
       dropEl.addEventListener('drop', e => {
         e.preventDefault(); e.stopPropagation();
         dropEl.classList.remove('dragover');
-        const file = e.dataTransfer?.files?.[0];
-        if (file) _onPickFile(file);
+        if (e.dataTransfer?.files?.length) _onPickFiles(e.dataTransfer.files);
       });
     }
   }
   function _closeUpload() { _q('ar-upload-ov')?.remove(); }
-  function _onPickFile(file) {
-    if (!file) return;
-    _pickedFile = file;
+  function _renderPickedList() {
+    const wrap = _q('ar-picked-list');
+    if (!wrap) return;
+    if (!_pickedFiles.length) { wrap.innerHTML = ''; return; }
+    wrap.innerHTML = `<div class="ar-picked-list">${_pickedFiles.map((file, i) => `
+      <div class="ar-picked-item">
+        <span class="ar-picked-name">📄 ${_esc(file.name)}</span>
+        <span class="ar-picked-size">${_fmtSize(file.size)}</span>
+        <button type="button" onclick="ArchiveApp._removePickedFile(${i})" title="빼기">✕</button>
+      </div>`).join('')}</div>`;
     const drop = _q('ar-drop');
-    if (drop) { drop.textContent = `✓ ${file.name} (${_fmtSize(file.size)})`; drop.classList.add('has-file'); }
+    if (drop) { drop.textContent = `✓ ${_pickedFiles.length}개 파일 선택됨 — 더 추가하려면 다시 눌러주세요`; drop.classList.add('has-file'); }
+  }
+  function _onPickFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    _pickedFiles = _pickedFiles.concat(files); // ★ 여러 번에 걸쳐 추가할 수도 있게 누적
+    _renderPickedList();
     const nameInp = _q('ar-name-inp');
-    if (nameInp && !nameInp.value) nameInp.value = file.name.replace(/\.[^.]+$/, '');
+    if (nameInp && !nameInp.value) nameInp.value = _pickedFiles[0].name.replace(/\.[^.]+$/, '');
+  }
+  function _removePickedFile(idx) {
+    _pickedFiles.splice(idx, 1);
+    _renderPickedList();
   }
   // ═══════════════ 업로드 시 썸네일·검색용 텍스트 미리 추출 ═══════════════
   // ★ 형식별로 가능한 만큼만 최선을 다해 시도한다. 실패해도 업로드 자체는
@@ -461,25 +495,28 @@ const ArchiveApp = (() => {
   }
 
   async function _submitUpload() {
-    if (!_pickedFile) { alert('파일을 선택해 주세요'); return; }
+    if (!_pickedFiles.length) { alert('파일을 선택해 주세요'); return; }
     const btn = _q('ar-upload-submit');
     const prog = _q('ar-upload-progress');
     btn.disabled = true; btn.textContent = '업로드 중...';
-    if (prog) prog.innerHTML = `<div class="ar-progress">⏳ 미리보기 준비 중...</div>`;
-    const extracted = await _extractPreview(_pickedFile).catch(() => ({}));
-    if (prog) prog.innerHTML = `<div class="ar-progress">⏳ 업로드하고 있어요...</div>`;
+    const extraPerFile = [];
+    for (let i = 0; i < _pickedFiles.length; i++) {
+      if (prog) prog.innerHTML = `<div class="ar-progress">⏳ 미리보기 준비 중... (${i + 1}/${_pickedFiles.length})</div>`;
+      extraPerFile.push(await _extractPreview(_pickedFiles[i]).catch(() => ({})));
+    }
+    if (prog) prog.innerHTML = `<div class="ar-progress">⏳ 업로드하고 있어요... (0/${_pickedFiles.length})</div>`;
     try {
-      const result = await ArchiveDB.uploadFile(_pickedFile, {
-        name: _q('ar-name-inp')?.value?.trim() || _pickedFile.name,
+      const result = await ArchiveDB.createPost(_pickedFiles, {
+        name: _q('ar-name-inp')?.value?.trim() || _pickedFiles[0].name,
         category: _q('ar-cat-inp')?.value || '기타',
         description: _q('ar-desc-inp')?.value?.trim() || '',
         uploadedBy: (typeof DB !== 'undefined' && DB.getSession) ? (DB.getSession()?.name || '') : '',
-        thumbnail: extracted.thumbnail || '',
-        contentText: extracted.contentText || '',
-      });
+      }, extraPerFile);
       _closeUpload();
       _refreshGrid();
-      if (typeof App !== 'undefined' && App._toast) App._toast(result.savedToServer ? '✅ 업로드 완료' : '⏳ 업로드됨 · 서버 반영 대기 중');
+      const msg = result.partialFailure ? '⚠️ 일부 파일 업로드 실패 — 나머지는 완료됨'
+        : result.savedToServer ? '✅ 업로드 완료' : '⏳ 업로드됨 · 서버 반영 대기 중';
+      if (typeof App !== 'undefined' && App._toast) App._toast(msg);
     } catch (e) {
       btn.disabled = false; btn.textContent = '업로드';
       if (prog) prog.innerHTML = `<div class="ar-progress" style="color:#ef4444">⚠️ 업로드 실패: ${_esc(e.message || '알 수 없는 오류')}</div>`;
@@ -487,36 +524,81 @@ const ArchiveApp = (() => {
   }
 
   /* ═══════════════ 미리보기 ═══════════════ */
+  let _previewPost = null, _previewFileIdx = 0;
+  function _currentPreviewFile() { return _previewPost?.files?.[_previewFileIdx] || null; }
+
   async function openPreview(id) {
-    const f = ArchiveDB.getById(id);
-    if (!f) return;
-    const convOpts = _convertOptionsFor(f.ext);
+    const post = ArchiveDB.getById(id);
+    if (!post || !post.files?.length) return;
+    _previewPost = post; _previewFileIdx = 0;
     const ov = document.createElement('div');
     ov.className = 'ar-ov'; ov.id = 'ar-preview-ov';
-    ov.innerHTML = `<div class="ar-sheet ar-prev-sheet" id="ar-prev-sheet" style="max-width:680px">
+    ov.innerHTML = `<div class="ar-sheet ar-prev-sheet" id="ar-prev-sheet" style="max-width:680px"><div id="ar-prev-inner"></div></div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+    _renderPreviewModal();
+  }
+  function _renderPreviewModal() {
+    const post = _previewPost;
+    const f = _currentPreviewFile();
+    const inner = _q('ar-prev-inner');
+    if (!post || !f || !inner) return;
+    const convOpts = _convertOptionsFor(f.ext);
+    inner.innerHTML = `
       <div class="ar-prev-hdr">
-        <div class="ar-prev-name">${_iconFor(f.ext)} ${_esc(f.name)}</div>
+        <div class="ar-prev-name">${_iconFor(f.ext)} ${_esc(post.name)}</div>
         <div class="ar-prev-acts">
           ${convOpts.length ? `<div class="ar-conv-wrap">
             <button class="ar-prev-icobtn" onclick="ArchiveApp._toggleConvertMenu()" title="다른 형식으로 다운로드">🔄</button>
             <div class="ar-conv-menu hidden" id="ar-conv-menu">
-              ${convOpts.map(e => `<button onclick="ArchiveApp._convertAndDownload('${id}','${e}')">.${e}로 저장</button>`).join('')}
+              ${convOpts.map(e => `<button onclick="ArchiveApp._convertAndDownload('${e}')">.${e}로 저장</button>`).join('')}
             </div>
           </div>` : ''}
           <button class="ar-prev-icobtn" onclick="ArchiveApp._printPreview()" title="인쇄">🖨️</button>
           <button class="ar-prev-icobtn" onclick="ArchiveApp._toggleFullscreen()" title="전체화면">⛶</button>
-          <button class="ar-prev-icobtn" onclick="ArchiveApp.openEdit('${id}')" title="수정">✏️</button>
-          <button class="ar-prev-icobtn" onclick="ArchiveApp._confirmDelete('${id}')" title="삭제">🗑️</button>
+          <button class="ar-prev-icobtn" onclick="ArchiveApp.openEdit('${post.id}')" title="수정">✏️</button>
+          <button class="ar-prev-icobtn" onclick="ArchiveApp._confirmDelete('${post.id}')" title="삭제">🗑️</button>
           <a class="ar-prev-icobtn" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none" href="${ArchiveDB.getFileUrl(f.r2Key)}" download="${_esc(f.originalName)}" title="다운로드">⬇️</a>
           <button class="ar-prev-icobtn" onclick="document.getElementById('ar-preview-ov').remove()" title="닫기">✕</button>
         </div>
       </div>
+      ${post.files.length > 1 ? `<div class="ar-file-switch">${post.files.map((pf, i) => `
+        <button class="ar-file-tab${i === _previewFileIdx ? ' on' : ''}" onclick="ArchiveApp._switchPreviewFile(${i})">${_iconFor(pf.ext)} ${_esc(pf.originalName)}</button>`).join('')}
+        <button class="ar-file-tab add" onclick="ArchiveApp._addMoreFiles('${post.id}')" title="파일 추가">＋</button>
+      </div>` : `<div class="ar-file-switch-single"><button class="ar-file-tab add" onclick="ArchiveApp._addMoreFiles('${post.id}')" title="파일 추가">＋ 파일 추가</button></div>`}
       <div class="ar-prev-body" id="ar-prev-body">${_previewLoadingHtml(f)}</div>
-      ${f.description ? `<div class="ar-desc-view">${_esc(f.description)}</div>` : ''}
-    </div>`;
-    document.body.appendChild(ov);
-    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+      ${post.description ? `<div class="ar-desc-view">${_esc(post.description)}</div>` : ''}
+      <div id="ar-detail-progress"></div>`;
     _renderPreviewBody(f);
+  }
+  function _switchPreviewFile(idx) {
+    _previewFileIdx = idx;
+    _renderPreviewModal();
+  }
+  // ★ 이미 있는 게시물에 파일을 더 추가 — 같은 미리보기·검색용 추출 파이프라인을 재사용
+  async function _addMoreFiles(postId) {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.multiple = true; inp.style.display = 'none';
+    document.body.appendChild(inp);
+    inp.onchange = async () => {
+      const files = Array.from(inp.files || []);
+      inp.remove();
+      if (!files.length) return;
+      const prog = _q('ar-detail-progress');
+      const extraPerFile = [];
+      for (let i = 0; i < files.length; i++) {
+        if (prog) prog.innerHTML = `<div class="ar-progress">⏳ 추가하는 중... (${i + 1}/${files.length})</div>`;
+        extraPerFile.push(await _extractPreview(files[i]).catch(() => ({})));
+      }
+      const result = await ArchiveDB.addFilesToPost(postId, files, extraPerFile);
+      if (result) {
+        _previewPost = result;
+        _renderPreviewModal();
+        _refreshGrid();
+        if (typeof App !== 'undefined' && App._toast) App._toast('✅ 파일이 추가되었습니다');
+      }
+    };
+    inp.click();
   }
   function _toggleConvertMenu() { _q('ar-conv-menu')?.classList.toggle('hidden'); }
   function _printPreview() {
@@ -543,12 +625,12 @@ const ArchiveApp = (() => {
     if (_isCsv(ext)) return ['xlsx', 'pdf'];
     return [];
   }
-  async function _convertAndDownload(id, targetExt) {
-    const f = ArchiveDB.getById(id);
+  async function _convertAndDownload(targetExt) {
+    const f = _currentPreviewFile();
     if (!f) return;
     _q('ar-conv-menu')?.classList.add('hidden');
     const url = ArchiveDB.getFileUrl(f.r2Key);
-    const baseName = f.name.replace(/\.[^.]+$/, '');
+    const baseName = (f.originalName || 'file').replace(/\.[^.]+$/, '');
     const busyToast = () => { if (typeof App !== 'undefined' && App._toast) App._toast('⏳ 변환 중...', '', 15000); };
     try {
       if (_isImg(f.ext) && targetExt === 'pdf') {
@@ -662,17 +744,19 @@ const ArchiveApp = (() => {
     const ids = [..._selectedIds];
     const zip = new JSZip();
     const usedNames = new Set();
-    let failCount = 0;
-    for (let i = 0; i < ids.length; i++) {
-      const f = ArchiveDB.getById(ids[i]);
-      if (!f) continue;
-      if (typeof App !== 'undefined' && App._toast) App._toast(`📦 압축 준비 중... (${i + 1}/${ids.length})`, '', 60000);
+    let failCount = 0, totalFiles = 0;
+    const allFiles = []; // {postName, file}
+    ids.forEach(id => { const p = ArchiveDB.getById(id); if (p) (p.files || []).forEach(f => allFiles.push({ postName: p.name, file: f })); });
+    totalFiles = allFiles.length;
+    for (let i = 0; i < allFiles.length; i++) {
+      const f = allFiles[i].file;
+      if (typeof App !== 'undefined' && App._toast) App._toast(`📦 압축 준비 중... (${i + 1}/${totalFiles})`, '', 60000);
       try {
         const res = await fetch(ArchiveDB.getFileUrl(f.r2Key));
         if (!res.ok) throw new Error('fetch failed');
         const blob = await res.blob();
         // ★ 같은 이름 파일이 여러 개 선택됐을 수 있어 중복 시 번호를 붙임
-        let name = f.originalName || f.name;
+        let name = f.originalName || 'file';
         if (usedNames.has(name)) {
           const dot = name.lastIndexOf('.');
           const base = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : '';
@@ -683,7 +767,7 @@ const ArchiveApp = (() => {
         zip.file(name, blob);
       } catch (e) {
         failCount++;
-        console.warn('[ArchiveApp] ZIP 포함 실패:', f.name, e);
+        console.warn('[ArchiveApp] ZIP 포함 실패:', f.originalName, e);
       }
     }
     if (typeof App !== 'undefined' && App._toast) App._toast('📦 압축 파일 생성 중...', '', 30000);
@@ -826,12 +910,14 @@ const ArchiveApp = (() => {
   function _confirmDelete(id) {
     const f = ArchiveDB.getById(id);
     if (!f) return;
-    if (!confirm(`"${f.name}"을(를) 삭제할까요?\n이 작업은 되돌릴 수 없습니다.`)) return;
+    const n = f.files?.length || 0;
+    const warn = n > 1 ? `이 게시물에 첨부된 파일 ${n}개가 모두 삭제됩니다.` : '이 작업은 되돌릴 수 없습니다.';
+    if (!confirm(`"${f.name}"을(를) 삭제할까요?\n${warn}`)) return;
     _deleteNow(id);
   }
   async function _deleteNow(id) {
     _q('ar-preview-ov')?.remove();
-    const result = await ArchiveDB.deleteFile(id);
+    const result = await ArchiveDB.deletePost(id);
     _refreshGrid();
     if (typeof App !== 'undefined' && App._toast) {
       App._toast(result.ok ? '🗑️ 삭제되었습니다' : `⚠️ 삭제 실패: ${result.error || ''}`);
@@ -847,8 +933,8 @@ const ArchiveApp = (() => {
 
   return {
     init, render, _selectCategory, _onSearchInput, _togglePin, _setViewMode, _selectTool,
-    openUpload, _closeUpload, _onPickFile, _submitUpload,
-    openPreview, openEdit, _closeEdit, _submitEdit,
+    openUpload, _closeUpload, _onPickFiles, _removePickedFile, _submitUpload,
+    openPreview, _switchPreviewFile, _addMoreFiles, openEdit, _closeEdit, _submitEdit,
     _confirmDelete, _toggleFullscreen, _printPreview,
     _toggleConvertMenu, _convertAndDownload,
     _toggleSelectMode, _toggleSelect, _selectAllVisible, _downloadSelectedZip,
