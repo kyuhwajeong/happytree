@@ -483,24 +483,38 @@ const EduVideoApp = (() => {
 
   // ★ jsPDF 기본 폰트는 한글을 지원하지 않아 깨진 글자로 나온다(알려진 제약).
   //   나눔고딕 폰트를 한 번만 받아서(세션 중 캐시) PDF에 심어 넣는다.
-  const KOREAN_FONT_URL = 'https://raw.githubusercontent.com/google/fonts/main/ofl/nanumgothic/NanumGothic-Regular.ttf';
+  const KOREAN_FONT_URLS = [
+    'https://raw.githubusercontent.com/google/fonts/main/ofl/nanumgothic/NanumGothic-Regular.ttf',
+    'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/nanumgothic/NanumGothic-Regular.ttf', // ★ 위가 특정 네트워크 환경에서 막힐 경우의 대체 경로
+  ];
   let _koreanFontBase64 = null;
   async function _ensureKoreanFont(pdf) {
     if (!_koreanFontBase64) {
-      console.log('[EduVideoApp] 한글 폰트 다운로드 시작...');
-      const res = await fetch(KOREAN_FONT_URL);
-      console.log('[EduVideoApp] 폰트 응답:', res.status, res.type);
-      if (!res.ok) throw new Error(`폰트 다운로드 실패 (HTTP ${res.status})`);
-      const buf = await res.arrayBuffer();
-      console.log('[EduVideoApp] 폰트 크기:', buf.byteLength, 'bytes');
-      const bytes = new Uint8Array(buf);
-      let binary = '';
-      const chunk = 8192;
-      for (let i = 0; i < bytes.length; i += chunk) {
-        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+      let lastErr = null;
+      for (const url of KOREAN_FONT_URLS) {
+        try {
+          console.log('[EduVideoApp] 한글 폰트 시도:', url);
+          const res = await fetch(url);
+          console.log('[EduVideoApp] 폰트 응답:', res.status);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const buf = await res.arrayBuffer();
+          console.log('[EduVideoApp] 폰트 크기:', buf.byteLength, 'bytes');
+          const bytes = new Uint8Array(buf);
+          let binary = '';
+          const chunk = 8192;
+          for (let i = 0; i < bytes.length; i += chunk) {
+            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+          }
+          _koreanFontBase64 = btoa(binary);
+          console.log('[EduVideoApp] base64 변환 완료');
+          lastErr = null;
+          break;
+        } catch (e) {
+          console.warn('[EduVideoApp] 이 경로 실패, 다음 경로 시도:', url, e.message || e);
+          lastErr = e;
+        }
       }
-      _koreanFontBase64 = btoa(binary);
-      console.log('[EduVideoApp] base64 변환 완료, 길이:', _koreanFontBase64.length);
+      if (!_koreanFontBase64) throw lastErr || new Error('모든 경로에서 폰트를 받지 못했습니다');
     }
     pdf.addFileToVFS('NanumGothic.ttf', _koreanFontBase64);
     pdf.addFont('NanumGothic.ttf', 'NanumGothic', 'normal');
@@ -519,12 +533,13 @@ const EduVideoApp = (() => {
 
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
+    let koreanOk = true;
     try {
       await _ensureKoreanFont(pdf);
     } catch (e) {
-      console.error('[EduVideoApp] 한글 폰트 로드 실패', e);
-      if (prog) prog.innerHTML = `<div class="ev-progress" style="color:#ef4444">⚠️ 한글 폰트 오류: ${_esc(e.message || e.toString())}</div>`;
-      return;
+      koreanOk = false;
+      console.error('[EduVideoApp] 한글 폰트 로드 실패 — 기본 폰트로 계속 진행', e);
+      if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ 한글 폰트를 못 불러와서 영문 폰트로 만듭니다(한글이 깨질 수 있어요)', '', 5000);
     }
     if (prog) prog.innerHTML = `<div class="ev-progress">📄 워크시트 준비 중... (0/${v.words.length})</div>`;
 
