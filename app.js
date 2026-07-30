@@ -213,6 +213,8 @@ const App = (() => {
     if (typeof ArchiveApp  !== 'undefined') ArchiveApp.init().catch(e=>console.warn('[ArchiveApp]',e));
     // ★ 영문 교육자료 모듈 초기화 (독립 모듈 — 오류 시 기존 기능 영향 없음)
     if (typeof EduVideoApp !== 'undefined') EduVideoApp.init().catch(e=>console.warn('[EduVideoApp]',e));
+    // ★ 학습 게임 모듈 초기화 (독립 모듈 — 오류 시 기존 기능 영향 없음)
+    if (typeof GameApp !== 'undefined') GameApp.init().catch(e=>console.warn('[GameApp]',e));
 
     DB.on('classes',()=>{_renderChips();if(S.page==='operate')_renderOperateBody();if(S.page==='manage'&&S.mgTab==='classes'){_renderMgCls();if(_q('mg-fee-ov')&&!_q('mg-fee-ov').classList.contains('hidden'))_renderFeePanel();}});
     DB.on('progress',()=>{if(S.page==='operate')_renderOperateBody();if(S.shareActive)_refreshShareProgress();});

@@ -203,6 +203,7 @@ const ArchiveApp = (() => {
   const TOOL_TABS = [
     { key: 'files',           ico: '📁', lbl: '파일',        mount: (cid) => { const el = _q(cid); if (el) el.innerHTML = _filesTabHtml(); } },
     { key: 'video-worksheet', ico: '🎬', lbl: '영상 워크시트', mount: (cid) => { if (typeof EduVideoApp !== 'undefined') EduVideoApp.render(cid); } },
+    { key: 'games',           ico: '🎮', lbl: '학습 게임',    mount: (cid) => { if (typeof GameApp !== 'undefined') GameApp.render(cid); } },
   ];
   let _activeTool = 'files';
   function _selectTool(key) { _activeTool = key; render(); }
