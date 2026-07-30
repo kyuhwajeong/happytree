@@ -886,6 +886,11 @@ const ArchiveApp = (() => {
         <select id="ar-edit-cat">${ArchiveDB.CATEGORIES.map(c => `<option value="${_esc(c)}"${c===f.category?' selected':''}>${_esc(c)}</option>`).join('')}</select>
       </div>
       <div class="ar-field"><label>설명</label><textarea id="ar-edit-desc">${_esc(f.description||'')}</textarea></div>
+      <div class="ar-field">
+        <label>첨부 파일 (${f.files?.length || 0}개)</label>
+        <div id="ar-edit-files">${_editFilesListHtml(id)}</div>
+        <button type="button" class="ar-btn ghost" style="margin-top:8px;flex:0;padding:8px 14px;font-size:12px" onclick="ArchiveApp._addMoreFilesInEdit('${id}')">＋ 파일 추가</button>
+      </div>
       <div class="ar-btn-row">
         <button class="ar-btn ghost" onclick="ArchiveApp._closeEdit()">취소</button>
         <button class="ar-btn primary" onclick="ArchiveApp._submitEdit('${id}')">저장</button>
@@ -893,6 +898,51 @@ const ArchiveApp = (() => {
     </div>`;
     document.body.appendChild(ov);
     ov.onclick = e => { if (e.target === ov) _closeEdit(); };
+  }
+  function _editFilesListHtml(postId) {
+    const f = ArchiveDB.getById(postId);
+    const files = f?.files || [];
+    if (!files.length) return `<div class="ar-progress" style="color:var(--tx3)">첨부된 파일이 없습니다</div>`;
+    return `<div class="ar-picked-list">${files.map(file => `
+      <div class="ar-picked-item">
+        <span class="ar-picked-name">${_iconFor(file.ext)} ${_esc(file.originalName)}</span>
+        <span class="ar-picked-size">${_fmtSize(file.size)}</span>
+        <button type="button" onclick="ArchiveApp._removeFileInEdit('${postId}','${_esc(file.r2Key)}')" title="이 파일 삭제">✕</button>
+      </div>`).join('')}</div>`;
+  }
+  async function _removeFileInEdit(postId, r2Key) {
+    const f = ArchiveDB.getById(postId);
+    if (f?.files?.length === 1) {
+      if (!confirm('마지막 파일을 삭제하면 이 게시물 전체가 삭제됩니다. 계속할까요?')) return;
+    } else if (!confirm('이 파일을 삭제할까요?')) {
+      return;
+    }
+    const result = await ArchiveDB.removeFileFromPost(postId, r2Key);
+    if (!result.ok) { if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ 삭제 실패: ' + (result.error || '')); return; }
+    if (!ArchiveDB.getById(postId)) { _closeEdit(); _refreshGrid(); return; } // 게시물 자체가 없어졌으면 편집창도 닫음
+    const wrap = _q('ar-edit-files');
+    if (wrap) wrap.innerHTML = _editFilesListHtml(postId);
+    _refreshGrid();
+  }
+  function _addMoreFilesInEdit(postId) {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.multiple = true; inp.style.display = 'none';
+    document.body.appendChild(inp);
+    inp.onchange = async () => {
+      const files = Array.from(inp.files || []);
+      inp.remove();
+      if (!files.length) return;
+      const extraPerFile = [];
+      for (let i = 0; i < files.length; i++) extraPerFile.push(await _extractPreview(files[i]).catch(() => ({})));
+      const result = await ArchiveDB.addFilesToPost(postId, files, extraPerFile);
+      if (result) {
+        const wrap = _q('ar-edit-files');
+        if (wrap) wrap.innerHTML = _editFilesListHtml(postId);
+        _refreshGrid();
+        if (typeof App !== 'undefined' && App._toast) App._toast('✅ 파일이 추가되었습니다');
+      }
+    };
+    inp.click();
   }
   function _closeEdit() { _q('ar-edit-ov')?.remove(); ArchiveDB.pauseUpdates(false); }
   async function _submitEdit(id) {
@@ -935,6 +985,7 @@ const ArchiveApp = (() => {
     init, render, _selectCategory, _onSearchInput, _togglePin, _setViewMode, _selectTool,
     openUpload, _closeUpload, _onPickFiles, _removePickedFile, _submitUpload,
     openPreview, _switchPreviewFile, _addMoreFiles, openEdit, _closeEdit, _submitEdit,
+    _removeFileInEdit, _addMoreFilesInEdit,
     _confirmDelete, _toggleFullscreen, _printPreview,
     _toggleConvertMenu, _convertAndDownload,
     _toggleSelectMode, _toggleSelect, _selectAllVisible, _downloadSelectedZip,
