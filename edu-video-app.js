@@ -11,7 +11,7 @@ const EduVideoApp = (() => {
   // https://unsplash.com/developers → New Application → Access Key 복사
   const UNSPLASH_ACCESS_KEY = 'YOUR-UNSPLASH-ACCESS-KEY';
   // ★★★ Google Cloud Console에서 YouTube Data API v3 활성화 후(무료, 카드 불필요) 실제 키로 바꿔주세요 ★★★
-  const YOUTUBE_API_KEY = 'YOUR-YOUTUBE-API-KEY';
+  const YOUTUBE_API_KEY = 'AIzaSyCbbS4jkWNUyyO83AdzCwagUKYQJJKtsKY';
 
   let _curTopic = null; // null = 전체
   let _cssInjected = false;
