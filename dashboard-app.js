@@ -188,7 +188,7 @@ const DashboardApp = (() => {
 .db-ar-thumb img{width:84px;height:84px;object-fit:cover;border-radius:12px;border:1px solid var(--bdr);display:block}
 .db-ar-thumb-ico{width:84px;height:84px;border-radius:12px;border:1px solid var(--bdr);background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:32px}
 .db-ar-thumb-name{font-size:10.5px;font-weight:600;color:var(--tx2);margin-top:5px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.db-quote-inline{flex:1 1 auto;min-width:80px;margin:0 10px;cursor:pointer;transition:opacity .15s}
+.db-quote-inline{flex:1 1 auto;min-width:80px;margin:0 10px;cursor:pointer;transition:opacity .15s;text-align:right}
 .db-quote-inline.loading{opacity:.4}
 .db-quote-kr{white-space:normal;line-height:1.4}
 .db-quote-kr::before{content:'"';font-family:Georgia,serif;color:var(--tx3);opacity:.6;margin-right:2px}

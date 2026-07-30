@@ -51,8 +51,8 @@ const ArchiveApp = (() => {
 .ar-lrow-name{font-size:12.5px;font-weight:700;color:var(--tx);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ar-lrow-desc{font-size:11px;color:var(--tx2);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ar-lrow-meta{font-size:10px;color:var(--tx3);margin-top:4px}
-.ar-storage-footer{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--bdr);
-  padding:10px 14px calc(10px + env(safe-area-inset-bottom));z-index:55}
+.ar-storage-footer{position:fixed;left:0;right:0;bottom:calc(var(--nav) + env(safe-area-inset-bottom, 0px));background:var(--card);border-top:1px solid var(--bdr);
+  padding:10px 14px;z-index:55}
 .ar-storage{margin:0}
 .ar-storage-bar{height:6px;border-radius:4px;background:var(--card2);overflow:hidden}
 .ar-storage-fill{height:100%;background:var(--a);border-radius:4px;transition:width .3s}
@@ -63,8 +63,8 @@ const ArchiveApp = (() => {
 .ar-storage.over .ar-storage-text{color:#ef4444;font-weight:700}
 .ar-card-check{position:absolute;top:8px;left:8px;font-size:16px;line-height:1;z-index:1}
 .ar-card.selected{border-color:var(--a);background:var(--a10)}
-.ar-select-bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--bdr);
-  padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:8px;z-index:60;box-shadow:0 -4px 16px rgba(0,0,0,.08)}
+.ar-select-bar{position:fixed;left:0;right:0;bottom:calc(var(--nav) + env(safe-area-inset-bottom, 0px));background:var(--card);border-top:1px solid var(--bdr);
+  padding:10px 14px;display:flex;align-items:center;gap:8px;z-index:60;box-shadow:0 -4px 16px rgba(0,0,0,.08)}
 .ar-select-count{font-size:12px;font-weight:700;color:var(--tx2);flex:1}
 .ar-select-bar .ar-btn{padding:9px 14px;font-size:12.5px}
 .ar-tool-tabs-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 14px 0;border-bottom:1px solid var(--bdr)}
@@ -96,7 +96,7 @@ const ArchiveApp = (() => {
 .ar-card-cat{display:inline-block;margin-top:6px;font-size:9.5px;font-weight:700;color:var(--a);background:var(--a10);border-radius:6px;padding:2px 6px}
 .ar-empty{text-align:center;padding:60px 20px;color:var(--tx3)}
 .ar-empty-ico{font-size:44px;margin-bottom:10px;opacity:.6}
-.ar-fab{position:fixed;right:18px;bottom:150px;width:54px;height:54px;border-radius:50%;background:var(--a);color:#fff;
+.ar-fab{position:fixed;right:18px;bottom:calc(var(--nav) + env(safe-area-inset-bottom, 0px) + 72px);width:54px;height:54px;border-radius:50%;background:var(--a);color:#fff;
   border:none;font-size:24px;box-shadow:0 6px 18px var(--a40);cursor:pointer;z-index:60;display:flex;align-items:center;justify-content:center}
 .ar-ov{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:flex-end;justify-content:center}
 @media (min-width:640px){ .ar-ov{align-items:center} }

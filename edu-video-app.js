@@ -39,7 +39,7 @@ const EduVideoApp = (() => {
 .ev-card-words{font-size:9.5px;color:var(--tx3)}
 .ev-empty{text-align:center;padding:60px 20px;color:var(--tx3)}
 .ev-empty-ico{font-size:44px;margin-bottom:10px;opacity:.6}
-.ev-fab{position:fixed;right:18px;bottom:86px;width:54px;height:54px;border-radius:50%;background:var(--a);color:#fff;
+.ev-fab{position:fixed;right:18px;bottom:calc(var(--nav) + env(safe-area-inset-bottom, 0px) + 20px);width:54px;height:54px;border-radius:50%;background:var(--a);color:#fff;
   border:none;font-size:24px;box-shadow:0 6px 18px var(--a40);cursor:pointer;z-index:60;display:flex;align-items:center;justify-content:center}
 .ev-ov{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:flex-end;justify-content:center}
 @media (min-width:640px){ .ev-ov{align-items:center} }
