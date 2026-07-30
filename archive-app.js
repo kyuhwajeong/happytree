@@ -142,6 +142,10 @@ const ArchiveApp = (() => {
 .ar-prev-table[contenteditable] td{cursor:text;outline:none}
 .ar-prev-table[contenteditable] td:focus{background:var(--a10);box-shadow:inset 0 0 0 2px var(--a)}
 .ar-xlsx-wrap{display:flex;flex-direction:column;height:100%;min-height:0;width:100%;align-self:stretch}
+.ar-xlsx-images{padding:10px 12px;border-bottom:1px solid var(--bdr);flex-shrink:0}
+.ar-xlsx-images-label{font-size:10.5px;font-weight:700;color:var(--tx3);margin-bottom:6px}
+.ar-xlsx-images-row{display:flex;gap:8px;overflow-x:auto;flex-wrap:wrap}
+.ar-xlsx-images-row img{max-width:120px;max-height:120px;border-radius:8px;border:1px solid var(--bdr);object-fit:contain;background:#fff}
 .ar-xlsx-wrap .ar-prev-table-wrap{flex:1;min-height:0}
 .ar-xlsx-sheettabs{display:flex;gap:2px;overflow-x:auto;flex-shrink:0;background:var(--card2);border-top:1px solid var(--bdr);padding:0 4px;scrollbar-width:thin}
 .ar-xlsx-sheettab{flex-shrink:0;padding:8px 16px;border:none;border-right:1px solid var(--bdr);background:transparent;color:var(--tx3);font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap}
@@ -594,13 +598,14 @@ const ArchiveApp = (() => {
   let _previewPost = null, _previewFileIdx = 0;
   let _previewSelectedKeys = new Set(); // ★ 게시물 안에서 원하는 파일만 골라 받기용
   let _xlsxWb = null, _xlsxSheetIdx = 0, _xlsxEditMode = false; // ★ 엑셀 다중 시트 · 편집 상태
+  let _xlsxImages = []; // ★ 엑셀에 삽입된 이미지(있으면) — {sheetIdx, src}
   function _currentPreviewFile() { return _previewPost?.files?.[_previewFileIdx] || null; }
 
   async function openPreview(id) {
     const post = ArchiveDB.getById(id);
     if (!post || !post.files?.length) return;
     _previewPost = post; _previewFileIdx = 0; _previewSelectedKeys = new Set();
-    _xlsxWb = null; _xlsxSheetIdx = 0; _xlsxEditMode = false;
+    _xlsxWb = null; _xlsxSheetIdx = 0; _xlsxEditMode = false; _xlsxImages = [];
     const ov = document.createElement('div');
     ov.className = 'ar-ov'; ov.id = 'ar-preview-ov';
     ov.innerHTML = `<div class="ar-sheet ar-prev-sheet" id="ar-prev-sheet" style="max-width:680px"><div id="ar-prev-inner"></div></div>`;
@@ -668,7 +673,7 @@ const ArchiveApp = (() => {
   }
   function _switchPreviewFile(idx) {
     _previewFileIdx = idx;
-    _xlsxWb = null; _xlsxSheetIdx = 0; _xlsxEditMode = false;
+    _xlsxWb = null; _xlsxSheetIdx = 0; _xlsxEditMode = false; _xlsxImages = [];
     _renderPreviewModal();
   }
   function _toggleFileSelect(r2Key) {
@@ -1046,8 +1051,13 @@ const ArchiveApp = (() => {
       try {
         const res = await fetch(url);
         let wb;
+        _xlsxImages = [];
         if (_isCsv(f.ext)) { wb = XLSX.read(await res.text(), { type: 'string' }); }
-        else { wb = XLSX.read(await res.arrayBuffer(), { type: 'array' }); }
+        else {
+          const buf = await res.arrayBuffer();
+          wb = XLSX.read(buf, { type: 'array' });
+          _xlsxImages = await _extractXlsxImages(buf); // ★ 표에 못 담는 삽입된 이미지는 따로 뽑아서 갤러리로
+        }
         _xlsxWb = wb; _xlsxSheetIdx = 0;
         _renderXlsxSheet();
       } catch (e) {
@@ -1056,6 +1066,33 @@ const ArchiveApp = (() => {
       return;
     }
     body.innerHTML = `<div class="ar-prev-none">이 형식은 미리보기를 지원하지 않아요<br>다운로드 버튼(⬇️)으로 받아서 확인해 주세요</div>`;
+  }
+
+  // ★ 엑셀 안에 삽입된 이미지 추출 — 표 렌더링 라이브러리(SheetJS)는 이걸
+  //   지원 안 해서, 별도 라이브러리(ExcelJS)로 최선을 다해 뽑아본다.
+  //   실패해도 표 자체는 정상 표시되니 조용히 넘어간다.
+  async function _extractXlsxImages(arrayBuffer) {
+    if (typeof ExcelJS === 'undefined') return [];
+    try {
+      const wb2 = new ExcelJS.Workbook();
+      await wb2.xlsx.load(arrayBuffer);
+      const images = [];
+      wb2.worksheets.forEach((ws, sheetIdx) => {
+        (ws.getImages ? ws.getImages() : []).forEach(imgRef => {
+          const media = wb2.model.media.find(m => m.index === imgRef.imageId);
+          if (!media?.buffer) return;
+          const bytes = media.buffer instanceof Uint8Array ? media.buffer : new Uint8Array(media.buffer);
+          let binary = '';
+          const chunk = 8192;
+          for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+          images.push({ sheetIdx, src: `data:image/${media.extension || 'png'};base64,${btoa(binary)}` });
+        });
+      });
+      return images;
+    } catch (e) {
+      console.warn('[ArchiveApp] 엑셀 이미지 추출 실패(표는 정상 표시됨)', e);
+      return [];
+    }
   }
 
   // ★ 엑셀 시트 렌더링 — 시트가 여러 개면 탭으로 전환 가능, 편집 모드에선
@@ -1067,8 +1104,13 @@ const ArchiveApp = (() => {
     const ws = _xlsxWb.Sheets[sheetNames[_xlsxSheetIdx]];
     const html = XLSX.utils.sheet_to_html(ws, { editable: false });
     const tableHtml = html.replace('<table', `<table class="ar-prev-table"${_xlsxEditMode ? ' contenteditable="true"' : ''}`);
+    const sheetImages = _xlsxImages.filter(img => img.sheetIdx === _xlsxSheetIdx);
     body.innerHTML = `
       <div class="ar-xlsx-wrap">
+        ${sheetImages.length ? `<div class="ar-xlsx-images">
+          <div class="ar-xlsx-images-label">🖼️ 이 시트에 삽입된 이미지 (${sheetImages.length}개)</div>
+          <div class="ar-xlsx-images-row">${sheetImages.map(img => `<img src="${img.src}" alt="">`).join('')}</div>
+        </div>` : ''}
         <div class="ar-prev-table-wrap" id="ar-xlsx-table-wrap">${tableHtml}</div>
         ${sheetNames.length > 1 ? `<div class="ar-xlsx-sheettabs">${sheetNames.map((name, i) => `
           <button class="ar-xlsx-sheettab${i === _xlsxSheetIdx ? ' on' : ''}" onclick="ArchiveApp._switchXlsxSheet(${i})">${_esc(name)}</button>`).join('')}</div>` : ''}
