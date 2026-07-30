@@ -465,10 +465,12 @@ const EduVideoApp = (() => {
   async function _fetchUnsplashImage(query) {
     if (UNSPLASH_ACCESS_KEY.includes('YOUR-UNSPLASH')) return null;
     try {
-      const res = await fetch(`https://api.unsplash.com/photos/random?query=${encodeURIComponent(query)}&orientation=squarish&client_id=${UNSPLASH_ACCESS_KEY}`);
+      // ★ /photos/random은 "검색어와 대충 관련된 것 중 무작위"라 정확도가 낮았음.
+      //   /search/photos + 관련도순 정렬로 바꿔서 가장 매칭되는 사진을 우선 사용.
+      const res = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=3&orientation=squarish&order_by=relevant&content_filter=high&client_id=${UNSPLASH_ACCESS_KEY}`);
       if (!res.ok) return null;
       const data = await res.json();
-      const imgUrl = data?.urls?.small;
+      const imgUrl = data?.results?.[0]?.urls?.small;
       if (!imgUrl) return null;
       const imgRes = await fetch(imgUrl);
       const blob = await imgRes.blob();
