@@ -49,6 +49,9 @@ const EduVideoApp = (() => {
 .ev-field label{display:block;font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:5px}
 .ev-field input,.ev-field textarea,.ev-field select{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--bdr);background:var(--surf);color:var(--tx);font-size:13px;font-family:inherit}
 .ev-field textarea{resize:vertical;min-height:80px}
+.ev-guide-box{background:var(--a10);border:1px solid var(--a20);border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:11.5px;color:var(--tx2);line-height:1.7}
+.ev-guide-box b{color:var(--tx)}
+.ev-yt-open-btn{display:inline-block;margin-top:6px;padding:5px 10px;border-radius:8px;background:#fff;border:1px solid var(--a40);color:var(--a);font-size:11px;font-weight:700;text-decoration:none}
 .ev-btn-row{display:flex;gap:8px;margin-top:16px}
 .ev-btn{flex:1;padding:11px;border-radius:12px;border:none;font-size:13px;font-weight:800;cursor:pointer}
 .ev-btn.primary{background:var(--a);color:#fff}
@@ -71,6 +74,7 @@ const EduVideoApp = (() => {
 .ev-rec-body{min-width:0}
 .ev-rec-title{font-size:12.5px;font-weight:700;color:var(--tx);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3}
 .ev-rec-channel{font-size:10.5px;color:var(--tx3);margin-top:2px}
+.ev-rec-cc{color:#059669;font-weight:700}
 .ev-rec-reason{font-size:10.5px;color:var(--a);margin-top:4px;line-height:1.4}
 .ev-rec-add-btn{margin-top:6px;padding:4px 10px;border-radius:8px;border:none;background:var(--a);color:#fff;font-size:10.5px;font-weight:700;cursor:pointer}`;
     document.head.appendChild(s);
@@ -126,17 +130,34 @@ const EduVideoApp = (() => {
   /* ═══════════════ AI 추천 (유튜브 실제 검색 + Gemini 큐레이션) ═══════════════ */
   async function _searchYoutube(query) {
     if (YOUTUBE_API_KEY.includes('YOUR-YOUTUBE')) throw new Error('유튜브 API 키가 설정되지 않았습니다');
-    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=6&safeSearch=strict&relevanceLanguage=en&order=relevance&q=${encodeURIComponent(query)}&key=${YOUTUBE_API_KEY}`;
+    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=8&safeSearch=strict&relevanceLanguage=en&order=relevance&q=${encodeURIComponent(query)}&key=${YOUTUBE_API_KEY}`;
     const res = await fetch(url);
     if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error(`유튜브 검색 실패 (HTTP ${res.status}) ${t.slice(0, 100)}`); }
     const data = await res.json();
-    return (data.items || []).map(it => ({
+    const candidates = (data.items || []).map(it => ({
       youtubeId: it.id.videoId,
       title: it.snippet.title,
       channelTitle: it.snippet.channelTitle,
       description: it.snippet.description,
       thumbnail: it.snippet.thumbnails?.medium?.url || it.snippet.thumbnails?.default?.url,
     }));
+    // ★ 자막 있는 영상만 남긴다 — "스크립트 표시"가 아예 안 뜨는 영상을
+    //   추천에서 미리 걸러내서, 나중에 대본을 못 구해 헛수고하는 걸 방지
+    return await _filterCaptioned(candidates);
+  }
+  async function _filterCaptioned(candidates) {
+    if (!candidates.length) return candidates;
+    const ids = candidates.map(c => c.youtubeId).join(',');
+    try {
+      const url = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${ids}&key=${YOUTUBE_API_KEY}`;
+      const res = await fetch(url);
+      if (!res.ok) return candidates; // ★ 확인 자체가 실패하면 필터링 없이 그대로 통과(추천이 아예 끊기지 않도록)
+      const data = await res.json();
+      const captioned = new Set((data.items || []).filter(it => it.contentDetails?.caption === 'true').map(it => it.id));
+      return candidates.filter(c => captioned.has(c.youtubeId));
+    } catch (e) {
+      return candidates; // 확인 실패 시에도 추천 자체는 계속 진행
+    }
   }
 
   function openRecommend() {
@@ -176,17 +197,17 @@ const EduVideoApp = (() => {
       // ★ 중복 제거
       const seen = new Set();
       candidates = candidates.filter(c => { if (seen.has(c.youtubeId)) return false; seen.add(c.youtubeId); return true; });
-      if (!candidates.length) { prog.innerHTML = `<div class="ev-progress" style="color:#ef4444">⚠️ 검색 결과가 없습니다</div>`; btn.disabled = false; return; }
+      if (!candidates.length) { prog.innerHTML = `<div class="ev-progress" style="color:#ef4444">⚠️ 자막 있는 검색 결과가 없습니다 — 다른 주제로 시도해보세요</div>`; btn.disabled = false; return; }
       prog.innerHTML = `<div class="ev-progress">🤖 AI가 ${candidates.length}개 중에서 고르는 중...</div>`;
       const curated = await GeminiAI.curateVideos(topic, candidates);
       if (!curated.length) { prog.innerHTML = `<div class="ev-progress" style="color:#ef4444">⚠️ 적합한 영상을 찾지 못했습니다 — 다른 주제로 시도해보세요</div>`; btn.disabled = false; return; }
-      prog.innerHTML = `<div class="ev-progress">✅ ${curated.length}개 추천</div>`;
+      prog.innerHTML = `<div class="ev-progress">✅ ${curated.length}개 추천 (전부 자막 확인됨)</div>`;
       results.innerHTML = curated.map((v, i) => `
         <div class="ev-rec-card">
           <img class="ev-rec-thumb" src="${v.thumbnail}" alt="">
           <div class="ev-rec-body">
             <div class="ev-rec-title">${_esc(v.title)}</div>
-            <div class="ev-rec-channel">${_esc(v.channelTitle)}</div>
+            <div class="ev-rec-channel">${_esc(v.channelTitle)} · <span class="ev-rec-cc">✅ 자막 있음</span></div>
             <div class="ev-rec-reason">💡 ${_esc(v.reason)}</div>
             <button class="ev-rec-add-btn" data-yid="${_esc(v.youtubeId)}" data-title="${_esc(v.title)}" data-topic="${_esc(topic)}" onclick="EduVideoApp._addFromRecommend(this)">이 영상으로 등록</button>
           </div>
@@ -207,6 +228,47 @@ const EduVideoApp = (() => {
     }, 0);
   }
 
+  // ★ 자막 파일(.srt/.vtt) 파싱 — 공식적으로 다운로드 제공되는 자막 파일을
+  //   올리면 시간코드·번호를 다 걷어내고 순수 텍스트만 뽑아준다.
+  //   (유튜브에서 긁어오는 게 아니라, 사용자가 합법적으로 받은 파일을 읽는 것뿐)
+  function _parseSubtitleFile(text) {
+    const lines = text.replace(/\r/g, '').split('\n');
+    const out = [];
+    const timeLine = /\d{1,2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{1,2}:\d{2}:\d{2}[,.]\d{3}/;
+    for (let line of lines) {
+      line = line.trim();
+      if (!line) continue;
+      if (line === 'WEBVTT') continue;
+      if (/^\d+$/.test(line)) continue; // SRT 순번
+      if (timeLine.test(line)) continue; // 시간코드
+      if (/^NOTE\b/.test(line)) continue; // VTT 주석
+      line = line.replace(/<[^>]+>/g, ''); // <i>, <00:00:01.000> 같은 인라인 태그 제거
+      if (line) out.push(line);
+    }
+    // ★ 자동 생성 자막은 같은 줄이 겹쳐서 반복되는 경우가 많아 중복은 걸러냄
+    const dedup = [];
+    out.forEach(l => { if (dedup[dedup.length - 1] !== l) dedup.push(l); });
+    return dedup.join(' ');
+  }
+  function _bindSubtitleUpload(inputId, textareaId) {
+    const inp = _q(inputId);
+    if (!inp) return;
+    inp.addEventListener('change', async () => {
+      const file = inp.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const parsed = _parseSubtitleFile(text);
+        if (!parsed) { if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ 자막 내용을 읽지 못했습니다'); return; }
+        const ta = _q(textareaId);
+        if (ta) ta.value = parsed;
+        if (typeof App !== 'undefined' && App._toast) App._toast('✅ 자막 파일에서 대본을 자동으로 채웠습니다');
+      } catch (e) {
+        if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ 자막 파일을 읽지 못했습니다: ' + (e.message || ''));
+      }
+    });
+  }
+
   /* ═══════════════ 영상 추가(직접 입력) ═══════════════ */
   function openAdd() {
     const topics = EduVideoDB.getTopics();
@@ -221,7 +283,17 @@ const EduVideoApp = (() => {
       </div>
       <div class="ev-field">
         <label>대본/스크립트 (선택 — 넣으면 AI 단어 추출 및 PDF 워크시트 생성 가능)</label>
-        <textarea id="ev-script-inp" placeholder="유튜브 영상 하단 '...' → '스크립트 표시'에서 복사해서 붙여넣으세요"></textarea>
+        <div class="ev-guide-box">
+          <b>📝 대본 가져오는 방법 1 — 직접 복사</b>
+          ① 아래 링크 눌러 유튜브 영상 열기 → ② 영상 아래 <b>"···"</b> 클릭 → ③ <b>"스크립트 표시"</b> 클릭 → ④ 텍스트 전체 복사(Ctrl+A → Ctrl+C) → ⑤ 여기 붙여넣기
+          <div id="ev-yt-open-wrap"></div>
+        </div>
+        <div class="ev-guide-box">
+          <b>📎 대본 가져오는 방법 2 — 자막 파일 업로드</b>
+          공식적으로 자막 파일(.srt, .vtt)을 무료 제공하는 교육 사이트/채널이라면, 그 파일을 그대로 올려주세요 — 시간코드를 자동으로 걷어내고 대본만 채워드립니다.
+          <div><input type="file" id="ev-sub-file-inp" accept=".srt,.vtt" style="margin-top:6px;font-size:11px"></div>
+        </div>
+        <textarea id="ev-script-inp" placeholder="여기에 대본을 붙여넣으세요 (시간 표시가 같이 복사돼도 AI가 알아서 걸러냅니다)"></textarea>
       </div>
       <div id="ev-add-progress"></div>
       <div class="ev-btn-row">
@@ -230,6 +302,14 @@ const EduVideoApp = (() => {
       </div>
     </div>`;
     document.body.appendChild(ov);
+    _bindSubtitleUpload('ev-sub-file-inp', 'ev-script-inp');
+    // ★ 링크 입력이 끝나면(blur 시점) "유튜브에서 열기" 버튼을 바로 보여줌 —
+    //   매번 새 탭에서 유튜브 검색해서 다시 찾아가는 수고를 덜어줌
+    _q('ev-url-inp')?.addEventListener('blur', () => {
+      const url = _q('ev-url-inp')?.value?.trim();
+      const wrap = _q('ev-yt-open-wrap');
+      if (wrap) wrap.innerHTML = url ? `<a href="${_esc(url)}" target="_blank" rel="noopener" class="ev-yt-open-btn">▶ 이 영상 유튜브에서 열기</a>` : '';
+    });
     ov.onclick = e => { if (e.target === ov) _closeAdd(); };
   }
   function _closeAdd() { _q('ev-add-ov')?.remove(); }
@@ -332,13 +412,26 @@ const EduVideoApp = (() => {
       <div class="ev-field"><label>주제</label>
         <select id="ev-edit-topic">${EduVideoDB.getTopics().map(t => `<option value="${_esc(t)}"${t===v.topic?' selected':''}>${_esc(t)}</option>`).join('')}</select>
       </div>
-      <div class="ev-field"><label>대본</label><textarea id="ev-edit-script" style="min-height:160px">${_esc(v.script || '')}</textarea></div>
+      <div class="ev-field">
+        <label>대본</label>
+        <div class="ev-guide-box">
+          <b>📝 방법 1 — 직접 복사</b>
+          ① <a href="${_esc(v.youtubeUrl)}" target="_blank" rel="noopener" class="ev-yt-open-btn">▶ 이 영상 유튜브에서 열기</a> → ② 영상 아래 <b>"···"</b> 클릭 → ③ <b>"스크립트 표시"</b> 클릭 → ④ 텍스트 전체 복사 → ⑤ 아래에 붙여넣기
+        </div>
+        <div class="ev-guide-box">
+          <b>📎 방법 2 — 자막 파일 업로드</b>
+          .srt 또는 .vtt 자막 파일이 있으면 올려주세요 — 자동으로 대본을 채워드립니다.
+          <div><input type="file" id="ev-sub-file-inp-edit" accept=".srt,.vtt" style="margin-top:6px;font-size:11px"></div>
+        </div>
+        <textarea id="ev-edit-script" style="min-height:160px">${_esc(v.script || '')}</textarea>
+      </div>
       <div class="ev-btn-row">
         <button class="ev-btn ghost" onclick="document.getElementById('ev-edit-ov').remove()">취소</button>
         <button class="ev-btn primary" onclick="EduVideoApp._submitEditScript('${id}')">저장</button>
       </div>
     </div>`;
     document.body.appendChild(ov);
+    _bindSubtitleUpload('ev-sub-file-inp-edit', 'ev-edit-script');
     ov.onclick = e => { if (e.target === ov) ov.remove(); };
   }
   async function _submitEditScript(id) {
