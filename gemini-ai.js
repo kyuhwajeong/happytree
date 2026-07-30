@@ -106,8 +106,9 @@ const GeminiAI = (() => {
   }
 
   /* ══ 핵심 API 호출 ════════════════════════════════════════ */
-  async function _call(prompt, system) {
+  async function _call(prompt, system, maxTokens) {
     system = system || '';
+    maxTokens = maxTokens || 1024;
     if (!KEYS.length) throw new Error('API 키 미설정 — gemini-ai.js의 KEYS 배열을 확인하세요.');
     var errors = [];
     for (var ki = 0; ki < KEYS.length; ki++) {
@@ -117,7 +118,7 @@ const GeminiAI = (() => {
         try {
           var body = {
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.78, maxOutputTokens: 1024 }
+            generationConfig: { temperature: 0.78, maxOutputTokens: maxTokens }
           };
           if (system) body.systemInstruction = { parts: [{ text: system }] };
 
@@ -355,6 +356,23 @@ const GeminiAI = (() => {
     return out.replace(/\n+/g, ' ').trim();
   }
 
+  // ★ 영문 교육영상 스크립트에서 초등 수준 어휘 추출(자료실 - 영문 교육자료용)
+  async function extractVocabulary(script, topic) {
+    const prompt = `다음은 초등학생 대상 영어 교육 영상의 대본이다(주제: ${topic || '일반'}).
+이 대본에서 초등학생이 배우기 좋은 핵심 단어를 8~15개 골라서, 아래 JSON 배열 형식으로만 출력해줘.
+설명이나 다른 텍스트 없이 JSON만 출력할 것.
+
+형식: [{"word":"영단어","meaning":"한글 뜻","example":"대본에 나온 그대로의 예문 또는 쉬운 새 예문","pos":"품사(명사/동사/형용사 등 한글로)"}]
+
+대본:
+${script.slice(0, 4000)}`;
+    const out = await _call(prompt, '', 2048);
+    const cleaned = out.replace(/```json|```/g, '').trim();
+    const arr = JSON.parse(cleaned);
+    if (!Array.isArray(arr)) throw new Error('예상치 못한 응답 형식');
+    return arr.filter(w => w && w.word && w.meaning);
+  }
+
   async function testConnection() {
     try {
       var r = await _call('"OK"라고만 답해주세요.');
@@ -378,6 +396,6 @@ const GeminiAI = (() => {
     loadPinsFromDB, listenPinsFromDB,
     getBookPins, addBookPin, removeBookPin, clearBookPins, getMergedPins,
     getAnalysisCache, setAnalysisCache, clearStyleCache,
-    testConnection, status, translateToEnglish,
+    testConnection, status, translateToEnglish, extractVocabulary,
   };
 })();

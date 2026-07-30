@@ -24,6 +24,7 @@ const App = (() => {
     { pg:'students', ico:'👨‍🎓', lbl:'학생', adminOnly:true  },
     { pg:'staff',    ico:'👩‍💼', lbl:'직원', adminOnly:true  },
     { pg:'archive',  ico:'📁', lbl:'자료실', adminOnly:true  },
+    { pg:'eduvideo', ico:'🎬', lbl:'교육자료', adminOnly:true  },
   ];
   const LS_NAV_ORDER = 'hk10b_nav_order';
 
@@ -211,6 +212,8 @@ const App = (() => {
     if (typeof ScheduleApp !== 'undefined') ScheduleApp.init().catch(e=>console.warn('[ScheduleApp]',e));
     // ★ 자료실 모듈 초기화 (독립 모듈 — 오류 시 기존 기능 영향 없음)
     if (typeof ArchiveApp  !== 'undefined') ArchiveApp.init().catch(e=>console.warn('[ArchiveApp]',e));
+    // ★ 영문 교육자료 모듈 초기화 (독립 모듈 — 오류 시 기존 기능 영향 없음)
+    if (typeof EduVideoApp !== 'undefined') EduVideoApp.init().catch(e=>console.warn('[EduVideoApp]',e));
 
     DB.on('classes',()=>{_renderChips();if(S.page==='operate')_renderOperateBody();if(S.page==='manage'&&S.mgTab==='classes'){_renderMgCls();if(_q('mg-fee-ov')&&!_q('mg-fee-ov').classList.contains('hidden'))_renderFeePanel();}});
     DB.on('progress',()=>{if(S.page==='operate')_renderOperateBody();if(S.shareActive)_refreshShareProgress();});
@@ -266,6 +269,7 @@ const App = (() => {
     if(page==='students'&&!DB.isAdmin())  {_showLogin();return;}
     if(page==='staff'   &&!DB.isAdmin())  {_showLogin();return;}
     if(page==='archive' &&!DB.isAdmin())  {_showLogin();return;}
+    if(page==='eduvideo'&&!DB.isAdmin())  {_showLogin();return;}
     // ★ 교재·성적: admin은 항상 허용, 비관리자는 allowedMenus 포함 여부로 판단
     if(page==='booklib'&&!DB.isAdmin()){
       const _am=(DB.getSession()?.allowedMenus)||[];
@@ -288,6 +292,7 @@ const App = (() => {
     if(page==='booklib' &&typeof BooklibApp!=='undefined') BooklibApp.render();
     if(page==='staff'   &&typeof StaffApp  !=='undefined') StaffApp.render();
     if(page==='archive' &&typeof ArchiveApp!=='undefined') ArchiveApp.render();
+    if(page==='eduvideo'&&typeof EduVideoApp!=='undefined') EduVideoApp.render();
     if(page==='grade'   &&typeof GradeApp  !=='undefined') GradeApp.render();
     // ★ render() 이후 호출해야 동적으로 생성된 로그아웃 버튼이 DOM에 존재함
     _refreshAuthUI();
@@ -320,6 +325,7 @@ const App = (() => {
     if(S.page==='booklib' ){go('operate');return;}
     if(S.page==='staff'   ){go('operate');return;}
     if(S.page==='archive' ){go('operate');return;}
+    if(S.page==='eduvideo'){go('operate');return;}
     if(S.page==='grade'   ){go('operate');return;}
     if(S.page==='operate' ){go('dashboard');return;}
     history.pushState({pg:'dashboard'},'');
