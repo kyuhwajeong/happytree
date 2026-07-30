@@ -81,6 +81,8 @@ const ArchiveApp = (() => {
 .ar-cats::-webkit-scrollbar{display:none}
 .ar-cat-tab{flex-shrink:0;padding:7px 13px;border-radius:999px;border:1px solid var(--bdr);background:var(--card2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
 .ar-cat-tab.on{background:var(--a);border-color:var(--a);color:#fff}
+.ar-cat-tab.add{border-style:dashed;color:var(--a)}
+.ar-cat-tab.manage{padding:7px 10px}
 .ar-body{flex:1;overflow-y:auto;padding:0 14px 150px}
 .ar-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .ar-card{background:var(--card);border:1px solid var(--bdr);border-radius:14px;padding:12px;cursor:pointer;transition:transform .1s;position:relative}
@@ -139,9 +141,13 @@ const ArchiveApp = (() => {
 .ar-prev-table td,.ar-prev-table th{border:1px solid var(--bdr);padding:5px 8px;white-space:nowrap;color:var(--tx)}
 .ar-prev-table[contenteditable] td{cursor:text;outline:none}
 .ar-prev-table[contenteditable] td:focus{background:var(--a10);box-shadow:inset 0 0 0 2px var(--a)}
-.ar-xlsx-tabs{display:flex;flex-wrap:wrap;gap:6px;padding:8px 8px 0}
-.ar-xlsx-toolbar{display:flex;align-items:center;gap:8px;padding:8px}
-.ar-xlsx-edit-hint{font-size:11px;color:var(--a);font-weight:700}
+.ar-xlsx-wrap{display:flex;flex-direction:column;height:100%;min-height:0;width:100%;align-self:stretch}
+.ar-xlsx-wrap .ar-prev-table-wrap{flex:1;min-height:0}
+.ar-xlsx-sheettabs{display:flex;gap:2px;overflow-x:auto;flex-shrink:0;background:var(--card2);border-top:1px solid var(--bdr);padding:0 4px;scrollbar-width:thin}
+.ar-xlsx-sheettab{flex-shrink:0;padding:8px 16px;border:none;border-right:1px solid var(--bdr);background:transparent;color:var(--tx3);font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap}
+.ar-xlsx-sheettab.on{background:var(--card);color:var(--a);font-weight:800;box-shadow:inset 0 2px 0 var(--a)}
+.ar-xlsx-edit-hint{font-size:11px;color:var(--a);font-weight:700;padding:6px 14px;background:var(--a10)}
+.ar-prev-icobtn.accent{background:var(--a);border-color:var(--a);color:#fff}
 .ar-prev-none{padding:40px;text-align:center;color:var(--tx3);font-size:13px}
 .ar-desc-view{font-size:12.5px;color:var(--tx2);margin-top:10px;line-height:1.5;white-space:pre-wrap}
 .ar-card-multi{position:absolute;bottom:8px;right:8px;background:var(--a);color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:999px;z-index:1}
@@ -216,14 +222,17 @@ const ArchiveApp = (() => {
   }
 
   function _filesTabHtml() {
-    const cats = ['전체', ...ArchiveDB.CATEGORIES];
+    const cats = ['전체', ...ArchiveDB.getCategories()];
     return `
       <div class="ar-search-wrap">
         <input type="text" id="ar-search-inp" class="ar-search-inp" placeholder="🔍 파일명, 설명, 문서 내용으로 검색..."
           value="${_esc(_searchQuery)}" oninput="ArchiveApp._onSearchInput(this.value)">
         ${_searchQuery ? `<button class="ar-search-clear" onclick="ArchiveApp._onSearchInput('')">✕</button>` : ''}
       </div>
-      <div class="ar-cats">${cats.map(c => `<button class="ar-cat-tab${c===_curCategory?' on':''}" onclick="ArchiveApp._selectCategory('${c}')">${_esc(c)}</button>`).join('')}</div>
+      <div class="ar-cats">${cats.map(c => `<button class="ar-cat-tab${c===_curCategory?' on':''}" onclick="ArchiveApp._selectCategory('${_esc(c)}')">${_esc(c)}</button>`).join('')}
+        <button class="ar-cat-tab add" onclick="ArchiveApp._promptNewCategory()">＋ 분류</button>
+        <button class="ar-cat-tab manage" onclick="ArchiveApp.openManageCategories()" title="분류 관리">⚙️</button>
+      </div>
       <div class="ar-body" id="ar-body">${_gridHtml()}</div>
       ${_selectMode ? _selectBarHtml() : `<div class="ar-storage-footer">${_storageUsageHtml()}</div><button class="ar-fab" onclick="ArchiveApp.openUpload()" title="파일 올리기">＋</button>`}`;
   }
@@ -349,6 +358,47 @@ const ArchiveApp = (() => {
   }
   function _selectCategory(c) { _curCategory = c; render(); }
 
+  async function _promptNewCategory() {
+    const name = prompt('새 분류(폴더) 이름을 입력하세요');
+    if (!name?.trim()) return;
+    await ArchiveDB.addCategory(name.trim());
+    render();
+  }
+  function openManageCategories() {
+    const cats = ArchiveDB.getCategories();
+    const ov = document.createElement('div');
+    ov.className = 'ar-ov'; ov.id = 'ar-catmgr-ov';
+    ov.innerHTML = `<div class="ar-sheet">
+      <div class="ar-sheet-title">⚙️ 분류 관리</div>
+      <div id="ar-catmgr-list">${_catMgrListHtml()}</div>
+      <div class="ar-btn-row">
+        <button class="ar-btn ghost" onclick="document.getElementById('ar-catmgr-ov').remove()">닫기</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  }
+  function _catMgrListHtml() {
+    const cats = ArchiveDB.getCategories();
+    return `<div class="ar-picked-list">${cats.map(c => `
+      <div class="ar-picked-item">
+        <span class="ar-picked-name">📁 ${_esc(c)}</span>
+        ${c === '기타' ? `<span class="ar-picked-size">(기본, 삭제 불가)</span>` : `<button type="button" onclick="ArchiveApp._removeCategory('${_esc(c)}')" title="이 분류 삭제">✕</button>`}
+      </div>`).join('')}</div>`;
+  }
+  async function _removeCategory(name) {
+    const count = ArchiveDB.getAll().filter(p => p.category === name).length;
+    const warn = count ? `\n이 분류를 쓰는 게시물 ${count}개는 "기타"로 자동 이동됩니다.` : '';
+    if (!confirm(`"${name}" 분류를 삭제할까요?${warn}`)) return;
+    const result = await ArchiveDB.removeCategory(name);
+    if (!result.ok) { if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ ' + result.error); return; }
+    const wrap = _q('ar-catmgr-list');
+    if (wrap) wrap.innerHTML = _catMgrListHtml();
+    if (_curCategory === name) _curCategory = '전체';
+    render();
+    if (typeof App !== 'undefined' && App._toast) App._toast(`🗑️ 삭제됨${result.movedCount ? ` · ${result.movedCount}개 게시물이 "기타"로 이동` : ''}`);
+  }
+
   /* ═══════════════ 업로드 ═══════════════ */
   let _pickedFiles = [];
 
@@ -366,7 +416,7 @@ const ArchiveApp = (() => {
       </div>
       <div class="ar-field"><label>표시할 이름 (게시물 제목)</label><input type="text" id="ar-name-inp" placeholder="예: 2026년 여름방학 안내문"></div>
       <div class="ar-field"><label>분류</label>
-        <select id="ar-cat-inp">${ArchiveDB.CATEGORIES.map(c => `<option value="${_esc(c)}">${_esc(c)}</option>`).join('')}</select>
+        <select id="ar-cat-inp">${ArchiveDB.getCategories().map(c => `<option value="${_esc(c)}">${_esc(c)}</option>`).join('')}</select>
       </div>
       <div class="ar-field"><label>설명 (선택)</label><textarea id="ar-desc-inp" placeholder="메모나 설명을 남겨두면 나중에 찾기 편해요"></textarea></div>
       <div id="ar-upload-progress"></div>
@@ -563,26 +613,8 @@ const ArchiveApp = (() => {
     const f = _currentPreviewFile();
     const inner = _q('ar-prev-inner');
     if (!post || !f || !inner) return;
-    const convOpts = _convertOptionsFor(f.ext);
     inner.innerHTML = `
-      <div class="ar-prev-hdr">
-        <div class="ar-prev-name">${_iconFor(f.ext)} ${_esc(post.name)}</div>
-        <div class="ar-prev-acts">
-          ${convOpts.length ? `<div class="ar-conv-wrap">
-            <button class="ar-prev-icobtn" onclick="ArchiveApp._toggleConvertMenu()" title="다른 형식으로 다운로드">🔄</button>
-            <div class="ar-conv-menu hidden" id="ar-conv-menu">
-              ${convOpts.map(e => `<button onclick="ArchiveApp._convertAndDownload('${e}')">.${e}로 저장</button>`).join('')}
-            </div>
-          </div>` : ''}
-          <button class="ar-prev-icobtn" onclick="ArchiveApp._printPreview()" title="인쇄">🖨️</button>
-          <button class="ar-prev-icobtn" onclick="ArchiveApp._toggleFullscreen()" title="전체화면">⛶</button>
-          <button class="ar-prev-icobtn" onclick="ArchiveApp.openEdit('${post.id}')" title="수정">✏️</button>
-          <button class="ar-prev-icobtn" onclick="ArchiveApp._confirmDelete('${post.id}')" title="삭제">🗑️</button>
-          ${post.files.length > 1 ? `<button class="ar-prev-icobtn" onclick="ArchiveApp._downloadPostZip('${post.id}')" title="첨부파일 전체 ZIP으로 받기">📦</button>` : ''}
-          <a class="ar-prev-icobtn" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none" href="${ArchiveDB.getFileUrl(f.r2Key)}" download="${_esc(f.originalName)}" title="이 파일만 다운로드">⬇️</a>
-          <button class="ar-prev-icobtn" onclick="document.getElementById('ar-preview-ov').remove()" title="닫기">✕</button>
-        </div>
-      </div>
+      <div id="ar-prev-hdr-wrap">${_previewHeaderHtml()}</div>
       <div class="ar-prev-date">🗓️ 등록일 ${_fmtDate(post.uploadedAt)}${post.uploadedBy ? ` · ${_esc(post.uploadedBy)}` : ''}</div>
       ${post.files.length > 1 ? `<div class="ar-file-switch">${post.files.map((pf, i) => `
         <label class="ar-file-tab-wrap">
@@ -600,6 +632,39 @@ const ArchiveApp = (() => {
       ${post.description ? `<div class="ar-desc-view">${_esc(post.description)}</div>` : ''}
       <div id="ar-detail-progress"></div>`;
     _renderPreviewBody(f);
+  }
+  function _previewHeaderHtml() {
+    const post = _previewPost, f = _currentPreviewFile();
+    const convOpts = _convertOptionsFor(f.ext);
+    const isSheet = _isXlsx(f.ext) || _isCsv(f.ext);
+    return `
+      <div class="ar-prev-hdr">
+        <div class="ar-prev-name">${_iconFor(f.ext)} ${_esc(post.name)}</div>
+        <div class="ar-prev-acts">
+          ${convOpts.length ? `<div class="ar-conv-wrap">
+            <button class="ar-prev-icobtn" onclick="ArchiveApp._toggleConvertMenu()" title="다른 형식으로 다운로드">🔄</button>
+            <div class="ar-conv-menu hidden" id="ar-conv-menu">
+              ${convOpts.map(e => `<button onclick="ArchiveApp._convertAndDownload('${e}')">.${e}로 저장</button>`).join('')}
+            </div>
+          </div>` : ''}
+          <button class="ar-prev-icobtn" onclick="ArchiveApp._printPreview()" title="인쇄">🖨️</button>
+          <button class="ar-prev-icobtn" onclick="ArchiveApp._toggleFullscreen()" title="전체화면">⛶</button>
+          ${isSheet ? (_xlsxEditMode
+            ? `<button class="ar-prev-icobtn" onclick="ArchiveApp._cancelXlsxEdit()" title="편집 취소">↩️</button>
+               <button class="ar-prev-icobtn accent" onclick="ArchiveApp._saveXlsxEdit()" title="저장">💾</button>`
+            : `<button class="ar-prev-icobtn" onclick="ArchiveApp._startXlsxEdit()" title="셀 내용 편집">📝</button>`) : ''}
+          <button class="ar-prev-icobtn" onclick="ArchiveApp.openEdit('${post.id}')" title="게시물 정보 수정">✏️</button>
+          <button class="ar-prev-icobtn" onclick="ArchiveApp._confirmDelete('${post.id}')" title="삭제">🗑️</button>
+          ${post.files.length > 1 ? `<button class="ar-prev-icobtn" onclick="ArchiveApp._downloadPostZip('${post.id}')" title="첨부파일 전체 ZIP으로 받기">📦</button>` : ''}
+          <a class="ar-prev-icobtn" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none" href="${ArchiveDB.getFileUrl(f.r2Key)}" download="${_esc(f.originalName)}" title="이 파일만 다운로드">⬇️</a>
+          <button class="ar-prev-icobtn" onclick="document.getElementById('ar-preview-ov').remove()" title="닫기">✕</button>
+        </div>
+      </div>
+      ${isSheet && _xlsxEditMode ? `<div class="ar-xlsx-edit-hint">📝 편집 중 — 셀을 클릭해서 직접 고칠 수 있어요</div>` : ''}`;
+  }
+  function _refreshPreviewHeader() {
+    const wrap = _q('ar-prev-hdr-wrap');
+    if (wrap) wrap.innerHTML = _previewHeaderHtml();
   }
   function _switchPreviewFile(idx) {
     _previewFileIdx = idx;
@@ -1003,28 +1068,26 @@ const ArchiveApp = (() => {
     const html = XLSX.utils.sheet_to_html(ws, { editable: false });
     const tableHtml = html.replace('<table', `<table class="ar-prev-table"${_xlsxEditMode ? ' contenteditable="true"' : ''}`);
     body.innerHTML = `
-      ${sheetNames.length > 1 ? `<div class="ar-xlsx-tabs">${sheetNames.map((name, i) => `
-        <button class="ar-file-tab${i === _xlsxSheetIdx ? ' on' : ''}" onclick="ArchiveApp._switchXlsxSheet(${i})">${_esc(name)}</button>`).join('')}</div>` : ''}
-      <div class="ar-xlsx-toolbar">
-        ${_xlsxEditMode
-          ? `<span class="ar-xlsx-edit-hint">✏️ 편집 중 — 셀을 클릭해서 직접 고칠 수 있어요</span>
-             <button class="ar-btn ghost" style="flex:0 0 auto;padding:6px 12px;font-size:11.5px" onclick="ArchiveApp._cancelXlsxEdit()">취소</button>
-             <button class="ar-btn primary" style="flex:0 0 auto;padding:6px 12px;font-size:11.5px" onclick="ArchiveApp._saveXlsxEdit()">💾 저장</button>`
-          : `<button class="ar-btn ghost" style="flex:0 0 auto;padding:6px 12px;font-size:11.5px;margin-left:auto" onclick="ArchiveApp._startXlsxEdit()">✏️ 편집</button>`}
-      </div>
-      <div class="ar-prev-table-wrap" id="ar-xlsx-table-wrap">${tableHtml}</div>`;
+      <div class="ar-xlsx-wrap">
+        <div class="ar-prev-table-wrap" id="ar-xlsx-table-wrap">${tableHtml}</div>
+        ${sheetNames.length > 1 ? `<div class="ar-xlsx-sheettabs">${sheetNames.map((name, i) => `
+          <button class="ar-xlsx-sheettab${i === _xlsxSheetIdx ? ' on' : ''}" onclick="ArchiveApp._switchXlsxSheet(${i})">${_esc(name)}</button>`).join('')}</div>` : ''}
+      </div>`;
   }
   function _switchXlsxSheet(idx) {
     _xlsxSheetIdx = idx;
     _xlsxEditMode = false;
+    _refreshPreviewHeader();
     _renderXlsxSheet();
   }
   function _startXlsxEdit() {
     _xlsxEditMode = true;
+    _refreshPreviewHeader();
     _renderXlsxSheet();
   }
   function _cancelXlsxEdit() {
     _xlsxEditMode = false;
+    _refreshPreviewHeader();
     _renderXlsxSheet(); // ★ 워크북 원본에서 다시 그려서 편집 내용 버림
   }
   // ★ 표(HTML table)에서 지금 화면에 보이는 값을 읽어서 시트를 다시 만들고,
@@ -1057,6 +1120,7 @@ const ArchiveApp = (() => {
       _xlsxEditMode = false;
       _refreshGrid();
       if (prog) prog.innerHTML = `<div class="ar-progress">✅ 저장되었습니다</div>`;
+      _refreshPreviewHeader();
       _renderXlsxSheet();
     } catch (e) {
       if (prog) prog.innerHTML = `<div class="ar-progress" style="color:#ef4444">⚠️ 저장 실패: ${_esc(e.message || '알 수 없는 오류')}</div>`;
@@ -1075,7 +1139,7 @@ const ArchiveApp = (() => {
       <div class="ar-sheet-title">✏️ 자료 정보 수정</div>
       <div class="ar-field"><label>표시할 이름</label><input type="text" id="ar-edit-name" value="${_esc(f.name)}"></div>
       <div class="ar-field"><label>분류</label>
-        <select id="ar-edit-cat">${ArchiveDB.CATEGORIES.map(c => `<option value="${_esc(c)}"${c===f.category?' selected':''}>${_esc(c)}</option>`).join('')}</select>
+        <select id="ar-edit-cat">${ArchiveDB.getCategories().map(c => `<option value="${_esc(c)}"${c===f.category?' selected':''}>${_esc(c)}</option>`).join('')}</select>
       </div>
       <div class="ar-field"><label>설명</label><textarea id="ar-edit-desc">${_esc(f.description||'')}</textarea></div>
       <div class="ar-field">
@@ -1174,7 +1238,7 @@ const ArchiveApp = (() => {
   }
 
   return {
-    init, render, _selectCategory, _onSearchInput, _togglePin, _setViewMode, _selectTool,
+    init, render, _selectCategory, _promptNewCategory, openManageCategories, _removeCategory, _onSearchInput, _togglePin, _setViewMode, _selectTool,
     openUpload, _closeUpload, _onPickFiles, _removePickedFile, _submitUpload,
     openPreview, _switchPreviewFile, _addMoreFiles, _toggleFileSelect, _selectAllFilesInPreview, _downloadSelectedFilesInPost,
     openEdit, _closeEdit, _submitEdit,
