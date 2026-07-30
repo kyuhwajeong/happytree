@@ -34,6 +34,20 @@ const ArchiveApp = (() => {
     if (_cssInjected) return; _cssInjected = true;
     const s = document.createElement('style');
     s.textContent = `
+.ar-view-toggle{display:flex;border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-right:2px}
+.ar-view-toggle button{width:30px;height:30px;border:none;background:var(--card2);color:var(--tx3);font-size:14px;cursor:pointer}
+.ar-view-toggle button.on{background:var(--a);color:#fff}
+.ar-list{display:flex;flex-direction:column;gap:8px}
+.ar-lrow{display:flex;align-items:flex-start;gap:10px;background:var(--card);border:1px solid var(--bdr);border-radius:12px;padding:10px 12px;cursor:pointer}
+.ar-lrow.selected{border-color:var(--a);background:var(--a10)}
+.ar-lrow-ico{font-size:22px;flex-shrink:0;margin-top:1px}
+.ar-lrow-thumb{width:34px;height:34px;object-fit:cover;border-radius:7px;border:1px solid var(--bdr);flex-shrink:0}
+.ar-lrow-check{font-size:16px;flex-shrink:0;margin-top:1px}
+.ar-lrow-body{flex:1;min-width:0}
+.ar-lrow-top{display:flex;align-items:center;gap:8px}
+.ar-lrow-name{font-size:12.5px;font-weight:700;color:var(--tx);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ar-lrow-desc{font-size:11px;color:var(--tx2);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ar-lrow-meta{font-size:10px;color:var(--tx3);margin-top:4px}
 .ar-storage{margin:8px 14px 0}
 .ar-storage-bar{height:6px;border-radius:4px;background:var(--card2);overflow:hidden}
 .ar-storage-fill{height:100%;background:var(--a);border-radius:4px;transition:width .3s}
@@ -62,6 +76,7 @@ const ArchiveApp = (() => {
 .ar-card-pin{position:absolute;top:8px;right:8px;border:none;background:transparent;font-size:16px;cursor:pointer;line-height:1;padding:2px;opacity:.5}
 .ar-card-pin.on{opacity:1}
 .ar-card-ico{font-size:30px;margin-bottom:8px}
+.ar-card-thumb{width:100%;aspect-ratio:1;object-fit:cover;border-radius:9px;margin-bottom:8px;background:var(--surf2);display:block}
 .ar-card-name{font-size:12.5px;font-weight:700;color:var(--tx);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.35;min-height:34px}
 .ar-card-meta{font-size:10px;color:var(--tx3);margin-top:6px;display:flex;justify-content:space-between;gap:4px}
 .ar-card-cat{display:inline-block;margin-top:6px;font-size:9.5px;font-weight:700;color:var(--a);background:var(--a10);border-radius:6px;padding:2px 6px}
@@ -118,6 +133,13 @@ const ArchiveApp = (() => {
   let _selectMode = false;
   let _selectedIds = new Set();
   const STORAGE_LIMIT_BYTES = 10 * 1024 * 1024 * 1024; // ★ Backblaze B2 무료 한도 10GB 기준
+  const LS_VIEW_MODE = 'hk10b_archiveViewMode';
+  let _viewMode = (() => { try { const v = localStorage.getItem(LS_VIEW_MODE); return (v === 'list' || v === 'grid') ? v : 'grid'; } catch { return 'grid'; } })();
+  function _setViewMode(m) {
+    _viewMode = m;
+    try { localStorage.setItem(LS_VIEW_MODE, m); } catch (e) {}
+    render();
+  }
 
   function _storageUsageHtml() {
     const totalBytes = ArchiveDB.getAll().reduce((s, f) => s + (f.size || 0), 0);
@@ -134,11 +156,17 @@ const ArchiveApp = (() => {
     return `
       <div class="ph">
         <div class="phl"><div class="ph-title">📁 자료실</div></div>
-        <div class="phr"><button class="db-mini-btn${_selectMode ? '' : ' ghost'}" onclick="ArchiveApp._toggleSelectMode()">${_selectMode ? '✕ 선택 취소' : '☑️ 선택'}</button></div>
+        <div class="phr">
+          <div class="ar-view-toggle">
+            <button class="${_viewMode==='grid'?'on':''}" onclick="ArchiveApp._setViewMode('grid')" title="그리드로 보기">▦</button>
+            <button class="${_viewMode==='list'?'on':''}" onclick="ArchiveApp._setViewMode('list')" title="리스트로 보기">☰</button>
+          </div>
+          <button class="db-mini-btn${_selectMode ? '' : ' ghost'}" onclick="ArchiveApp._toggleSelectMode()">${_selectMode ? '✕ 선택 취소' : '☑️ 선택'}</button>
+        </div>
       </div>
       ${_storageUsageHtml()}
       <div class="ar-search-wrap">
-        <input type="text" id="ar-search-inp" class="ar-search-inp" placeholder="🔍 파일명, 제목, 설명으로 검색..."
+        <input type="text" id="ar-search-inp" class="ar-search-inp" placeholder="🔍 파일명, 설명, 문서 내용으로 검색..."
           value="${_esc(_searchQuery)}" oninput="ArchiveApp._onSearchInput(this.value)">
         ${_searchQuery ? `<button class="ar-search-clear" onclick="ArchiveApp._onSearchInput('')">✕</button>` : ''}
       </div>
@@ -183,7 +211,7 @@ const ArchiveApp = (() => {
     if (!query) return true;
     const words = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
     if (!words.length) return true;
-    const haystack = `${f.name} ${f.originalName} ${f.description || ''}`.toLowerCase();
+    const haystack = `${f.name} ${f.originalName} ${f.description || ''} ${f.contentText || ''}`.toLowerCase();
     return words.every(w => haystack.includes(w));
   }
   function _onSearchInput(v) {
@@ -207,15 +235,41 @@ const ArchiveApp = (() => {
         ? `<div class="ar-empty"><div class="ar-empty-ico">🔍</div>"${_esc(_searchQuery)}"와(과) 일치하는 자료가 없습니다</div>`
         : `<div class="ar-empty"><div class="ar-empty-ico">🗂️</div>등록된 자료가 없습니다<br>오른쪽 아래 + 버튼으로 올려보세요</div>`;
     }
+    return _viewMode === 'list' ? _listRowsHtml(items) : _gridCardsHtml(items);
+  }
+  function _gridCardsHtml(items) {
     return `<div class="ar-grid">${items.map(f => `
       <div class="ar-card${_selectMode && _selectedIds.has(f.id) ? ' selected' : ''}" onclick="${_selectMode ? `ArchiveApp._toggleSelect('${f.id}')` : `ArchiveApp.openPreview('${f.id}')`}">
         ${_selectMode
           ? `<span class="ar-card-check">${_selectedIds.has(f.id) ? '✅' : '⬜'}</span>`
           : `<button class="ar-card-pin${f.pinned ? ' on' : ''}" onclick="event.stopPropagation();ArchiveApp._togglePin('${f.id}')" title="${f.pinned ? '대시보드에서 빼기' : '대시보드에 썸네일로 표시'}">${f.pinned ? '⭐' : '☆'}</button>`}
-        <div class="ar-card-ico">${_iconFor(f.ext)}</div>
+        ${f.thumbnail ? `<img class="ar-card-thumb" src="${f.thumbnail}" alt="">`
+          : _isImg(f.ext) ? `<img class="ar-card-thumb" src="${ArchiveDB.getFileUrl(f.r2Key)}" alt="">`
+          : `<div class="ar-card-ico">${_iconFor(f.ext)}</div>`}
         <div class="ar-card-name">${_esc(f.name)}</div>
         <div class="ar-card-meta"><span>${_fmtSize(f.size)}</span><span>${_fmtDate(f.uploadedAt)}</span></div>
         <span class="ar-card-cat">${_esc(f.category)}</span>
+      </div>`).join('')}</div>`;
+  }
+  // ★ 리스트형 — 한 줄에 더 많은 정보(설명 미리보기 포함)를 보여줘서
+  //   여러 파일을 빠르게 훑어보는 용도에 적합하다.
+  function _listRowsHtml(items) {
+    return `<div class="ar-list">${items.map(f => `
+      <div class="ar-lrow${_selectMode && _selectedIds.has(f.id) ? ' selected' : ''}" onclick="${_selectMode ? `ArchiveApp._toggleSelect('${f.id}')` : `ArchiveApp.openPreview('${f.id}')`}">
+        ${_selectMode
+          ? `<span class="ar-lrow-check">${_selectedIds.has(f.id) ? '✅' : '⬜'}</span>`
+          : (f.thumbnail || _isImg(f.ext))
+            ? `<img class="ar-lrow-thumb" src="${f.thumbnail || ArchiveDB.getFileUrl(f.r2Key)}" alt="">`
+            : `<span class="ar-lrow-ico">${_iconFor(f.ext)}</span>`}
+        <div class="ar-lrow-body">
+          <div class="ar-lrow-top">
+            <span class="ar-lrow-name">${_esc(f.name)}</span>
+            <span class="ar-card-cat">${_esc(f.category)}</span>
+          </div>
+          ${f.description ? `<div class="ar-lrow-desc">${_esc(f.description)}</div>` : ''}
+          <div class="ar-lrow-meta">${_fmtSize(f.size)} · ${_fmtDate(f.uploadedAt)}</div>
+        </div>
+        ${_selectMode ? '' : `<button class="ar-card-pin${f.pinned ? ' on' : ''}" onclick="event.stopPropagation();ArchiveApp._togglePin('${f.id}')" title="${f.pinned ? '대시보드에서 빼기' : '대시보드에 썸네일로 표시'}">${f.pinned ? '⭐' : '☆'}</button>`}
       </div>`).join('')}</div>`;
   }
 
@@ -293,11 +347,102 @@ const ArchiveApp = (() => {
     const nameInp = _q('ar-name-inp');
     if (nameInp && !nameInp.value) nameInp.value = file.name.replace(/\.[^.]+$/, '');
   }
+  // ═══════════════ 업로드 시 썸네일·검색용 텍스트 미리 추출 ═══════════════
+  // ★ 형식별로 가능한 만큼만 최선을 다해 시도한다. 실패해도 업로드 자체는
+  //   정상 진행되고, 그냥 아이콘/검색불가 상태로 남을 뿐이다(치명적이지 않음).
+  function _extFromName(name) { return (name.match(/\.([a-zA-Z0-9]+)$/)?.[1] || '').toLowerCase(); }
+
+  async function _extractPdf(file) {
+    if (typeof pdfjsLib === 'undefined') return {};
+    if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 0.5 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    const thumbnail = canvas.toDataURL('image/jpeg', 0.6);
+    // ★ 검색용 텍스트 — 문서가 길 수 있어 최대 10페이지 · 5000자까지만
+    let text = '';
+    const maxPages = Math.min(pdf.numPages, 10);
+    for (let i = 1; i <= maxPages && text.length < 5000; i++) {
+      const p = await pdf.getPage(i);
+      const content = await p.getTextContent();
+      text += content.items.map(it => it.str).join(' ') + ' ';
+    }
+    return { thumbnail, contentText: text.slice(0, 5000) };
+  }
+  async function _extractSheet(file, isCsv) {
+    if (typeof XLSX === 'undefined') return {};
+    const wb = isCsv ? XLSX.read(await file.text(), { type: 'string' }) : XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const contentText = (XLSX.utils.sheet_to_txt ? XLSX.utils.sheet_to_txt(ws) : XLSX.utils.sheet_to_csv(ws)).slice(0, 5000);
+    let thumbnail = '';
+    if (typeof html2canvas !== 'undefined') {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;padding:6px;width:280px;font-size:8px';
+      wrap.innerHTML = XLSX.utils.sheet_to_html(ws);
+      wrap.querySelectorAll('td,th').forEach(c => { c.style.border = '1px solid #ddd'; c.style.padding = '2px 4px'; });
+      document.body.appendChild(wrap);
+      try {
+        const canvas = await html2canvas(wrap, { backgroundColor: '#fff', scale: 1 });
+        thumbnail = canvas.toDataURL('image/jpeg', 0.6);
+      } catch (e) { /* 썸네일 실패해도 텍스트는 이미 뽑았으니 검색은 됨 */ }
+      wrap.remove();
+    }
+    return { thumbnail, contentText };
+  }
+  async function _extractTxt(file) {
+    const text = await file.text();
+    return { contentText: text.slice(0, 5000) };
+  }
+  async function _extractHwp(file) {
+    // ★ HWP는 텍스트 추출 API가 아직 확실치 않아 썸네일만 시도(검색용
+    //   텍스트는 지원 안 함 — 실패해도 조용히 넘어감)
+    try {
+      if (!globalThis.measureTextWidth) {
+        globalThis.measureTextWidth = (font, text) => {
+          const ctx = document.createElement('canvas').getContext('2d');
+          ctx.font = font; return ctx.measureText(text).width;
+        };
+      }
+      const rhwp = await import('https://esm.sh/@rhwp/core');
+      await rhwp.default();
+      const buf = new Uint8Array(await file.arrayBuffer());
+      const doc = new rhwp.HwpDocument(buf);
+      const svg = doc.renderPageSvg(0);
+      const svgUrl = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = svgUrl; });
+      const canvas = document.createElement('canvas');
+      const scale = 200 / img.width;
+      canvas.width = 200; canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(svgUrl);
+      return { thumbnail: canvas.toDataURL('image/jpeg', 0.7) };
+    } catch (e) { return {}; }
+  }
+  async function _extractPreview(file) {
+    const ext = _extFromName(file.name);
+    try {
+      if (_isPdf(ext)) return await _extractPdf(file);
+      if (_isXlsx(ext)) return await _extractSheet(file, false);
+      if (_isCsv(ext)) return await _extractSheet(file, true);
+      if (ext === 'txt') return await _extractTxt(file);
+      if (_isHwp(ext)) return await _extractHwp(file);
+    } catch (e) { console.warn('[ArchiveApp] 미리보기/검색용 추출 실패', e); }
+    return {};
+  }
+
   async function _submitUpload() {
     if (!_pickedFile) { alert('파일을 선택해 주세요'); return; }
     const btn = _q('ar-upload-submit');
     const prog = _q('ar-upload-progress');
     btn.disabled = true; btn.textContent = '업로드 중...';
+    if (prog) prog.innerHTML = `<div class="ar-progress">⏳ 미리보기 준비 중...</div>`;
+    const extracted = await _extractPreview(_pickedFile).catch(() => ({}));
     if (prog) prog.innerHTML = `<div class="ar-progress">⏳ 업로드하고 있어요...</div>`;
     try {
       const result = await ArchiveDB.uploadFile(_pickedFile, {
@@ -305,6 +450,8 @@ const ArchiveApp = (() => {
         category: _q('ar-cat-inp')?.value || '기타',
         description: _q('ar-desc-inp')?.value?.trim() || '',
         uploadedBy: (typeof DB !== 'undefined' && DB.getSession) ? (DB.getSession()?.name || '') : '',
+        thumbnail: extracted.thumbnail || '',
+        contentText: extracted.contentText || '',
       });
       _closeUpload();
       _refreshGrid();
@@ -675,7 +822,7 @@ const ArchiveApp = (() => {
   }
 
   return {
-    init, render, _selectCategory, _onSearchInput, _togglePin,
+    init, render, _selectCategory, _onSearchInput, _togglePin, _setViewMode,
     openUpload, _closeUpload, _onPickFile, _submitUpload,
     openPreview, openEdit, _closeEdit, _submitEdit,
     _confirmDelete, _toggleFullscreen, _printPreview,

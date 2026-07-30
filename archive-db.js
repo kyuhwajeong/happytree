@@ -112,6 +112,8 @@ const ArchiveDB = (() => {
       category: meta.category || '기타',
       description: meta.description || '',
       uploadedBy: meta.uploadedBy || '',
+      thumbnail: meta.thumbnail || '', // ★ 그리드에서 아이콘 대신 보여줄 작은 미리보기 이미지(가능한 형식만)
+      contentText: meta.contentText || '', // ★ 검색용으로 미리 뽑아둔 문서 내용(가능한 형식만)
       uploadedAt: _now(),
       updatedAt: _now(),
     };
