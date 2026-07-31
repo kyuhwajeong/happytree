@@ -166,6 +166,73 @@ const GeminiAI = (() => {
     );
   }
 
+  // ★ 유튜브 영상 링크를 Gemini API에 직접 넘겨서 분석시키는 함수 —
+  //   구글이 공식 문서로 지원을 명시한 기능(현재 프리뷰 단계, 무료).
+  //   우리가 영상을 직접 내려받는 게 아니라, 구글 자체 인프라가 유튜브
+  //   영상을 처리하는 방식이라 지난번 "다운로드 금지" 원칙과는 무관하다.
+  async function _callWithYoutube(youtubeUrl, prompt, maxTokens) {
+    maxTokens = maxTokens || 2048;
+    if (!KEYS.length) throw new Error('API 키 미설정');
+    var errors = [];
+    for (var ki = 0; ki < KEYS.length; ki++) {
+      var key = KEYS[ki];
+      for (var mi = 0; mi < MODELS.length; mi++) {
+        var model = MODELS[mi];
+        try {
+          var body = {
+            contents: [{ parts: [
+              { file_data: { file_uri: youtubeUrl } },
+              { text: prompt }
+            ] }],
+            generationConfig: { temperature: 0.4, maxOutputTokens: maxTokens }
+          };
+          var res = await fetch(_ep(model, key), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          if (res.status === 401) { errors.push(key.slice(0,8)+'...: 키무효(401)'); break; }
+          if (res.status === 429) { errors.push(key.slice(0,8)+'...: 한도소진(429)'); break; }
+          if (res.status === 404) { errors.push(model+': 모델없음(404, 영상 지원 안 되는 모델일 수 있음)'); continue; }
+          if (res.status === 503) { await _delay(500); errors.push(model+': 503'); continue; }
+          if (!res.ok) {
+            var t = await res.text().catch(function(){ return ''; });
+            throw new Error('API ' + res.status + ': ' + t.slice(0, 150));
+          }
+          var data = await res.json();
+          var text = (data && data.candidates && data.candidates[0] &&
+                      data.candidates[0].content && data.candidates[0].content.parts &&
+                      data.candidates[0].content.parts[0] &&
+                      data.candidates[0].content.parts[0].text) || '';
+          if (!text) {
+            var reason = (data && data.candidates && data.candidates[0] && data.candidates[0].finishReason) || '?';
+            if (reason === 'SAFETY') throw new Error('안전 필터 차단');
+            errors.push(model + ': 빈응답(' + reason + ')'); continue;
+          }
+          return text.trim();
+        } catch (e) {
+          if (e.message && e.message.includes('안전 필터')) throw e;
+          errors.push(model + ': ' + (e.message || e).toString().slice(0, 80));
+        }
+      }
+    }
+    throw new Error('영상 분석 실패\n' + errors.map(function(e){ return '  · ' + e; }).join('\n'));
+  }
+
+  // ★ 영상 워크시트용 — 유튜브 링크만으로 바로 단어를 추출한다(대본 필요 없음)
+  async function extractVocabularyFromYoutubeVideo(youtubeUrl, topic) {
+    const prompt = `이 유튜브 영상은 초등학생 대상 영어 교육 영상이다(주제: ${topic || '일반'}).
+영상 속 음성과 화면 내용을 바탕으로, 초등학생이 배우기 좋은 핵심 영단어를 8~15개 골라서
+아래 JSON 배열 형식으로만 출력해줘. 설명이나 다른 텍스트 없이 JSON만 출력할 것.
+
+형식: [{"word":"영단어","meaning":"한글 뜻","example":"영상에 나온 문장 또는 쉬운 예문","pos":"품사(명사/동사/형용사 등 한글로)"}]`;
+    const out = await _callWithYoutube(youtubeUrl, prompt, 2048);
+    const cleaned = out.replace(/```json|```/g, '').trim();
+    const arr = JSON.parse(cleaned);
+    if (!Array.isArray(arr)) throw new Error('예상치 못한 응답 형식');
+    return arr.filter(w => w && w.word && w.meaning);
+  }
+
   /* ══ 프롬프트 빌더 ════════════════════════════════════════ */
   function _buildContext(opts) {
     opts = opts || {};
@@ -373,6 +440,21 @@ ${script.slice(0, 4000)}`;
     return arr.filter(w => w && w.word && w.meaning);
   }
 
+  // ★ 학습 게임용 - 사용자가 직접 입력한 영단어 목록에 뜻/품사/예문을 붙여준다
+  async function generateWordMeanings(words) {
+    const list = words.slice(0, 30).join(', ');
+    const prompt = `다음은 초등학생에게 가르칠 영단어 목록이다: ${list}
+각 단어에 대해 한글 뜻, 품사, 쉬운 초등 수준 예문을 만들어서 아래 JSON 배열 형식으로만 출력해줘.
+설명이나 다른 텍스트 없이 JSON만 출력할 것. 목록에 없는 단어는 만들지 말고, 목록의 단어 개수와 정확히 같은 개수로 출력해줘.
+
+형식: [{"word":"영단어","meaning":"한글 뜻","example":"쉬운 예문","pos":"품사(명사/동사/형용사 등 한글로)"}]`;
+    const out = await _call(prompt, '', 2048);
+    const cleaned = out.replace(/```json|```/g, '').trim();
+    const arr = JSON.parse(cleaned);
+    if (!Array.isArray(arr)) throw new Error('예상치 못한 응답 형식');
+    return arr.filter(w => w && w.word && w.meaning);
+  }
+
   // ★ 영문 교육자료 - 유튜브 추천용: 주제에 맞는 좋은 영어 검색어를 만들어준다
   async function generateSearchQueries(topic) {
     const prompt = `초등학생 영어 교육용 유튜브 영상을 찾고 싶다. 주제: "${topic}".
@@ -422,7 +504,7 @@ ${list}`;
     loadPinsFromDB, listenPinsFromDB,
     getBookPins, addBookPin, removeBookPin, clearBookPins, getMergedPins,
     getAnalysisCache, setAnalysisCache, clearStyleCache,
-    testConnection, status, translateToEnglish, extractVocabulary,
+    testConnection, status, translateToEnglish, extractVocabulary, generateWordMeanings, extractVocabularyFromYoutubeVideo,
     generateSearchQueries, curateVideos,
   };
 })();
