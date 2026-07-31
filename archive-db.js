@@ -66,12 +66,19 @@ const ArchiveDB = (() => {
   // ★ 옛날(파일 1개짜리) 게시물을 files[] 구조로 변환 — 하위호환
   function _normalize(rec) {
     if (!rec) return rec;
-    if (Array.isArray(rec.files)) return rec;
-    if (rec.r2Key) {
-      const { r2Key, originalName, ext, size, mimeType, thumbnail, contentText, ...rest } = rec;
-      return { ...rest, files: [{ r2Key, originalName, ext, size, mimeType, thumbnail: thumbnail || '', contentText: contentText || '' }] };
+    let out = rec;
+    if (!Array.isArray(rec.files)) {
+      if (rec.r2Key) {
+        const { r2Key, originalName, ext, size, mimeType, thumbnail, contentText, ...rest } = rec;
+        out = { ...rest, files: [{ r2Key, originalName, ext, size, mimeType, thumbnail: thumbnail || '', contentText: contentText || '' }] };
+      } else {
+        out = { ...rec, files: rec.files || [] };
+      }
     }
-    return { ...rec, files: rec.files || [] };
+    // ★ 이 기능(비밀번호/공개설정) 이전에 만들어진 게시물엔 기본값을 채워준다
+    if (out.password === undefined) out = { ...out, password: '' };
+    if (out.visibility === undefined) out = { ...out, visibility: 'public' };
+    return out;
   }
   function _normalizeAll(arr) { return (arr || []).map(_normalize); }
 
@@ -112,6 +119,32 @@ const ArchiveDB = (() => {
   function getAll() { return _list.slice().sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || '')); }
   function getById(id) { return _list.find(x => x.id === id) || null; }
   function getByCategory(cat) { return getAll().filter(x => x.category === cat); }
+
+  /* ── 권한(작성자/공개설정/비밀번호) ── */
+  function _currentUsername() {
+    return (typeof DB !== 'undefined' && DB.getSession) ? (DB.getSession()?.username || '') : '';
+  }
+  function _isCurrentAdmin() {
+    return typeof DB !== 'undefined' && DB.isAdmin && DB.isAdmin();
+  }
+  function isOwner(post) {
+    const u = _currentUsername();
+    return !!u && post?.uploadedBy === u;
+  }
+  // ★ admin은 전부 다 보임(비공개 포함). 그 외 계정은 "공개"이거나
+  //   "내가 올린 것"만 보인다 — 남이 올린 비공개 글은 목록에서부터 안 보임.
+  function getVisiblePosts() {
+    if (_isCurrentAdmin()) return getAll();
+    return getAll().filter(p => p.visibility !== 'private' || isOwner(p));
+  }
+  // ★ 비밀번호는 "목록에 보이느냐"와는 별개 — 목록엔 보이되, 실제로
+  //   열람하려면 admin이거나 본인이거나 비밀번호를 맞혀야 한다.
+  function canOpenWithoutPassword(post) {
+    return _isCurrentAdmin() || isOwner(post) || !post?.password;
+  }
+  function checkPassword(post, input) {
+    return post?.password && input === post.password;
+  }
 
   /* ── Worker 통신 ── */
   function _fileExt(name) {
@@ -184,6 +217,8 @@ const ArchiveDB = (() => {
       category: meta.category || '기타',
       description: meta.description || '',
       uploadedBy: meta.uploadedBy || '',
+      password: meta.password || '', // ★ 빈 문자열 = 비밀번호 없음
+      visibility: meta.visibility === 'private' ? 'private' : 'public', // ★ 기본은 공개
       files: uploaded,
       uploadedAt: _now(),
       updatedAt: _now(),
@@ -292,6 +327,7 @@ const ArchiveDB = (() => {
   return {
     init, on, pauseUpdates,
     getAll, getById, getByCategory, getFileUrl,
+    getVisiblePosts, isOwner, canOpenWithoutPassword, checkPassword,
     createPost, addFilesToPost, removeFileFromPost, replaceFileContent,
     updateFile, deletePost, deleteFile,
     getCategories, addCategory, removeCategory,
