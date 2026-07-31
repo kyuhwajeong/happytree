@@ -414,7 +414,8 @@ const EduVideoApp = (() => {
       </label>` : ''}
       <div class="ev-btn-row">
         <button class="ev-btn ghost" onclick="EduVideoApp.openEditScript('${id}')">✏️ 대본 수정</button>
-        ${v.script ? `<button class="ev-btn warn" id="ev-extract-btn" onclick="EduVideoApp._extractWords('${id}')">🤖 AI로 단어 추출</button>` : ''}
+        <button class="ev-btn warn" id="ev-extract-video-btn" onclick="EduVideoApp._extractWordsFromVideo('${id}')">🎬 영상에서 바로 추출 (대본 필요없음)</button>
+        ${v.script ? `<button class="ev-btn warn" id="ev-extract-btn" onclick="EduVideoApp._extractWords('${id}')">🤖 대본에서 단어 추출</button>` : ''}
         ${v.words?.length ? `<button class="ev-btn primary" onclick="EduVideoApp._makePdf('${id}')">📄 PDF 워크시트</button>` : ''}
       </div>
       <div id="ev-detail-progress"></div>
@@ -443,26 +444,53 @@ const EduVideoApp = (() => {
     if (prog) prog.innerHTML = `<div class="ev-progress">🤖 AI가 대본에서 단어를 뽑고 있어요...</div>`;
     try {
       const words = await GeminiAI.extractVocabulary(v.script, v.topic);
-      const result = await EduVideoDB.updateVideo(id, { words });
-      const area = _q('ev-words-area');
-      if (area) area.innerHTML = _wordsAreaHtml(result);
-      if (prog) prog.innerHTML = `<div class="ev-progress">✅ ${words.length}개 단어 추출 완료</div>`;
+      await _onWordsExtracted(id, words, prog);
       if (btn) btn.remove();
-      // ★ PDF 버튼이 없었다면 새로 보여준다(단어가 이번에 처음 생겼을 수 있으므로)
-      if (!document.querySelector('.ev-btn-row .ev-btn.primary')) {
-        const row = document.querySelector('.ev-btn-row');
-        if (row) {
-          if (!_q('ev-pdf-img-chk')) {
-            row.insertAdjacentHTML('beforebegin', `<label class="ev-img-chk-row">
-              <input type="checkbox" id="ev-pdf-img-chk" checked> 워크시트에 단어별 관련 이미지 포함하기 (무료 이미지 사이트에서 가져옴)
-            </label>`);
-          }
-          row.insertAdjacentHTML('beforeend', `<button class="ev-btn primary" onclick="EduVideoApp._makePdf('${id}')">📄 PDF 워크시트</button>`);
-        }
-      }
     } catch (e) {
-      if (btn) { btn.disabled = false; btn.textContent = '🤖 AI로 단어 추출'; }
+      if (btn) { btn.disabled = false; btn.textContent = '🤖 대본에서 단어 추출'; }
       if (prog) prog.innerHTML = `<div class="ev-progress" style="color:#ef4444">⚠️ 추출 실패: ${_esc(e.message || '알 수 없는 오류')}</div>`;
+    }
+  }
+
+  // ★ 대본 없이, 유튜브 링크만으로 Gemini가 영상(음성+화면)을 직접 분석해서
+  //   단어를 뽑는다 — 구글 공식 지원 기능(현재 프리뷰, 무료)을 사용.
+  //   영상 전체를 처리하다 보니 대본 방식보다 시간이 좀 더 걸릴 수 있다.
+  async function _extractWordsFromVideo(id) {
+    const v = EduVideoDB.getById(id);
+    if (!v) return;
+    if (typeof GeminiAI === 'undefined' || !GeminiAI.extractVocabularyFromYoutubeVideo) {
+      if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ AI 기능을 불러오지 못했습니다'); return;
+    }
+    const btn = _q('ev-extract-video-btn'), prog = _q('ev-detail-progress');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ 영상 분석 중... (시간이 조금 걸려요)'; }
+    if (prog) prog.innerHTML = `<div class="ev-progress">🎬 AI가 영상을 직접 보고 듣는 중이에요...</div>`;
+    try {
+      const words = await GeminiAI.extractVocabularyFromYoutubeVideo(v.youtubeUrl, v.topic);
+      await _onWordsExtracted(id, words, prog);
+      if (btn) btn.remove();
+      _q('ev-extract-btn')?.remove(); // ★ 이미 단어를 얻었으니 대본 기반 버튼도 정리
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.textContent = '🎬 영상에서 바로 추출 (대본 필요없음)'; }
+      if (prog) prog.innerHTML = `<div class="ev-progress" style="color:#ef4444">⚠️ 추출 실패: ${_esc(e.message || '알 수 없는 오류')}</div>`;
+    }
+  }
+  // ★ 두 추출 방식(대본/영상) 공통 — 결과를 저장하고 화면(단어 목록 · PDF 버튼)을 갱신
+  async function _onWordsExtracted(id, words, prog) {
+    const result = await EduVideoDB.updateVideo(id, { words });
+    const area = _q('ev-words-area');
+    if (area) area.innerHTML = _wordsAreaHtml(result);
+    if (prog) prog.innerHTML = `<div class="ev-progress">✅ ${words.length}개 단어 추출 완료</div>`;
+    // ★ PDF 버튼이 없었다면 새로 보여준다(단어가 이번에 처음 생겼을 수 있으므로)
+    if (!document.querySelector('.ev-btn-row .ev-btn.primary')) {
+      const row = document.querySelector('.ev-btn-row');
+      if (row) {
+        if (!_q('ev-pdf-img-chk')) {
+          row.insertAdjacentHTML('beforebegin', `<label class="ev-img-chk-row">
+            <input type="checkbox" id="ev-pdf-img-chk" checked> 워크시트에 단어별 관련 이미지 포함하기 (무료 이미지 사이트에서 가져옴)
+          </label>`);
+        }
+        row.insertAdjacentHTML('beforeend', `<button class="ev-btn primary" onclick="EduVideoApp._makePdf('${id}')">📄 PDF 워크시트</button>`);
+      }
     }
   }
 
@@ -661,7 +689,7 @@ const EduVideoApp = (() => {
     render, _selectTopic, _promptNewTopic,
     openRecommend, _runRecommend, _addFromRecommend, _loadMoreRecommend,
     openAdd, _closeAdd, _submitAdd,
-    openDetail, _extractWords, openEditScript, _submitEditScript, _confirmDeleteVideo,
+    openDetail, _extractWords, _extractWordsFromVideo, openEditScript, _submitEditScript, _confirmDeleteVideo,
     _makePdf,
   };
 })();
