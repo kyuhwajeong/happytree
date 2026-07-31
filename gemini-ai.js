@@ -222,15 +222,19 @@ const GeminiAI = (() => {
   // ★ 영상 워크시트용 — 유튜브 링크만으로 바로 단어를 추출한다(대본 필요 없음)
   async function extractVocabularyFromYoutubeVideo(youtubeUrl, topic) {
     const prompt = `이 유튜브 영상은 초등학생 대상 영어 교육 영상이다(주제: ${topic || '일반'}).
-영상 속 음성과 화면 내용을 바탕으로, 초등학생이 배우기 좋은 핵심 영단어를 8~15개 골라서
-아래 JSON 배열 형식으로만 출력해줘. 설명이나 다른 텍스트 없이 JSON만 출력할 것.
+영상 속 음성과 화면 내용을 바탕으로 아래 두 가지를 뽑아서, 설명 없이 JSON 하나만 출력해줘.
 
-형식: [{"word":"영단어","meaning":"한글 뜻","example":"영상에 나온 문장 또는 쉬운 예문","pos":"품사(명사/동사/형용사 등 한글로)"}]`;
-    const out = await _callWithYoutube(youtubeUrl, prompt, 2048);
+1. words: 초등학생이 배우기 좋은 핵심 영단어 8~15개
+2. sentences: 영상에서 실제로 말한 핵심 문장 중 학습에 도움되는 것 10~15개(전체 대사가 아니라 통문장 통째로 익히기 좋은 것 위주로 선별)와 그 한글 뜻
+
+형식: {"words":[{"word":"영단어","meaning":"한글 뜻","example":"영상에 나온 문장 또는 쉬운 예문","pos":"품사(명사/동사/형용사 등 한글로)"}],"sentences":[{"en":"영상에 나온 영어 문장 그대로","ko":"한글 뜻"}]}`;
+    const out = await _callWithYoutube(youtubeUrl, prompt, 3072);
     const cleaned = out.replace(/```json|```/g, '').trim();
-    const arr = JSON.parse(cleaned);
-    if (!Array.isArray(arr)) throw new Error('예상치 못한 응답 형식');
-    return arr.filter(w => w && w.word && w.meaning);
+    const parsed = JSON.parse(cleaned);
+    const words = Array.isArray(parsed?.words) ? parsed.words.filter(w => w && w.word && w.meaning) : [];
+    const sentences = Array.isArray(parsed?.sentences) ? parsed.sentences.filter(s => s && s.en && s.ko) : [];
+    if (!words.length && !sentences.length) throw new Error('예상치 못한 응답 형식');
+    return { words, sentences };
   }
 
   /* ══ 프롬프트 빌더 ════════════════════════════════════════ */
