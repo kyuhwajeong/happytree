@@ -23,7 +23,7 @@ const App = (() => {
     { pg:'grade',    ico:'📝', lbl:'성적',  adminOnly:true  },
     { pg:'students', ico:'👨‍🎓', lbl:'학생', adminOnly:true  },
     { pg:'staff',    ico:'👩‍💼', lbl:'직원', adminOnly:true  },
-    { pg:'archive',  ico:'📁', lbl:'콘텐츠', adminOnly:true  },
+    { pg:'archive',  ico:'📁', lbl:'콘텐츠', adminOnly:false },
   ];
   const LS_NAV_ORDER = 'hk10b_nav_order';
 
@@ -269,7 +269,7 @@ const App = (() => {
     if(page==='manage'  &&DB.getRole()==='teacher'){go('operate');return;}
     if(page==='students'&&!DB.isAdmin())  {_showLogin();return;}
     if(page==='staff'   &&!DB.isAdmin())  {_showLogin();return;}
-    if(page==='archive' &&!DB.isAdmin())  {_showLogin();return;}
+    if(page==='archive' &&!DB.canOperate())  {_showLogin();return;}
     // ★ 교재·성적: admin은 항상 허용, 비관리자는 allowedMenus 포함 여부로 판단
     if(page==='booklib'&&!DB.isAdmin()){
       const _am=(DB.getSession()?.allowedMenus)||[];

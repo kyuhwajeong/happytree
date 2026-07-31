@@ -109,6 +109,9 @@ const ArchiveApp = (() => {
 .ar-prev-sheet.fullscreen .ar-prev-table-wrap{max-height:none;height:100%}
 .ar-sheet-title{font-size:15px;font-weight:800;color:var(--tx);margin-bottom:14px}
 .ar-field{margin-bottom:12px}
+.ar-field-row{display:flex;gap:10px}
+.ar-pw-clear-row{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--tx2);margin:-4px 0 12px}
+.ar-pw-clear-row input{width:14px;height:14px}
 .ar-field label{display:block;font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:5px}
 .ar-field input[type=text],.ar-field textarea,.ar-field select{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--bdr);background:var(--surf);color:var(--tx);font-size:13px;font-family:inherit}
 .ar-field textarea{resize:vertical;min-height:60px}
@@ -123,6 +126,7 @@ const ArchiveApp = (() => {
 .ar-prev-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px}
 .ar-prev-name{font-size:14px;font-weight:800;color:var(--tx);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ar-prev-date{font-size:10.5px;color:var(--tx3);margin-bottom:10px}
+.ar-prev-author{font-size:10.5px;color:var(--tx3);padding:0 18px 8px}
 .ar-prev-acts{display:flex;gap:6px;flex-shrink:0}
 .ar-prev-icobtn{width:32px;height:32px;border-radius:9px;border:1px solid var(--bdr);background:var(--card2);cursor:pointer;font-size:14px}
 .ar-conv-wrap{position:relative}
@@ -155,6 +159,11 @@ const ArchiveApp = (() => {
 .ar-prev-none{padding:40px;text-align:center;color:var(--tx3);font-size:13px}
 .ar-desc-view{font-size:12.5px;color:var(--tx2);margin-top:10px;line-height:1.5;white-space:pre-wrap}
 .ar-card-multi{position:absolute;bottom:8px;right:8px;background:var(--a);color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:999px;z-index:1}
+.ar-card-badges{position:absolute;top:8px;left:34px;display:flex;gap:4px;z-index:1}
+.ar-badge{font-size:9px;font-weight:800;padding:2px 6px;border-radius:999px}
+.ar-badge.lock{background:#fff3cd;color:#997404}
+.ar-badge.private{background:#f1f3f5;color:#495057}
+.ar-card-author{display:block;font-size:9.5px;color:var(--tx3);margin-top:3px}
 .ar-lrow-multi{font-size:9.5px;font-weight:700;color:var(--a);background:var(--a10);border-radius:6px;padding:1px 5px;margin-left:4px}
 .ar-file-switch{display:flex;flex-wrap:wrap;gap:6px;padding-bottom:8px;margin-bottom:6px;border-bottom:1px solid var(--bdr)}
 .ar-file-switch-single{margin-bottom:6px}
@@ -264,7 +273,8 @@ const ArchiveApp = (() => {
     _refreshSelectBar();
   }
   function _selectAllVisible() {
-    let items = _curCategory === '전체' ? ArchiveDB.getAll() : ArchiveDB.getByCategory(_curCategory);
+    let items = ArchiveDB.getVisiblePosts();
+    if (_curCategory !== '전체') items = items.filter(f => f.category === _curCategory);
     if (_searchQuery) items = items.filter(f => _matchesSearch(f, _searchQuery));
     items.forEach(f => _selectedIds.add(f.id));
     _refreshGrid();
@@ -296,7 +306,8 @@ const ArchiveApp = (() => {
   }
 
   function _gridHtml() {
-    let items = _curCategory === '전체' ? ArchiveDB.getAll() : ArchiveDB.getByCategory(_curCategory);
+    let items = ArchiveDB.getVisiblePosts();
+    if (_curCategory !== '전체') items = items.filter(f => f.category === _curCategory);
     if (_searchQuery) items = items.filter(f => _matchesSearch(f, _searchQuery));
     if (!items.length) {
       return _searchQuery
@@ -312,12 +323,17 @@ const ArchiveApp = (() => {
           ? `<span class="ar-card-check">${_selectedIds.has(f.id) ? '✅' : '⬜'}</span>`
           : `<button class="ar-card-pin${f.pinned ? ' on' : ''}" onclick="event.stopPropagation();ArchiveApp._togglePin('${f.id}')" title="${f.pinned ? '대시보드에서 빼기' : '대시보드에 썸네일로 표시'}">${f.pinned ? '⭐' : '☆'}</button>`}
         ${n > 1 ? `<span class="ar-card-multi">📎 ${n}</span>` : ''}
+        <div class="ar-card-badges">
+          ${f.password ? `<span class="ar-badge lock" title="비밀번호 보호됨">🔒</span>` : ''}
+          ${f.visibility === 'private' ? `<span class="ar-badge private" title="비공개 (관리자에게만 보임)">🙈 비공개</span>` : ''}
+        </div>
         ${pf.thumbnail ? `<img class="ar-card-thumb" src="${pf.thumbnail}" alt="">`
           : _isImg(pf.ext) ? `<img class="ar-card-thumb" src="${ArchiveDB.getFileUrl(pf.r2Key)}" alt="">`
           : `<div class="ar-card-ico">${_iconFor(pf.ext)}</div>`}
         <div class="ar-card-name">${_esc(f.name)}</div>
         <div class="ar-card-meta"><span>${_fmtSize(_postSize(f))}</span><span>${_fmtDate(f.uploadedAt)}</span></div>
         <span class="ar-card-cat">${_esc(f.category)}</span>
+        ${f.uploadedBy ? `<span class="ar-card-author">✍️ ${_esc(f.uploadedBy)}</span>` : ''}
       </div>`; }).join('')}</div>`;
   }
   // ★ 리스트형 — 한 줄에 더 많은 정보(설명 미리보기 포함)를 보여줘서
@@ -332,11 +348,11 @@ const ArchiveApp = (() => {
             : `<span class="ar-lrow-ico">${_iconFor(pf.ext)}</span>`}
         <div class="ar-lrow-body">
           <div class="ar-lrow-top">
-            <span class="ar-lrow-name">${_esc(f.name)}${n > 1 ? ` <span class="ar-lrow-multi">📎${n}</span>` : ''}</span>
+            <span class="ar-lrow-name">${_esc(f.name)}${n > 1 ? ` <span class="ar-lrow-multi">📎${n}</span>` : ''}${f.password ? ' 🔒' : ''}${f.visibility === 'private' ? ' <span class="ar-badge private">🙈 비공개</span>' : ''}</span>
             <span class="ar-card-cat">${_esc(f.category)}</span>
           </div>
           ${f.description ? `<div class="ar-lrow-desc">${_esc(f.description)}</div>` : ''}
-          <div class="ar-lrow-meta">${_fmtSize(_postSize(f))} · ${_fmtDate(f.uploadedAt)}</div>
+          <div class="ar-lrow-meta">${_fmtSize(_postSize(f))} · ${_fmtDate(f.uploadedAt)}${f.uploadedBy ? ` · ✍️ ${_esc(f.uploadedBy)}` : ''}</div>
         </div>
         ${_selectMode ? '' : `<button class="ar-card-pin${f.pinned ? ' on' : ''}" onclick="event.stopPropagation();ArchiveApp._togglePin('${f.id}')" title="${f.pinned ? '대시보드에서 빼기' : '대시보드에 썸네일로 표시'}">${f.pinned ? '⭐' : '☆'}</button>`}
       </div>`; }).join('')}</div>`;
@@ -424,6 +440,17 @@ const ArchiveApp = (() => {
         <select id="ar-cat-inp">${ArchiveDB.getCategories().map(c => `<option value="${_esc(c)}">${_esc(c)}</option>`).join('')}</select>
       </div>
       <div class="ar-field"><label>설명 (선택)</label><textarea id="ar-desc-inp" placeholder="메모나 설명을 남겨두면 나중에 찾기 편해요"></textarea></div>
+      <div class="ar-field-row">
+        <div class="ar-field" style="flex:1"><label>공개 설정</label>
+          <select id="ar-visibility-inp">
+            <option value="public">🌍 공개 (모두 볼 수 있음)</option>
+            <option value="private">🙈 비공개 (관리자와 나만 볼 수 있음)</option>
+          </select>
+        </div>
+        <div class="ar-field" style="flex:1"><label>비밀번호 (선택)</label>
+          <input type="password" id="ar-password-inp" placeholder="설정 시 나와 관리자만 열람 가능">
+        </div>
+      </div>
       <div id="ar-upload-progress"></div>
       <div class="ar-btn-row">
         <button class="ar-btn ghost" onclick="ArchiveApp._closeUpload()">취소</button>
@@ -582,7 +609,9 @@ const ArchiveApp = (() => {
         name: _q('ar-name-inp')?.value?.trim() || _pickedFiles[0].name,
         category: _q('ar-cat-inp')?.value || '기타',
         description: _q('ar-desc-inp')?.value?.trim() || '',
-        uploadedBy: (typeof DB !== 'undefined' && DB.getSession) ? (DB.getSession()?.name || '') : '',
+        uploadedBy: (typeof DB !== 'undefined' && DB.getSession) ? (DB.getSession()?.username || '') : '',
+        visibility: _q('ar-visibility-inp')?.value || 'public',
+        password: _q('ar-password-inp')?.value || '',
       }, extraPerFile);
       _closeUpload();
       _refreshGrid();
@@ -605,6 +634,44 @@ const ArchiveApp = (() => {
   async function openPreview(id) {
     const post = ArchiveDB.getById(id);
     if (!post || !post.files?.length) return;
+    if (!ArchiveDB.canOpenWithoutPassword(post)) { _openPasswordGate(id); return; }
+    _openPreviewUnlocked(id);
+  }
+  // ★ 비밀번호가 걸린 게시물 — 관리자나 작성자 본인이 아니면 여기를 먼저 통과해야 함
+  function _openPasswordGate(id) {
+    const post = ArchiveDB.getById(id);
+    if (!post) return;
+    const ov = document.createElement('div');
+    ov.className = 'ar-ov'; ov.id = 'ar-pwgate-ov';
+    ov.innerHTML = `<div class="ar-sheet" style="max-width:340px">
+      <div class="ar-sheet-title">🔒 비밀번호로 보호된 자료</div>
+      <div class="ar-field"><label>"${_esc(post.name)}" — 비밀번호를 입력하세요</label>
+        <input type="password" id="ar-pw-input" placeholder="비밀번호" onkeydown="if(event.key==='Enter')ArchiveApp._submitPasswordGate('${id}')">
+      </div>
+      <div id="ar-pw-error" style="color:#ef4444;font-size:11.5px;margin-bottom:8px"></div>
+      <div class="ar-btn-row">
+        <button class="ar-btn ghost" onclick="document.getElementById('ar-pwgate-ov').remove()">취소</button>
+        <button class="ar-btn primary" onclick="ArchiveApp._submitPasswordGate('${id}')">확인</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+    setTimeout(() => _q('ar-pw-input')?.focus(), 50);
+  }
+  function _submitPasswordGate(id) {
+    const post = ArchiveDB.getById(id);
+    const input = _q('ar-pw-input')?.value || '';
+    if (!ArchiveDB.checkPassword(post, input)) {
+      const err = _q('ar-pw-error');
+      if (err) err.textContent = '⚠️ 비밀번호가 일치하지 않습니다';
+      return;
+    }
+    _q('ar-pwgate-ov')?.remove();
+    _openPreviewUnlocked(id);
+  }
+  function _openPreviewUnlocked(id) {
+    const post = ArchiveDB.getById(id);
+    if (!post) return;
     _previewPost = post; _previewFileIdx = 0; _previewSelectedKeys = new Set();
     _xlsxWb = null; _xlsxSheetIdx = 0; _xlsxEditMode = false; _xlsxImages = [];
     const ov = document.createElement('div');
@@ -643,6 +710,7 @@ const ArchiveApp = (() => {
     const post = _previewPost, f = _currentPreviewFile();
     const convOpts = _convertOptionsFor(f.ext);
     const isSheet = _isXlsx(f.ext) || _isCsv(f.ext);
+    const canManage = ArchiveDB.isOwner(post) || (typeof DB !== 'undefined' && DB.isAdmin());
     return `
       <div class="ar-prev-hdr">
         <div class="ar-prev-name">${_iconFor(f.ext)} ${_esc(post.name)}</div>
@@ -655,17 +723,17 @@ const ArchiveApp = (() => {
           </div>` : ''}
           <button class="ar-prev-icobtn" onclick="ArchiveApp._printPreview()" title="인쇄">🖨️</button>
           <button class="ar-prev-icobtn" onclick="ArchiveApp._toggleFullscreen()" title="전체화면">⛶</button>
-          ${isSheet ? (_xlsxEditMode
+          ${isSheet && canManage ? (_xlsxEditMode
             ? `<button class="ar-prev-icobtn" onclick="ArchiveApp._cancelXlsxEdit()" title="편집 취소">↩️</button>
                <button class="ar-prev-icobtn accent" onclick="ArchiveApp._saveXlsxEdit()" title="저장">💾</button>`
             : `<button class="ar-prev-icobtn" onclick="ArchiveApp._startXlsxEdit()" title="셀 내용 편집">📝</button>`) : ''}
-          <button class="ar-prev-icobtn" onclick="ArchiveApp.openEdit('${post.id}')" title="게시물 정보 수정">✏️</button>
-          <button class="ar-prev-icobtn" onclick="ArchiveApp._confirmDelete('${post.id}')" title="삭제">🗑️</button>
+          ${canManage ? `<button class="ar-prev-icobtn" onclick="ArchiveApp.openEdit('${post.id}')" title="게시물 정보 수정">✏️</button>
+          <button class="ar-prev-icobtn" onclick="ArchiveApp._confirmDelete('${post.id}')" title="삭제">🗑️</button>` : ''}
           ${post.files.length > 1 ? `<button class="ar-prev-icobtn" onclick="ArchiveApp._downloadPostZip('${post.id}')" title="첨부파일 전체 ZIP으로 받기">📦</button>` : ''}
           <a class="ar-prev-icobtn" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none" href="${ArchiveDB.getFileUrl(f.r2Key)}" download="${_esc(f.originalName)}" title="이 파일만 다운로드">⬇️</a>
           <button class="ar-prev-icobtn" onclick="document.getElementById('ar-preview-ov').remove()" title="닫기">✕</button>
         </div>
-      </div>
+      </div>${!canManage && post.uploadedBy ? `<div class="ar-prev-author">✍️ 작성자: ${_esc(post.uploadedBy)}</div>` : ''}
       ${isSheet && _xlsxEditMode ? `<div class="ar-xlsx-edit-hint">📝 편집 중 — 셀을 클릭해서 직접 고칠 수 있어요</div>` : ''}`;
   }
   function _refreshPreviewHeader() {
@@ -1174,6 +1242,10 @@ const ArchiveApp = (() => {
   function openEdit(id) {
     const f = ArchiveDB.getById(id);
     if (!f) return;
+    if (!ArchiveDB.isOwner(f) && !(typeof DB !== 'undefined' && DB.isAdmin())) {
+      if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ 본인이 올린 자료만 수정할 수 있습니다');
+      return;
+    }
     ArchiveDB.pauseUpdates(true); // ★ 편집 중엔 서버 갱신이 화면을 덮어쓰지 않도록
     _q('ar-preview-ov')?.remove();
     const ov = document.createElement('div');
@@ -1185,6 +1257,18 @@ const ArchiveApp = (() => {
         <select id="ar-edit-cat">${ArchiveDB.getCategories().map(c => `<option value="${_esc(c)}"${c===f.category?' selected':''}>${_esc(c)}</option>`).join('')}</select>
       </div>
       <div class="ar-field"><label>설명</label><textarea id="ar-edit-desc">${_esc(f.description||'')}</textarea></div>
+      <div class="ar-field-row">
+        <div class="ar-field" style="flex:1"><label>공개 설정</label>
+          <select id="ar-edit-visibility">
+            <option value="public"${f.visibility!=='private'?' selected':''}>🌍 공개</option>
+            <option value="private"${f.visibility==='private'?' selected':''}>🙈 비공개</option>
+          </select>
+        </div>
+        <div class="ar-field" style="flex:1"><label>비밀번호 ${f.password ? '(설정됨 · 비워두면 유지)' : '(선택)'}</label>
+          <input type="password" id="ar-edit-password" placeholder="${f.password ? '변경하려면 새 비밀번호 입력' : '설정 안 함'}">
+        </div>
+      </div>
+      ${f.password ? `<label class="ar-pw-clear-row"><input type="checkbox" id="ar-edit-pw-clear"> 비밀번호 해제하기</label>` : ''}
       <div class="ar-field">
         <label>첨부 파일 (${f.files?.length || 0}개)</label>
         <div id="ar-edit-files">${_editFilesListHtml(id)}</div>
@@ -1245,10 +1329,18 @@ const ArchiveApp = (() => {
   }
   function _closeEdit() { _q('ar-edit-ov')?.remove(); ArchiveDB.pauseUpdates(false); }
   async function _submitEdit(id) {
+    const f = ArchiveDB.getById(id);
+    const pwInput = _q('ar-edit-password')?.value || '';
+    const pwClear = _q('ar-edit-pw-clear')?.checked;
+    let password = f?.password || '';
+    if (pwClear) password = '';
+    else if (pwInput) password = pwInput;
     const result = await ArchiveDB.updateFile(id, {
       name: _q('ar-edit-name')?.value?.trim(),
       category: _q('ar-edit-cat')?.value,
       description: _q('ar-edit-desc')?.value?.trim(),
+      visibility: _q('ar-edit-visibility')?.value || 'public',
+      password,
     });
     _closeEdit();
     _refreshGrid();
@@ -1259,6 +1351,10 @@ const ArchiveApp = (() => {
   function _confirmDelete(id) {
     const f = ArchiveDB.getById(id);
     if (!f) return;
+    if (!ArchiveDB.isOwner(f) && !(typeof DB !== 'undefined' && DB.isAdmin())) {
+      if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ 본인이 올린 자료만 삭제할 수 있습니다');
+      return;
+    }
     const n = f.files?.length || 0;
     const warn = n > 1 ? `이 게시물에 첨부된 파일 ${n}개가 모두 삭제됩니다.` : '이 작업은 되돌릴 수 없습니다.';
     if (!confirm(`"${f.name}"을(를) 삭제할까요?\n${warn}`)) return;

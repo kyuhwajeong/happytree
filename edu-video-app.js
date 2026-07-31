@@ -382,7 +382,7 @@ const EduVideoApp = (() => {
         youtubeUrl: url,
         topic: _q('ev-topic-inp')?.value,
         script: _q('ev-script-inp')?.value,
-        createdBy: (typeof DB !== 'undefined' && DB.getSession) ? (DB.getSession()?.name || '') : '',
+        createdBy: (typeof DB !== 'undefined' && DB.getSession) ? (DB.getSession()?.username || '') : '',
       });
       _closeAdd();
       _refreshGrid();
