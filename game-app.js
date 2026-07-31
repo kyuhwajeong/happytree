@@ -130,6 +130,31 @@ const GameApp = (() => {
 .gm-match-status{font-size:17px;font-weight:900;color:#2b2d42;margin-top:20px;padding:8px 22px;background:#fff;border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.1)}
 @keyframes gmCardIn{from{opacity:0;transform:translateY(14px) scale(.9)}to{opacity:1;transform:translateY(0) scale(1)}}
 
+/* 스펠링 채우기 */
+.gm-spell-score{font-size:16px;font-weight:900;color:#2b2d42;margin-bottom:10px;padding:6px 18px;background:#fff;border-radius:999px;box-shadow:0 3px 10px rgba(0,0,0,.08)}
+.gm-spell-speak-main{display:flex;align-items:center;gap:10px;border:none;border-radius:18px;padding:16px 26px;margin-bottom:14px;cursor:pointer;
+  background:linear-gradient(150deg,#4D96FF,#3b7ddb);color:#fff;font-size:17px;font-weight:800;
+  box-shadow:0 5px 0 rgba(0,0,0,.2),0 8px 20px rgba(77,150,255,.35);transition:transform .1s;animation:gmSpeakPulse 1.6s ease infinite}
+.gm-spell-speak-main span{font-size:15px}
+.gm-spell-speak-main:active{transform:translateY(3px)}
+@keyframes gmSpeakPulse{0%,100%{box-shadow:0 5px 0 rgba(0,0,0,.2),0 8px 20px rgba(77,150,255,.35)}50%{box-shadow:0 5px 0 rgba(0,0,0,.2),0 8px 28px rgba(77,150,255,.6)}}
+.gm-spell-meaning{font-size:16px;font-weight:700;color:#2b2d42;margin-bottom:22px;text-align:center;background:#fff;padding:9px 20px;border-radius:14px;box-shadow:0 3px 10px rgba(0,0,0,.06)}
+.gm-spell-word{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:30px;transition:transform .2s;cursor:pointer;padding:8px;border-radius:14px}
+.gm-spell-word:active{transform:scale(.98)}
+.gm-spell-word.done{animation:gmBounce .5s ease 2}
+.gm-spell-letter{width:44px;height:54px;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:900;color:#2b2d42;border-radius:10px}
+.gm-spell-letter.fixed{background:rgba(255,255,255,.5)}
+.gm-spell-letter.blank{background:#fff;border-bottom:4px solid #ced4da;box-shadow:0 3px 8px rgba(0,0,0,.08)}
+.gm-spell-letter.blank.filled{border-bottom-color:#6BCB77;color:#2f9e44}
+.gm-spell-letter.blank.current{border-bottom-color:#4D96FF;animation:gmSpellPulse 1s ease infinite}
+@keyframes gmSpellPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+.gm-spell-tiles{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;max-width:480px}
+.gm-spell-tile{width:52px;height:52px;border-radius:12px;border:none;font-size:20px;font-weight:900;color:#fff;cursor:pointer;
+  background:linear-gradient(150deg,#4D96FF,#3b7ddb);box-shadow:0 4px 0 rgba(0,0,0,.18),0 6px 12px rgba(0,0,0,.12);transition:transform .1s}
+.gm-spell-tile:active{transform:translateY(2px)}
+.gm-spell-tile.used{opacity:.25;pointer-events:none}
+.gm-spell-tile.wrong{animation:gmShake .35s;background:linear-gradient(150deg,#FF6B6B,#e03131)}
+
 /* 스피드 퀴즈 */
 .gm-quiz-timerbar{width:100%;max-width:500px;height:12px;background:#fff;border-radius:8px;overflow:hidden;margin-bottom:22px;box-shadow:inset 0 2px 4px rgba(0,0,0,.12)}
 .gm-quiz-timerfill{height:100%;background:linear-gradient(90deg,#6BCB77,#FFD93D,#FF6B6B);transition:width .1s linear;border-radius:8px}
@@ -153,9 +178,18 @@ const GameApp = (() => {
 .gm-quiz-end-emoji{font-size:64px;margin-bottom:10px;animation:gmBounce .6s ease infinite alternate}
 @keyframes gmBounce{from{transform:translateY(0)}to{transform:translateY(-14px)}}
 .gm-quiz-end-score{font-size:24px;font-weight:900;color:#2b2d42;margin-bottom:22px}
-.gm-replay-btn{padding:14px 30px;border:none;border-radius:14px;background:linear-gradient(150deg,#6badff,#845EF7);color:#fff;font-weight:800;cursor:pointer;font-size:15px;
-  box-shadow:0 5px 0 rgba(0,0,0,.2),0 8px 18px rgba(0,0,0,.18);transition:transform .1s}
+.gm-replay-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.gm-replay-btn{padding:14px 26px;border:none;border-radius:14px;background:linear-gradient(150deg,#6badff,#845EF7);color:#fff;font-weight:800;cursor:pointer;font-size:14.5px;
+  box-shadow:0 5px 0 rgba(0,0,0,.2),0 8px 18px rgba(0,0,0,.18);transition:transform .1s;white-space:nowrap}
 .gm-replay-btn:active{transform:translateY(3px)}
+.gm-replay-btn.wrong-only{background:linear-gradient(150deg,#FF922B,#FF6B6B)}
+.gm-review{width:100%;max-width:440px;margin:30px auto 0;background:#fff;border-radius:18px;padding:16px;box-shadow:0 6px 20px rgba(0,0,0,.08)}
+.gm-review-title{font-size:14px;font-weight:900;color:#2b2d42;margin-bottom:10px}
+.gm-review-item{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid #f1f3f5}
+.gm-review-item:last-child{border-bottom:none}
+.gm-review-word{font-weight:800;color:#2b2d42;font-size:14.5px;min-width:90px}
+.gm-review-meaning{flex:1;color:#495057;font-size:13.5px}
+.gm-review-speak{width:30px;height:30px;border-radius:50%;border:none;background:#f1f3f5;font-size:13px;cursor:pointer;flex-shrink:0}
 
 /* 색종이 효과 (정답 시) */
 .gm-confetti{position:fixed;width:9px;height:9px;border-radius:2px;pointer-events:none;z-index:400;
@@ -169,7 +203,7 @@ const GameApp = (() => {
 
   /* ═══════════════ 설정 화면 ═══════════════ */
   let _mountId = 'page-games';
-  let _srcMode = 'video'; // 'video' | 'paste'
+  let _srcMode = 'video'; // 'video' | 'paste' | 'words'
   let _gameType = 'match';
   let _extracted = null; // paste 모드에서 추출한 결과
 
@@ -185,10 +219,11 @@ const GameApp = (() => {
         <div class="gm-setup-card">
           <div class="gm-setup-title">🎮 학습 게임 만들기</div>
           <div class="gm-source-tabs">
-            <button class="gm-source-tab${_srcMode==='video'?' on':''}" onclick="GameApp._selectSource('video')">🎬 영상 워크시트에서</button>
-            <button class="gm-source-tab${_srcMode==='paste'?' on':''}" onclick="GameApp._selectSource('paste')">📝 텍스트 붙여넣기</button>
+            <button class="gm-source-tab${_srcMode==='video'?' on':''}" onclick="GameApp._selectSource('video')">🎬 영상에서</button>
+            <button class="gm-source-tab${_srcMode==='paste'?' on':''}" onclick="GameApp._selectSource('paste')">📝 지문 붙여넣기</button>
+            <button class="gm-source-tab${_srcMode==='words'?' on':''}" onclick="GameApp._selectSource('words')">🔤 단어만 입력</button>
           </div>
-          ${_srcMode === 'video' ? _videoSourceHtml() : _pasteSourceHtml()}
+          ${_srcMode === 'video' ? _videoSourceHtml() : _srcMode === 'paste' ? _pasteSourceHtml() : _wordsSourceHtml()}
           <div class="gm-field"><label>게임 종류</label>
             <div class="gm-type-grid">
               <div class="gm-type-card${_gameType==='match'?' on':''}" onclick="GameApp._selectType('match')">
@@ -196,6 +231,9 @@ const GameApp = (() => {
               </div>
               <div class="gm-type-card${_gameType==='quiz'?' on':''}" onclick="GameApp._selectType('quiz')">
                 <div class="gm-type-ico">⚡</div><div class="gm-type-lbl">스피드 퀴즈</div>
+              </div>
+              <div class="gm-type-card${_gameType==='spell'?' on':''}" onclick="GameApp._selectType('spell')" style="grid-column:1/3">
+                <div class="gm-type-ico">🔤</div><div class="gm-type-lbl">스펠링 채우기</div>
               </div>
             </div>
           </div>
@@ -219,6 +257,11 @@ const GameApp = (() => {
       <textarea id="gm-paste-text" placeholder="여기에 영어 텍스트를 붙여넣으면, AI가 단어를 뽑아서 게임을 만들어드려요"></textarea>
     </div>`;
   }
+  function _wordsSourceHtml() {
+    return `<div class="gm-field"><label>영단어를 콤마나 줄바꿈으로 구분해서 입력하세요</label>
+      <textarea id="gm-words-text" placeholder="예: apple, banana, orange, grape&#10;(AI가 각 단어의 뜻·예문을 자동으로 만들어드려요)"></textarea>
+    </div>`;
+  }
   function _selectSource(mode) { _srcMode = mode; render(_mountId); }
   function _selectType(type) { _gameType = type; render(_mountId); }
 
@@ -236,13 +279,33 @@ const GameApp = (() => {
       return;
     }
     // paste 모드 — AI로 단어 추출(영상 워크시트와 동일 파이프라인 재사용)
-    const text = _q('gm-paste-text')?.value?.trim();
-    if (!text) { if (prog) prog.innerHTML = `<div class="gm-progress" style="color:#ef4444">⚠️ 텍스트를 붙여넣어 주세요</div>`; btn.disabled = false; return; }
-    if (typeof GeminiAI === 'undefined' || !GeminiAI.extractVocabulary) { if (prog) prog.innerHTML = `<div class="gm-progress" style="color:#ef4444">⚠️ AI 기능을 불러오지 못했습니다</div>`; btn.disabled = false; return; }
-    if (prog) prog.innerHTML = `<div class="gm-progress">🤖 AI가 단어를 뽑는 중...</div>`;
+    if (_srcMode === 'paste') {
+      const text = _q('gm-paste-text')?.value?.trim();
+      if (!text) { if (prog) prog.innerHTML = `<div class="gm-progress" style="color:#ef4444">⚠️ 텍스트를 붙여넣어 주세요</div>`; btn.disabled = false; return; }
+      if (typeof GeminiAI === 'undefined' || !GeminiAI.extractVocabulary) { if (prog) prog.innerHTML = `<div class="gm-progress" style="color:#ef4444">⚠️ AI 기능을 불러오지 못했습니다</div>`; btn.disabled = false; return; }
+      if (prog) prog.innerHTML = `<div class="gm-progress">🤖 AI가 단어를 뽑는 중...</div>`;
+      try {
+        const words = await GeminiAI.extractVocabulary(text, '일반');
+        if (!words.length) { if (prog) prog.innerHTML = `<div class="gm-progress" style="color:#ef4444">⚠️ 단어를 찾지 못했습니다</div>`; btn.disabled = false; return; }
+        _words = words; _sourceTitle = '학습 게임';
+        if (prog) prog.innerHTML = '';
+        _openPlay();
+      } catch (e) {
+        if (prog) prog.innerHTML = `<div class="gm-progress" style="color:#ef4444">⚠️ ${_esc(e.message || '알 수 없는 오류')}</div>`;
+      }
+      btn.disabled = false;
+      return;
+    }
+    // words 모드 — 사용자가 입력한 단어 목록에 AI가 뜻·품사·예문만 붙여준다
+    const raw = _q('gm-words-text')?.value?.trim();
+    if (!raw) { if (prog) prog.innerHTML = `<div class="gm-progress" style="color:#ef4444">⚠️ 단어를 입력해 주세요</div>`; btn.disabled = false; return; }
+    const wordList = raw.split(/[,\n]/).map(w => w.trim()).filter(Boolean);
+    if (!wordList.length) { if (prog) prog.innerHTML = `<div class="gm-progress" style="color:#ef4444">⚠️ 단어를 찾지 못했습니다</div>`; btn.disabled = false; return; }
+    if (typeof GeminiAI === 'undefined' || !GeminiAI.generateWordMeanings) { if (prog) prog.innerHTML = `<div class="gm-progress" style="color:#ef4444">⚠️ AI 기능을 불러오지 못했습니다</div>`; btn.disabled = false; return; }
+    if (prog) prog.innerHTML = `<div class="gm-progress">🤖 AI가 단어 뜻을 만드는 중...</div>`;
     try {
-      const words = await GeminiAI.extractVocabulary(text, '일반');
-      if (!words.length) { if (prog) prog.innerHTML = `<div class="gm-progress" style="color:#ef4444">⚠️ 단어를 찾지 못했습니다</div>`; btn.disabled = false; return; }
+      const words = await GeminiAI.generateWordMeanings(wordList);
+      if (!words.length) { if (prog) prog.innerHTML = `<div class="gm-progress" style="color:#ef4444">⚠️ 뜻을 만들지 못했습니다</div>`; btn.disabled = false; return; }
       _words = words; _sourceTitle = '학습 게임';
       if (prog) prog.innerHTML = '';
       _openPlay();
@@ -253,8 +316,8 @@ const GameApp = (() => {
   }
 
   /* ═══════════════ 게임 화면(전체화면 — 빔프로젝터용) ═══════════════ */
-  function _pickWords(max) {
-    const arr = _words.slice();
+  function _pickWords(max, poolOverride) {
+    const arr = (poolOverride && poolOverride.length ? poolOverride : _words).slice();
     for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
     return arr.slice(0, Math.min(max, arr.length));
   }
@@ -263,6 +326,7 @@ const GameApp = (() => {
     wrap.className = 'gm-play'; wrap.id = 'gm-play';
     document.body.appendChild(wrap);
     if (_gameType === 'match') _renderMatchGame(wrap);
+    else if (_gameType === 'spell') _renderSpellGame(wrap);
     else _renderQuizGame(wrap);
   }
   function _closePlay() { _q('gm-play')?.remove(); }
@@ -387,12 +451,124 @@ const GameApp = (() => {
     pdf.save(`${_sourceTitle.replace(/[^\w가-힣 ]/g, '')}_짝맞추기.pdf`);
   }
 
+  /* ── 스펠링 채우기 게임 ── */
+  let _spellQ = [], _spellIdx = 0, _spellBlanks = [], _spellFilled = [], _spellTiles = [], _spellScore = 0;
+  const ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  function _renderSpellGame(wrap) {
+    _spellQ = _pickWords(8);
+    _spellIdx = 0; _spellScore = 0;
+    _renderSpellWord(wrap);
+  }
+  // ★ 단어 길이에 맞춰 30~45% 정도를 무작위로 빈칸 처리(너무 쉽거나 너무 어렵지 않게)
+  function _makeBlanks(word) {
+    const len = word.length;
+    const n = Math.max(1, Math.min(len - 1, Math.round(len * 0.4)));
+    const positions = Array.from({ length: len }, (_, i) => i).sort(() => Math.random() - 0.5).slice(0, n).sort((a, b) => a - b);
+    return positions;
+  }
+  function _renderSpellWord(wrap) {
+    if (_spellIdx >= _spellQ.length) { _renderSpellEnd(wrap); return; }
+    const q = _spellQ[_spellIdx];
+    const word = q.word.toUpperCase();
+    _spellBlanks = _makeBlanks(word);
+    _spellFilled = _spellBlanks.map(() => null); // ★ 각 빈칸에 채워진 글자(맞았을 때만 채움)
+    // ★ 타일 = 정답 글자들 + 오답 글자 2~3개(정답만 있으면 그냥 순서대로 눌러 풀 수 있어 의미가 없음)
+    const correctLetters = _spellBlanks.map(i => word[i]);
+    const decoyPool = ALPHA.split('').filter(c => !correctLetters.includes(c));
+    const decoys = decoyPool.sort(() => Math.random() - 0.5).slice(0, Math.min(3, decoyPool.length));
+    _spellTiles = [...correctLetters, ...decoys].sort(() => Math.random() - 0.5);
+    wrap.innerHTML = `
+      ${_playHeaderHtml('스펠링 채우기', 'GameApp._printSpell()')}
+      <div class="gm-play-body">
+        <div class="gm-spell-score">${_spellIdx + 1} / ${_spellQ.length}번째 단어 · 맞은 개수 ${_spellScore}</div>
+        <button class="gm-spell-speak-main" id="gm-spell-speak-main" onclick="GameApp._speakWord('${q.word.replace(/'/g, "\\'")}')" title="다시 듣기">
+          🔊 <span>소리 듣고 맞혀보세요</span>
+        </button>
+        <div class="gm-spell-meaning">💡 뜻: ${_esc(q.meaning)}</div>
+        <div class="gm-spell-word" id="gm-spell-word" onclick="GameApp._speakWord('${q.word.replace(/'/g, "\\'")}')" title="눌러서 다시 듣기">${_spellLettersHtml(word)}</div>
+        <div class="gm-spell-tiles" id="gm-spell-tiles">${_spellTiles.map((c, i) => `
+          <button class="gm-spell-tile" data-letter="${c}" onclick="GameApp._spellTileClick(this)">${c}</button>`).join('')}</div>
+      </div>`;
+    setTimeout(() => _speak(q.word), 250); // ★ 화면이 뜨자마자 자동으로 한 번 들려줌 — 소리가 핵심 단서이므로 클릭 없이 바로 시작
+  }
+  function _spellLettersHtml(word) {
+    return word.split('').map((ch, i) => {
+      const blankIdx = _spellBlanks.indexOf(i);
+      if (blankIdx === -1) return `<span class="gm-spell-letter fixed">${ch}</span>`;
+      const filled = _spellFilled[blankIdx];
+      return `<span class="gm-spell-letter blank${filled ? ' filled' : ''}${_spellCurrentBlank() === blankIdx ? ' current' : ''}">${filled || ''}</span>`;
+    }).join('');
+  }
+  function _spellCurrentBlank() { return _spellFilled.findIndex(f => f === null); }
+  function _spellTileClick(btn) {
+    if (btn.disabled) return;
+    const cur = _spellCurrentBlank();
+    if (cur === -1) return;
+    const word = _spellQ[_spellIdx].word.toUpperCase();
+    const correctLetter = word[_spellBlanks[cur]];
+    if (btn.dataset.letter === correctLetter) {
+      _spellFilled[cur] = correctLetter;
+      btn.disabled = true; btn.classList.add('used');
+      _sndTick();
+      const wordEl = _q('gm-spell-word');
+      if (wordEl) wordEl.innerHTML = _spellLettersHtml(word);
+      if (_spellCurrentBlank() === -1) _spellWordComplete(); // ★ 모든 빈칸이 채워짐 = 이 단어 완료
+    } else {
+      btn.classList.add('wrong'); _sndWrong();
+      setTimeout(() => btn.classList.remove('wrong'), 350);
+    }
+  }
+  function _spellWordComplete() {
+    _spellScore++;
+    _sndCorrect();
+    const wordEl = _q('gm-spell-word');
+    if (wordEl) { _burstConfetti(wordEl); wordEl.classList.add('done'); }
+    _speak(_spellQ[_spellIdx].word);
+    document.querySelectorAll('#gm-spell-tiles button').forEach(b => b.disabled = true);
+    setTimeout(() => { _spellIdx++; _renderSpellWord(_q('gm-play')); }, 1400);
+  }
+  function _renderSpellEnd(wrap) {
+    const emoji = _spellScore === _spellQ.length ? '🏆' : _spellScore >= _spellQ.length * 0.6 ? '🎉' : '💪';
+    _sndComplete();
+    wrap.innerHTML = `
+      ${_playHeaderHtml('스펠링 채우기', 'GameApp._printSpell()')}
+      <div class="gm-play-body">
+        <div class="gm-quiz-end">
+          <div class="gm-quiz-end-emoji">${emoji}</div>
+          <div class="gm-quiz-end-score">${_spellQ.length}개 중 ${_spellScore}개 완성했어요!</div>
+          <div class="gm-replay-row"><button class="gm-replay-btn" onclick="GameApp._reshuffleSpell()">🔁 다시 하기</button></div>
+        </div>
+      </div>`;
+  }
+  function _reshuffleSpell() { const wrap = _q('gm-play'); if (wrap) _renderSpellGame(wrap); }
+  function _printSpell() {
+    if (typeof window.jspdf === 'undefined') { alert('PDF 라이브러리를 불러오지 못했습니다'); return; }
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
+    _applyKoreanFont(pdf);
+    const margin = 40; let y = margin;
+    pdf.setFontSize(16); pdf.text(`${_sourceTitle} — 스펠링 채우기`, margin, y); y += 24;
+    pdf.setFontSize(10); pdf.setTextColor(120); pdf.text('뜻을 보고 빈칸에 알맞은 철자를 써넣으세요.', margin, y); y += 26; pdf.setTextColor(0);
+    pdf.setFontSize(13);
+    _spellQ.forEach((q, i) => {
+      if (y > 740) { pdf.addPage(); y = margin; }
+      const word = q.word.toUpperCase();
+      const blanks = _makeBlanks(word); // ★ 인쇄본은 화면과 별개로 새로 빈칸 위치를 뽑음(매번 다른 문제지)
+      const display = word.split('').map((ch, idx) => blanks.includes(idx) ? '_' : ch).join(' ');
+      pdf.text(`${i + 1}. ${display}`, margin, y); y += 16;
+      pdf.setFontSize(10.5); pdf.setTextColor(120);
+      pdf.text(`(뜻: ${q.meaning})`, margin + 14, y); y += 24;
+      pdf.setFontSize(13); pdf.setTextColor(0);
+    });
+    pdf.save(`${_sourceTitle.replace(/[^\w가-힣 ]/g, '')}_스펠링.pdf`);
+  }
+
   /* ── 스피드 퀴즈 게임 ── */
-  let _quizQ = [], _quizIdx = 0, _quizScore = 0, _quizTimer = null;
+  let _quizQ = [], _quizIdx = 0, _quizScore = 0, _quizTimer = null, _quizWrong = [];
   const QUIZ_SEC = 15;
-  function _renderQuizGame(wrap) {
-    _quizQ = _pickWords(10);
-    _quizIdx = 0; _quizScore = 0;
+  function _renderQuizGame(wrap, poolOverride) {
+    _quizQ = _pickWords(10, poolOverride);
+    _quizIdx = 0; _quizScore = 0; _quizWrong = [];
     _renderQuizQuestion(wrap);
   }
   function _renderQuizQuestion(wrap) {
@@ -426,7 +602,7 @@ const GameApp = (() => {
     _quizTimer = setInterval(() => {
       timeLeft--;
       if (fill) fill.style.width = `${(timeLeft / (QUIZ_SEC * 10)) * 100}%`;
-      if (timeLeft <= 0) { clearInterval(_quizTimer); _quizNext(wrap); }
+      if (timeLeft <= 0) { clearInterval(_quizTimer); _quizWrong.push(q); _sndWrong(); _quizNext(wrap); }
     }, 100);
   }
   function _speakCurrent() {
@@ -437,7 +613,7 @@ const GameApp = (() => {
     clearInterval(_quizTimer);
     document.querySelectorAll('#gm-quiz-choices button').forEach(b => b.onclick = null);
     if (isCorrect) { btn.classList.add('correct'); _quizScore++; _sndCorrect(); _burstConfetti(btn); }
-    else { btn.classList.add('wrong'); _sndWrong(); }
+    else { btn.classList.add('wrong'); _sndWrong(); _quizWrong.push(_quizQ[_quizIdx]); }
     setTimeout(() => _quizNext(_q('gm-play')), 700);
   }
   function _quizNext(wrap) { _quizIdx++; _renderQuizQuestion(wrap); }
@@ -445,17 +621,42 @@ const GameApp = (() => {
     const pct = Math.round((_quizScore / _quizQ.length) * 100);
     const emoji = pct >= 80 ? '🏆' : pct >= 50 ? '🎉' : '💪';
     _sndComplete();
+    // ★ 같은 단어가 우연히 중복될 수 있어(같은 라운드에 두 번 나온 경우 등) 이름 기준으로 정리
+    const wrongUnique = [];
+    const seen = new Set();
+    _quizWrong.forEach(w => { if (!seen.has(w.word)) { seen.add(w.word); wrongUnique.push(w); } });
     wrap.innerHTML = `
       ${_playHeaderHtml('스피드 퀴즈', 'GameApp._printQuiz()')}
       <div class="gm-play-body">
         <div class="gm-quiz-end">
           <div class="gm-quiz-end-emoji">${emoji}</div>
           <div class="gm-quiz-end-score">${_quizQ.length}문제 중 ${_quizScore}개 맞혔어요!</div>
-          <button class="gm-replay-btn" onclick="GameApp._replayQuiz()">🔁 다시 하기</button>
+          <div class="gm-replay-row">
+            <button class="gm-replay-btn" onclick="GameApp._replayQuiz()">🔁 처음부터 다시</button>
+            ${wrongUnique.length ? `<button class="gm-replay-btn wrong-only" onclick="GameApp._retryWrongOnly()">🎯 틀린 ${wrongUnique.length}개만 다시</button>` : ''}
+          </div>
         </div>
+        ${wrongUnique.length ? `<div class="gm-review">
+          <div class="gm-review-title">📖 틀린 단어 복습</div>
+          ${wrongUnique.map(w => `
+            <div class="gm-review-item">
+              <span class="gm-review-word">${_esc(w.word)}</span>
+              <span class="gm-review-meaning">${_esc(w.meaning)}</span>
+              <button class="gm-review-speak" onclick="GameApp._speakWord('${_esc(w.word).replace(/'/g, "\\'")}')">🔊</button>
+            </div>`).join('')}
+        </div>` : ''}
       </div>`;
   }
   function _replayQuiz() { const wrap = _q('gm-play'); if (wrap) _renderQuizGame(wrap); }
+  function _retryWrongOnly() {
+    const wrap = _q('gm-play');
+    if (!wrap) return;
+    const seen = new Set();
+    const pool = _quizWrong.filter(w => { if (seen.has(w.word)) return false; seen.add(w.word); return true; });
+    if (!pool.length) return;
+    _renderQuizGame(wrap, pool);
+  }
+  function _speakWord(w) { _speak(w); }
   function _printQuiz() {
     if (typeof window.jspdf === 'undefined') { alert('PDF 라이브러리를 불러오지 못했습니다'); return; }
     const { jsPDF } = window.jspdf;
@@ -484,7 +685,8 @@ const GameApp = (() => {
     init: async () => {}, // ★ 별도 초기화 데이터 없음(그때그때 만들어 쓰는 구조)
     render, _selectSource, _selectType, _startGame,
     _matchClick, _printMatch, _reshuffleMatch,
-    _quizAnswer, _replayQuiz, _printQuiz, _speakCurrent,
+    _spellTileClick, _reshuffleSpell, _printSpell,
+    _quizAnswer, _replayQuiz, _printQuiz, _speakCurrent, _retryWrongOnly, _speakWord,
     _toggleFs, _closePlay,
   };
 })();
