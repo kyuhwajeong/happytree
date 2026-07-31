@@ -135,8 +135,7 @@ const DashboardApp = (() => {
   function _quoteBannerHtml() {
     const initial = _getCachedLiveQuote() || _localFallbackQuote();
     return `<div class="db-quote-inline" id="db-quote-banner"
-        data-quote-author="${_esc(initial.a)}" data-quote-text="${_esc(initial.q)}"
-        onclick="DashboardApp._openQuoteSearch()" title="눌러서 더 알아보기">
+        data-quote-author="${_esc(initial.a)}" data-quote-text="${_esc(initial.q)}">
       <div class="db-quote-kr"><span class="db-quote-text">${_esc(initial.q)}</span><span class="db-quote-author"> — ${_esc(initial.a)}</span></div>
       <div class="db-quote-en" style="${initial.en ? '' : 'display:none'}">${_esc(initial.en || '')}</div>
     </div>`;
@@ -164,11 +163,6 @@ const DashboardApp = (() => {
       _renderQuoteInto(await _ensureEnglish(item));
     });
   }
-  function _openQuoteSearch() {
-    const el = _q('db-quote-banner');
-    const q = encodeURIComponent(`${el?.dataset.quoteAuthor || ''} ${el?.dataset.quoteText || ''}`.trim());
-    window.open(`https://www.google.com/search?q=${q}`, '_blank', 'noopener');
-  }
 
   function _esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function _q(id) { return document.getElementById(id); }
@@ -188,7 +182,7 @@ const DashboardApp = (() => {
 .db-ar-thumb img{width:84px;height:84px;object-fit:cover;border-radius:12px;border:1px solid var(--bdr);display:block}
 .db-ar-thumb-ico{width:84px;height:84px;border-radius:12px;border:1px solid var(--bdr);background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:32px}
 .db-ar-thumb-name{font-size:10.5px;font-weight:600;color:var(--tx2);margin-top:5px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.db-quote-inline{flex:1 1 auto;min-width:80px;margin:0 10px;cursor:pointer;transition:opacity .15s;text-align:right}
+.db-quote-inline{flex:1 1 auto;min-width:80px;margin:0 10px;text-align:right}
 .db-quote-inline.loading{opacity:.4}
 .db-quote-kr{white-space:normal;line-height:1.4}
 .db-quote-kr::before{content:'"';font-family:Georgia,serif;color:var(--tx3);opacity:.6;margin-right:2px}
@@ -623,5 +617,5 @@ const DashboardApp = (() => {
     if (typeof BooklibApp !== 'undefined' && BooklibApp.goToMatrix) BooklibApp.goToMatrix(clsId, bkId);
   }
 
-  return { init, render, goMatrix, goArchivePreview, _refreshBadges, openReorder, _saveReorder, _selectBookDay, _requestBulkUpdate, _todayUpdateTargets, _refreshQuote, _openQuoteSearch };
+  return { init, render, goMatrix, goArchivePreview, _refreshBadges, openReorder, _saveReorder, _selectBookDay, _requestBulkUpdate, _todayUpdateTargets, _refreshQuote };
 })();
