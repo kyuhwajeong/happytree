@@ -65,6 +65,11 @@ const EduVideoApp = (() => {
 .ev-detail-title{font-size:15px;font-weight:800;color:var(--tx);margin-bottom:12px}
 .ev-script-box{background:var(--surf2);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--tx2);line-height:1.6;max-height:140px;overflow-y:auto;white-space:pre-wrap;margin-bottom:12px}
 .ev-word-list{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.ev-sent-title{font-size:13px;font-weight:800;color:var(--tx);margin:4px 0 8px}
+.ev-sent-list{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.ev-sent-item{background:var(--surf2);border-radius:10px;padding:10px 12px}
+.ev-sent-en{font-size:12.5px;font-weight:700;color:var(--tx);line-height:1.5}
+.ev-sent-ko{font-size:11.5px;color:var(--tx2);margin-top:4px;line-height:1.5}
 .ev-img-chk-row{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--tx2);margin-bottom:10px;cursor:pointer}
 .ev-img-chk-row input{width:15px;height:15px;flex-shrink:0;cursor:pointer}
 .ev-word-item{display:flex;align-items:baseline;gap:8px;background:var(--surf2);border-radius:9px;padding:8px 10px}
@@ -409,6 +414,7 @@ const EduVideoApp = (() => {
       <div class="ev-detail-title">${_esc(v.title)}</div>
       ${v.script ? `<div class="ev-field"><label>대본</label><div class="ev-script-box">${_esc(v.script)}</div></div>` : `<div class="ev-progress" style="color:var(--tx3)">대본이 없어서 단어 추출·PDF 생성은 이용할 수 없어요. 수정에서 대본을 추가해보세요.</div>`}
       <div id="ev-words-area">${_wordsAreaHtml(v)}</div>
+      <div id="ev-sentences-area">${_sentencesAreaHtml(v)}</div>
       ${v.words?.length ? `<label class="ev-img-chk-row">
         <input type="checkbox" id="ev-pdf-img-chk" checked> 워크시트에 단어별 관련 이미지 포함하기 (무료 이미지 사이트에서 가져옴)
       </label>` : ''}
@@ -432,6 +438,15 @@ const EduVideoApp = (() => {
         <span class="ev-word-kr">${_esc(w.meaning)}</span>
       </div>`).join('')}</div>`;
   }
+  function _sentencesAreaHtml(v) {
+    if (!v.sentences?.length) return '';
+    return `<div class="ev-sent-title">📝 핵심 문장</div>
+      <div class="ev-sent-list">${v.sentences.map(s => `
+      <div class="ev-sent-item">
+        <div class="ev-sent-en">${_esc(s.en)}</div>
+        <div class="ev-sent-ko">${_esc(s.ko)}</div>
+      </div>`).join('')}</div>`;
+  }
 
   async function _extractWords(id) {
     const v = EduVideoDB.getById(id);
@@ -444,7 +459,7 @@ const EduVideoApp = (() => {
     if (prog) prog.innerHTML = `<div class="ev-progress">🤖 AI가 대본에서 단어를 뽑고 있어요...</div>`;
     try {
       const words = await GeminiAI.extractVocabulary(v.script, v.topic);
-      await _onWordsExtracted(id, words, prog);
+      await _onWordsExtracted(id, words, [], prog);
       if (btn) btn.remove();
     } catch (e) {
       if (btn) { btn.disabled = false; btn.textContent = '🤖 대본에서 단어 추출'; }
@@ -465,8 +480,8 @@ const EduVideoApp = (() => {
     if (btn) { btn.disabled = true; btn.textContent = '⏳ 영상 분석 중... (시간이 조금 걸려요)'; }
     if (prog) prog.innerHTML = `<div class="ev-progress">🎬 AI가 영상을 직접 보고 듣는 중이에요...</div>`;
     try {
-      const words = await GeminiAI.extractVocabularyFromYoutubeVideo(v.youtubeUrl, v.topic);
-      await _onWordsExtracted(id, words, prog);
+      const { words, sentences } = await GeminiAI.extractVocabularyFromYoutubeVideo(v.youtubeUrl, v.topic);
+      await _onWordsExtracted(id, words, sentences, prog);
       if (btn) btn.remove();
       _q('ev-extract-btn')?.remove(); // ★ 이미 단어를 얻었으니 대본 기반 버튼도 정리
     } catch (e) {
@@ -474,12 +489,15 @@ const EduVideoApp = (() => {
       if (prog) prog.innerHTML = `<div class="ev-progress" style="color:#ef4444">⚠️ 추출 실패: ${_esc(e.message || '알 수 없는 오류')}</div>`;
     }
   }
-  // ★ 두 추출 방식(대본/영상) 공통 — 결과를 저장하고 화면(단어 목록 · PDF 버튼)을 갱신
-  async function _onWordsExtracted(id, words, prog) {
-    const result = await EduVideoDB.updateVideo(id, { words });
+  // ★ 두 추출 방식(대본/영상) 공통 — 결과를 저장하고 화면(단어·문장 목록 · PDF 버튼)을 갱신
+  async function _onWordsExtracted(id, words, sentences, prog) {
+    const result = await EduVideoDB.updateVideo(id, { words, sentences: sentences || [] });
     const area = _q('ev-words-area');
     if (area) area.innerHTML = _wordsAreaHtml(result);
-    if (prog) prog.innerHTML = `<div class="ev-progress">✅ ${words.length}개 단어 추출 완료</div>`;
+    const sentArea = _q('ev-sentences-area');
+    if (sentArea) sentArea.innerHTML = _sentencesAreaHtml(result);
+    const sentMsg = sentences?.length ? ` · 문장 ${sentences.length}개` : '';
+    if (prog) prog.innerHTML = `<div class="ev-progress">✅ ${words.length}개 단어 추출 완료${sentMsg}</div>`;
     // ★ PDF 버튼이 없었다면 새로 보여준다(단어가 이번에 처음 생겼을 수 있으므로)
     if (!document.querySelector('.ev-btn-row .ev-btn.primary')) {
       const row = document.querySelector('.ev-btn-row');
@@ -678,6 +696,22 @@ const EduVideoApp = (() => {
       pdf.text(`${i + 1}. ${w.word}`, margin, y + i * 22);
       pdf.text(`${String.fromCharCode(97 + i)}. ${shuffledMeanings[i].meaning}`, margin + 260, y + i * 22);
     });
+
+    // ★ 핵심 문장 페이지 (있는 경우만)
+    if (v.sentences?.length) {
+      pdf.addPage(); y = margin;
+      pdf.setFontSize(15); pdf.text('📝 핵심 문장', margin, y); y += 24;
+      pdf.setFontSize(11);
+      v.sentences.forEach((s, i) => {
+        if (y > 760) { pdf.addPage(); y = margin; }
+        const enLines = pdf.splitTextToSize(`${i + 1}. ${s.en}`, pageW - margin * 2);
+        pdf.text(enLines, margin, y); y += enLines.length * 16 + 4;
+        pdf.setTextColor(120);
+        const koLines = pdf.splitTextToSize(s.ko, pageW - margin * 2 - 14);
+        pdf.text(koLines, margin + 14, y); y += koLines.length * 15 + 14;
+        pdf.setTextColor(0);
+      });
+    }
 
     pdf.save(`${v.title.replace(/[^\w가-힣 ]/g, '')}_워크시트.pdf`);
     const noImgReason = !wantsImages ? ' (이미지 미포함 선택)' : !hasUnsplash ? ' (이미지 API 미설정 — 이미지 없이 생성됨)' : '';
