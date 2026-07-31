@@ -514,6 +514,7 @@ const FireDB = (() => {
     if (window.__appReloading) { console.log('[FireDB] ⏸ 이미 다른 경로에서 새로고침 진행 중 — 중복 실행 방지'); return; }
     window.__appReloading = true;
     try { sessionStorage.setItem(RELOAD_COOLDOWN_KEY, String(Date.now())); } catch {}
+    try { sessionStorage.setItem('hk10b_wasAutoReload', '1'); } catch {} // ★ 재시작 후 "왜 새로고침됐는지" 알려주기 위한 표시
     console.log(`[FireDB] 🔄 ${force ? '사용자 요청' : '장시간 재연결 실패'} — 데이터 보존 신호 전송 후 새로고침`);
     try { window.dispatchEvent(new Event('fb:force-flush-before-reload')); } catch {}
     setTimeout(() => { try { location.reload(); } catch {} }, 500);

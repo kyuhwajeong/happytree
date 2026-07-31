@@ -221,6 +221,7 @@ const ArchiveApp = (() => {
     return `
       <div class="ph">
         <div class="phl"><div class="ph-title">📁 콘텐츠</div></div>
+        <div class="phr"><button class="ibtn red" onclick="App.logout()" title="로그아웃">🚪</button></div>
       </div>
       <div class="ar-tool-tabs-row">
         <div class="ar-tool-tabs">${TOOL_TABS.map(t => `<button class="ar-tool-tab${_activeTool===t.key?' on':''}" onclick="ArchiveApp._selectTool('${t.key}')">${t.ico} ${t.lbl}</button>`).join('')}</div>
