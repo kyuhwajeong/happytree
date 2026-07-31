@@ -238,7 +238,16 @@ const App = (() => {
     ['spl-logo-img','op-logo'].forEach(id=>{const el=document.getElementById(id);if(el)el.src=LOGO.small;});
   }
   function _hideSplash(){const sp=document.getElementById('splash');sp.classList.add('out');setTimeout(()=>{sp.style.display='none';document.getElementById('app').classList.remove('hidden');
-      if(!DB.isLoggedIn()){_showLogin();}else{go(S.page||'dashboard');}
+      if(!DB.isLoggedIn()){_showLogin();}else{
+        // ★ 새로고침 전에 보고 있던 화면을 그대로 복원 — 연결 문제로
+        //   조용히 새로고침되더라도 사용자가 엉뚱한(기본) 화면에 던져지지 않게 함
+        let lastPage=null;
+        try{lastPage=sessionStorage.getItem('hk10b_lastPage');}catch(e){}
+        go(lastPage||S.page||'dashboard');
+        let wasAutoReload=false;
+        try{wasAutoReload=sessionStorage.getItem('hk10b_wasAutoReload')==='1';sessionStorage.removeItem('hk10b_wasAutoReload');}catch(e){}
+        if(wasAutoReload) setTimeout(()=>_toast('🔄 연결이 복구되어 화면이 새로 불러와졌어요','',3200),600);
+      }
     },480);}
   function _setSt(m){const e=_q('spl-st');if(e)e.textContent=m;}
   function _syncDot(s){const d=_q('sync-dot');if(!d)return;d.style.background=s==='on'?'var(--green)':s==='saving'?'var(--orange)':'var(--tx3)';}
@@ -280,6 +289,7 @@ const App = (() => {
       if(!_am.includes('grade')){_showLogin();return;}
     }
     S.page=page;
+    try{sessionStorage.setItem('hk10b_lastPage',page);}catch(e){}
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
     document.querySelectorAll('.bni').forEach(n=>n.classList.remove('on'));
     document.getElementById('page-'+page)?.classList.add('on');
