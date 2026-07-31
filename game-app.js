@@ -51,6 +51,33 @@ const GameApp = (() => {
   function _sndComplete() { [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => _tone(f, i * .11, .22, 'triangle')); }
   function _sndTick() { _tone(880, 0, .05, 'square', .08); }
 
+  // ★ 원어민 음성 — 브라우저 내장 기능(Web Speech API)이라 추가 비용·API 키 없음.
+  //   기기에 설치된 영어 음성 목록 중 가장 자연스러운 걸 골라서 쓴다.
+  let _enVoice = null, _voicesReady = false;
+  function _pickEnVoice() {
+    if (typeof speechSynthesis === 'undefined') return;
+    const voices = speechSynthesis.getVoices();
+    if (!voices.length) return;
+    _enVoice = voices.find(v => v.lang === 'en-US' && /Google|Natural|Neural/i.test(v.name))
+      || voices.find(v => v.lang === 'en-US')
+      || voices.find(v => v.lang?.startsWith('en'))
+      || null;
+    _voicesReady = true;
+  }
+  if (typeof speechSynthesis !== 'undefined') {
+    _pickEnVoice();
+    speechSynthesis.onvoiceschanged = _pickEnVoice; // ★ 음성 목록은 비동기로 늦게 채워지는 브라우저가 많아 이벤트로 다시 시도
+  }
+  function _speak(text) {
+    if (typeof speechSynthesis === 'undefined' || !text) return;
+    if (!_voicesReady) _pickEnVoice();
+    speechSynthesis.cancel(); // ★ 이전 발음이 끝나기 전에 또 눌러도 안 겹치게 먼저 정리
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'en-US'; u.rate = 0.92; u.pitch = 1.05; // ★ 살짝 천천히 — 아이들이 듣기 편하게
+    if (_enVoice) u.voice = _enVoice;
+    speechSynthesis.speak(u);
+  }
+
   function _css() {
     if (_cssInjected) return; _cssInjected = true;
     const s = document.createElement('style');
@@ -107,7 +134,11 @@ const GameApp = (() => {
 .gm-quiz-timerbar{width:100%;max-width:500px;height:12px;background:#fff;border-radius:8px;overflow:hidden;margin-bottom:22px;box-shadow:inset 0 2px 4px rgba(0,0,0,.12)}
 .gm-quiz-timerfill{height:100%;background:linear-gradient(90deg,#6BCB77,#FFD93D,#FF6B6B);transition:width .1s linear;border-radius:8px}
 .gm-quiz-score{font-size:16px;font-weight:900;color:#2b2d42;margin-bottom:8px;padding:6px 18px;background:#fff;border-radius:999px;box-shadow:0 3px 10px rgba(0,0,0,.08)}
-.gm-quiz-word{font-size:50px;font-weight:900;color:#2b2d42;margin-bottom:8px;text-align:center;text-shadow:0 2px 0 rgba(255,255,255,.6);letter-spacing:.5px}
+.gm-quiz-word-row{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.gm-quiz-word{font-size:50px;font-weight:900;color:#2b2d42;text-align:center;text-shadow:0 2px 0 rgba(255,255,255,.6);letter-spacing:.5px}
+.gm-quiz-speak-btn{width:44px;height:44px;border-radius:50%;border:none;background:#fff;font-size:19px;cursor:pointer;
+  box-shadow:0 4px 0 rgba(0,0,0,.12),0 6px 12px rgba(0,0,0,.1);transition:transform .1s}
+.gm-quiz-speak-btn:active{transform:translateY(2px)}
 .gm-quiz-pos{font-size:16px;font-weight:700;color:#495057;margin-bottom:28px;background:#fff;padding:4px 14px;border-radius:999px}
 .gm-quiz-choices{display:grid;grid-template-columns:1fr 1fr;gap:16px;width:100%;max-width:540px}
 .gm-quiz-choice{padding:24px 12px;border-radius:18px;border:1px solid rgba(255,255,255,.3);color:#fff;font-size:18px;font-weight:800;cursor:pointer;
@@ -284,6 +315,7 @@ const GameApp = (() => {
       document.querySelectorAll('#gm-match-left .gm-match-card').forEach(c => c.classList.remove('selected'));
       el.classList.add('selected');
       _matchLeftSel = { el, idx };
+      _speak(el.textContent);
       return;
     }
     if (!_matchLeftSel) return; // 오른쪽 먼저 누르면 무시(왼쪽부터 고르게 유도)
@@ -380,11 +412,15 @@ const GameApp = (() => {
       <div class="gm-play-body">
         <div class="gm-quiz-score">${_quizIdx + 1} / ${_quizQ.length}문제 · 점수 ${_quizScore}</div>
         <div class="gm-quiz-timerbar"><div class="gm-quiz-timerfill" id="gm-timerfill" style="width:100%"></div></div>
-        <div class="gm-quiz-word">${_esc(q.word)}</div>
+        <div class="gm-quiz-word-row">
+          <span class="gm-quiz-word">${_esc(q.word)}</span>
+          <button class="gm-quiz-speak-btn" onclick="GameApp._speakCurrent()" title="다시 듣기">🔊</button>
+        </div>
         <div class="gm-quiz-pos">${_esc(q.pos || '')}</div>
         <div class="gm-quiz-choices" id="gm-quiz-choices">${choices.map((c, i) => `
           <button class="gm-quiz-choice" style="background:${_cardBg(i)};animation-delay:${i * 70}ms" onclick="GameApp._quizAnswer(this, ${c === q.meaning})">${_esc(c)}</button>`).join('')}</div>
       </div>`;
+    _speak(q.word); // ★ 문제 뜨자마자 자동으로 한 번 읽어줌
     let timeLeft = QUIZ_SEC * 10;
     const fill = _q('gm-timerfill');
     _quizTimer = setInterval(() => {
@@ -392,6 +428,10 @@ const GameApp = (() => {
       if (fill) fill.style.width = `${(timeLeft / (QUIZ_SEC * 10)) * 100}%`;
       if (timeLeft <= 0) { clearInterval(_quizTimer); _quizNext(wrap); }
     }, 100);
+  }
+  function _speakCurrent() {
+    const q = _quizQ[_quizIdx];
+    if (q) _speak(q.word);
   }
   function _quizAnswer(btn, isCorrect) {
     clearInterval(_quizTimer);
@@ -444,7 +484,7 @@ const GameApp = (() => {
     init: async () => {}, // ★ 별도 초기화 데이터 없음(그때그때 만들어 쓰는 구조)
     render, _selectSource, _selectType, _startGame,
     _matchClick, _printMatch, _reshuffleMatch,
-    _quizAnswer, _replayQuiz, _printQuiz,
+    _quizAnswer, _replayQuiz, _printQuiz, _speakCurrent,
     _toggleFs, _closePlay,
   };
 })();
