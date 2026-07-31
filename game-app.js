@@ -142,6 +142,7 @@ const GameApp = (() => {
 .gm-spell-word{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:30px;transition:transform .2s;cursor:pointer;padding:8px;border-radius:14px}
 .gm-spell-word:active{transform:scale(.98)}
 .gm-spell-word.done{animation:gmBounce .5s ease 2}
+.gm-spell-word.timeout .gm-spell-letter.blank{border-bottom-color:#FF922B;color:#e8590c;background:#fff4e6}
 .gm-spell-letter{width:44px;height:54px;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:900;color:#2b2d42;border-radius:10px}
 .gm-spell-letter.fixed{background:rgba(255,255,255,.5)}
 .gm-spell-letter.blank{background:#fff;border-bottom:4px solid #ced4da;box-shadow:0 3px 8px rgba(0,0,0,.08)}
@@ -329,7 +330,7 @@ const GameApp = (() => {
     else if (_gameType === 'spell') _renderSpellGame(wrap);
     else _renderQuizGame(wrap);
   }
-  function _closePlay() { _q('gm-play')?.remove(); }
+  function _closePlay() { clearInterval(_quizTimer); clearInterval(_spellTimer); _q('gm-play')?.remove(); }
   function _playHeaderHtml(title, printFn, extraBtnHtml) {
     return `<div class="gm-play-hdr">
       <div class="gm-play-title">🌳 ${_esc(_sourceTitle)} — ${title}</div>
@@ -452,11 +453,12 @@ const GameApp = (() => {
   }
 
   /* ── 스펠링 채우기 게임 ── */
-  let _spellQ = [], _spellIdx = 0, _spellBlanks = [], _spellFilled = [], _spellTiles = [], _spellScore = 0;
+  let _spellQ = [], _spellIdx = 0, _spellBlanks = [], _spellFilled = [], _spellTiles = [], _spellScore = 0, _spellTimer = null, _spellSkipped = [];
   const ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const SPELL_SEC = 25; // ★ 스펠링은 고민할 시간이 필요해서 퀴즈(15초)보다 넉넉하게
   function _renderSpellGame(wrap) {
     _spellQ = _pickWords(8);
-    _spellIdx = 0; _spellScore = 0;
+    _spellIdx = 0; _spellScore = 0; _spellSkipped = [];
     _renderSpellWord(wrap);
   }
   // ★ 단어 길이에 맞춰 30~45% 정도를 무작위로 빈칸 처리(너무 쉽거나 너무 어렵지 않게)
@@ -467,6 +469,7 @@ const GameApp = (() => {
     return positions;
   }
   function _renderSpellWord(wrap) {
+    clearInterval(_spellTimer);
     if (_spellIdx >= _spellQ.length) { _renderSpellEnd(wrap); return; }
     const q = _spellQ[_spellIdx];
     const word = q.word.toUpperCase();
@@ -481,6 +484,7 @@ const GameApp = (() => {
       ${_playHeaderHtml('스펠링 채우기', 'GameApp._printSpell()')}
       <div class="gm-play-body">
         <div class="gm-spell-score">${_spellIdx + 1} / ${_spellQ.length}번째 단어 · 맞은 개수 ${_spellScore}</div>
+        <div class="gm-quiz-timerbar" style="max-width:340px"><div class="gm-quiz-timerfill" id="gm-spell-timerfill" style="width:100%"></div></div>
         <button class="gm-spell-speak-main" id="gm-spell-speak-main" onclick="GameApp._speakWord('${q.word.replace(/'/g, "\\'")}')" title="다시 듣기">
           🔊 <span>소리 듣고 맞혀보세요</span>
         </button>
@@ -490,6 +494,26 @@ const GameApp = (() => {
           <button class="gm-spell-tile" data-letter="${c}" onclick="GameApp._spellTileClick(this)">${c}</button>`).join('')}</div>
       </div>`;
     setTimeout(() => _speak(q.word), 250); // ★ 화면이 뜨자마자 자동으로 한 번 들려줌 — 소리가 핵심 단서이므로 클릭 없이 바로 시작
+    let timeLeft = SPELL_SEC * 10;
+    const fill = _q('gm-spell-timerfill');
+    _spellTimer = setInterval(() => {
+      timeLeft--;
+      if (fill) fill.style.width = `${(timeLeft / (SPELL_SEC * 10)) * 100}%`;
+      if (timeLeft <= 0) { clearInterval(_spellTimer); _spellTimeout(); }
+    }, 100);
+  }
+  // ★ 시간 안에 못 맞추면 무한정 멈춰있지 않고, 정답을 보여준 뒤 다음 단어로 자동 진행
+  function _spellTimeout() {
+    _spellSkipped.push(_spellQ[_spellIdx]);
+    const word = _spellQ[_spellIdx].word.toUpperCase();
+    _spellFilled = _spellFilled.map((_, i) => word[_spellBlanks[i]]); // ★ 정답을 전부 채워서 보여줌
+    const wordEl = _q('gm-spell-word');
+    if (wordEl) { wordEl.innerHTML = _spellLettersHtml(word); wordEl.classList.add('timeout'); }
+    document.querySelectorAll('#gm-spell-tiles button').forEach(b => b.disabled = true);
+    const speakBtn = _q('gm-spell-speak-main');
+    if (speakBtn) speakBtn.innerHTML = `⏰ <span>시간 종료! 정답: ${_esc(_spellQ[_spellIdx].word)}</span>`;
+    _sndWrong();
+    setTimeout(() => { _spellIdx++; _renderSpellWord(_q('gm-play')); }, 2200);
   }
   function _spellLettersHtml(word) {
     return word.split('').map((ch, i) => {
@@ -519,6 +543,7 @@ const GameApp = (() => {
     }
   }
   function _spellWordComplete() {
+    clearInterval(_spellTimer);
     _spellScore++;
     _sndCorrect();
     const wordEl = _q('gm-spell-word');
@@ -530,15 +555,38 @@ const GameApp = (() => {
   function _renderSpellEnd(wrap) {
     const emoji = _spellScore === _spellQ.length ? '🏆' : _spellScore >= _spellQ.length * 0.6 ? '🎉' : '💪';
     _sndComplete();
+    const seen = new Set();
+    const skippedUnique = _spellSkipped.filter(w => { if (seen.has(w.word)) return false; seen.add(w.word); return true; });
     wrap.innerHTML = `
       ${_playHeaderHtml('스펠링 채우기', 'GameApp._printSpell()')}
       <div class="gm-play-body">
         <div class="gm-quiz-end">
           <div class="gm-quiz-end-emoji">${emoji}</div>
           <div class="gm-quiz-end-score">${_spellQ.length}개 중 ${_spellScore}개 완성했어요!</div>
-          <div class="gm-replay-row"><button class="gm-replay-btn" onclick="GameApp._reshuffleSpell()">🔁 다시 하기</button></div>
+          <div class="gm-replay-row">
+            <button class="gm-replay-btn" onclick="GameApp._reshuffleSpell()">🔁 처음부터 다시</button>
+            ${skippedUnique.length ? `<button class="gm-replay-btn wrong-only" onclick="GameApp._retrySkippedOnly()">🎯 놓친 ${skippedUnique.length}개만 다시</button>` : ''}
+          </div>
         </div>
+        ${skippedUnique.length ? `<div class="gm-review">
+          <div class="gm-review-title">📖 시간 초과로 놓친 단어</div>
+          ${skippedUnique.map(w => `
+            <div class="gm-review-item">
+              <span class="gm-review-word">${_esc(w.word)}</span>
+              <span class="gm-review-meaning">${_esc(w.meaning)}</span>
+              <button class="gm-review-speak" onclick="GameApp._speakWord('${_esc(w.word).replace(/'/g, "\\'")}')">🔊</button>
+            </div>`).join('')}
+        </div>` : ''}
       </div>`;
+  }
+  function _retrySkippedOnly() {
+    const wrap = _q('gm-play');
+    if (!wrap) return;
+    const seen = new Set();
+    const pool = _spellSkipped.filter(w => { if (seen.has(w.word)) return false; seen.add(w.word); return true; });
+    if (!pool.length) return;
+    _spellQ = _pickWords(pool.length, pool); _spellIdx = 0; _spellScore = 0; _spellSkipped = [];
+    _renderSpellWord(wrap);
   }
   function _reshuffleSpell() { const wrap = _q('gm-play'); if (wrap) _renderSpellGame(wrap); }
   function _printSpell() {
@@ -685,7 +733,7 @@ const GameApp = (() => {
     init: async () => {}, // ★ 별도 초기화 데이터 없음(그때그때 만들어 쓰는 구조)
     render, _selectSource, _selectType, _startGame,
     _matchClick, _printMatch, _reshuffleMatch,
-    _spellTileClick, _reshuffleSpell, _printSpell,
+    _spellTileClick, _reshuffleSpell, _printSpell, _retrySkippedOnly,
     _quizAnswer, _replayQuiz, _printQuiz, _speakCurrent, _retryWrongOnly, _speakWord,
     _toggleFs, _closePlay,
   };
