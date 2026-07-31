@@ -263,9 +263,9 @@ const GameApp = (() => {
       <div class="gm-play-body">
         <div class="gm-match-wrap">
           <div class="gm-match-col" id="gm-match-left">${left.map((w, i) => `
-            <div class="gm-match-card" style="background:${_cardBg(w.idx)};animation-delay:${i * 60}ms" data-idx="${w.idx}" data-side="l" onclick="GameApp._matchClick(this)">${_esc(w.word)}</div>`).join('')}</div>
+            <div class="gm-match-card" style="background:${_cardBg(i)};animation-delay:${i * 60}ms" data-idx="${w.idx}" data-side="l" onclick="GameApp._matchClick(this)">${_esc(w.word)}</div>`).join('')}</div>
           <div class="gm-match-col" id="gm-match-right">${right.map((w, i) => `
-            <div class="gm-match-card" style="background:${_cardBg(w.idx)};animation-delay:${i * 60 + 40}ms" data-idx="${w.idx}" data-side="r" onclick="GameApp._matchClick(this)">${_esc(w.meaning)}</div>`).join('')}</div>
+            <div class="gm-match-card" style="background:${_cardBg(i + 5)};animation-delay:${i * 60 + 40}ms" data-idx="${w.idx}" data-side="r" onclick="GameApp._matchClick(this)">${_esc(w.meaning)}</div>`).join('')}</div>
         </div>
         <div class="gm-match-status" id="gm-match-status">${_matchWords.length}쌍 중 0쌍 맞춤</div>
         <button class="gm-replay-btn" id="gm-match-replay" style="margin-top:16px;display:none" onclick="GameApp._reshuffleMatch()">🔀 단어 섞어서 다시 도전</button>
