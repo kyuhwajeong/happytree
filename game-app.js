@@ -138,7 +138,8 @@ const GameApp = (() => {
 .gm-spell-speak-main span{font-size:15px}
 .gm-spell-speak-main:active{transform:translateY(3px)}
 @keyframes gmSpeakPulse{0%,100%{box-shadow:0 5px 0 rgba(0,0,0,.2),0 8px 20px rgba(77,150,255,.35)}50%{box-shadow:0 5px 0 rgba(0,0,0,.2),0 8px 28px rgba(77,150,255,.6)}}
-.gm-spell-meaning{font-size:16px;font-weight:700;color:#2b2d42;margin-bottom:22px;text-align:center;background:#fff;padding:9px 20px;border-radius:14px;box-shadow:0 3px 10px rgba(0,0,0,.06)}
+.gm-spell-meaning{font-size:16px;font-weight:700;color:#2b2d42;margin-bottom:8px;text-align:center;background:#fff;padding:9px 20px;border-radius:14px;box-shadow:0 3px 10px rgba(0,0,0,.06)}
+.gm-spell-attempts{font-size:12.5px;font-weight:700;color:#e8590c;min-height:16px;margin-bottom:14px}
 .gm-spell-word{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:30px;transition:transform .2s;cursor:pointer;padding:8px;border-radius:14px}
 .gm-spell-word:active{transform:scale(.98)}
 .gm-spell-word.done{animation:gmBounce .5s ease 2}
@@ -480,6 +481,7 @@ const GameApp = (() => {
     const decoyPool = ALPHA.split('').filter(c => !correctLetters.includes(c));
     const decoys = decoyPool.sort(() => Math.random() - 0.5).slice(0, Math.min(3, decoyPool.length));
     _spellTiles = [...correctLetters, ...decoys].sort(() => Math.random() - 0.5);
+    _spellWrongCount = 0;
     wrap.innerHTML = `
       ${_playHeaderHtml('스펠링 채우기', 'GameApp._printSpell()')}
       <div class="gm-play-body">
@@ -489,6 +491,7 @@ const GameApp = (() => {
           🔊 <span>소리 듣고 맞혀보세요</span>
         </button>
         <div class="gm-spell-meaning">💡 뜻: ${_esc(q.meaning)}</div>
+        <div class="gm-spell-attempts" id="gm-spell-attempts"></div>
         <div class="gm-spell-word" id="gm-spell-word" onclick="GameApp._speakWord('${q.word.replace(/'/g, "\\'")}')" title="눌러서 다시 듣기">${_spellLettersHtml(word)}</div>
         <div class="gm-spell-tiles" id="gm-spell-tiles">${_spellTiles.map((c, i) => `
           <button class="gm-spell-tile" data-letter="${c}" onclick="GameApp._spellTileClick(this)">${c}</button>`).join('')}</div>
@@ -503,7 +506,10 @@ const GameApp = (() => {
     }, 100);
   }
   // ★ 시간 안에 못 맞추면 무한정 멈춰있지 않고, 정답을 보여준 뒤 다음 단어로 자동 진행
-  function _spellTimeout() {
+  const SPELL_MAX_WRONG = 4; // ★ 이 횟수 이상 틀리면 무작정 눌러서 맞히는 걸 막고 정답을 보여준 뒤 다음으로
+  // ★ 시간 초과든 오답 초과든 "포기하고 다음으로" 처리는 동일 — 이유만 다르게 표시
+  function _spellGiveUp(reason) {
+    clearInterval(_spellTimer);
     _spellSkipped.push(_spellQ[_spellIdx]);
     const word = _spellQ[_spellIdx].word.toUpperCase();
     _spellFilled = _spellFilled.map((_, i) => word[_spellBlanks[i]]); // ★ 정답을 전부 채워서 보여줌
@@ -511,10 +517,11 @@ const GameApp = (() => {
     if (wordEl) { wordEl.innerHTML = _spellLettersHtml(word); wordEl.classList.add('timeout'); }
     document.querySelectorAll('#gm-spell-tiles button').forEach(b => b.disabled = true);
     const speakBtn = _q('gm-spell-speak-main');
-    if (speakBtn) speakBtn.innerHTML = `⏰ <span>시간 종료! 정답: ${_esc(_spellQ[_spellIdx].word)}</span>`;
+    if (speakBtn) speakBtn.innerHTML = `${reason.icon} <span>${reason.label} 정답: ${_esc(_spellQ[_spellIdx].word)}</span>`;
     _sndWrong();
     setTimeout(() => { _spellIdx++; _renderSpellWord(_q('gm-play')); }, 2200);
   }
+  function _spellTimeout() { _spellGiveUp({ icon: '⏰', label: '시간 종료!' }); }
   function _spellLettersHtml(word) {
     return word.split('').map((ch, i) => {
       const blankIdx = _spellBlanks.indexOf(i);
@@ -524,6 +531,7 @@ const GameApp = (() => {
     }).join('');
   }
   function _spellCurrentBlank() { return _spellFilled.findIndex(f => f === null); }
+  let _spellWrongCount = 0;
   function _spellTileClick(btn) {
     if (btn.disabled) return;
     const cur = _spellCurrentBlank();
@@ -540,6 +548,10 @@ const GameApp = (() => {
     } else {
       btn.classList.add('wrong'); _sndWrong();
       setTimeout(() => btn.classList.remove('wrong'), 350);
+      _spellWrongCount++;
+      const hint = _q('gm-spell-attempts');
+      if (hint) hint.textContent = `❌ ${_spellWrongCount}/${SPELL_MAX_WRONG}번 틀림`;
+      if (_spellWrongCount >= SPELL_MAX_WRONG) _spellGiveUp({ icon: '🙋', label: '아쉬워요!' });
     }
   }
   function _spellWordComplete() {
