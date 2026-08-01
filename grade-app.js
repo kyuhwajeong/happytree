@@ -4275,7 +4275,8 @@ to{opacity:1;transform:none}}
     if (cdCmtEl) _st.data[sid].comment = cdCmtEl.value;
 
     const now     = new Date();
-    const savedAt = `${now.toISOString().slice(0,10)} ${now.toTimeString().slice(0,5)}`;
+    // ★ 버그 수정: UTC 날짜 + 로컬 시간이 섞여 자정~오전9시 사이엔 하루 전 날짜로 저장되던 문제
+    const savedAt = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${now.toTimeString().slice(0,5)}`;
     _st.data[sid].savedAt = savedAt;
 
     const result = await GradeDB.saveRecord({
@@ -4781,7 +4782,8 @@ to{opacity:1;transform:none}}
     }
 
     const now     = new Date();
-    const savedAt = `${now.toISOString().slice(0,10)} ${now.toTimeString().slice(0,5)}`;
+    // ★ 버그 수정: UTC 날짜 + 로컬 시간이 섞여 자정~오전9시 사이엔 하루 전 날짜로 저장되던 문제
+    const savedAt = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${now.toTimeString().slice(0,5)}`;
     _st.data[sid].savedAt = savedAt;
 
     const result = await GradeDB.saveRecord({
@@ -4994,7 +4996,8 @@ to{opacity:1;transform:none}}
         //   실제로는 로컬/서버 어디에도 단 한 건도 기록되지 않았던 것 — 엑셀
         //   일괄 복원(전체불러오기) 기능이 처음부터 100% 무동작이었던 원인.
         const now2 = new Date();
-        const savedAt2 = `${now2.toISOString().slice(0,10)} ${now2.toTimeString().slice(0,5)}`;
+        // ★ 버그 수정: 위와 동일한 UTC/로컬 혼용 문제
+        const savedAt2 = `${now2.getFullYear()}-${String(now2.getMonth()+1).padStart(2,'0')}-${String(now2.getDate()).padStart(2,'0')} ${now2.toTimeString().slice(0,5)}`;
         const saveRes = await GradeDB.saveRecord({
           classId:   cls.id || cls.name,
           studentId: stu.id,
