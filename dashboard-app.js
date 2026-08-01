@@ -236,6 +236,21 @@ const DashboardApp = (() => {
 .db-style-hero .db-sec{border-radius:20px}
 .db-style-hero .db-sec-title{padding-left:10px;border-left:4px solid var(--a);font-size:16px}
 
+/* --- 컴팩트: 즐겨찾기 썸네일·교재 카드도 더 작고 촘촘하게 --- */
+.db-style-compact .db-ar-thumb,.db-style-compact .db-ar-thumb img,.db-style-compact .db-ar-thumb-ico{width:60px;height:60px}
+.db-style-compact .db-ar-thumbs{gap:7px}
+.db-style-compact .db-cls-group{padding:8px;border-radius:8px}
+.db-style-compact .db-book-card{padding:6px 8px;border-radius:7px}
+.db-style-compact .db-day-tab{padding:5px 10px;font-size:10.5px}
+
+/* --- 히어로: 즐겨찾기 썸네일·교재 카드를 더 크고 존재감 있게 --- */
+.db-style-hero .db-ar-thumb,.db-style-hero .db-ar-thumb img,.db-style-hero .db-ar-thumb-ico{width:108px;height:108px}
+.db-style-hero .db-ar-thumb img,.db-style-hero .db-ar-thumb-ico{border-radius:16px}
+.db-style-hero .db-ar-thumbs{gap:12px}
+.db-style-hero .db-cls-group{border-radius:16px;padding:13px}
+.db-style-hero .db-book-card{border-radius:12px}
+.db-style-hero .db-day-tab.on{box-shadow:0 4px 10px -3px var(--a40)}
+
 /* ★ 작은 폰 화면(≤400px) 전용 — 선택한 스타일과 무관하게 항상 적용.
    장식 요소(명언 배너)는 감추고 여백을 조여 한 화면에 더 많은 정보가 들어오게 한다.
    401px 이상(큰 폰·태블릿·PC)은 전혀 영향받지 않는다. */
@@ -646,13 +661,15 @@ const DashboardApp = (() => {
    * ═══════════════════════════════════════════════════════════ */
   function _scheduleSectionHtml() {
     if (typeof ScheduleApp === 'undefined') return '';
+    const isCompact = _dashStyle() === 'compact';
     return `<div class="db-sec">
       <div class="db-sec-hdr">
         <div class="db-sec-title">🗓️ 일정표</div>
         <div class="sch-cal-navs">
           <span class="sch-cal-title" id="sch-month-label"></span>
+          ${isCompact ? '' : `
           <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(-1)" title="이전 달">‹</button>
-          <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(1)" title="다음 달">›</button>
+          <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(1)" title="다음 달">›</button>`}
         </div>
       </div>
       <div id="sch-mini-cal"></div>
@@ -736,5 +753,5 @@ const DashboardApp = (() => {
     if (typeof BooklibApp !== 'undefined' && BooklibApp.goToMatrix) BooklibApp.goToMatrix(clsId, bkId);
   }
 
-  return { init, render, goMatrix, goArchivePreview, goEduVideo, _filterFavorites, _refreshBadges, openReorder, _saveReorder, _selectBookDay, _requestBulkUpdate, _todayUpdateTargets, _refreshQuote };
+  return { init, render, goMatrix, goArchivePreview, goEduVideo, _filterFavorites, _refreshBadges, openReorder, _saveReorder, _selectBookDay, _requestBulkUpdate, _todayUpdateTargets, _refreshQuote, _dashStyle };
 })();
