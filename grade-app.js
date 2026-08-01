@@ -4984,8 +4984,26 @@ to{opacity:1;transform:none}}
           rec.comment = String(row[cmtIdx]).trim();
         }
 
-        await GradeDB.saveRecord(cls.id || cls.name, stu.id, book.id, rec);
-        updated++;
+        // ★ 버그 수정: GradeDB.saveRecord()는 단일 객체 인자를 받는 함수인데
+        //   기존 코드는 (classId, studentId, bookId, rec) 4개의 개별 인자를 넘기고 있었다.
+        //   그 결과 saveRecord 내부에서 classId/studentId/bookId가 모두 undefined로
+        //   destructure되어 `if (!classId || !studentId || !bookId) return null;`에
+        //   걸려 매 호출마다 아무것도 저장하지 않고 조용히 종료됐다(에러도 없음).
+        //   화면에는 "✅ N명 데이터 불러오기 완료" 성공 토스트가 떴지만
+        //   실제로는 로컬/서버 어디에도 단 한 건도 기록되지 않았던 것 — 엑셀
+        //   일괄 복원(전체불러오기) 기능이 처음부터 100% 무동작이었던 원인.
+        const now2 = new Date();
+        const savedAt2 = `${now2.toISOString().slice(0,10)} ${now2.toTimeString().slice(0,5)}`;
+        const saveRes = await GradeDB.saveRecord({
+          classId:   cls.id || cls.name,
+          studentId: stu.id,
+          bookId:    book.id,
+          word:      rec.word    || null,
+          reading:   rec.reading || null,
+          comment:   rec.comment || '',
+          savedAt:   savedAt2,
+        });
+        if (saveRes?.rec) updated++; else skipped++;
       }
     }
 
