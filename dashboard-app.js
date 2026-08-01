@@ -21,10 +21,9 @@
 const DashboardApp = (() => {
   // ★ 대시보드 섹션 구성 — 순서는 사용자가 자유롭게 변경 가능 (기기별 localStorage 저장)
   const SECTION_DEFS = [
-    { key: 'schedule', ico: '🗓️', lbl: '일정표' },
-    { key: 'books',    ico: '📊', lbl: '교재 학습 현황' },
-    { key: 'archive',  ico: '📁', lbl: '콘텐츠 즐겨찾기' },
-    { key: 'eduvideo', ico: '🎬', lbl: '영상 워크시트 즐겨찾기' },
+    { key: 'schedule',  ico: '🗓️', lbl: '일정표' },
+    { key: 'books',     ico: '📊', lbl: '교재 학습 현황' },
+    { key: 'favorites', ico: '⭐', lbl: '즐겨찾기 콘텐츠' },
   ];
   const LS_ORDER = 'hk10b_dashboardOrder';
   function _getSectionOrder() {
@@ -37,10 +36,9 @@ const DashboardApp = (() => {
   function _saveSectionOrder(order) { try { localStorage.setItem(LS_ORDER, JSON.stringify(order)); } catch (e) {} }
   // ★ 함수 선언은 호이스팅되므로 아래에서 정의될 함수들을 미리 참조해도 안전함
   const _SECTION_HTML = {
-    schedule: () => _scheduleSectionHtml(),
-    books:    () => _bookStatusSectionHtml(),
-    archive:  () => _archiveThumbsSectionHtml(),
-    eduvideo: () => _eduVideoThumbsSectionHtml(),
+    schedule:  () => _scheduleSectionHtml(),
+    books:     () => _bookStatusSectionHtml(),
+    favorites: () => _favoritesSectionHtml(),
   };
   const DAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -184,6 +182,14 @@ const DashboardApp = (() => {
 .db-ar-thumb img{width:84px;height:84px;object-fit:cover;border-radius:12px;border:1px solid var(--bdr);display:block}
 .db-ar-thumb-ico{width:84px;height:84px;border-radius:12px;border:1px solid var(--bdr);background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:32px}
 .db-ar-thumb-name{font-size:10.5px;font-weight:600;color:var(--tx2);margin-top:5px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.db-fav-thumb{position:relative}
+.db-fav-thumb.db-fav-hide{display:none}
+.db-fav-badge{position:absolute;top:-5px;left:-5px;width:21px;height:21px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10.5px;box-shadow:0 2px 6px rgba(0,0,0,.28);border:2px solid var(--surf);z-index:1}
+.db-fav-badge.type-archive{background:#3b82f6}
+.db-fav-badge.type-video{background:#ef4444}
+.db-fav-filter{display:flex;gap:6px;margin-bottom:10px}
+.db-fav-filter-btn{padding:5px 10px;border-radius:9px;background:var(--card2);color:var(--tx2);border:1px solid var(--bdr2);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;transition:.15s}
+.db-fav-filter-btn.on{background:var(--a);color:#fff;border-color:var(--a)}
 .db-quote-inline{flex:1 1 auto;min-width:80px;margin:0 10px;text-align:right}
 .db-quote-inline.loading{opacity:.4}
 .db-quote-kr{white-space:normal;line-height:1.4}
@@ -447,7 +453,20 @@ const DashboardApp = (() => {
 
   /* ★ 오늘(offset 0)부터 앞으로 일주일 안에서, 실제로 수업이 있는 날짜만
    *   골라 탭 목록을 만든다. 수업이 없는 날은 탭 자체를 만들지 않는다. */
+  function _pad2(n) { return String(n).padStart(2, '0'); }
+  function _dateStrForOffset(offset) {
+    const d = new Date(); d.setDate(d.getDate() + offset);
+    return `${d.getFullYear()}-${_pad2(d.getMonth() + 1)}-${_pad2(d.getDate())}`;
+  }
+  // ★ 일정표(ScheduleApp)에서 "이 기간 정규 수업 없음"으로 표시해둔 방학·임시휴강 기간인지 확인
+  //   (schedule-app.js의 _todaySuppression()과 같은 suppressClasses 플래그를 그대로 재사용)
+  function _isSuppressedDay(offset) {
+    if (typeof ScheduleDB === 'undefined') return false;
+    const ds = _dateStrForOffset(offset);
+    return ScheduleDB.getAll().some(s => s.suppressClasses && s.startDate <= ds && (s.endDate || s.startDate) >= ds);
+  }
   function _classesForDayOffset(offset) {
+    if (_isSuppressedDay(offset)) return []; // ★ 방학·임시휴강 기간이면 요일이 맞아도 수업 없음으로 처리
     const d = new Date(); d.setDate(d.getDate() + offset);
     const dow = DAYS_KO[d.getDay()];
     return _visibleClasses().filter(c => (c.days || []).includes(dow));
@@ -501,6 +520,9 @@ const DashboardApp = (() => {
   function _bookStatusSectionHtml() {
     if (!_canSee('booklib')) return '';
     if (typeof BookLibDB === 'undefined' || typeof StudentDB === 'undefined') return '';
+    // ★ 오늘 수업이 있을 때만 섹션을 노출한다(주말·방학·임시휴강은 자동으로 제외됨).
+    //   오늘 수업이 있으면, 아래 탭에서 이번 주 예정된 다음 수업일들도 함께 보여준다.
+    if (!_classesForDayOffset(0).length) return '';
     const tabs = _bookDayTabs();
     // ★ 앞으로 일주일간 예정된 수업이 아예 없으면 섹션 자체를 숨긴다
     if (!tabs.length) return '';
@@ -588,55 +610,62 @@ const DashboardApp = (() => {
   }
 
   /* ═══════════════════════════════════════════════════════════
-   * 자료실 즐겨찾기 — 자료실에서 ⭐ 체크한 파일을 썸네일로 표시
+   * 즐겨찾기 콘텐츠 — 자료실 ⭐ 자료 + 영상 워크시트 ⭐ 영상을 한 섹션에 통합.
+   * 두 종류가 섞이면 카드 왼쪽 위 작은 배지(📄/🎬)로만 구분하고,
+   * 둘 다 있을 때만 상단에 전체·자료·영상 필터 칩을 보여준다.
    * ═══════════════════════════════════════════════════════════ */
   const _AR_IMG_EXT = ['png','jpg','jpeg','gif','webp'];
-  function _archiveThumbsSectionHtml() {
-    if (typeof ArchiveDB === 'undefined') return '';
-    const items = ArchiveDB.getAll().filter(f => f.pinned);
-    if (!items.length) return ''; // ★ 즐겨찾기한 자료가 없으면 섹션 자체를 숨김
-    return `<div class="db-sec">
-      <div class="db-sec-hdr"><div class="db-sec-title">📁 콘텐츠 즐겨찾기</div>
-        <button class="db-mini-btn ghost" onclick="App.go('archive')">전체보기</button></div>
-      <div class="db-ar-thumbs">${items.map(f => {
-        const isImg = _AR_IMG_EXT.includes((f.ext || '').toLowerCase());
-        const inner = isImg
-          ? `<img src="${ArchiveDB.getFileUrl(f.r2Key)}" alt="${_esc(f.name)}">`
-          : `<div class="db-ar-thumb-ico">${_archiveIconFor(f.ext)}</div>`;
-        return `<div class="db-ar-thumb" onclick="DashboardApp.goArchivePreview('${f.id}')" title="${_esc(f.name)}">
-          ${inner}
-          <div class="db-ar-thumb-name">${_esc(f.name)}</div>
-        </div>`;
-      }).join('')}</div>
-    </div>`;
-  }
   function _archiveIconFor(ext) {
     const m = { pdf:'📕', xlsx:'📗', xls:'📗', csv:'📗', ppt:'📙', pptx:'📙', doc:'📘', docx:'📘',
       zip:'🗜️', txt:'📄', mp4:'🎬', avi:'🎬', mov:'🎬', mkv:'🎬', webm:'🎬', wmv:'🎬',
       mp3:'🎵', wav:'🎵', m4a:'🎵', ogg:'🎵', aac:'🎵', flac:'🎵' };
     return m[(ext || '').toLowerCase()] || '📄';
   }
+  function _favoritesSectionHtml() {
+    const arItems = (typeof ArchiveDB !== 'undefined') ? ArchiveDB.getAll().filter(f => f.pinned).map(f => ({ ...f, _type: 'archive' })) : [];
+    const evItems = (typeof EduVideoDB !== 'undefined') ? EduVideoDB.getAll().filter(v => v.pinned).map(v => ({ ...v, _type: 'video' })) : [];
+    if (!arItems.length && !evItems.length) return ''; // ★ 즐겨찾기가 하나도 없으면 섹션 자체를 숨김
+    const items = [...arItems, ...evItems].sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''));
+    const hasBoth = arItems.length > 0 && evItems.length > 0;
+    const filterBar = hasBoth ? `
+      <div class="db-fav-filter">
+        <button class="db-fav-filter-btn on" data-filter="all" onclick="DashboardApp._filterFavorites('all')">전체 ${items.length}</button>
+        <button class="db-fav-filter-btn" data-filter="archive" onclick="DashboardApp._filterFavorites('archive')">📄 자료 ${arItems.length}</button>
+        <button class="db-fav-filter-btn" data-filter="video" onclick="DashboardApp._filterFavorites('video')">🎬 영상 ${evItems.length}</button>
+      </div>` : '';
+    return `<div class="db-sec">
+      <div class="db-sec-hdr"><div class="db-sec-title">⭐ 즐겨찾기 콘텐츠</div>
+        <button class="db-mini-btn ghost" onclick="App.go('archive')">전체보기</button></div>
+      ${filterBar}
+      <div class="db-ar-thumbs">${items.map(it => {
+        if (it._type === 'archive') {
+          const isImg = _AR_IMG_EXT.includes((it.ext || '').toLowerCase());
+          const inner = isImg
+            ? `<img src="${ArchiveDB.getFileUrl(it.r2Key)}" alt="${_esc(it.name)}">`
+            : `<div class="db-ar-thumb-ico">${_archiveIconFor(it.ext)}</div>`;
+          return `<div class="db-fav-thumb db-ar-thumb" data-type="archive" onclick="DashboardApp.goArchivePreview('${it.id}')" title="${_esc(it.name)}">
+            <span class="db-fav-badge type-archive" title="자료">📄</span>
+            ${inner}
+            <div class="db-ar-thumb-name">${_esc(it.name)}</div>
+          </div>`;
+        }
+        return `<div class="db-fav-thumb db-ar-thumb" data-type="video" onclick="DashboardApp.goEduVideo('${it.id}')" title="${_esc(it.title)}">
+          <span class="db-fav-badge type-video" title="영상 워크시트">🎬</span>
+          <img src="https://img.youtube.com/vi/${it.youtubeId}/hqdefault.jpg" alt="${_esc(it.title)}">
+          <div class="db-ar-thumb-name">${_esc(it.title)}</div>
+        </div>`;
+      }).join('')}</div>
+    </div>`;
+  }
+  function _filterFavorites(type) {
+    document.querySelectorAll('.db-fav-thumb').forEach(el => {
+      el.classList.toggle('db-fav-hide', !(type === 'all' || el.dataset.type === type));
+    });
+    document.querySelectorAll('.db-fav-filter-btn').forEach(b => b.classList.toggle('on', b.dataset.filter === type));
+  }
   function goArchivePreview(id) {
     if (typeof App !== 'undefined' && App.go) App.go('archive');
     if (typeof ArchiveApp !== 'undefined' && ArchiveApp.openPreview) ArchiveApp.openPreview(id);
-  }
-
-  /* ═══════════════════════════════════════════════════════════
-   * 영상 워크시트 즐겨찾기 — 자료실 즐겨찾기와 동일한 패턴
-   * ═══════════════════════════════════════════════════════════ */
-  function _eduVideoThumbsSectionHtml() {
-    if (typeof EduVideoDB === 'undefined') return '';
-    const items = EduVideoDB.getAll().filter(v => v.pinned);
-    if (!items.length) return ''; // ★ 즐겨찾기한 영상이 없으면 섹션 자체를 숨김
-    return `<div class="db-sec">
-      <div class="db-sec-hdr"><div class="db-sec-title">🎬 영상 워크시트 즐겨찾기</div>
-        <button class="db-mini-btn ghost" onclick="App.go('archive')">전체보기</button></div>
-      <div class="db-ar-thumbs">${items.map(v => `
-        <div class="db-ar-thumb" onclick="DashboardApp.goEduVideo('${v.id}')" title="${_esc(v.title)}">
-          <img src="https://img.youtube.com/vi/${v.youtubeId}/hqdefault.jpg" alt="${_esc(v.title)}">
-          <div class="db-ar-thumb-name">${_esc(v.title)}</div>
-        </div>`).join('')}</div>
-    </div>`;
   }
   function goEduVideo(id) {
     if (typeof App !== 'undefined' && App.go) App.go('archive');
@@ -654,5 +683,5 @@ const DashboardApp = (() => {
     if (typeof BooklibApp !== 'undefined' && BooklibApp.goToMatrix) BooklibApp.goToMatrix(clsId, bkId);
   }
 
-  return { init, render, goMatrix, goArchivePreview, goEduVideo, _refreshBadges, openReorder, _saveReorder, _selectBookDay, _requestBulkUpdate, _todayUpdateTargets, _refreshQuote };
+  return { init, render, goMatrix, goArchivePreview, goEduVideo, _filterFavorites, _refreshBadges, openReorder, _saveReorder, _selectBookDay, _requestBulkUpdate, _todayUpdateTargets, _refreshQuote };
 })();
