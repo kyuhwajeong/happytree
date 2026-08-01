@@ -6,6 +6,13 @@
 const EduVideoApp = (() => {
   const _q = id => document.getElementById(id);
   const _esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  // ★ admin이거나 본인이 등록한 영상일 때만 수정·삭제 가능(자료실과 동일한 정책)
+  function _canManage(v) {
+    if (!v) return false;
+    if (typeof DB !== 'undefined' && DB.isAdmin && DB.isAdmin()) return true;
+    const me = (typeof DB !== 'undefined' && DB.getSession) ? (DB.getSession()?.username || '') : '';
+    return !!me && v.createdBy === me;
+  }
 
   // ★★★ Unsplash 가입 후(무료, 카드 불필요) 아래 값을 실제 Access Key로 바꿔주세요 ★★★
   // https://unsplash.com/developers → New Application → Access Key 복사
@@ -32,6 +39,7 @@ const EduVideoApp = (() => {
 .ev-card{background:var(--card);border:1px solid var(--bdr);border-radius:14px;overflow:hidden;cursor:pointer;transition:transform .1s;position:relative}
 .ev-card-pin{position:absolute;top:6px;right:6px;z-index:2;border:none;background:rgba(0,0,0,.4);width:26px;height:26px;border-radius:50%;font-size:14px;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center}
 .ev-card-pin.on{background:rgba(255,255,255,.9)}
+.ev-card-private{position:absolute;top:6px;left:6px;z-index:2;background:rgba(0,0,0,.55);color:#fff;font-size:9.5px;font-weight:700;padding:3px 7px;border-radius:999px}
 .ev-card:active{transform:scale(.97)}
 .ev-card-thumb{width:100%;aspect-ratio:16/9;object-fit:cover;background:var(--surf2);display:block;position:relative}
 .ev-card-body{padding:10px}
@@ -39,6 +47,7 @@ const EduVideoApp = (() => {
 .ev-card-meta{display:flex;justify-content:space-between;align-items:center;margin-top:6px}
 .ev-card-topic{font-size:9.5px;font-weight:700;color:var(--a);background:var(--a10);border-radius:6px;padding:2px 6px}
 .ev-card-words{font-size:9.5px;color:var(--tx3)}
+.ev-card-author{font-size:9px;color:var(--tx3);margin-top:3px}
 .ev-empty{text-align:center;padding:60px 20px;color:var(--tx3)}
 .ev-empty-ico{font-size:44px;margin-bottom:10px;opacity:.6}
 .ev-fab{position:fixed;right:18px;bottom:calc(var(--nav) + env(safe-area-inset-bottom, 0px) + 20px);width:54px;height:54px;border-radius:50%;background:var(--a);color:#fff;
@@ -108,13 +117,14 @@ const EduVideoApp = (() => {
   }
 
   function _gridHtml() {
-    const items = _curTopic === null ? EduVideoDB.getAll() : EduVideoDB.getByTopic(_curTopic);
+    const items = _curTopic === null ? EduVideoDB.getVisibleVideos() : EduVideoDB.getVisibleByTopic(_curTopic);
     if (!items.length) {
       return `<div class="ev-empty"><div class="ev-empty-ico">🎬</div>등록된 영상이 없습니다<br>오른쪽 아래 + 버튼으로 유튜브 링크를 추가해보세요</div>`;
     }
     return `<div class="ev-grid">${items.map(v => `
       <div class="ev-card" onclick="EduVideoApp.openDetail('${v.id}')">
         <button class="ev-card-pin${v.pinned ? ' on' : ''}" onclick="event.stopPropagation();EduVideoApp._togglePin('${v.id}')" title="${v.pinned ? '대시보드에서 빼기' : '대시보드에 즐겨찾기로 표시'}">${v.pinned ? '⭐' : '☆'}</button>
+        ${v.visibility === 'private' ? `<span class="ev-card-private" title="비공개 (관리자와 등록자만 보임)">🙈 비공개</span>` : ''}
         <img class="ev-card-thumb" src="https://img.youtube.com/vi/${v.youtubeId}/hqdefault.jpg" alt="">
         <div class="ev-card-body">
           <div class="ev-card-title">${_esc(v.title)}</div>
@@ -122,6 +132,7 @@ const EduVideoApp = (() => {
             <span class="ev-card-topic">${_esc(v.topic)}</span>
             ${v.words?.length ? `<span class="ev-card-words">단어 ${v.words.length}개</span>` : ''}
           </div>
+          ${v.createdBy ? `<div class="ev-card-author">✍️ ${_esc(v.createdBy)}</div>` : ''}
         </div>
       </div>`).join('')}</div>`;
   }
@@ -352,6 +363,12 @@ const EduVideoApp = (() => {
       <div class="ev-field"><label>주제</label>
         <select id="ev-topic-inp">${topics.map(t => `<option value="${_esc(t)}">${_esc(t)}</option>`).join('')}</select>
       </div>
+      <div class="ev-field"><label>공개 설정</label>
+        <select id="ev-visibility-inp">
+          <option value="public">🌍 공개 (모두 볼 수 있음)</option>
+          <option value="private">🙈 비공개 (관리자와 나만 볼 수 있음)</option>
+        </select>
+      </div>
       <div class="ev-field">
         <label>대본/스크립트 (선택 — 넣으면 AI 단어 추출 및 PDF 워크시트 생성 가능)</label>
         <div class="ev-guide-box">
@@ -396,6 +413,7 @@ const EduVideoApp = (() => {
         youtubeUrl: url,
         topic: _q('ev-topic-inp')?.value,
         script: _q('ev-script-inp')?.value,
+        visibility: _q('ev-visibility-inp')?.value || 'public',
         createdBy: (typeof DB !== 'undefined' && DB.getSession) ? (DB.getSession()?.username || '') : '',
       });
       _closeAdd();
@@ -411,17 +429,19 @@ const EduVideoApp = (() => {
   function openDetail(id) {
     const v = EduVideoDB.getById(id);
     if (!v) return;
+    const canManage = _canManage(v);
     const ov = document.createElement('div');
     ov.className = 'ev-ov'; ov.id = 'ev-detail-ov';
     ov.innerHTML = `<div class="ev-sheet" style="max-width:640px">
       <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:8px">
         <button class="ev-btn ghost" style="flex:0 0 auto;padding:6px 10px" onclick="EduVideoApp._shareVideo('${id}')" title="공유">🔗</button>
-        <button class="ev-btn ghost" style="flex:0 0 auto;padding:6px 10px" onclick="EduVideoApp._confirmDeleteVideo('${id}')" title="삭제">🗑️</button>
+        ${canManage ? `<button class="ev-btn ghost" style="flex:0 0 auto;padding:6px 10px" onclick="EduVideoApp._confirmDeleteVideo('${id}')" title="삭제">🗑️</button>` : ''}
         <button class="ev-btn ghost" style="flex:0 0 auto;padding:6px 10px" onclick="document.getElementById('ev-detail-ov').remove()">✕</button>
       </div>
       <div class="ev-play-wrap"><iframe src="https://www.youtube.com/embed/${v.youtubeId}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>
-      <span class="ev-detail-topic">${_esc(v.topic)}</span>
+      <span class="ev-detail-topic">${_esc(v.topic)}</span>${v.visibility === 'private' ? ` <span class="ev-card-private" style="position:static;display:inline-block">🙈 비공개</span>` : ''}
       <div class="ev-detail-title">${_esc(v.title)}</div>
+      ${v.createdBy ? `<div class="ev-card-author">✍️ 등록: ${_esc(v.createdBy)}</div>` : ''}
       ${v.script ? `<div class="ev-field"><label>대본</label><div class="ev-script-box">${_esc(v.script)}</div></div>` : `<div class="ev-progress" style="color:var(--tx3)">대본이 없어서 단어 추출·PDF 생성은 이용할 수 없어요. 수정에서 대본을 추가해보세요.</div>`}
       <div id="ev-words-area">${_wordsAreaHtml(v)}</div>
       <div id="ev-sentences-area">${_sentencesAreaHtml(v)}</div>
@@ -429,7 +449,7 @@ const EduVideoApp = (() => {
         <input type="checkbox" id="ev-pdf-img-chk" checked> 워크시트에 단어별 관련 이미지 포함하기 (무료 이미지 사이트에서 가져옴)
       </label>` : ''}
       <div class="ev-btn-row">
-        <button class="ev-btn ghost" onclick="EduVideoApp.openEditScript('${id}')">✏️ 대본 수정</button>
+        ${canManage ? `<button class="ev-btn ghost" onclick="EduVideoApp.openEditScript('${id}')">✏️ 대본 수정</button>` : ''}
         <button class="ev-btn warn" id="ev-extract-video-btn" onclick="EduVideoApp._extractWordsFromVideo('${id}')">🎬 영상에서 바로 추출 (대본 필요없음)</button>
         ${v.script ? `<button class="ev-btn warn" id="ev-extract-btn" onclick="EduVideoApp._extractWords('${id}')">🤖 대본에서 단어 추출</button>` : ''}
         ${v.words?.length ? `<button class="ev-btn primary" onclick="EduVideoApp._makePdf('${id}')">📄 PDF 워크시트</button>` : ''}
@@ -526,6 +546,10 @@ const EduVideoApp = (() => {
   function openEditScript(id) {
     const v = EduVideoDB.getById(id);
     if (!v) return;
+    if (!_canManage(v)) {
+      if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ 다른 사람이 등록한 영상은 수정할 수 없습니다', 'error');
+      return;
+    }
     _q('ev-detail-ov')?.remove();
     const ov = document.createElement('div');
     ov.className = 'ev-ov'; ov.id = 'ev-edit-ov';
@@ -534,6 +558,12 @@ const EduVideoApp = (() => {
       <div class="ev-field"><label>제목</label><input type="text" id="ev-edit-title" value="${_esc(v.title)}"></div>
       <div class="ev-field"><label>주제</label>
         <select id="ev-edit-topic">${EduVideoDB.getTopics().map(t => `<option value="${_esc(t)}"${t===v.topic?' selected':''}>${_esc(t)}</option>`).join('')}</select>
+      </div>
+      <div class="ev-field"><label>공개 설정</label>
+        <select id="ev-edit-visibility">
+          <option value="public"${v.visibility!=='private'?' selected':''}>🌍 공개</option>
+          <option value="private"${v.visibility==='private'?' selected':''}>🙈 비공개 (관리자와 나만 볼 수 있음)</option>
+        </select>
       </div>
       <div class="ev-field">
         <label>대본</label>
@@ -564,6 +594,7 @@ const EduVideoApp = (() => {
     await EduVideoDB.updateVideo(id, {
       title: _q('ev-edit-title')?.value?.trim(),
       topic: _q('ev-edit-topic')?.value,
+      visibility: _q('ev-edit-visibility')?.value || 'public',
       script: newScript,
       // ★ 대본이 바뀌면 예전 단어 목록은 더 이상 안 맞을 수 있으니 초기화
       ...(scriptChanged ? { words: [] } : {}),
@@ -585,6 +616,10 @@ const EduVideoApp = (() => {
   function _confirmDeleteVideo(id) {
     const v = EduVideoDB.getById(id);
     if (!v) return;
+    if (!_canManage(v)) {
+      if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ 다른 사람이 등록한 영상은 삭제할 수 없습니다', 'error');
+      return;
+    }
     if (!confirm(`"${v.title}"을(를) 삭제할까요?`)) return;
     EduVideoDB.deleteVideo(id).then(() => {
       _q('ev-detail-ov')?.remove();

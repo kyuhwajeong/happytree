@@ -58,13 +58,32 @@ const EduVideoDB = (() => {
   function getById(id) { return _list.find(x => x.id === id) || null; }
   function getByTopic(topic) { return getAll().filter(x => x.topic === topic); }
 
+  /* ── 권한(작성자/공개설정) — ArchiveDB와 동일한 정책 ── */
+  function _currentUsername() {
+    return (typeof DB !== 'undefined' && DB.getSession) ? (DB.getSession()?.username || '') : '';
+  }
+  function _isCurrentAdmin() {
+    return typeof DB !== 'undefined' && DB.isAdmin && DB.isAdmin();
+  }
+  function isOwner(video) {
+    const u = _currentUsername();
+    return !!u && video?.createdBy === u;
+  }
+  // ★ admin은 전부 다 보임(비공개 포함). 그 외 계정은 "공개"이거나
+  //   "내가 올린 것"만 보인다 — 남이 올린 비공개 영상은 목록에서부터 안 보임.
+  function getVisibleVideos() {
+    if (_isCurrentAdmin()) return getAll();
+    return getAll().filter(v => v.visibility !== 'private' || isOwner(v));
+  }
+  function getVisibleByTopic(topic) { return getVisibleVideos().filter(x => x.topic === topic); }
+
   function _extractYoutubeId(url) {
     const m = (url || '').match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/);
     return m ? m[1] : null;
   }
 
   // Create
-  async function addVideo({ title, youtubeUrl, topic, script, createdBy }) {
+  async function addVideo({ title, youtubeUrl, topic, script, createdBy, visibility }) {
     const youtubeId = _extractYoutubeId(youtubeUrl);
     if (!youtubeId) throw new Error('올바른 유튜브 링크가 아닙니다');
     const id = _nid();
@@ -74,6 +93,7 @@ const EduVideoDB = (() => {
       topic: topic || '기타',
       script: (script || '').trim(),
       words: [], // AI로 추출한 단어 목록 — extractWords()로 채워짐
+      visibility: visibility === 'private' ? 'private' : 'public', // ★ 기본은 공개(ArchiveDB와 동일 정책)
       createdAt: _now(), updatedAt: _now(), createdBy: createdBy || '',
     };
     _list.push(rec);
@@ -115,5 +135,6 @@ const EduVideoDB = (() => {
     init, on,
     getAll, getById, getByTopic, getTopics, addTopic,
     addVideo, updateVideo, deleteVideo,
+    isOwner, getVisibleVideos, getVisibleByTopic,
   };
 })();

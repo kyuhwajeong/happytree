@@ -36,6 +36,7 @@ const ScheduleApp = (() => {
   let _selDate = null; // ★ 우측 패널에 상세를 보여주고 있는 선택된 날짜 (기본값=오늘)
   let _workAddFor = null; // ★ 근무 등록 폼이 열려있는 날짜 (해당 날짜의 상세 패널 안에 인라인으로 표시)
   let _editId = null;
+  let _editScope = 'this'; // ★ 반복 일정 수정 범위: 'this'(이 건만) | 'future'(이 건부터 전체) | 'all'(전체)
   let _timer = null;
 
   function _esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -49,6 +50,15 @@ const ScheduleApp = (() => {
     return `${d.getFullYear()}-${_pad(d.getMonth() + 1)}-${_pad(d.getDate())}`;
   }
   function _isAdmin() { return typeof DB !== 'undefined' && DB.isAdmin(); }
+  // ★ 일정 등록은 운용자·강사·admin 누구나 가능(로그인만 되어 있으면 됨)
+  function _canRegister() { return typeof DB !== 'undefined' && DB.canOperate(); }
+  // ★ 수정·삭제는 admin이거나, 본인이 등록한 일정일 때만 가능
+  function _canEdit(s) {
+    if (!s) return false;
+    if (_isAdmin()) return true;
+    const me = (typeof DB !== 'undefined' && DB.getSession) ? (DB.getSession()?.username || '') : '';
+    return !!me && s.createdBy === me;
+  }
 
   /* ═══════════════════════════════════════════════════════════
    * 스타일
@@ -165,6 +175,7 @@ const ScheduleApp = (() => {
 .sch-item-ico{font-size:18px;flex-shrink:0}
 .sch-item-body{flex:1;min-width:0}
 .sch-item-title{font-size:14px;font-weight:700;color:var(--tx)}
+.sch-item-repeat-tag{font-size:10px;font-weight:800;color:var(--a);background:var(--a10);padding:1px 6px;border-radius:999px;vertical-align:middle}
 .sch-item-meta{font-size:11.5px;color:var(--tx3);margin-top:1px}
 .sch-item-memo{font-size:12.5px;color:var(--tx2);margin-top:4px;white-space:pre-line}
 .sch-item-acts{display:flex;gap:5px;flex-shrink:0}
@@ -877,7 +888,7 @@ const ScheduleApp = (() => {
         <button class="sch-today-btn" onclick="ScheduleApp._goToday()">오늘</button>
         <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(-1)">‹</button>
         <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(1)">›</button>
-        ${isAdmin ? `<button class="sch-today-btn sch-add-btn" onclick="ScheduleApp.openEditor(null,'${dateStr}')">➕ 등록</button>` : ''}
+        ${_canRegister() ? `<button class="sch-today-btn sch-add-btn" onclick="ScheduleApp.openEditor(null,'${dateStr}')">➕ 등록</button>` : ''}
       </div>
     </div>`;
 
@@ -885,15 +896,16 @@ const ScheduleApp = (() => {
     html += scheds.length ? scheds.map(s => {
       const cat = CATS[s.category] || CATS.general;
       const range = s.startDate !== s.endDate ? `${s.startDate} ~ ${s.endDate}` : s.startDate;
+      const canEditThis = _canEdit(s);
       return `<div class="sch-item-row">
         <span class="sch-item-ico">${cat.ico}</span>
         <div class="sch-item-body">
-          <div class="sch-item-title">${_esc(s.title)}</div>
-          <div class="sch-item-meta">${cat.label} · ${range}${s.notifyEnabled ? ` · 🔔 ${s.notifyDaysBefore ? `${s.notifyDaysBefore}일 전 ` : ''}${s.notifyTime}` : ''}</div>
+          <div class="sch-item-title">${_esc(s.title)}${s.seriesId ? ' <span class="sch-item-repeat-tag">🔁 반복</span>' : ''}</div>
+          <div class="sch-item-meta">${cat.label} · ${range}${s.notifyEnabled ? ` · 🔔 ${s.notifyDaysBefore ? `${s.notifyDaysBefore}일 전 ` : ''}${s.notifyTime}` : ''}${s.createdBy ? ` · 👤 ${_esc(s.createdBy)}` : ''}</div>
           ${s.memo ? `<div class="sch-item-memo">${_esc(s.memo)}</div>` : ''}
           ${s.suppressClasses ? `<div class="sch-item-suppress-tag">🚫 이 기간 정규 수업 없음${s.specialNote ? ` · 🎤 ${_esc(s.specialNote)}` : ''}</div>` : ''}
         </div>
-        ${isAdmin ? `<div class="sch-item-acts">
+        ${canEditThis ? `<div class="sch-item-acts">
           <button class="sch-item-ibtn" title="수정" onclick="ScheduleApp.openEditor('${s.id}')">✏️</button>
           <button class="sch-item-ibtn" title="삭제" onclick="ScheduleApp.deleteItem('${s.id}')">🗑</button>
         </div>` : ''}
@@ -1085,7 +1097,48 @@ const ScheduleApp = (() => {
     if (prev) { prev.style.color = isAM ? 'var(--a)' : '#7c3aed'; prev.textContent = `${isAM ? '오전' : '오후'} ${hSel.value}:${m}`; }
   }
 
+  /* ═══════════════════════════════════════════════════════════
+   * 반복 일정 수정/삭제 범위 선택 — "이 건만 / 이 건부터 전체 / 전체" 같은
+   * 흔히 쓰는 캘린더 앱 패턴을 반복 등록된 일정에도 그대로 적용한다.
+   * ═══════════════════════════════════════════════════════════ */
+  function _showScopePicker(mode, s, onPick) {
+    _q('sch-scope-ov')?.remove();
+    const ov = document.createElement('div');
+    ov.id = 'sch-scope-ov'; ov.className = 'ov'; ov.style.zIndex = 950;
+    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+    const opts = mode === 'delete'
+      ? [{ v: 'this', l: '이 일정만 삭제' }, { v: 'all', l: '🔁 반복 일정 전체 삭제' }]
+      : [{ v: 'this', l: '이 건만 수정' }, { v: 'future', l: '이 건부터 이후 전체 수정' }, { v: 'all', l: '🔁 반복 일정 전체 수정' }];
+    ov.innerHTML = `
+      <div class="sh" style="max-width:340px">
+        <div class="sh-handle"></div>
+        <div class="sh-title">🔁 "${_esc(s.title)}"은(는) 반복 등록된 일정입니다</div>
+        <div style="font-size:12.5px;color:var(--tx3);margin:-6px 0 12px;line-height:1.5">${mode === 'delete' ? '삭제 범위' : '수정 범위'}를 선택해주세요.</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${opts.map(o => `<button type="button" class="btn-x" style="width:100%;text-align:center" data-v="${o.v}">${o.l}</button>`).join('')}
+        </div>
+        <div class="sh-acts"><button class="btn-x" style="width:100%" id="sch-scope-cancel">취소</button></div>
+      </div>`;
+    document.body.appendChild(ov);
+    ov.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { ov.remove(); onPick(b.dataset.v); });
+    _q('sch-scope-cancel').onclick = () => ov.remove();
+  }
+
   function openEditor(id = null, prefillDate = null) {
+    const s = id ? ScheduleDB.getById(id) : null;
+    if (s && !_canEdit(s)) {
+      if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ 다른 사람이 등록한 일정은 수정할 수 없습니다', 'error');
+      return;
+    }
+    if (s && s.seriesId) {
+      _showScopePicker('edit', s, scope => { _editScope = scope; _openEditorForm(id, prefillDate); });
+      return;
+    }
+    _editScope = 'this';
+    _openEditorForm(id, prefillDate);
+  }
+
+  function _openEditorForm(id = null, prefillDate = null) {
     _editId = id;
     ScheduleDB.pauseUpdates(true); // ★ 편집 중엔 서버 갱신이 화면을 덮어쓰지 않도록
     const s = id ? ScheduleDB.getById(id) : null;
@@ -1147,13 +1200,13 @@ const ScheduleApp = (() => {
         </div>
         <div class="f-grp">
           <label class="sch-notify-ck">
-            <input type="checkbox" id="sch-f-notify" ${notify ? 'checked' : ''} onchange="document.getElementById('sch-f-notify-wrap').style.display=this.checked?'flex':'none'">
+            <input type="checkbox" id="sch-f-notify" ${notify ? 'checked' : ''} onchange="document.getElementById('sch-f-notify-wrap').style.display=this.checked?'block':'none'">
             <span>🔔 알림 사용 <em>(끄면 조용히 캘린더에만 표시됩니다)</em></span>
           </label>
         </div>
-        <div class="f-grp" id="sch-f-notify-wrap" style="display:${notify ? 'flex' : 'none'};flex-wrap:wrap;gap:12px">
-          <div style="width:150px">${_timePicker('sch-f-time', '알림 시간', s?.notifyTime || '09:00')}</div>
-          <div style="flex:1;min-width:160px">
+        <div class="f-grp" id="sch-f-notify-wrap" style="display:${notify ? 'block' : 'none'}">
+          <div>${_timePicker('sch-f-time', '알림 시간', s?.notifyTime || '09:00')}</div>
+          <div style="margin-top:14px">
             <label class="f-lbl">미리 알림 <em style="font-style:normal;color:var(--tx3);font-weight:600">(도래 며칠 전부터 알릴지)</em></label>
             <div class="ntc-pill-row" id="sch-f-remind">
               <button type="button" class="ntc-pill${(s?.notifyDaysBefore || 0) === 0 ? ' on' : ''}" data-v="0">당일</button>
@@ -1162,7 +1215,7 @@ const ScheduleApp = (() => {
               <button type="button" class="ntc-pill${(s?.notifyDaysBefore || 0) === 7 ? ' on' : ''}" data-v="7">7일 전</button>
             </div>
           </div>
-          <div style="flex:1 1 100%">
+          <div style="margin-top:14px">
             <label class="f-lbl">알림 대상</label>
             <div class="ntc-pill-row" id="sch-f-aud">
               <button type="button" class="ntc-pill${(s?.audience || 'all') === 'admin' ? ' on' : ''}" data-v="admin">🔑 원장만</button>
@@ -1242,14 +1295,26 @@ const ScheduleApp = (() => {
     const repeatEnd = _q('sch-f-repeat-end')?.value || '';
 
     if (_editId) {
-      // 수정은 항상 그 항목 하나만 대상으로 함(반복 일괄 수정은 지원하지 않음)
+      const orig = ScheduleDB.getById(_editId);
+      if (orig?.seriesId && _editScope !== 'this') {
+        // ★ 반복 일정 일괄 수정 — 제목/메모/알림 등 "내용"만 함께 바꾸고, 각 회차 고유의 날짜는 그대로 둔다.
+        const { startDate: _s, endDate: _e, ...contentOnly } = data;
+        const targets = ScheduleDB.getAll().filter(x => x.seriesId === orig.seriesId && (_editScope === 'all' || x.startDate >= orig.startDate));
+        for (const t of targets) await ScheduleDB.update(t.id, contentOnly);
+        closeEditor(); refresh();
+        if (typeof App !== 'undefined' && App._toast) App._toast(`✅ 반복 일정 ${targets.length}건이 수정되었습니다`, 'success');
+        return;
+      }
+      // 이 건만 수정(반복이 아니거나 'this' 선택) — 날짜도 함께 반영
       await ScheduleDB.update(_editId, data);
     } else if (repeatFreq !== 'none' && repeatEnd && repeatEnd >= startDate) {
       // ★ 반복 등록 — 시작일~종료일 사이 간격만큼 자동으로 여러 건 생성 (안전장치: 최대 104회)
+      //   같은 반복 묶음임을 알 수 있도록 공통 seriesId를 부여해서, 나중에 "전체 수정/삭제"가 가능하게 한다.
+      const seriesId = 'ser' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
       const spanDays = Math.round((new Date(endDate + 'T00:00:00') - new Date(startDate + 'T00:00:00')) / 86400000);
       let cur = startDate, n = 0;
       while (cur <= repeatEnd && n < 104) {
-        await ScheduleDB.add({ ...data, startDate: cur, endDate: _addDays(cur, spanDays) });
+        await ScheduleDB.add({ ...data, startDate: cur, endDate: _addDays(cur, spanDays), seriesId });
         n++;
         if (repeatFreq === 'weekly') cur = _addDays(cur, 7);
         else if (repeatFreq === 'monthly') { const d = new Date(cur + 'T00:00:00'); d.setMonth(d.getMonth() + 1); cur = `${d.getFullYear()}-${_pad(d.getMonth() + 1)}-${_pad(d.getDate())}`; }
@@ -1268,6 +1333,25 @@ const ScheduleApp = (() => {
 
   async function deleteItem(id) {
     const s = ScheduleDB.getById(id); if (!s) return;
+    if (!_canEdit(s)) {
+      if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ 다른 사람이 등록한 일정은 삭제할 수 없습니다', 'error');
+      return;
+    }
+    if (s.seriesId) {
+      _showScopePicker('delete', s, async scope => {
+        if (scope === 'all') {
+          const targets = ScheduleDB.getAll().filter(x => x.seriesId === s.seriesId);
+          if (!confirm(`🔁 반복 등록된 ${targets.length}건을 모두 삭제할까요? 이 작업은 되돌릴 수 없습니다.`)) return;
+          for (const t of targets) await ScheduleDB.remove(t.id);
+          refresh();
+          if (typeof App !== 'undefined' && App._toast) App._toast(`🗑 반복 일정 ${targets.length}건이 삭제되었습니다`, 'success');
+        } else {
+          await ScheduleDB.remove(id);
+          refresh();
+        }
+      });
+      return;
+    }
     if (!confirm(`"${s.title}" 일정을 삭제할까요?`)) return;
     await ScheduleDB.remove(id);
     refresh();
