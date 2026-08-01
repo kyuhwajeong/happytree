@@ -214,13 +214,20 @@ const DashboardApp = (() => {
  * ══════════════════════════════════════════════════════════════ */
 /* --- 컴팩트: 여백을 줄이고 테두리를 얇게, 장식 요소(명언 배너)는 숨겨 정보 밀도를 높임 --- */
 .db-style-compact .db-body{gap:8px;padding:10px 12px 90px}
-.db-style-compact .db-sec{border-radius:10px;padding:10px;box-shadow:none;border-color:var(--bdr2)}
+.db-style-compact .db-sec{border-radius:8px;padding:10px;box-shadow:none;border-color:var(--bdr2)}
 .db-style-compact .db-sec-hdr{margin-bottom:7px}
-.db-style-compact .db-sec-title{font-size:13px}
-.db-style-compact .db-mini-btn{padding:5px 10px;border-radius:7px;font-size:11.5px}
+.db-style-compact .db-sec-title{font-size:11.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--tx2);padding-left:8px;border-left:3px solid var(--a)}
+.db-style-compact .db-mini-btn{padding:5px 10px;border-radius:6px;font-size:11.5px}
 .db-style-compact .ph{padding-bottom:10px}
 .db-style-compact .ph-title{font-size:15px}
 .db-style-compact .db-quote-inline{display:none}
+/* ★ PC 등 넓은 화면에서만 — 섹션들을 위아래로 쌓지 않고 2열로 나란히 배치해서
+   구도 자체를 다르게 만든다(Linear·Vercel류 대시보드의 다단 레이아웃 참고).
+   좁은 화면(휴대폰 등)은 별도 규칙으로 항상 1열이라 여기 영향을 받지 않는다. */
+@media (min-width:860px){
+  .db-style-compact .db-body{display:grid;grid-template-columns:1fr 1fr;align-items:start;gap:12px}
+  .db-style-compact .db-sec{margin:0}
+}
 
 /* --- 히어로: 상단을 그라디언트 배너로 강조하고, 섹션 제목엔 포인트 색 왼쪽 바를 둠 --- */
 .db-style-hero .ph{background:linear-gradient(135deg,var(--a),#7c3aed);border-radius:0 0 26px 26px;padding:18px 16px 24px;margin-bottom:2px;box-shadow:0 8px 20px -8px var(--a40)}
