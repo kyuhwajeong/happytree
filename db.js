@@ -223,6 +223,22 @@ const DB = (() => {
           // Firebase가 빈값 → C.accounts만 동기화, LS는 기존 값 유지
           C.accounts = nd;
         }
+        // ★ 지금 이 기기에 로그인해 있는 계정의 권한(역할·담당 반·메뉴 접근 권한 등)을
+        //   admin이 다른 곳에서 바꿨다면, 재로그인 없이 이 세션에도 즉시 반영한다.
+        //   (기존엔 로그인 시점의 스냅샷이 localStorage 세션에 고정돼 있어 admin이
+        //   바꿔도 다음 로그인 전까지 반영이 안 됐음 — 여기서 실시간으로 맞춰준다.)
+        const sess = getSession();
+        if (sess) {
+          if (nd.length > 0) {
+            const fresh = C.accounts.find(a => a.id === sess.id);
+            if (fresh) {
+              if (JSON.stringify(fresh) !== JSON.stringify(sess)) { setSession(fresh); _fire('session'); }
+            } else {
+              // 계정이 삭제됨 → 세션 즉시 종료
+              clearSession(); _fire('session');
+            }
+          }
+        }
         _fire('accounts');
       }
     });

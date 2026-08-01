@@ -62,29 +62,30 @@ const ScheduleApp = (() => {
 .sch-widget-resize-handle.rh-e{top:8px;bottom:8px;width:9px;right:-5px;}
 .sch-widget-resize-handle.rh-se{width:16px;height:16px;bottom:-6px;right:-6px;}
 .sch-widget-resize-handle:hover,.sch-resizable-wrap.resizing .sch-widget-resize-handle{background:var(--a20);border-radius:4px;}
-.sch-cal-title{font-size:13.5px;font-weight:800;color:var(--tx)}
+.sch-cal-title{font-size:15px;font-weight:800;color:var(--tx)}
 .sch-cal-navs{display:flex;align-items:center;gap:4px}
-.sch-nav-btn{width:26px;height:26px;border-radius:8px;background:var(--card2);border:1px solid var(--bdr);display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer;color:var(--tx2)}
-.sch-today-btn{padding:5px 9px;border-radius:8px;background:var(--card2);border:1px solid var(--bdr);font-size:10.5px;font-weight:700;color:var(--tx2);cursor:pointer}
+.sch-selday-navs{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.sch-nav-btn{width:30px;height:30px;border-radius:9px;background:var(--card2);border:1px solid var(--bdr);display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer;color:var(--tx2)}
+.sch-today-btn{padding:7px 12px;border-radius:9px;background:var(--card2);border:1px solid var(--bdr);font-size:12.5px;font-weight:700;color:var(--tx2);cursor:pointer}
+.sch-add-btn{background:var(--a);border-color:var(--a);color:#fff}
 .sch-widget-layout{display:flex;flex-wrap:wrap;gap:18px}
 .sch-cal-col{flex:0 0 auto;min-width:230px}
 .sch-tdc-col{flex:1 1 auto;min-width:210px;border-left:1px solid var(--bdr);padding-left:16px;display:flex;flex-direction:column}
-.sch-selday-hint{text-align:center;color:var(--tx3);font-size:11.5px;line-height:1.6;padding:22px 8px;background:var(--card2);border-radius:12px}
-.sch-selday-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.sch-selday-title{font-size:12px;font-weight:800;color:var(--tx)}
-.sch-selday-close{padding:4px 9px;border-radius:7px;background:var(--a10);border:1px solid var(--a40);color:var(--a);font-size:10.5px;font-weight:700;cursor:pointer;flex-shrink:0}
+.sch-selday-hint{text-align:center;color:var(--tx3);font-size:12.5px;line-height:1.6;padding:22px 8px;background:var(--card2);border-radius:12px}
+.sch-selday-hdr{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.sch-selday-title{font-size:15px;font-weight:800;color:var(--tx)}
 .sch-detail-sec-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-.sch-mini-add-btn{padding:4px 9px;border-radius:7px;background:var(--card2);border:1px solid var(--bdr2);color:var(--tx2);font-size:10px;font-weight:700;cursor:pointer}
+.sch-mini-add-btn{padding:6px 11px;border-radius:8px;background:var(--card2);border:1px solid var(--bdr2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer}
 .sch-workadd-box{background:var(--surf2);border:1px dashed var(--bdr2);border-radius:11px;padding:10px;margin-top:2px}
 .sch-notify-ck{display:flex;align-items:flex-start;gap:8px;cursor:pointer;padding:2px 0}
 .sch-notify-ck input{width:17px;height:17px;flex-shrink:0;margin-top:1px;accent-color:var(--a);cursor:pointer}
-.sch-notify-ck span{font-size:12.5px;color:var(--tx);line-height:1.5}
-.sch-notify-ck span em{font-style:normal;color:var(--tx3);font-size:11px}
+.sch-notify-ck span{font-size:13.5px;color:var(--tx);line-height:1.5}
+.sch-notify-ck span em{font-style:normal;color:var(--tx3);font-size:12px}
 .sch-today-divider{border-top:1px dashed var(--bdr);margin:16px 0 12px}
 .sch-today-section{width:100%}
 .sch-detail-sec{margin-bottom:14px}
 .sch-detail-sec:last-child{margin-bottom:0}
-.sch-detail-sec-title{font-size:11px;font-weight:800;color:var(--tx3);letter-spacing:.4px;margin-bottom:6px}
+.sch-detail-sec-title{font-size:12.5px;font-weight:800;color:var(--tx3);letter-spacing:.4px;margin-bottom:6px}
 .sch-dow-row{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:2px}
 .sch-dow{text-align:center;font-size:10px;font-weight:800;color:var(--tx3);padding:2px 0 6px}
 .sch-dow.sun{color:#ef4444}.sch-dow.sat{color:#3b82f6}
@@ -109,29 +110,29 @@ const ScheduleApp = (() => {
 .sch-overflow-row{margin-top:1px}
 .sch-overflow-cell{text-align:center;font-size:8px;font-weight:800;color:var(--tx3);cursor:pointer}
 .sch-legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;padding-top:10px;border-top:1px dashed var(--bdr)}
-.sch-legend-item{display:flex;align-items:center;gap:4px;font-size:9.5px;font-weight:600;color:var(--tx3);background:var(--card2);border-radius:999px;padding:3px 8px 3px 6px}
+.sch-legend-item{display:flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;color:var(--tx3);background:var(--card2);border-radius:999px;padding:3px 8px 3px 6px}
 .sch-legend-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 
 /* 오늘의 수업 (캘린더 우측 패널) */
 .sch-tdc-hdr{display:flex;align-items:baseline;gap:7px;margin-bottom:9px}
-.sch-tdc-title{font-size:11px;font-weight:800;color:var(--tx3);letter-spacing:.4px}
-.sch-tdc-date{font-size:10.5px;color:var(--tx3);opacity:.75}
+.sch-tdc-title{font-size:12.5px;font-weight:800;color:var(--tx3);letter-spacing:.4px}
+.sch-tdc-date{font-size:11.5px;color:var(--tx3);opacity:.75}
 .sch-tdc-grid{display:flex;flex-wrap:wrap;gap:8px}
 .sch-tdc-card{flex:0 1 175px;display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:12px;background:var(--card2);border:1px solid var(--bdr);cursor:pointer;transition:all .15s}
 .sch-tdc-card:active{transform:scale(.95);background:var(--surf2)}
 .sch-tdc-card.now{border-color:var(--a);background:var(--a10)}
-.sch-tdc-num{width:22px;height:22px;border-radius:50%;background:var(--a);color:#fff;font-size:10.5px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sch-tdc-num{width:24px;height:24px;border-radius:50%;background:var(--a);color:#fff;font-size:11.5px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .sch-tdc-card.now .sch-tdc-num{background:#ef4444}
 .sch-tdc-info{min-width:0}
-.sch-tdc-time2{font-size:10px;font-weight:700;color:var(--a);margin-bottom:1px;white-space:nowrap}
+.sch-tdc-time2{font-size:11px;font-weight:700;color:var(--a);margin-bottom:1px;white-space:nowrap}
 .sch-tdc-card.now .sch-tdc-time2{color:#ef4444}
-.sch-tdc-name2{font-size:12.5px;font-weight:800;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sch-tdc-stucnt{font-size:10.5px;font-weight:600;color:var(--tx3);margin-left:2px}
-.sch-tdc-empty{text-align:center;color:var(--tx3);font-size:12px;padding:24px 10px;background:var(--card2);border-radius:12px;border:1px dashed var(--bdr2)}
+.sch-tdc-name2{font-size:13.5px;font-weight:800;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sch-tdc-stucnt{font-size:11.5px;font-weight:600;color:var(--tx3);margin-left:2px}
+.sch-tdc-empty{text-align:center;color:var(--tx3);font-size:13px;padding:24px 10px;background:var(--card2);border-radius:12px;border:1px dashed var(--bdr2)}
 .sch-tdc-suppress{background:var(--a10);border:1px solid var(--a40);border-radius:12px;padding:14px}
-.sch-tdc-suppress-title{font-size:12.5px;font-weight:700;color:var(--tx);text-align:center}
-.sch-tdc-suppress-note{font-size:11.5px;color:var(--tx2);text-align:center;margin-top:6px;padding-top:6px;border-top:1px dashed var(--a40)}
-.sch-empty-mini{text-align:center;color:var(--tx3);font-size:11.5px;padding:20px 6px;line-height:1.5}
+.sch-tdc-suppress-title{font-size:13.5px;font-weight:700;color:var(--tx);text-align:center}
+.sch-tdc-suppress-note{font-size:12.5px;color:var(--tx2);text-align:center;margin-top:6px;padding-top:6px;border-top:1px dashed var(--a40)}
+.sch-empty-mini{text-align:center;color:var(--tx3);font-size:12.5px;padding:20px 6px;line-height:1.5}
 
 /* 일자 상세 (우측 패널 인라인) */
 .sch-item-row{display:flex;align-items:flex-start;gap:9px;background:var(--card2);border:1px solid var(--bdr);border-radius:11px;padding:10px;margin-bottom:6px}
@@ -140,15 +141,15 @@ const ScheduleApp = (() => {
 .sch-item-row.sch-item-done{opacity:.6}
 .sch-item-row.sch-item-done .sch-item-title{text-decoration:line-through}
 .sch-item-row.sch-item-done .sch-item-memo{text-decoration:line-through}
-.sch-item-suppress-tag{font-size:10.5px;color:var(--a);font-weight:700;margin-top:5px;padding-top:5px;border-top:1px dashed var(--bdr2)}
-.sch-item-ico{font-size:16px;flex-shrink:0}
+.sch-item-suppress-tag{font-size:11.5px;color:var(--a);font-weight:700;margin-top:5px;padding-top:5px;border-top:1px dashed var(--bdr2)}
+.sch-item-ico{font-size:18px;flex-shrink:0}
 .sch-item-body{flex:1;min-width:0}
-.sch-item-title{font-size:12.5px;font-weight:700;color:var(--tx)}
-.sch-item-meta{font-size:10.5px;color:var(--tx3);margin-top:1px}
-.sch-item-memo{font-size:11.5px;color:var(--tx2);margin-top:4px;white-space:pre-line}
+.sch-item-title{font-size:14px;font-weight:700;color:var(--tx)}
+.sch-item-meta{font-size:11.5px;color:var(--tx3);margin-top:1px}
+.sch-item-memo{font-size:12.5px;color:var(--tx2);margin-top:4px;white-space:pre-line}
 .sch-item-acts{display:flex;gap:5px;flex-shrink:0}
-.sch-item-ibtn{width:26px;height:26px;border-radius:8px;background:var(--surf2);border:1px solid var(--bdr);display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer}
-.sch-badge{font-size:9.5px;font-weight:800;border-radius:999px;padding:2px 7px;flex-shrink:0}
+.sch-item-ibtn{width:29px;height:29px;border-radius:9px;background:var(--surf2);border:1px solid var(--bdr);display:flex;align-items:center;justify-content:center;font-size:13.5px;cursor:pointer}
+.sch-badge{font-size:10.5px;font-weight:800;border-radius:999px;padding:3px 8px;flex-shrink:0}
 .sch-badge.ok{background:rgba(34,197,94,.14);color:#16a34a}
 .sch-badge.warn{background:rgba(239,68,68,.12);color:#ef4444}
 .sch-badge.info{background:var(--a10);color:var(--a)}
@@ -158,8 +159,8 @@ const ScheduleApp = (() => {
 .sch-pop-box{background:var(--card,#fff);border-radius:18px;padding:24px;max-width:400px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.35);animation:schPop .25s cubic-bezier(.34,1.56,.64,1)}
 @keyframes schPop{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
 .sch-pop-ico{font-size:34px;margin-bottom:10px}
-.sch-pop-title{font-size:17px;font-weight:800;color:var(--tx);margin-bottom:6px}
-.sch-pop-msg{font-size:13.5px;color:var(--tx2);line-height:1.6;white-space:pre-line;margin-bottom:18px}
+.sch-pop-title{font-size:18px;font-weight:800;color:var(--tx);margin-bottom:6px}
+.sch-pop-msg{font-size:14.5px;color:var(--tx2);line-height:1.6;white-space:pre-line;margin-bottom:18px}
 .sch-pop-acts{display:flex;gap:8px}
     `;
     document.head.appendChild(s);
@@ -613,11 +614,6 @@ const ScheduleApp = (() => {
     el.innerHTML = `
       <div class="sch-cal-hdr">
         <div class="sch-cal-title">${year}년 ${month}월</div>
-        <div class="sch-cal-navs">
-          <button class="sch-today-btn" onclick="ScheduleApp._goToday()">오늘</button>
-          <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(-1)">‹</button>
-          <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(1)">›</button>
-        </div>
       </div>
       <div class="sch-widget-layout">
         <div class="sch-cal-col">
@@ -818,7 +814,10 @@ const ScheduleApp = (() => {
   function _goToday() {
     const now = new Date();
     _st.year = now.getFullYear(); _st.month = now.getMonth() + 1;
-    if (_mountId) renderMiniCalendar(_mountId);
+    // ★ [오늘로] 버튼을 없애면서 [오늘] 버튼이 그 역할까지 겸하도록 함 —
+    //   달력 월 이동뿐 아니라 우측(또는 아래) 상세 패널 선택도 함께 오늘로 되돌린다.
+    _selDate = null; _workAddFor = null;
+    refresh();
   }
 
   // ★ 입학 기념일 항목 클릭 → 학생 탭으로 전환 후 해당 학생 상세 화면 오픈
@@ -853,7 +852,12 @@ const ScheduleApp = (() => {
 
     let html = `<div class="sch-selday-hdr">
       <span class="sch-selday-title">🗓️ ${dateLabel}</span>
-      ${dateStr !== _todayStr() ? `<button class="sch-selday-close" onclick="ScheduleApp.closeDayDetail()" title="오늘로 돌아가기">오늘로</button>` : ''}
+      <div class="sch-selday-navs">
+        <button class="sch-today-btn" onclick="ScheduleApp._goToday()">오늘</button>
+        <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(-1)">‹</button>
+        <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(1)">›</button>
+        ${isAdmin ? `<button class="sch-today-btn sch-add-btn" onclick="ScheduleApp.openEditor(null,'${dateStr}')">➕ 등록</button>` : ''}
+      </div>
     </div>`;
 
     html += `<div class="sch-detail-sec"><div class="sch-detail-sec-title">📌 이 날의 일정</div>`;
@@ -956,9 +960,6 @@ const ScheduleApp = (() => {
       html += `</div>`;
     }
 
-    if (isAdmin) {
-      html += `<button class="btn-ok" style="width:100%;margin-top:4px" onclick="ScheduleApp.openEditor(null,'${dateStr}')">➕ 이 날짜에 일정 등록</button>`;
-    }
     return html;
   }
 
