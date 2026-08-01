@@ -133,7 +133,7 @@ const ScheduleApp = (() => {
 .sch-daynum-cell.selected{font-weight:900}
 /* ★ 선택한 날짜: 숫자만 동그랗게가 아니라, 그 날짜의 이벤트 막대까지 포함해서
    세로로 길게 박스 하나로 감싸서 "그 날짜 칸 전체"를 고른 것처럼 보이게 함 */
-.sch-sel-col{position:absolute;top:0;bottom:0;width:calc(100% / 7);border-radius:10px;box-shadow:0 0 0 2px var(--a);background:var(--a10);pointer-events:none;z-index:0}
+.sch-sel-col{position:absolute;top:2px;bottom:2px;width:calc(100% / 7);border-radius:10px;background:var(--a10);pointer-events:none;z-index:0}
 .sch-track-row{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-top:2px;position:relative;z-index:1}
 .sch-bar{position:relative;grid-row:1;height:15px;line-height:15px;font-size:8.5px;font-weight:700;color:#fff;padding:0 4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;text-shadow:0 1px 1.5px rgba(0,0,0,.35)}
 .sch-bar-draggable{padding:0 9px}
@@ -654,14 +654,12 @@ const ScheduleApp = (() => {
     }).join('');
     const dowHtml = DAYS_KO.map((d, i) => `<div class="sch-dow${i === 0 ? ' sun' : ''}${i === 6 ? ' sat' : ''}">${d}</div>`).join('');
 
+    // ★ "🗓️ 일정표" 대시보드 섹션 헤더와 별도 줄로 중복 표시되던 월 제목을 없애고,
+    //   같은 행에 있는 외부 라벨(#sch-month-label)만 갱신한다.
+    const monthLabelEl = document.getElementById('sch-month-label');
+    if (monthLabelEl) monthLabelEl.textContent = `${year}년 ${month}월`;
+
     el.innerHTML = `
-      <div class="sch-cal-hdr">
-        <div class="sch-cal-title">${year}년 ${month}월</div>
-        <div class="sch-cal-navs">
-          <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(-1)" title="이전 달">‹</button>
-          <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(1)" title="다음 달">›</button>
-        </div>
-      </div>
       <div class="sch-widget-layout">
         <div class="sch-cal-col">
           <div id="sch-resizable-wrap" class="sch-resizable-wrap">
