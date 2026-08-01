@@ -415,6 +415,7 @@ const EduVideoApp = (() => {
     ov.className = 'ev-ov'; ov.id = 'ev-detail-ov';
     ov.innerHTML = `<div class="ev-sheet" style="max-width:640px">
       <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:8px">
+        <button class="ev-btn ghost" style="flex:0 0 auto;padding:6px 10px" onclick="EduVideoApp._shareVideo('${id}')" title="공유">🔗</button>
         <button class="ev-btn ghost" style="flex:0 0 auto;padding:6px 10px" onclick="EduVideoApp._confirmDeleteVideo('${id}')" title="삭제">🗑️</button>
         <button class="ev-btn ghost" style="flex:0 0 auto;padding:6px 10px" onclick="document.getElementById('ev-detail-ov').remove()">✕</button>
       </div>
@@ -573,6 +574,14 @@ const EduVideoApp = (() => {
   }
 
   /* ═══════════════ 삭제 ═══════════════ */
+  function _shareVideo(id) {
+    const v = EduVideoDB.getById(id);
+    if (!v) return;
+    App.openShareModal({
+      title: v.title,
+      links: [{ label: '유튜브 영상', url: v.youtubeUrl }],
+    });
+  }
   function _confirmDeleteVideo(id) {
     const v = EduVideoDB.getById(id);
     if (!v) return;
@@ -732,7 +741,7 @@ const EduVideoApp = (() => {
     render, _selectTopic, _promptNewTopic, _togglePin,
     openRecommend, _runRecommend, _addFromRecommend, _loadMoreRecommend,
     openAdd, _closeAdd, _submitAdd,
-    openDetail, _extractWords, _extractWordsFromVideo, openEditScript, _submitEditScript, _confirmDeleteVideo,
+    openDetail, _extractWords, _extractWordsFromVideo, openEditScript, _submitEditScript, _confirmDeleteVideo, _shareVideo,
     _makePdf,
   };
 })();

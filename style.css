@@ -443,6 +443,11 @@ body.dark .bk-inp.filled{color:#4ade80}
 
 /* Toast */
 .toast{position:fixed;bottom:calc(var(--nav)+14px);left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--bdr2);color:var(--tx);font-size:var(--fzs);font-weight:500;padding:9px 20px;border-radius:24px;white-space:nowrap;z-index:900;box-shadow:var(--sh2);pointer-events:none;animation:toastIn .22s ease}
+.app-share-warn{background:#fff3cd;color:#997404;font-size:11.5px;font-weight:600;padding:8px 12px;border-radius:10px;margin-bottom:12px;line-height:1.5}
+.app-share-title{font-size:13px;font-weight:800;color:var(--tx);margin-bottom:10px;word-break:break-all}
+.app-share-links{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.app-share-link-row{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--surf2);border-radius:9px;padding:8px 10px}
+.app-share-link-label{font-size:11.5px;color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .toast.success{border-color:rgba(5,150,105,.5);background:rgba(5,150,105,.1);color:var(--green)}
 .toast.error  {border-color:rgba(220,38,38,.4);background:rgba(220,38,38,.08);color:var(--red)}
 @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
