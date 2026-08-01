@@ -701,20 +701,9 @@ const ScheduleApp = (() => {
     if (!el) return;
     const dashStyle = (typeof DashboardApp !== 'undefined' && DashboardApp._dashStyle) ? DashboardApp._dashStyle() : 'minimal';
     const monthLabelEl = document.getElementById('sch-month-label');
-
-    // ★ 컴팩트 스타일 — 달력 그리드 대신 "다가오는 2주" 목록형 아젉다를 위에 얹지만,
-    //   ➕ 등록·근무기록·공지 등 실제 기능은 그대로 쓸 수 있도록 날짜 상세 패널은 유지한다.
-    //   (처음 버전은 아젠다만 보여주고 상세 패널을 통째로 빼버려서 등록·수정 자체가
-    //   불가능해지는 문제가 있었음 — 반드시 둘 다 있어야 한다)
-    if (dashStyle === 'compact') {
-      if (monthLabelEl) monthLabelEl.textContent = '📋 다가오는 2주';
-      el.innerHTML = `
-        <div class="sch-agenda-wrap">${_agendaViewHtml()}</div>
-        <div class="sch-agenda-detail">
-          <div id="sch-selday-panel">${_selDayPanelHtml(_selDate || _todayStr())}</div>
-        </div>`;
-      return;
-    }
+    // ★ 스타일과 무관하게 달력 그리드·날짜 상세 패널(등록·근무기록·공지 등)은
+    //   항상 그대로 나온다. "스타일이 다르게 보인다"는 건 톤·강조 방식이 바뀌는
+    //   것이지 기능이 빠지는 게 아니다 — 특히 PC에서는 공간이 넉넉하므로 더더욱.
 
     const { year, month } = _st;
     const todayStr = _todayStr();
