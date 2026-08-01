@@ -118,6 +118,27 @@ const ArchiveDB = (() => {
 
   function getAll() { return _list.slice().sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || '')); }
   function getById(id) { return _list.find(x => x.id === id) || null; }
+  // ★ 이 게시물 하나만 서버에서 강제로 다시 확인(캐시 무시) — 다른 기기에서
+  //   바뀐 내용이 실시간 리스너로 놓쳤을 경우를 대비한 보정용
+  async function refreshPost(id) {
+    if (typeof FireDB === 'undefined' || !FireDB.getFromServer) return getById(id);
+    try {
+      const fresh = await FireDB.getFromServer(`${FB_PATH}/${id}`);
+      const idx = _list.findIndex(x => x.id === id);
+      if (!fresh) {
+        // ★ 서버에 아예 없다(다른 기기에서 삭제됨) — 로컬에도 반영해서 정리
+        if (idx >= 0) { _list.splice(idx, 1); _saveLS(); _fire('archive'); }
+        return null;
+      }
+      const norm = _normalize(fresh);
+      if (idx >= 0) _list[idx] = norm; else _list.push(norm);
+      _saveLS();
+      return norm;
+    } catch (e) {
+      console.warn('[ArchiveDB] refreshPost 실패', e);
+      return getById(id);
+    }
+  }
   function getByCategory(cat) { return getAll().filter(x => x.category === cat); }
 
   /* ── 권한(작성자/공개설정/비밀번호) ── */
@@ -151,17 +172,17 @@ const ArchiveDB = (() => {
     const m = (name || '').match(/\.([a-zA-Z0-9]+)$/);
     return m ? m[1].toLowerCase() : '';
   }
-  async function _uploadToWorker(key, file) {
-    const res = await fetch(`${WORKER_BASE}/file/${encodeURIComponent(key)}`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${UPLOAD_TOKEN}`,
-        'Content-Type': file.type || 'application/octet-stream',
-      },
-      body: file,
+  function _uploadToWorker(key, file, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', `${WORKER_BASE}/file/${encodeURIComponent(key)}`);
+      xhr.setRequestHeader('Authorization', `Bearer ${UPLOAD_TOKEN}`);
+      xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+      if (onProgress) xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+      xhr.onload = () => { if (xhr.status >= 200 && xhr.status < 300) resolve(true); else reject(new Error(`업로드 실패: HTTP ${xhr.status}`)); };
+      xhr.onerror = () => reject(new Error('업로드 실패: 네트워크 오류'));
+      xhr.send(file);
     });
-    if (!res.ok) throw new Error(`업로드 실패: HTTP ${res.status}`);
-    return true;
   }
   async function _deleteFromWorker(key) {
     const res = await fetch(`${WORKER_BASE}/file/${encodeURIComponent(key)}`, {
@@ -179,9 +200,9 @@ const ArchiveDB = (() => {
 
   // ★ 파일 하나를 실제로 업로드하고, files[] 항목 하나를 만들어 반환
   //   (메타 추출 결과가 있으면 같이 담는다 — archive-app.js가 미리 뽑아서 넘겨줌)
-  async function _uploadOneFile(postId, file, extra = {}) {
+  async function _uploadOneFile(postId, file, extra = {}, onProgress) {
     const key = `${postId}_${_nid()}_${file.name}`.replace(/[^\w.\-가-힣]/g, '_'); // R2 키에 안전한 문자만
-    await _uploadToWorker(key, file);
+    await _uploadToWorker(key, file, onProgress);
     return {
       r2Key: key,
       originalName: file.name,
@@ -196,7 +217,8 @@ const ArchiveDB = (() => {
   // Create — 파일 여러 개(files: File[] 또는 FileList)를 한 번에 업로드해서
   //   하나의 게시물로 묶는다. extraPerFile은 archive-app.js가 미리 추출한
   //   {thumbnail, contentText}를 파일 순서대로 넘겨줄 때 쓴다(선택).
-  async function createPost(files, meta = {}, extraPerFile = []) {
+  //   onFileProgress(fileIndex, ratio)는 각 파일 업로드 진행률(0~1)을 알려준다.
+  async function createPost(files, meta = {}, extraPerFile = [], onFileProgress) {
     const fileArr = Array.from(files || []);
     if (!fileArr.length) throw new Error('파일이 없습니다');
     const id = _nid();
@@ -204,7 +226,7 @@ const ArchiveDB = (() => {
     let anyFailed = false;
     for (let i = 0; i < fileArr.length; i++) {
       try {
-        uploaded.push(await _uploadOneFile(id, fileArr[i], extraPerFile[i] || {}));
+        uploaded.push(await _uploadOneFile(id, fileArr[i], extraPerFile[i] || {}, ratio => onFileProgress?.(i, ratio)));
       } catch (e) {
         console.error('[ArchiveDB] 파일 업로드 실패:', fileArr[i].name, e);
         anyFailed = true;
@@ -232,14 +254,67 @@ const ArchiveDB = (() => {
     return { ...rec, savedToServer: savedToServer === true, partialFailure: anyFailed };
   }
 
+  // ★ 파일을 올리는 대신, 온라인 문서(OneDrive·구글시트 등) 링크를 등록한다.
+  //   실제 파일을 우리 저장소에 두지 않고 링크만 저장 — 열람 시 그 서비스의
+  //   웹 편집기를 그대로 띄워서, 우리가 어설픈 뷰어/에디터를 직접 만드는
+  //   대신 MS·구글이 이미 잘 만들어둔 걸 그대로 활용한다.
+  function _linkFileEntry(url, title, linkType) {
+    return {
+      r2Key: `link_${_nid()}`, // ★ files[] 안에서 항목을 구분하는 용도로만 씀(실제 저장소 키 아님)
+      originalName: title || url,
+      ext: 'link',
+      size: 0,
+      mimeType: 'application/vnd.online-link',
+      linkUrl: url,
+      linkType: linkType || 'other',
+      thumbnail: '', contentText: '',
+    };
+  }
+  async function createLinkPost(meta = {}) {
+    if (!meta.linkUrl) throw new Error('링크 주소가 없습니다');
+    const id = _nid();
+    const fileEntry = _linkFileEntry(meta.linkUrl, meta.linkTitle, meta.linkType);
+    const rec = {
+      id,
+      name: meta.name || meta.linkTitle || '온라인 문서',
+      category: meta.category || '기타',
+      description: meta.description || '',
+      uploadedBy: meta.uploadedBy || '',
+      password: meta.password || '',
+      visibility: meta.visibility === 'private' ? 'private' : 'public',
+      files: [fileEntry],
+      uploadedAt: _now(),
+      updatedAt: _now(),
+    };
+    _list.push(rec);
+    _saveLS(); _fire('archive');
+    let savedToServer = false;
+    if (typeof FireDB !== 'undefined') {
+      savedToServer = await FireDB.set(`${FB_PATH}/${id}`, rec).catch(() => false);
+    }
+    return { ...rec, savedToServer: savedToServer === true };
+  }
+  async function addLinkToPost(id, url, title, linkType) {
+    const idx = _list.findIndex(x => x.id === id);
+    if (idx < 0) return null;
+    const fileEntry = _linkFileEntry(url, title, linkType);
+    const rec = { ..._list[idx], files: [..._list[idx].files, fileEntry], updatedAt: _now() };
+    _list[idx] = rec;
+    _saveLS(); _fire('archive');
+    if (typeof FireDB !== 'undefined') {
+      await FireDB.set(`${FB_PATH}/${id}`, rec).catch(e => console.warn('[ArchiveDB] 저장 실패', e));
+    }
+    return rec;
+  }
+
   // ★ 이미 있는 게시물에 파일을 추가로 첨부
-  async function addFilesToPost(id, files, extraPerFile = []) {
+  async function addFilesToPost(id, files, extraPerFile = [], onFileProgress) {
     const idx = _list.findIndex(x => x.id === id);
     if (idx < 0) return null;
     const fileArr = Array.from(files || []);
     const added = [];
     for (let i = 0; i < fileArr.length; i++) {
-      try { added.push(await _uploadOneFile(id, fileArr[i], extraPerFile[i] || {})); }
+      try { added.push(await _uploadOneFile(id, fileArr[i], extraPerFile[i] || {}, ratio => onFileProgress?.(i, ratio))); }
       catch (e) { console.error('[ArchiveDB] 파일 추가 실패:', fileArr[i].name, e); }
     }
     const rec = { ..._list[idx], files: [..._list[idx].files, ...added], updatedAt: _now() };
@@ -256,7 +331,10 @@ const ArchiveDB = (() => {
   async function removeFileFromPost(id, r2Key) {
     const idx = _list.findIndex(x => x.id === id);
     if (idx < 0) return { ok: false, error: '게시물을 찾을 수 없습니다' };
-    try { await _deleteFromWorker(r2Key); } catch (e) { return { ok: false, error: e.message }; }
+    const target = _list[idx].files.find(f => f.r2Key === r2Key);
+    if (target && !target.linkUrl) { // ★ 링크 항목은 실제 저장된 파일이 없어 삭제 요청을 보낼 필요 없음
+      try { await _deleteFromWorker(r2Key); } catch (e) { return { ok: false, error: e.message }; }
+    }
     const remaining = _list[idx].files.filter(f => f.r2Key !== r2Key);
     if (!remaining.length) return deletePost(id); // 마지막 파일이었으면 게시물 자체를 삭제
     const rec = { ..._list[idx], files: remaining, updatedAt: _now() };
@@ -313,6 +391,7 @@ const ArchiveDB = (() => {
     const rec = getById(id);
     if (!rec) return { ok: false, error: '게시물을 찾을 수 없습니다' };
     for (const f of (rec.files || [])) {
+      if (f.linkUrl) continue; // ★ 링크 항목은 실제 저장된 파일이 없음
       try { await _deleteFromWorker(f.r2Key); } catch (e) { console.warn('[ArchiveDB] 파일 삭제 실패:', f.originalName, e); }
     }
     _list = _list.filter(x => x.id !== id);
@@ -326,9 +405,9 @@ const ArchiveDB = (() => {
 
   return {
     init, on, pauseUpdates,
-    getAll, getById, getByCategory, getFileUrl,
+    getAll, getById, refreshPost, getByCategory, getFileUrl,
     getVisiblePosts, isOwner, canOpenWithoutPassword, checkPassword,
-    createPost, addFilesToPost, removeFileFromPost, replaceFileContent,
+    createPost, addFilesToPost, removeFileFromPost, replaceFileContent, createLinkPost, addLinkToPost,
     updateFile, deletePost, deleteFile,
     getCategories, addCategory, removeCategory,
   };

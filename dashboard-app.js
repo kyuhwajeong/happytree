@@ -24,6 +24,7 @@ const DashboardApp = (() => {
     { key: 'schedule', ico: '🗓️', lbl: '일정표' },
     { key: 'books',    ico: '📊', lbl: '교재 학습 현황' },
     { key: 'archive',  ico: '📁', lbl: '콘텐츠 즐겨찾기' },
+    { key: 'eduvideo', ico: '🎬', lbl: '영상 워크시트 즐겨찾기' },
   ];
   const LS_ORDER = 'hk10b_dashboardOrder';
   function _getSectionOrder() {
@@ -39,6 +40,7 @@ const DashboardApp = (() => {
     schedule: () => _scheduleSectionHtml(),
     books:    () => _bookStatusSectionHtml(),
     archive:  () => _archiveThumbsSectionHtml(),
+    eduvideo: () => _eduVideoThumbsSectionHtml(),
   };
   const DAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -611,11 +613,37 @@ const DashboardApp = (() => {
   }
 
   /* ═══════════════════════════════════════════════════════════
+   * 영상 워크시트 즐겨찾기 — 자료실 즐겨찾기와 동일한 패턴
+   * ═══════════════════════════════════════════════════════════ */
+  function _eduVideoThumbsSectionHtml() {
+    if (typeof EduVideoDB === 'undefined') return '';
+    const items = EduVideoDB.getAll().filter(v => v.pinned);
+    if (!items.length) return ''; // ★ 즐겨찾기한 영상이 없으면 섹션 자체를 숨김
+    return `<div class="db-sec">
+      <div class="db-sec-hdr"><div class="db-sec-title">🎬 영상 워크시트 즐겨찾기</div>
+        <button class="db-mini-btn ghost" onclick="App.go('archive')">전체보기</button></div>
+      <div class="db-ar-thumbs">${items.map(v => `
+        <div class="db-ar-thumb" onclick="DashboardApp.goEduVideo('${v.id}')" title="${_esc(v.title)}">
+          <img src="https://img.youtube.com/vi/${v.youtubeId}/hqdefault.jpg" alt="${_esc(v.title)}">
+          <div class="db-ar-thumb-name">${_esc(v.title)}</div>
+        </div>`).join('')}</div>
+    </div>`;
+  }
+  function goEduVideo(id) {
+    if (typeof App !== 'undefined' && App.go) App.go('archive');
+    // ★ 자료실 화면이 "영상 워크시트" 도구 탭으로 전환된 뒤에 상세 화면을 열어야 하므로 살짝 지연
+    setTimeout(() => {
+      if (typeof ArchiveApp !== 'undefined' && ArchiveApp._selectTool) ArchiveApp._selectTool('video-worksheet');
+      setTimeout(() => { if (typeof EduVideoApp !== 'undefined' && EduVideoApp.openDetail) EduVideoApp.openDetail(id); }, 120);
+    }, 80);
+  }
+
+  /* ═══════════════════════════════════════════════════════════
    * 이동 액션
    * ═══════════════════════════════════════════════════════════ */
   function goMatrix(clsId, bkId) {
     if (typeof BooklibApp !== 'undefined' && BooklibApp.goToMatrix) BooklibApp.goToMatrix(clsId, bkId);
   }
 
-  return { init, render, goMatrix, goArchivePreview, _refreshBadges, openReorder, _saveReorder, _selectBookDay, _requestBulkUpdate, _todayUpdateTargets, _refreshQuote };
+  return { init, render, goMatrix, goArchivePreview, goEduVideo, _refreshBadges, openReorder, _saveReorder, _selectBookDay, _requestBulkUpdate, _todayUpdateTargets, _refreshQuote };
 })();
