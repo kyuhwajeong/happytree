@@ -207,6 +207,47 @@ const DashboardApp = (() => {
 .db-mini-btn.ghost{background:var(--card2);color:var(--tx2);border:1px solid var(--bdr2)}
 .db-empty-mini{text-align:center;color:var(--tx3);font-size:12px;padding:16px 8px}
 
+/* ══════════════════════════════════════════════════════════════
+ * 대시보드 스타일 3종 — 관리 > 테마에서 admin이 선택 (색상 팔레트와 별개)
+ * 참고: 미니멀=Notion/Linear의 여백 중심, 컴팩트=Linear/Vercel의 절제된
+ *      데이터 밀집형, 히어로=Stripe/Attio의 단일 포커스형 히어로 배너
+ * ══════════════════════════════════════════════════════════════ */
+/* --- 컴팩트: 여백을 줄이고 테두리를 얇게, 장식 요소(명언 배너)는 숨겨 정보 밀도를 높임 --- */
+.db-style-compact .db-body{gap:8px;padding:10px 12px 90px}
+.db-style-compact .db-sec{border-radius:10px;padding:10px;box-shadow:none;border-color:var(--bdr2)}
+.db-style-compact .db-sec-hdr{margin-bottom:7px}
+.db-style-compact .db-sec-title{font-size:13px}
+.db-style-compact .db-mini-btn{padding:5px 10px;border-radius:7px;font-size:11.5px}
+.db-style-compact .ph{padding-bottom:10px}
+.db-style-compact .ph-title{font-size:15px}
+.db-style-compact .db-quote-inline{display:none}
+
+/* --- 히어로: 상단을 그라디언트 배너로 강조하고, 섹션 제목엔 포인트 색 왼쪽 바를 둠 --- */
+.db-style-hero .ph{background:linear-gradient(135deg,var(--a),#7c3aed);border-radius:0 0 26px 26px;padding:18px 16px 24px;margin-bottom:2px;box-shadow:0 8px 20px -8px var(--a40)}
+.db-style-hero .ph-title{color:#fff;font-size:19px;font-weight:900}
+.db-style-hero .ph-sub{color:rgba(255,255,255,.85)}
+.db-style-hero .logo-badge{background:rgba(255,255,255,.18)}
+.db-style-hero .db-reorder-btn,.db-style-hero #db-logout-btn{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.32);color:#fff}
+.db-style-hero .db-quote-inline .db-quote-text,.db-style-hero .db-quote-inline .db-quote-author{color:rgba(255,255,255,.92)}
+.db-style-hero .db-quote-kr::before{color:rgba(255,255,255,.6)}
+.db-style-hero .db-quote-en{color:rgba(255,255,255,.8)}
+.db-style-hero .admin-badge{background:rgba(255,255,255,.25);color:#fff}
+.db-style-hero .db-body{padding-top:16px}
+.db-style-hero .db-sec{border-radius:20px}
+.db-style-hero .db-sec-title{padding-left:10px;border-left:4px solid var(--a);font-size:16px}
+
+/* ★ 작은 폰 화면(≤400px) 전용 — 선택한 스타일과 무관하게 항상 적용.
+   장식 요소(명언 배너)는 감추고 여백을 조여 한 화면에 더 많은 정보가 들어오게 한다.
+   401px 이상(큰 폰·태블릿·PC)은 전혀 영향받지 않는다. */
+@media (max-width:400px){
+  .db-quote-inline{display:none}
+  .db-body{padding:9px 10px 88px;gap:9px}
+  .db-sec{padding:10px}
+  .db-sec-title{font-size:13.5px}
+  .db-mini-btn{padding:5px 10px;font-size:11px}
+  .ph-title{max-width:170px}
+}
+
 /* 순서 변경 버튼/편집 시트 */
 .db-reorder-btn{width:34px;height:34px;border-radius:9px;background:var(--a10);border:1px solid var(--a40);display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer;color:var(--a);flex-shrink:0}
 .db-reorder-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--card2);border:1px solid var(--bdr);border-radius:10px;margin-bottom:6px}
@@ -292,8 +333,15 @@ const DashboardApp = (() => {
   /* ═══════════════════════════════════════════════════════════
    * 렌더
    * ═══════════════════════════════════════════════════════════ */
+  // ★ 대시보드 스타일(구도·톤) — admin이 관리 > 테마에서 3종 중 선택, 색상 팔레트와는 별개로 동작
+  function _dashStyle() {
+    const v = (typeof DB !== 'undefined' && DB.getTheme) ? DB.getTheme()?.dashboardStyle : null;
+    return ['minimal', 'compact', 'hero'].includes(v) ? v : 'minimal';
+  }
   function render() {
     const pg = _q('page-dashboard'); if (!pg) return;
+    pg.classList.remove('db-style-minimal', 'db-style-compact', 'db-style-hero');
+    pg.classList.add('db-style-' + _dashStyle());
     pg.innerHTML = _shell();
     if (typeof LOGO !== 'undefined') { const li = _q('db-logo'); if (li) li.src = LOGO.small; }
     _refreshBadges();
