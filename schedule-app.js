@@ -147,6 +147,12 @@ const ScheduleApp = (() => {
 .sch-sel-col{position:absolute;top:2px;bottom:2px;width:calc(100% / 7);border-radius:10px;background:var(--a10);pointer-events:none;z-index:0}
 .sch-track-row{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-top:2px;position:relative;z-index:1}
 .sch-bar{position:relative;grid-row:1;height:15px;line-height:15px;font-size:8.5px;font-weight:700;color:#fff;padding:0 4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;text-shadow:0 1px 1.5px rgba(0,0,0,.35)}
+/* ★ 컴팩트 스타일 전용 — 달력 자체도 더 촘촘하게(한 화면에 더 많은 주가 보이도록) */
+.db-style-compact .sch-week-block{padding:1px 0 3px}
+.db-style-compact .sch-daynum-cell{font-size:10px;padding:1px 0}
+.db-style-compact .sch-bar{height:12px;line-height:12px;font-size:7.5px}
+.db-style-compact .sch-dow{font-size:9px;padding:1px 0 4px}
+.db-style-compact .sch-legend{display:none}
 .sch-bar-draggable{padding:0 9px}
 .sch-resize-handle{position:absolute;top:0;bottom:0;width:9px;cursor:col-resize;touch-action:none}
 .sch-resize-handle.l{left:0}
