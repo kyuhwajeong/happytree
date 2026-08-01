@@ -90,6 +90,9 @@ const ScheduleApp = (() => {
 .sch-selday-hint{text-align:center;color:var(--tx3);font-size:12.5px;line-height:1.6;padding:22px 8px;background:var(--card2);border-radius:12px}
 .sch-selday-hdr{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px}
 .sch-selday-title{font-size:15px;font-weight:800;color:var(--tx)}
+.sch-selday-title-btn{cursor:pointer;border-radius:8px;padding:2px 6px;margin:-2px -6px;transition:background .15s}
+.sch-selday-title-btn:hover{background:var(--card2)}
+.sch-date-jump-inp{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;border:none}
 .sch-detail-sec-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
 .sch-mini-add-btn{padding:6px 11px;border-radius:8px;background:var(--card2);border:1px solid var(--bdr2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer}
 .sch-workadd-box{background:var(--surf2);border:1px dashed var(--bdr2);border-radius:11px;padding:10px;margin-top:2px}
@@ -119,16 +122,19 @@ const ScheduleApp = (() => {
 .sch-dow-row{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:2px}
 .sch-dow{text-align:center;font-size:10px;font-weight:800;color:var(--tx3);padding:2px 0 6px}
 .sch-dow.sun{color:#ef4444}.sch-dow.sat{color:#3b82f6}
-.sch-week-block{border-bottom:1px solid var(--bdr);padding:3px 0 5px}
+.sch-week-block{border-bottom:1px solid var(--bdr);padding:3px 0 5px;position:relative}
 .sch-week-block:last-of-type{border-bottom:none}
-.sch-daynum-row{display:grid;grid-template-columns:repeat(7,1fr)}
+.sch-daynum-row{display:grid;grid-template-columns:repeat(7,1fr);position:relative;z-index:1}
 .sch-daynum-cell{text-align:center;font-size:11px;font-weight:800;color:var(--tx2);cursor:pointer;padding:2px 0;border-radius:7px}
 .sch-daynum-cell.other{opacity:.32}
 .sch-daynum-cell.sun{color:#ef4444}
 .sch-daynum-cell.sat{color:#3b82f6}
 .sch-daynum-cell.today{background:var(--a);color:#fff;box-shadow:0 0 0 2px var(--a10)}
-.sch-daynum-cell.selected{box-shadow:0 0 0 2px var(--a);font-weight:900}
-.sch-track-row{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-top:2px}
+.sch-daynum-cell.selected{font-weight:900}
+/* ★ 선택한 날짜: 숫자만 동그랗게가 아니라, 그 날짜의 이벤트 막대까지 포함해서
+   세로로 길게 박스 하나로 감싸서 "그 날짜 칸 전체"를 고른 것처럼 보이게 함 */
+.sch-sel-col{position:absolute;top:0;bottom:0;width:calc(100% / 7);border-radius:10px;box-shadow:0 0 0 2px var(--a);background:var(--a10);pointer-events:none;z-index:0}
+.sch-track-row{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-top:2px;position:relative;z-index:1}
 .sch-bar{position:relative;grid-row:1;height:15px;line-height:15px;font-size:8.5px;font-weight:700;color:#fff;padding:0 4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;text-shadow:0 1px 1.5px rgba(0,0,0,.35)}
 .sch-bar-draggable{padding:0 9px}
 .sch-resize-handle{position:absolute;top:0;bottom:0;width:9px;cursor:col-resize;touch-action:none}
@@ -635,7 +641,12 @@ const ScheduleApp = (() => {
             ? `<div class="sch-overflow-cell" onclick="ScheduleApp.openDayDetail('${d.dateStr}')">+${overflowByDay[i]}</div>`
             : `<div></div>`).join('')}</div>`
         : '';
+      // ★ 이 주(week)에 선택된 날짜가 있으면, 숫자뿐 아니라 그 아래 이벤트 막대까지
+      //   전부 감싸는 세로 박스를 하나 깔아준다(숫자만 동그랗게 표시되던 문제 개선)
+      const selIdx = week.findIndex(d => d.dateStr === _selDate);
+      const selColHtml = selIdx >= 0 ? `<div class="sch-sel-col" style="left:calc(${selIdx} * (100% / 7))"></div>` : '';
       return `<div class="sch-week-block">
+        ${selColHtml}
         <div class="sch-daynum-row">${daynumHtml}</div>
         ${trackRowsHtml}
         ${overflowHtml}
@@ -646,6 +657,10 @@ const ScheduleApp = (() => {
     el.innerHTML = `
       <div class="sch-cal-hdr">
         <div class="sch-cal-title">${year}년 ${month}월</div>
+        <div class="sch-cal-navs">
+          <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(-1)" title="이전 달">‹</button>
+          <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(1)" title="다음 달">›</button>
+        </div>
       </div>
       <div class="sch-widget-layout">
         <div class="sch-cal-col">
@@ -851,6 +866,32 @@ const ScheduleApp = (() => {
     _selDate = null; _workAddFor = null;
     refresh();
   }
+  // ★ 일자 상세 패널의 ‹/›는 달이 아니라 "하루씩" 이동한다(달 이동은 달력 쪽 ‹/›가 담당)
+  function _navDay(diff) {
+    const base = _selDate || _todayStr();
+    const d = new Date(base + 'T00:00:00');
+    d.setDate(d.getDate() + diff);
+    _selDate = `${d.getFullYear()}-${_pad(d.getMonth() + 1)}-${_pad(d.getDate())}`;
+    _st.year = d.getFullYear(); _st.month = d.getMonth() + 1;
+    _workAddFor = null;
+    refresh();
+  }
+  // ★ 🗓️ 아이콘 클릭 → 네이티브 날짜 선택기를 열어 원하는 연/월/일로 바로 이동
+  function _openDateJump() {
+    const inp = _q('sch-date-jump-inp');
+    if (!inp) return;
+    if (typeof inp.showPicker === 'function') { try { inp.showPicker(); return; } catch (e) {} }
+    inp.focus(); inp.click();
+  }
+  function _jumpToDate(val) {
+    if (!val) return;
+    const d = new Date(val + 'T00:00:00');
+    if (isNaN(d.getTime())) return;
+    _selDate = val;
+    _st.year = d.getFullYear(); _st.month = d.getMonth() + 1;
+    _workAddFor = null;
+    refresh();
+  }
 
   // ★ 입학 기념일 항목 클릭 → 학생 탭으로 전환 후 해당 학생 상세 화면 오픈
   function _goStudentDetail(studentId) {
@@ -883,11 +924,12 @@ const ScheduleApp = (() => {
     const dueIds = (typeof NoticeApp !== 'undefined' && NoticeApp.getDueList) ? NoticeApp.getDueList().map(n => n.id) : [];
 
     let html = `<div class="sch-selday-hdr">
-      <span class="sch-selday-title">🗓️ ${dateLabel}</span>
+      <span class="sch-selday-title sch-selday-title-btn" onclick="ScheduleApp._openDateJump()" title="날짜로 바로 이동">🗓️ ${dateLabel}</span>
+      <input type="date" id="sch-date-jump-inp" value="${dateStr}" class="sch-date-jump-inp" onchange="ScheduleApp._jumpToDate(this.value)">
       <div class="sch-selday-navs">
         <button class="sch-today-btn" onclick="ScheduleApp._goToday()">오늘</button>
-        <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(-1)">‹</button>
-        <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(1)">›</button>
+        <button class="sch-nav-btn" onclick="ScheduleApp._navDay(-1)" title="전날">‹</button>
+        <button class="sch-nav-btn" onclick="ScheduleApp._navDay(1)" title="다음날">›</button>
         ${_canRegister() ? `<button class="sch-today-btn sch-add-btn" onclick="ScheduleApp.openEditor(null,'${dateStr}')">➕ 등록</button>` : ''}
       </div>
     </div>`;
@@ -1413,7 +1455,7 @@ const ScheduleApp = (() => {
     openDayDetail, closeDayDetail,
     openEditor, closeEditor, saveEditor, deleteItem,
     openWorkQuickAdd, closeWorkQuickAdd, saveWorkQuickAdd,
-    _navMonth, _goToday, _goStudentDetail,
+    _navMonth, _goToday, _navDay, _openDateJump, _jumpToDate, _goStudentDetail,
     _tpAmPm, _tpChange,
   };
 })();
