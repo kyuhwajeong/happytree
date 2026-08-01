@@ -29,7 +29,9 @@ const EduVideoApp = (() => {
 .ev-cat-tab.add{border-style:dashed}
 .ev-body{flex:1;overflow-y:auto;padding:0 14px 90px}
 .ev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
-.ev-card{background:var(--card);border:1px solid var(--bdr);border-radius:14px;overflow:hidden;cursor:pointer;transition:transform .1s}
+.ev-card{background:var(--card);border:1px solid var(--bdr);border-radius:14px;overflow:hidden;cursor:pointer;transition:transform .1s;position:relative}
+.ev-card-pin{position:absolute;top:6px;right:6px;z-index:2;border:none;background:rgba(0,0,0,.4);width:26px;height:26px;border-radius:50%;font-size:14px;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center}
+.ev-card-pin.on{background:rgba(255,255,255,.9)}
 .ev-card:active{transform:scale(.97)}
 .ev-card-thumb{width:100%;aspect-ratio:16/9;object-fit:cover;background:var(--surf2);display:block;position:relative}
 .ev-card-body{padding:10px}
@@ -112,6 +114,7 @@ const EduVideoApp = (() => {
     }
     return `<div class="ev-grid">${items.map(v => `
       <div class="ev-card" onclick="EduVideoApp.openDetail('${v.id}')">
+        <button class="ev-card-pin${v.pinned ? ' on' : ''}" onclick="event.stopPropagation();EduVideoApp._togglePin('${v.id}')" title="${v.pinned ? '대시보드에서 빼기' : '대시보드에 즐겨찾기로 표시'}">${v.pinned ? '⭐' : '☆'}</button>
         <img class="ev-card-thumb" src="https://img.youtube.com/vi/${v.youtubeId}/hqdefault.jpg" alt="">
         <div class="ev-card-body">
           <div class="ev-card-title">${_esc(v.title)}</div>
@@ -131,6 +134,12 @@ const EduVideoApp = (() => {
     pg.innerHTML = _shellHtml();
   }
   function _refreshGrid() { const b = _q('ev-body'); if (b) b.innerHTML = _gridHtml(); }
+  async function _togglePin(id) {
+    const v = EduVideoDB.getById(id);
+    if (!v) return;
+    await EduVideoDB.updateVideo(id, { pinned: !v.pinned });
+    _refreshGrid();
+  }
   function _selectTopic(t) { _curTopic = t; render(_mountId); }
   async function _promptNewTopic() {
     const name = prompt('새 주제 이름을 입력하세요 (예: 동물, 음식)');
@@ -720,7 +729,7 @@ const EduVideoApp = (() => {
 
   return {
     init: async () => { if (typeof EduVideoDB !== 'undefined') await EduVideoDB.init(); },
-    render, _selectTopic, _promptNewTopic,
+    render, _selectTopic, _promptNewTopic, _togglePin,
     openRecommend, _runRecommend, _addFromRecommend, _loadMoreRecommend,
     openAdd, _closeAdd, _submitAdd,
     openDetail, _extractWords, _extractWordsFromVideo, openEditScript, _submitEditScript, _confirmDeleteVideo,
