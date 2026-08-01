@@ -30,7 +30,9 @@ const GradeDB = (() => {
   const _ls  = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
   const _nid = ()    => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
   const _now = ()    => new Date().toISOString();
-  const _today = ()  => new Date().toISOString().slice(0,10);
+  // ★ 버그 수정: toISOString() 기준 날짜는 UTC라서 한국시간 자정~오전9시 사이엔
+  //   실제 날짜보다 하루 전으로 계산됐다. "오늘" 판정은 반드시 로컬 달력 기준이어야 함.
+  const _today = ()  => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
   const _fb  = ()    => typeof FireDB !== 'undefined' && FireDB.ready();
 
   const _ev = {};

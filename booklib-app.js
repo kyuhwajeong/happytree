@@ -2291,7 +2291,11 @@ const BooklibApp = (() => {
       _toast(confirmed ? '📍 스탬프 해제' : '📍 스탬프 해제 (서버 전송 대기 중)');
     } else {
       const now=new Date();
-      const ts=`${now.toISOString().slice(0,10)} ${now.toTimeString().slice(0,5)}`;
+      // ★ 버그 수정: toISOString()의 날짜는 UTC 기준이라 한국시간 자정~오전9시 사이에는
+      //   toTimeString()(로컬 시간)과 날짜가 하루 어긋나 버렸다(예: 8/2 00:05인데 8/1로 찍힘).
+      //   날짜도 로컬 기준으로 직접 만들어 시간과 짝이 맞도록 한다.
+      const ymd=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+      const ts=`${ymd} ${now.toTimeString().slice(0,5)}`;
       _stamps[chId]=ts;
       const confirmed = await BookLibDB.setStamp(cid,bid,chId,ts);
       /* ② 스탬프 생성 당시 미수행 통계 수집 → DB 저장 */
@@ -3687,7 +3691,9 @@ const BooklibApp = (() => {
 
   function _nowStampStr() {
     const now = new Date();
-    const ymd = now.toISOString().slice(0,10);
+    // ★ 버그 수정: toISOString()은 UTC 날짜라서 한국시간 자정~오전9시 사이엔 실제보다 하루 전 날짜가 찍혔다.
+    //   (스크린샷 사례: PC 시계 8/2 00:05인데 스탬프엔 "8/1 00:05"로 기록됨 — UTC 날짜 + 로컬 시간이 섞인 것)
+    const ymd = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
     const hm  = now.toTimeString().slice(0,5);
     return `${ymd} ${hm}`;
   }
