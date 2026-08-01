@@ -1863,10 +1863,32 @@ if (typeof BgTheme !== 'undefined') {
   bgCkLabel.appendChild(bgCk); bgCkLabel.appendChild(bgCkText);
   const bgSub = document.createElement('div');
   bgSub.className = 'bg-sub' + (bgWasOn ? '' : ' bg-sub-disabled');
-  bgCk.onchange = () => {
+  bgCk.onchange = async () => {
     S.tmpTheme.bg.enabled = bgCk.checked;
-    BgTheme.render(S.tmpTheme);
     bgSub.classList.toggle('bg-sub-disabled', !bgCk.checked);
+    // ★ 버그 수정: 체크만 하고 저장하면 사진을 받아온 적이 없어(bg.url 비어있음)
+    //   render()가 그릴 게 없어 아무 변화도 안 보였던 부분 — 처음 켤 때 자동으로 한 장 받아온다.
+    if (bgCk.checked && !S.tmpTheme.bg.url) {
+      bgCkText.textContent = '배경 이미지 사용 — 첫 배경을 불러오는 중...';
+      bgCk.disabled = true;
+      try {
+        const fresh = await BgTheme.fetchOne(S.tmpTheme.bg.mood || 'season');
+        if (fresh) {
+          S.tmpTheme.bg = { ...S.tmpTheme.bg, url:fresh.url, credit:fresh.credit, query:fresh.query, updatedAt:new Date().toISOString() };
+          BgTheme.render(S.tmpTheme);
+          _toast('🖼️ 배경 이미지를 적용했습니다 — 아래 저장 버튼을 눌러야 기기 전체에 반영됩니다','success',3500);
+        } else {
+          _toast('⚠️ 이미지를 불러오지 못했습니다. "지금 새 배경 미리보기" 버튼으로 다시 시도해주세요','error',4000);
+        }
+      } catch(e) {
+        console.warn('[BgTheme] 최초 배경 불러오기 실패', e);
+        _toast('⚠️ 이미지를 불러오지 못했습니다. "지금 새 배경 미리보기" 버튼으로 다시 시도해주세요','error',4000);
+      }
+      bgCkText.textContent = '배경 이미지 사용 (체크할 때만 동작 · 기본값: 사용 안 함)';
+      bgCk.disabled = !isAdmin;
+    } else {
+      BgTheme.render(S.tmpTheme);
+    }
   };
   bgCard.appendChild(bgCkLabel); card.appendChild(bgCard);
 
