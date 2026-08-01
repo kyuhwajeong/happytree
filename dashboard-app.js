@@ -619,8 +619,11 @@ const DashboardApp = (() => {
     return m[(ext || '').toLowerCase()] || '📄';
   }
   function _favoritesSectionHtml() {
-    const arItems = (typeof ArchiveDB !== 'undefined') ? ArchiveDB.getAll().filter(f => f.pinned).map(f => ({ ...f, _type: 'archive' })) : [];
-    const evItems = (typeof EduVideoDB !== 'undefined') ? EduVideoDB.getAll().filter(v => v.pinned).map(v => ({ ...v, _type: 'video' })) : [];
+    // ★ 버그 수정: getAll()은 비공개 항목까지 그대로 포함한 원본 목록이라,
+    //   남이 비공개로 즐겨찾기한 자료·영상이 내 대시보드에도 노출되고 있었다.
+    //   공개 여부를 반영하는 접근자로 교체.
+    const arItems = (typeof ArchiveDB !== 'undefined') ? (ArchiveDB.getVisiblePosts ? ArchiveDB.getVisiblePosts() : ArchiveDB.getAll()).filter(f => f.pinned).map(f => ({ ...f, _type: 'archive' })) : [];
+    const evItems = (typeof EduVideoDB !== 'undefined') ? (EduVideoDB.getVisibleVideos ? EduVideoDB.getVisibleVideos() : EduVideoDB.getAll()).filter(v => v.pinned).map(v => ({ ...v, _type: 'video' })) : [];
     if (!arItems.length && !evItems.length) return ''; // ★ 즐겨찾기가 하나도 없으면 섹션 자체를 숨김
     const items = [...arItems, ...evItems].sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''));
     const hasBoth = arItems.length > 0 && evItems.length > 0;

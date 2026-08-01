@@ -152,6 +152,7 @@ const ScheduleDB = (() => {
       notifyTime: data.notifyTime || '09:00',
       notifyDaysBefore: data.notifyDaysBefore || 0, // ★ 도래 며칠 전부터 미리 알릴지(0=당일)
       notifiedAt: null,
+      seriesId: data.seriesId || null, // ★ 반복 등록으로 생성된 경우, 같은 반복 묶음을 가리키는 공통 id
       audience: data.audience || 'all',
       suppressClasses: !!data.suppressClasses, // ★ true면 이 기간의 "오늘의 수업"에서 정규 반 목록을 숨김 (방학·임시휴강 등)
       specialNote: (data.specialNote || '').trim(), // ★ 정규 수업 대신 안내할 특강/보충 등 메모
