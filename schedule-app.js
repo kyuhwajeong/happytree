@@ -74,6 +74,17 @@ const ScheduleApp = (() => {
 .sch-zoom-inner{transform-origin:top left;}
 .sch-resize-hint{position:absolute;right:2px;bottom:0px;font-size:12px;color:var(--tx3);opacity:.4;pointer-events:none;line-height:1;z-index:1;}
 .sch-widget-resize-handle{position:absolute;z-index:5;}
+@media (max-width:700px){
+  /* ★ 휴대폰 화면 안전장치 — 드래그 리사이즈 UI를 완전히 숨기고, 달력 영역이
+     어떤 이유로든 화면 폭을 넘지 못하도록 이중으로 막아 좌우 스크롤을 원천 차단 */
+  .sch-resize-hint,.sch-widget-resize-handle{display:none}
+  .sch-resizable-wrap{max-width:100%;overflow-x:hidden}
+  .sch-widget-layout{overflow-x:hidden}
+  #sch-cal-zoom{zoom:1 !important}
+  /* ★ 손가락으로 누르기 편하도록 날짜 칸 터치 영역을 살짝 넉넉하게 */
+  .sch-daynum-cell{padding:5px 0}
+  .sch-legend{gap:5px}
+}
 .sch-widget-resize-handle.rh-s{left:8px;right:8px;height:9px;bottom:-5px;}
 .sch-widget-resize-handle.rh-e{top:8px;bottom:8px;width:9px;right:-5px;}
 .sch-widget-resize-handle.rh-se{width:16px;height:16px;bottom:-6px;right:-6px;}
@@ -169,6 +180,27 @@ const ScheduleApp = (() => {
 .sch-tdc-suppress-title{font-size:13.5px;font-weight:700;color:var(--tx);text-align:center}
 .sch-tdc-suppress-note{font-size:12.5px;color:var(--tx2);text-align:center;margin-top:6px;padding-top:6px;border-top:1px dashed var(--a40)}
 .sch-empty-mini{text-align:center;color:var(--tx3);font-size:12.5px;padding:20px 6px;line-height:1.5}
+
+/* ══ 컴팩트 스타일 — 다가오는 2주 아젠다 리스트 ══ */
+.sch-agenda-wrap{display:flex;flex-direction:column;gap:2px}
+.sch-agenda-row{display:flex;gap:12px;padding:9px 2px;border-bottom:1px solid var(--bdr)}
+.sch-agenda-row:last-child{border-bottom:none}
+.sch-agenda-date{flex-shrink:0;width:42px;text-align:center}
+.sch-agenda-daynum{font-size:16px;font-weight:800;color:var(--tx)}
+.sch-agenda-date.today .sch-agenda-daynum{color:var(--a)}
+.sch-agenda-dow{font-size:9.5px;font-weight:700;color:var(--tx3);margin-top:1px}
+.sch-agenda-date.today .sch-agenda-dow{color:var(--a)}
+.sch-agenda-items{flex:1;display:flex;flex-direction:column;gap:5px;min-width:0}
+.sch-agenda-item{font-size:12.5px;font-weight:600;color:var(--tx);border-left:3px solid var(--a);padding:2px 0 2px 9px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sch-agenda-done{color:var(--green)}
+
+/* ══ 히어로 스타일 — 오늘 강조 카드 ══ */
+.sch-hero-today{background:linear-gradient(135deg,var(--a),#7c3aed);border-radius:16px;padding:14px 16px;margin-bottom:14px;color:#fff}
+.sch-hero-today-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.sch-hero-today-date{font-size:13px;font-weight:700;color:rgba(255,255,255,.85)}
+.sch-hero-today-count{font-size:16px;font-weight:900;color:#fff}
+.sch-hero-item{font-size:12.5px;font-weight:600;color:#fff;background:rgba(255,255,255,.18);border-radius:8px;padding:6px 10px;margin-top:5px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sch-hero-empty{font-size:12px;color:rgba(255,255,255,.8);margin-top:2px}
 
 /* 일자 상세 (우측 패널 인라인) */
 .sch-item-row{display:flex;align-items:flex-start;gap:9px;background:var(--card2);border:1px solid var(--bdr);border-radius:11px;padding:10px;margin-bottom:6px}
@@ -480,16 +512,25 @@ const ScheduleApp = (() => {
   const CAL_ZOOM_KEY = 'sch_cal_zoom';
   const ZOOM_MIN = 0.7, ZOOM_MAX = 2.2;
   let _tdcBaseW = 0; // 상세 패널의 "줌 1.0" 기준 폭(최초 측정값)
+  // ★ 휴대폰처럼 좁은 화면인지 — 이 경우 드래그 확대/축소 기능 자체를 끈다.
+  //   (마우스로 테두리를 끌어 크기를 조절하는 PC용 기능인데, 터치에도 반응하다 보니
+  //   확대된 상태가 저장되면 달력이 화면 폭보다 커져서 좌우로 밀리는 문제가 있었다)
+  function _isNarrowViewport() { return window.innerWidth <= 700; }
 
   function _getSavedCalZoom() {
+    if (_isNarrowViewport()) return 1; // ★ 좁은 화면에서는 항상 100% 고정
     const v = parseFloat(localStorage.getItem(CAL_ZOOM_KEY));
     return (v && v >= ZOOM_MIN && v <= ZOOM_MAX) ? v : 1;
   }
   function _setCalZoom(z) {
+    const narrow = _isNarrowViewport();
+    if (narrow) z = 1; // ★ 좁은 화면에서는 드래그로도 100%를 벗어날 수 없게 막음
     z = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
     const calZoomEl = _q('sch-cal-zoom');
     if (calZoomEl) calZoomEl.style.zoom = z;
-    try { localStorage.setItem(CAL_ZOOM_KEY, String(z)); } catch (e) {}
+    // ★ 좁은 화면에서 강제로 1로 고정한 값은 저장하지 않는다 — 넓은 화면(PC 등)에서
+    //   설정해둔 확대 배율이 휴대폰으로 잠깐 봤다고 지워지면 안 되므로.
+    if (!narrow) { try { localStorage.setItem(CAL_ZOOM_KEY, String(z)); } catch (e) {} }
     return z;
   }
 
@@ -506,15 +547,25 @@ const ScheduleApp = (() => {
     const tdcCol  = document.querySelector('.sch-tdc-col');
     const tdcZoom = _q('sch-tdc-zoom');
     if (!tdcCol || !tdcZoom || typeof ResizeObserver === 'undefined') return;
-    if (tdcCol._roBound) return;
-    tdcCol._roBound = true;
+    // ★ 버그 수정: 예전엔 _tdcBaseW를 모듈 전역에 딱 한 번만 저장해두고 계속 재사용해서,
+    //   레이아웃이 바뀐 뒤에도(예: 다른 렌더의 낡은 기준폭) 우측 상세 패널 글자가
+    //   PC에서도 이유 없이 왼쪽 달력보다 작고 흐릿하게(줌 비정수 배율 → 서브픽셀 렌더링)
+    //   보이는 문제가 있었다. 매 렌더마다 기준을 새로 잡고, 이전 감시자는 정리한다.
+    _tdcBaseW = 0;
+    if (tdcCol._ro) { try { tdcCol._ro.disconnect(); } catch (e) {} }
 
     let raf = null;
     const ro = new ResizeObserver(entries => {
       const w = entries[0]?.contentRect?.width;
       if (!w) return;
+      // ★ 달력을 수동으로 확대해둔 상태가 아니라면(기본값) 우측 패널은 항상 정확히
+      //   100%로 고정한다 — 흐려지거나 작아 보일 이유가 전혀 없는 게 정상 상태다.
+      if (_getSavedCalZoom() <= 1) {
+        tdcZoom.style.zoom = 1;
+        _tdcBaseW = w;
+        return;
+      }
       if (!_tdcBaseW) {
-        // ★ 첫 측정값을 "줌 1.0 기준 폭"으로 삼는다(현재 줌을 역보정)
         const curZoom = parseFloat(tdcZoom.style.zoom) || 1;
         _tdcBaseW = w / curZoom;
         return;
@@ -525,6 +576,7 @@ const ScheduleApp = (() => {
         tdcZoom.style.zoom = ratio;
       });
     });
+    tdcCol._ro = ro;
     ro.observe(tdcCol);
   }
 
@@ -532,6 +584,9 @@ const ScheduleApp = (() => {
     const wrap = _q('sch-resizable-wrap');
     if (!wrap || wrap._resizeBound) return;
     wrap._resizeBound = true;
+    // ★ 휴대폰 화면에서는 드래그 확대/축소 기능 자체를 끈다(터치 스크롤과 충돌 방지,
+    //   화면 폭을 벗어나는 문제의 근본 원인 제거) — 넓은 화면(PC 등)에서만 제공.
+    if (_isNarrowViewport()) return;
 
     if (!wrap.querySelector('.sch-widget-resize-handle')) {
       [
@@ -586,11 +641,73 @@ const ScheduleApp = (() => {
     handle.addEventListener('touchstart', start, { passive: false });
   }
 
+  /* ═══════════════════════════════════════════════════════════
+   * 대시보드 스타일별 대안 프레젠테이션
+   * - compact: 달력 그리드 대신 "다가오는 2주" 아젠다 리스트(Linear식 목록형)
+   * - hero: 기존 달력 그리드 위에 "오늘" 히어로 카드를 하나 더 얹음(Stripe식 단일 포커스)
+   * ═══════════════════════════════════════════════════════════ */
+  function _agendaViewHtml() {
+    const todayStr = _todayStr();
+    const days = [];
+    for (let i = 0; i < 14; i++) {
+      const ds = _addDays(todayStr, i);
+      const d = new Date(ds + 'T00:00:00');
+      days.push({ dateStr: ds, cellDay: d.getDate(), dow: d.getDay() });
+    }
+    const events = _buildBarEvents(days);
+    const byDate = {};
+    days.forEach(d => { byDate[d.dateStr] = []; });
+    // ★ 아젠다는 목록형이라 여러 날에 걸친 일정을 매일 반복 표시하지 않고 시작일에만 표시
+    events.forEach(e => { if (byDate[e.startDate] !== undefined) byDate[e.startDate].push(e); });
+    const rows = days.map(d => {
+      const items = byDate[d.dateStr];
+      if (!items.length) return '';
+      const isToday = d.dateStr === todayStr;
+      return `<div class="sch-agenda-row">
+        <div class="sch-agenda-date${isToday ? ' today' : ''}">
+          <div class="sch-agenda-daynum">${d.cellDay}</div>
+          <div class="sch-agenda-dow">${isToday ? '오늘' : DAYS_KO[d.dow]}</div>
+        </div>
+        <div class="sch-agenda-items">
+          ${items.map(e => `<div class="sch-agenda-item" style="border-left-color:${e.color}" onclick="${e.onclick}">${_esc(e.title)}${e.done ? ' <span class="sch-agenda-done">✔</span>' : ''}</div>`).join('')}
+        </div>
+      </div>`;
+    }).filter(Boolean).join('');
+    return rows || `<div class="sch-empty-mini">앞으로 2주간 예정된 일정이 없습니다</div>`;
+  }
+  function _heroTodayCardHtml() {
+    const todayStr = _todayStr();
+    const scheds = _schedulesOn(todayStr);
+    const now = new Date();
+    const count = scheds.length;
+    const itemsHtml = scheds.slice(0, 3).map(s => {
+      const cat = CATS[s.category] || CATS.general;
+      return `<div class="sch-hero-item" onclick="ScheduleApp.openDayDetail('${todayStr}')">${cat.ico} ${_esc(s.title)}</div>`;
+    }).join('');
+    return `<div class="sch-hero-today">
+      <div class="sch-hero-today-top">
+        <div class="sch-hero-today-date">${now.getMonth() + 1}월 ${now.getDate()}일 (${DAYS_KO[now.getDay()]})</div>
+        <div class="sch-hero-today-count">오늘 일정 ${count}건</div>
+      </div>
+      ${itemsHtml || '<div class="sch-hero-empty">오늘은 등록된 일정이 없어요 🍃</div>'}
+    </div>`;
+  }
+
   function renderMiniCalendar(containerId) {
     if (typeof ScheduleDB === 'undefined') return;
     _mountId = containerId;
     const el = _q(containerId);
     if (!el) return;
+    const dashStyle = (typeof DashboardApp !== 'undefined' && DashboardApp._dashStyle) ? DashboardApp._dashStyle() : 'minimal';
+    const monthLabelEl = document.getElementById('sch-month-label');
+
+    // ★ 컴팩트 스타일 — 달력 그리드 대신 "다가오는 2주" 목록형 아젠다로 완전히 다르게 보여준다
+    if (dashStyle === 'compact') {
+      if (monthLabelEl) monthLabelEl.textContent = '📋 다가오는 2주';
+      el.innerHTML = `<div class="sch-agenda-wrap">${_agendaViewHtml()}</div>`;
+      return;
+    }
+
     const { year, month } = _st;
     const todayStr = _todayStr();
     const first = new Date(year, month - 1, 1);
@@ -656,10 +773,13 @@ const ScheduleApp = (() => {
 
     // ★ "🗓️ 일정표" 대시보드 섹션 헤더와 별도 줄로 중복 표시되던 월 제목을 없애고,
     //   같은 행에 있는 외부 라벨(#sch-month-label)만 갱신한다.
-    const monthLabelEl = document.getElementById('sch-month-label');
     if (monthLabelEl) monthLabelEl.textContent = `${year}년 ${month}월`;
 
+    // ★ 히어로 스타일 — 달력 그리드는 그대로 두되, 그 위에 "오늘"을 크게 강조하는 카드를 얹는다
+    const heroCardHtml = dashStyle === 'hero' ? _heroTodayCardHtml() : '';
+
     el.innerHTML = `
+      ${heroCardHtml}
       <div class="sch-widget-layout">
         <div class="sch-cal-col">
           <div id="sch-resizable-wrap" class="sch-resizable-wrap">
