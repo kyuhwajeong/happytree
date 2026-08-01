@@ -782,3 +782,7 @@ body.dark .bk-inp.filled{color:#4ade80}
   font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);color:var(--tx2);transition:.15s;}
 .tl-cp-btn:hover{border-color:var(--a);color:var(--a);background:var(--a10);}
 .tl-cp-btn:disabled{opacity:.4;cursor:not-allowed;}
+
+/* ══ bg-theme.js — 배경 이미지 설정 UI (테마 탭) ══ */
+.bg-sub{display:flex;flex-direction:column;transition:opacity .2s}
+.bg-sub-disabled{opacity:.4;pointer-events:none;filter:grayscale(.3)}

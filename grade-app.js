@@ -136,7 +136,8 @@ const GradeApp = (() => {
 .gs-td.ro.achv-c .gs-val{color:#8b5cf6;font-weight:800;}
 /* 입력 가능 셀 - 밝은 흰색/강조 배경 */
 .gs-td.inp-cell{background:#fff;}
-.dark .gs-td.inp-cell{background:rgba(255,255,255,.04);}
+/* ★ 시인성 강화: 기존 4% 흰색 틴트는 사실상 배경이 그대로 비치는 것과 같아 불투명 서페이스 색으로 교체 */
+.dark .gs-td.inp-cell{background:var(--surf2);}
 
 /* selected row highlight */
 .gr-sheet tbody tr.sel-row .gs-td:not(.ro){background:rgba(99,102,241,.06)!important;}

@@ -316,7 +316,7 @@ const DashboardApp = (() => {
           <div class="logo-badge" onclick="DashboardApp.render()" title="새로고침" style="cursor:pointer"><img id="db-logo" src="" alt=""></div>
           <div style="min-width:0">
             <div class="ph-title">${_esc(_greeting())} <span id="db-admin-badge" class="admin-badge hidden">🔑 관리자</span></div>
-            <div class="ph-sub">${dateStr}</div>
+            <div class="ph-sub">${dateStr}${_esc(_bgMoodCaption())}</div>
           </div>
         </div>
         ${_quoteBannerHtml()}
@@ -384,6 +384,15 @@ const DashboardApp = (() => {
     _q('db-reorder-ov')?.remove();
     render();
     if (typeof App !== 'undefined' && App._toast) App._toast('✅ 순서가 저장되었습니다', 'success', 2000);
+  }
+
+  /* ★ 배경 이미지(BgTheme) 시너지 — 현재 적용 중인 무드를 대시보드 상단에 살짝 알려줌 */
+  function _bgMoodCaption() {
+    const bg = (typeof DB !== 'undefined' && DB.getTheme) ? DB.getTheme()?.bg : null;
+    if (!bg?.enabled) return '';
+    const MOOD_LABEL = { season: '🍁 계절 무드', minimal: '🤍 미니멀 무드', wood: '🪵 우드톤 무드', pastel: '🌸 파스텔 무드' };
+    const label = MOOD_LABEL[bg.mood];
+    return label ? ` · ${label} 배경 적용 중` : '';
   }
 
   function _greeting() {

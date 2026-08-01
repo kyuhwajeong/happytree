@@ -215,6 +215,8 @@ const App = (() => {
     if (typeof EduVideoApp !== 'undefined') EduVideoApp.init().catch(e=>console.warn('[EduVideoApp]',e));
     // ★ 학습 게임 모듈 초기화 (독립 모듈 — 오류 시 기존 기능 영향 없음)
     if (typeof GameApp !== 'undefined') GameApp.init().catch(e=>console.warn('[GameApp]',e));
+    // ★ 배경 이미지 모듈 초기화 (독립 모듈 — 오류 시 기존 기능 영향 없음, 미설정 시 기존 단색 배경 그대로)
+    if (typeof BgTheme !== 'undefined') BgTheme.init().catch(e=>console.warn('[BgTheme]',e));
 
     DB.on('classes',()=>{_renderChips();if(S.page==='operate')_renderOperateBody();if(S.page==='manage'&&S.mgTab==='classes'){_renderMgCls();if(_q('mg-fee-ov')&&!_q('mg-fee-ov').classList.contains('hidden'))_renderFeePanel();}});
     DB.on('progress',()=>{if(S.page==='operate')_renderOperateBody();if(S.shareActive)_refreshShareProgress();});
@@ -270,6 +272,7 @@ const App = (() => {
     rs.setProperty('--fz-sub',`${t.subFontSize||Math.max(fz-1,10)}px`);
     rs.setProperty('--inp-w',`${t.inputBoxWidth||140}px`);
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content',pal.bg||'#f8f9fc');
+    if (typeof BgTheme !== 'undefined' && BgTheme.render) BgTheme.render(t); // ★ 배경 이미지 반영(꺼져 있으면 아무 변화 없음)
   }
 
   /* ══ PAGE NAV ══ */
@@ -289,6 +292,7 @@ const App = (() => {
       if(!_am.includes('grade')){_showLogin();return;}
     }
     S.page=page;
+    if (typeof BgTheme !== 'undefined' && BgTheme.setPage) BgTheme.setPage(page); // ★ 화면 밀도에 맞춰 배경 스크림 재계산
     try{sessionStorage.setItem('hk10b_lastPage',page);}catch(e){}
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
     document.querySelectorAll('.bni').forEach(n=>n.classList.remove('on'));
@@ -1835,7 +1839,109 @@ const App = (() => {
   async function delAcc(id,u){if(DB.getSession()?.id===id){_toast('⚠️ 현재 계정은 삭제 불가','error');return;}if(!confirm(`"${u}" 계정을 삭제하시겠습니까?`))return;await DB.deleteAccount(id);_renderMgAcc();_toast('🗑 삭제 완료');}
 
   /* 테마 */
-  function _renderMgTheme(){const wrap=document.getElementById('mg-theme');if(!wrap)return;wrap.innerHTML='';const t=DB.getTheme();S.tmpTheme={...t};const isAdmin=DB.isAdmin();const card=document.createElement('div');card.className='th-card';const prev=document.createElement('div');prev.className='th-row';prev.innerHTML='<div class="th-preview" id="th-prev"></div>';card.appendChild(prev);_upPrev(PALETTES.find(p=>p.id===(t.palette||'light1'))?.accent||'#4f46e5');const pr=document.createElement('div');pr.className='th-row';pr.innerHTML='<div class="th-lbl">🎨 테마</div>';const palRow=document.createElement('div');palRow.className='pal-row';PALETTES.forEach(pal=>{const item=document.createElement('div');item.className='pal-item'+(pal.id===(t.palette||'light1')?' on':'');const swBg=pal.id==='system'?'linear-gradient(135deg,#f8f9fc 50%,#0b0b14 50%)':pal.bg;item.innerHTML=`<div class="pal-swatch" style="background:${swBg}">${pal.emoji}</div><div class="pal-name">${pal.name}</div>`;if(!isAdmin){item.style.pointerEvents='none';item.style.opacity='.5';}item.onclick=()=>{S.tmpTheme.palette=pal.id;if(pal.id!=='system')S.tmpTheme.accent=pal.accent;_applyTheme(S.tmpTheme);_upPrev(pal.accent||'#4f46e5');palRow.querySelectorAll('.pal-item').forEach((el,i)=>el.classList.toggle('on',PALETTES[i].id===pal.id));};palRow.appendChild(item);});pr.appendChild(palRow);card.appendChild(pr);const fr=document.createElement('div');fr.className='th-row';fr.innerHTML='<div class="th-lbl">🔤 폰트</div>';const ffList=document.createElement('div');ffList.className='ff-list';FONTS.forEach(f=>{const item=document.createElement('div');item.className='ff-item'+(f.key===(t.fontFamily||'Noto Sans KR')?' on':'');item.style.fontFamily=`'${f.key}',sans-serif`;item.innerHTML=`<span class="ff-name">${f.label}</span><span class="ff-sample">${f.sample}</span>`;if(!isAdmin){item.style.pointerEvents='none';item.style.opacity='.45';}item.onclick=()=>{S.tmpTheme.fontFamily=f.key;_applyTheme(S.tmpTheme);ffList.querySelectorAll('.ff-item').forEach((el,i)=>el.classList.toggle('on',FONTS[i].key===f.key));};ffList.appendChild(item);});fr.appendChild(ffList);card.appendChild(fr);const szr=document.createElement('div');szr.className='th-row';szr.innerHTML='<div class="th-lbl">📐 전체 글자 크기</div>';const szW=document.createElement('div');szW.className='sl-row';const sl=document.createElement('input');sl.type='range';sl.className='sl';sl.min=11;sl.max=22;sl.step=1;sl.value=t.fontSize||14;sl.disabled=!isAdmin;const fzv=document.createElement('div');fzv.className='sl-val';fzv.textContent=`${t.fontSize||14}px`;sl.addEventListener('input',()=>{S.tmpTheme.fontSize=+sl.value;fzv.textContent=`${sl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});szW.appendChild(sl);szW.appendChild(fzv);szr.appendChild(szW);card.appendChild(szr);const mfr=document.createElement('div');mfr.className='th-row';mfr.innerHTML='<div class="th-lbl">📘 주교재명 글자 크기</div>';const mfW=document.createElement('div');mfW.className='sl-row';const msl=document.createElement('input');msl.type='range';msl.className='sl';msl.min=10;msl.max=22;msl.step=1;msl.value=t.mainFontSize||t.fontSize||14;msl.disabled=!isAdmin;const mfv=document.createElement('div');mfv.className='sl-val';mfv.style.color='var(--a)';mfv.textContent=`${t.mainFontSize||t.fontSize||14}px`;msl.addEventListener('input',()=>{S.tmpTheme.mainFontSize=+msl.value;mfv.textContent=`${msl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});mfW.appendChild(msl);mfW.appendChild(mfv);mfr.appendChild(mfW);card.appendChild(mfr);const sfr=document.createElement('div');sfr.className='th-row';sfr.innerHTML='<div class="th-lbl">📗 부교재명 글자 크기</div>';const sfW=document.createElement('div');sfW.className='sl-row';const ssl=document.createElement('input');ssl.type='range';ssl.className='sl';ssl.min=10;ssl.max=22;ssl.step=1;ssl.value=t.subFontSize||Math.max((t.fontSize||14)-1,10);ssl.disabled=!isAdmin;const sfv=document.createElement('div');sfv.className='sl-val';sfv.style.color='var(--green)';sfv.textContent=`${t.subFontSize||Math.max((t.fontSize||14)-1,10)}px`;ssl.addEventListener('input',()=>{S.tmpTheme.subFontSize=+ssl.value;sfv.textContent=`${ssl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});sfW.appendChild(ssl);sfW.appendChild(sfv);sfr.appendChild(sfW);card.appendChild(sfr);const bpRow=document.createElement('div');bpRow.className='th-row';bpRow.innerHTML='<div class="th-lbl">👁 교재 미리보기</div>';const bpBox=document.createElement('div');bpBox.className='bk-preview-box';bpBox.id='bk-preview-box';['main','sub'].forEach(type=>{const row=document.createElement('div');row.className='bk-preview-row';const tag=document.createElement('span');tag.className=`bk-tag ${type}`;tag.textContent=type==='main'?'주':'부';const nm=document.createElement('span');nm.className='bk-preview-nm';nm.id=`bk-preview-nm-${type}`;nm.textContent=type==='main'?'수학의 정석(상)':'쎈 수학';nm.style.fontSize=type==='main'?`${S.tmpTheme.mainFontSize||t.mainFontSize||t.fontSize||14}px`:`${S.tmpTheme.subFontSize||t.subFontSize||Math.max((t.fontSize||14)-1,10)}px`;const inp2=document.createElement('div');inp2.className='bk-preview-inp';inp2.textContent='p.123~130';inp2.style.fontSize=`${S.tmpTheme.fontSize||t.fontSize||14}px`;inp2.style.width=`${S.tmpTheme.inputBoxWidth||t.inputBoxWidth||140}px`;row.appendChild(tag);row.appendChild(nm);row.appendChild(inp2);bpBox.appendChild(row);});bpRow.appendChild(bpBox);card.appendChild(bpRow);const iwr=document.createElement('div');iwr.className='th-row';iwr.innerHTML='<div class="th-lbl">📏 진도 입력칸 너비</div>';const iwW=document.createElement('div');iwW.className='sl-row';const isl=document.createElement('input');isl.type='range';isl.className='sl';isl.min=80;isl.max=260;isl.step=10;isl.value=t.inputBoxWidth||140;isl.disabled=!isAdmin;const iwv=document.createElement('div');iwv.className='sl-val';iwv.textContent=`${t.inputBoxWidth||140}px`;isl.addEventListener('input',()=>{S.tmpTheme.inputBoxWidth=+isl.value;iwv.textContent=`${isl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});iwW.appendChild(isl);iwW.appendChild(iwv);iwr.appendChild(iwW);card.appendChild(iwr);const ovr=document.createElement('div');ovr.className='th-row';ovr.innerHTML='<div class="th-lbl">📱 운용화면 기본 보기</div>';const vrow=document.createElement('div');vrow.className='view-sel-row';[{v:'grid',l:'⊞ 그리드'},{v:'list',l:'☰ 리스트'}].forEach(({v,l})=>{const btn=document.createElement('button');btn.className='view-sel-btn'+(v===(t.operateView||'grid')?' on':'');btn.textContent=l;if(!isAdmin){btn.disabled=true;btn.style.opacity='.45';}btn.onclick=()=>{S.tmpTheme.operateView=v;S.operateView=v;vrow.querySelectorAll('.view-sel-btn').forEach((b,i)=>b.classList.toggle('on',['grid','list'][i]===v));};vrow.appendChild(btn);});ovr.appendChild(vrow);card.appendChild(ovr);const pvr=document.createElement('div');pvr.className='th-row';pvr.innerHTML='<div class="th-lbl">📅 진도 탭 표시 방식</div>';const pvRow=document.createElement('div');pvRow.className='view-sel-row';[{v:'timeline',l:'📅 타임라인(권장)'},{v:'weekly',l:'🗓️ 주간(기존)'}].forEach(({v,l})=>{const btn=document.createElement('button');btn.className='view-sel-btn'+(v===(t.progressViewMode||'timeline')?' on':'');btn.textContent=l;if(!isAdmin){btn.disabled=true;btn.style.opacity='.45';}btn.onclick=()=>{S.tmpTheme.progressViewMode=v;pvRow.querySelectorAll('.view-sel-btn').forEach((b,i)=>b.classList.toggle('on',['timeline','weekly'][i]===v));};pvRow.appendChild(btn);});pvr.appendChild(pvRow);card.appendChild(pvr);if(isAdmin){const sr=document.createElement('div');sr.className='th-row';const sb=document.createElement('button');sb.className='th-save-btn';sb.textContent='💾 테마 저장 · 적용';sb.onclick=async()=>{sb.textContent='저장 중...';sb.disabled=true;await DB.saveTheme(S.tmpTheme);_applyTheme(S.tmpTheme);S.operateView=S.tmpTheme.operateView||'grid';S.viewMode=S.tmpTheme.viewMode||'grid';S.progressViewMode=S.tmpTheme.progressViewMode||'timeline';_updateToggleBtn();sb.textContent='💾 테마 저장 · 적용';sb.disabled=false;_toast('🎨 테마 저장 완료!','success',3500);_renderMgTheme();};sr.appendChild(sb);card.appendChild(sr);}else{const nr=document.createElement('div');nr.className='th-row';nr.innerHTML='<div style="font-size:11px;color:var(--tx3)">⚠️ 테마 변경은 관리자 로그인 후 가능합니다</div>';card.appendChild(nr);}wrap.appendChild(card);
+  function _renderMgTheme(){const wrap=document.getElementById('mg-theme');if(!wrap)return;wrap.innerHTML='';const t=DB.getTheme();S.tmpTheme={...t};const isAdmin=DB.isAdmin();const card=document.createElement('div');card.className='th-card';const prev=document.createElement('div');prev.className='th-row';prev.innerHTML='<div class="th-preview" id="th-prev"></div>';card.appendChild(prev);_upPrev(PALETTES.find(p=>p.id===(t.palette||'light1'))?.accent||'#4f46e5');const pr=document.createElement('div');pr.className='th-row';pr.innerHTML='<div class="th-lbl">🎨 테마</div>';const palRow=document.createElement('div');palRow.className='pal-row';PALETTES.forEach(pal=>{const item=document.createElement('div');item.className='pal-item'+(pal.id===(t.palette||'light1')?' on':'');const swBg=pal.id==='system'?'linear-gradient(135deg,#f8f9fc 50%,#0b0b14 50%)':pal.bg;item.innerHTML=`<div class="pal-swatch" style="background:${swBg}">${pal.emoji}</div><div class="pal-name">${pal.name}</div>`;if(!isAdmin){item.style.pointerEvents='none';item.style.opacity='.5';}item.onclick=()=>{S.tmpTheme.palette=pal.id;if(pal.id!=='system')S.tmpTheme.accent=pal.accent;_applyTheme(S.tmpTheme);_upPrev(pal.accent||'#4f46e5');palRow.querySelectorAll('.pal-item').forEach((el,i)=>el.classList.toggle('on',PALETTES[i].id===pal.id));};palRow.appendChild(item);});pr.appendChild(palRow);card.appendChild(pr);const fr=document.createElement('div');fr.className='th-row';fr.innerHTML='<div class="th-lbl">🔤 폰트</div>';const ffList=document.createElement('div');ffList.className='ff-list';FONTS.forEach(f=>{const item=document.createElement('div');item.className='ff-item'+(f.key===(t.fontFamily||'Noto Sans KR')?' on':'');item.style.fontFamily=`'${f.key}',sans-serif`;item.innerHTML=`<span class="ff-name">${f.label}</span><span class="ff-sample">${f.sample}</span>`;if(!isAdmin){item.style.pointerEvents='none';item.style.opacity='.45';}item.onclick=()=>{S.tmpTheme.fontFamily=f.key;_applyTheme(S.tmpTheme);ffList.querySelectorAll('.ff-item').forEach((el,i)=>el.classList.toggle('on',FONTS[i].key===f.key));};ffList.appendChild(item);});fr.appendChild(ffList);card.appendChild(fr);const szr=document.createElement('div');szr.className='th-row';szr.innerHTML='<div class="th-lbl">📐 전체 글자 크기</div>';const szW=document.createElement('div');szW.className='sl-row';const sl=document.createElement('input');sl.type='range';sl.className='sl';sl.min=11;sl.max=22;sl.step=1;sl.value=t.fontSize||14;sl.disabled=!isAdmin;const fzv=document.createElement('div');fzv.className='sl-val';fzv.textContent=`${t.fontSize||14}px`;sl.addEventListener('input',()=>{S.tmpTheme.fontSize=+sl.value;fzv.textContent=`${sl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});szW.appendChild(sl);szW.appendChild(fzv);szr.appendChild(szW);card.appendChild(szr);const mfr=document.createElement('div');mfr.className='th-row';mfr.innerHTML='<div class="th-lbl">📘 주교재명 글자 크기</div>';const mfW=document.createElement('div');mfW.className='sl-row';const msl=document.createElement('input');msl.type='range';msl.className='sl';msl.min=10;msl.max=22;msl.step=1;msl.value=t.mainFontSize||t.fontSize||14;msl.disabled=!isAdmin;const mfv=document.createElement('div');mfv.className='sl-val';mfv.style.color='var(--a)';mfv.textContent=`${t.mainFontSize||t.fontSize||14}px`;msl.addEventListener('input',()=>{S.tmpTheme.mainFontSize=+msl.value;mfv.textContent=`${msl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});mfW.appendChild(msl);mfW.appendChild(mfv);mfr.appendChild(mfW);card.appendChild(mfr);const sfr=document.createElement('div');sfr.className='th-row';sfr.innerHTML='<div class="th-lbl">📗 부교재명 글자 크기</div>';const sfW=document.createElement('div');sfW.className='sl-row';const ssl=document.createElement('input');ssl.type='range';ssl.className='sl';ssl.min=10;ssl.max=22;ssl.step=1;ssl.value=t.subFontSize||Math.max((t.fontSize||14)-1,10);ssl.disabled=!isAdmin;const sfv=document.createElement('div');sfv.className='sl-val';sfv.style.color='var(--green)';sfv.textContent=`${t.subFontSize||Math.max((t.fontSize||14)-1,10)}px`;ssl.addEventListener('input',()=>{S.tmpTheme.subFontSize=+ssl.value;sfv.textContent=`${ssl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});sfW.appendChild(ssl);sfW.appendChild(sfv);sfr.appendChild(sfW);card.appendChild(sfr);const bpRow=document.createElement('div');bpRow.className='th-row';bpRow.innerHTML='<div class="th-lbl">👁 교재 미리보기</div>';const bpBox=document.createElement('div');bpBox.className='bk-preview-box';bpBox.id='bk-preview-box';['main','sub'].forEach(type=>{const row=document.createElement('div');row.className='bk-preview-row';const tag=document.createElement('span');tag.className=`bk-tag ${type}`;tag.textContent=type==='main'?'주':'부';const nm=document.createElement('span');nm.className='bk-preview-nm';nm.id=`bk-preview-nm-${type}`;nm.textContent=type==='main'?'수학의 정석(상)':'쎈 수학';nm.style.fontSize=type==='main'?`${S.tmpTheme.mainFontSize||t.mainFontSize||t.fontSize||14}px`:`${S.tmpTheme.subFontSize||t.subFontSize||Math.max((t.fontSize||14)-1,10)}px`;const inp2=document.createElement('div');inp2.className='bk-preview-inp';inp2.textContent='p.123~130';inp2.style.fontSize=`${S.tmpTheme.fontSize||t.fontSize||14}px`;inp2.style.width=`${S.tmpTheme.inputBoxWidth||t.inputBoxWidth||140}px`;row.appendChild(tag);row.appendChild(nm);row.appendChild(inp2);bpBox.appendChild(row);});bpRow.appendChild(bpBox);card.appendChild(bpRow);const iwr=document.createElement('div');iwr.className='th-row';iwr.innerHTML='<div class="th-lbl">📏 진도 입력칸 너비</div>';const iwW=document.createElement('div');iwW.className='sl-row';const isl=document.createElement('input');isl.type='range';isl.className='sl';isl.min=80;isl.max=260;isl.step=10;isl.value=t.inputBoxWidth||140;isl.disabled=!isAdmin;const iwv=document.createElement('div');iwv.className='sl-val';iwv.textContent=`${t.inputBoxWidth||140}px`;isl.addEventListener('input',()=>{S.tmpTheme.inputBoxWidth=+isl.value;iwv.textContent=`${isl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});iwW.appendChild(isl);iwW.appendChild(iwv);iwr.appendChild(iwW);card.appendChild(iwr);const ovr=document.createElement('div');ovr.className='th-row';ovr.innerHTML='<div class="th-lbl">📱 운용화면 기본 보기</div>';const vrow=document.createElement('div');vrow.className='view-sel-row';[{v:'grid',l:'⊞ 그리드'},{v:'list',l:'☰ 리스트'}].forEach(({v,l})=>{const btn=document.createElement('button');btn.className='view-sel-btn'+(v===(t.operateView||'grid')?' on':'');btn.textContent=l;if(!isAdmin){btn.disabled=true;btn.style.opacity='.45';}btn.onclick=()=>{S.tmpTheme.operateView=v;S.operateView=v;vrow.querySelectorAll('.view-sel-btn').forEach((b,i)=>b.classList.toggle('on',['grid','list'][i]===v));};vrow.appendChild(btn);});ovr.appendChild(vrow);card.appendChild(ovr);const pvr=document.createElement('div');pvr.className='th-row';pvr.innerHTML='<div class="th-lbl">📅 진도 탭 표시 방식</div>';const pvRow=document.createElement('div');pvRow.className='view-sel-row';[{v:'timeline',l:'📅 타임라인(권장)'},{v:'weekly',l:'🗓️ 주간(기존)'}].forEach(({v,l})=>{const btn=document.createElement('button');btn.className='view-sel-btn'+(v===(t.progressViewMode||'timeline')?' on':'');btn.textContent=l;if(!isAdmin){btn.disabled=true;btn.style.opacity='.45';}btn.onclick=()=>{S.tmpTheme.progressViewMode=v;pvRow.querySelectorAll('.view-sel-btn').forEach((b,i)=>b.classList.toggle('on',['timeline','weekly'][i]===v));};pvRow.appendChild(btn);});pvr.appendChild(pvRow);card.appendChild(pvr);
+/* ══ 배경 이미지(BgTheme) — 무료 이미지 연동, 무드/강도/교체주기 설정 ══ */
+if (typeof BgTheme !== 'undefined') {
+  // ★ t.bg는 DB.getTheme()가 반환하는 라이브 참조이므로, 얕은 복사라도 반드시
+  //   새 객체로 떼어내야 한다. 그렇지 않으면 저장 버튼을 누르기 전 미리보기
+  //   조작만으로 DB.getTheme()의 실제 값(C.theme.bg)이 그대로 변조되어 버린다.
+  S.tmpTheme.bg = { ...(t.bg || {}) };
+  // ★ 옵션 체크 전에는 반드시 기존 상태(=배경 없음) 그대로 유지되도록 명시적으로 false 판정
+  const bgWasOn = t.bg?.enabled === true;
+  const bgCard = document.createElement('div'); bgCard.className = 'th-row';
+  bgCard.innerHTML = '<div class="th-lbl">🖼️ 배경 이미지 (무료 이미지 연동)</div>';
+  const bgCkLabel = document.createElement('label');
+  bgCkLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none';
+  const bgCk = document.createElement('input');
+  bgCk.type = 'checkbox'; bgCk.id = 'th-bg-enable';
+  bgCk.checked = bgWasOn;
+  bgCk.style.cssText = 'width:18px;height:18px;accent-color:var(--a);cursor:pointer;flex-shrink:0';
+  if (!isAdmin) { bgCk.disabled = true; bgCk.style.opacity = '.45'; }
+  const bgCkText = document.createElement('span');
+  bgCkText.style.cssText = 'font-size:var(--fzs);font-weight:700;color:var(--tx2)';
+  bgCkText.textContent = '배경 이미지 사용 (체크할 때만 동작 · 기본값: 사용 안 함)';
+  bgCkLabel.appendChild(bgCk); bgCkLabel.appendChild(bgCkText);
+  const bgSub = document.createElement('div');
+  bgSub.className = 'bg-sub' + (bgWasOn ? '' : ' bg-sub-disabled');
+  bgCk.onchange = () => {
+    S.tmpTheme.bg.enabled = bgCk.checked;
+    BgTheme.render(S.tmpTheme);
+    bgSub.classList.toggle('bg-sub-disabled', !bgCk.checked);
+  };
+  bgCard.appendChild(bgCkLabel); card.appendChild(bgCard);
+
+  const mdr = document.createElement('div'); mdr.className = 'th-row';
+  mdr.innerHTML = '<div class="th-lbl">🎨 무드</div>';
+  const mdRow = document.createElement('div'); mdRow.className = 'view-sel-row';
+  [{v:'season',l:'🍁 계절감'},{v:'minimal',l:'🤍 미니멀'},{v:'wood',l:'🪵 우드톤'},{v:'pastel',l:'🌸 파스텔'}].forEach(({v,l})=>{
+    const btn = document.createElement('button');
+    btn.className = 'view-sel-btn' + ((S.tmpTheme.bg.mood||'season') === v ? ' on' : '');
+    btn.textContent = l;
+    if (!isAdmin) { btn.disabled = true; btn.style.opacity = '.45'; }
+    btn.onclick = () => {
+      S.tmpTheme.bg.mood = v;
+      mdRow.querySelectorAll('.view-sel-btn').forEach((b,i)=>b.classList.toggle('on',['season','minimal','wood','pastel'][i]===v));
+    };
+    mdRow.appendChild(btn);
+  });
+  mdr.appendChild(mdRow); bgSub.appendChild(mdr);
+
+  const stR = document.createElement('div'); stR.className = 'th-row';
+  stR.innerHTML = '<div class="th-lbl">🌗 배경 강도</div>';
+  const stRow = document.createElement('div'); stRow.className = 'view-sel-row';
+  [{v:'soft',l:'은은하게'},{v:'normal',l:'보통'},{v:'vivid',l:'선명하게'}].forEach(({v,l})=>{
+    const btn = document.createElement('button');
+    btn.className = 'view-sel-btn' + ((S.tmpTheme.bg.strength||'soft') === v ? ' on' : '');
+    btn.textContent = l;
+    if (!isAdmin) { btn.disabled = true; btn.style.opacity = '.45'; }
+    btn.onclick = () => {
+      S.tmpTheme.bg.strength = v;
+      BgTheme.render(S.tmpTheme);
+      stRow.querySelectorAll('.view-sel-btn').forEach((b,i)=>b.classList.toggle('on',['soft','normal','vivid'][i]===v));
+    };
+    stRow.appendChild(btn);
+  });
+  stR.appendChild(stRow); bgSub.appendChild(stR);
+
+  const rfR = document.createElement('div'); rfR.className = 'th-row';
+  rfR.innerHTML = '<div class="th-lbl">🔄 자동 교체 주기 · 즉시 미리보기</div>';
+  const rfRow = document.createElement('div'); rfRow.className = 'view-sel-row';
+  [{v:7,l:'매주'},{v:1,l:'매일'},{v:30,l:'매월'}].forEach(({v,l})=>{
+    const btn = document.createElement('button');
+    btn.className = 'view-sel-btn' + ((S.tmpTheme.bg.rotateDays||7) === v ? ' on' : '');
+    btn.textContent = l;
+    if (!isAdmin) { btn.disabled = true; btn.style.opacity = '.45'; }
+    btn.onclick = () => {
+      S.tmpTheme.bg.rotateDays = v;
+      rfRow.querySelectorAll('.view-sel-btn').forEach((b,i)=>b.classList.toggle('on',[7,1,30][i]===v));
+    };
+    rfRow.appendChild(btn);
+  });
+  rfR.appendChild(rfRow);
+  if (isAdmin) {
+    const rfBtn = document.createElement('button');
+    rfBtn.className = 'view-sel-btn'; rfBtn.style.cssText = 'margin-top:8px;width:100%';
+    rfBtn.textContent = '🎲 지금 새 배경 미리보기';
+    rfBtn.onclick = async () => {
+      rfBtn.disabled = true; rfBtn.textContent = '불러오는 중...';
+      try {
+        const fresh = await BgTheme.fetchOne(S.tmpTheme.bg.mood || 'season');
+        if (fresh) {
+          S.tmpTheme.bg = { ...S.tmpTheme.bg, url:fresh.url, credit:fresh.credit, query:fresh.query, updatedAt:new Date().toISOString() };
+          BgTheme.render(S.tmpTheme);
+          _toast('🖼️ 새 배경 미리보기 — 마음에 들면 아래 저장 버튼을 눌러주세요','success',3200);
+        } else {
+          _toast('⚠️ 이미지를 불러오지 못했습니다(잠시 후 다시 시도)','error');
+        }
+      } catch(e) { console.warn('[BgTheme] 미리보기 실패', e); _toast('⚠️ 이미지를 불러오지 못했습니다','error'); }
+      rfBtn.disabled = false; rfBtn.textContent = '🎲 지금 새 배경 미리보기';
+    };
+    rfR.appendChild(rfBtn);
+  }
+  bgSub.appendChild(rfR);
+  card.appendChild(bgSub);
+}
+if(isAdmin){const sr=document.createElement('div');sr.className='th-row';const sb=document.createElement('button');sb.className='th-save-btn';sb.textContent='💾 테마 저장 · 적용';sb.onclick=async()=>{sb.textContent='저장 중...';sb.disabled=true;await DB.saveTheme(S.tmpTheme);_applyTheme(S.tmpTheme);S.operateView=S.tmpTheme.operateView||'grid';S.viewMode=S.tmpTheme.viewMode||'grid';S.progressViewMode=S.tmpTheme.progressViewMode||'timeline';_updateToggleBtn();sb.textContent='💾 테마 저장 · 적용';sb.disabled=false;_toast('🎨 테마 저장 완료!','success',3500);_renderMgTheme();};sr.appendChild(sb);card.appendChild(sr);}else{const nr=document.createElement('div');nr.className='th-row';nr.innerHTML='<div style="font-size:11px;color:var(--tx3)">⚠️ 테마 변경은 관리자 로그인 후 가능합니다</div>';card.appendChild(nr);}wrap.appendChild(card);
 
   // ★ 탭 순서 설정 카드 (관리자 전용)
   if(isAdmin){
