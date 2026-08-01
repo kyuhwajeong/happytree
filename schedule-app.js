@@ -183,6 +183,7 @@ const ScheduleApp = (() => {
 
 /* ══ 컴팩트 스타일 — 다가오는 2주 아젠다 리스트 ══ */
 .sch-agenda-wrap{display:flex;flex-direction:column;gap:2px}
+.sch-agenda-detail{margin-top:14px;padding-top:14px;border-top:1px solid var(--bdr)}
 .sch-agenda-row{display:flex;gap:12px;padding:9px 2px;border-bottom:1px solid var(--bdr)}
 .sch-agenda-row:last-child{border-bottom:none}
 .sch-agenda-date{flex-shrink:0;width:42px;text-align:center}
@@ -664,7 +665,7 @@ const ScheduleApp = (() => {
       if (!items.length) return '';
       const isToday = d.dateStr === todayStr;
       return `<div class="sch-agenda-row">
-        <div class="sch-agenda-date${isToday ? ' today' : ''}">
+        <div class="sch-agenda-date${isToday ? ' today' : ''}" onclick="ScheduleApp.openDayDetail('${d.dateStr}')" style="cursor:pointer">
           <div class="sch-agenda-daynum">${d.cellDay}</div>
           <div class="sch-agenda-dow">${isToday ? '오늘' : DAYS_KO[d.dow]}</div>
         </div>
@@ -701,10 +702,17 @@ const ScheduleApp = (() => {
     const dashStyle = (typeof DashboardApp !== 'undefined' && DashboardApp._dashStyle) ? DashboardApp._dashStyle() : 'minimal';
     const monthLabelEl = document.getElementById('sch-month-label');
 
-    // ★ 컴팩트 스타일 — 달력 그리드 대신 "다가오는 2주" 목록형 아젠다로 완전히 다르게 보여준다
+    // ★ 컴팩트 스타일 — 달력 그리드 대신 "다가오는 2주" 목록형 아젉다를 위에 얹지만,
+    //   ➕ 등록·근무기록·공지 등 실제 기능은 그대로 쓸 수 있도록 날짜 상세 패널은 유지한다.
+    //   (처음 버전은 아젠다만 보여주고 상세 패널을 통째로 빼버려서 등록·수정 자체가
+    //   불가능해지는 문제가 있었음 — 반드시 둘 다 있어야 한다)
     if (dashStyle === 'compact') {
       if (monthLabelEl) monthLabelEl.textContent = '📋 다가오는 2주';
-      el.innerHTML = `<div class="sch-agenda-wrap">${_agendaViewHtml()}</div>`;
+      el.innerHTML = `
+        <div class="sch-agenda-wrap">${_agendaViewHtml()}</div>
+        <div class="sch-agenda-detail">
+          <div id="sch-selday-panel">${_selDayPanelHtml(_selDate || _todayStr())}</div>
+        </div>`;
       return;
     }
 
