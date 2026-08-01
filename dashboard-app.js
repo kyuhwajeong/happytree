@@ -601,6 +601,11 @@ const DashboardApp = (() => {
     return `<div class="db-sec">
       <div class="db-sec-hdr">
         <div class="db-sec-title">🗓️ 일정표</div>
+        <div class="sch-cal-navs">
+          <span class="sch-cal-title" id="sch-month-label"></span>
+          <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(-1)" title="이전 달">‹</button>
+          <button class="sch-nav-btn" onclick="ScheduleApp._navMonth(1)" title="다음 달">›</button>
+        </div>
       </div>
       <div id="sch-mini-cal"></div>
     </div>`;
