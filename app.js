@@ -1961,6 +1961,13 @@ if (typeof BgTheme !== 'undefined') {
     rfR.appendChild(rfBtn);
   }
   bgSub.appendChild(rfR);
+  // ★ 화면을 가리던 우하단 고정 출처 표기를 없애는 대신, 여기 설정 화면 안에만 조용히 표기
+  const crR = document.createElement('div'); crR.className = 'th-row';
+  const credit = (typeof BgTheme !== 'undefined' && BgTheme.getCredit) ? BgTheme.getCredit() : null;
+  crR.innerHTML = credit?.name
+    ? `<div style="font-size:10px;color:var(--tx3)">📷 현재 배경 출처: <a href="${_esc(credit.link||'#')}" target="_blank" rel="noopener" style="color:var(--tx3);text-decoration:underline">${_esc(credit.name)} · Unsplash</a></div>`
+    : '';
+  if (credit?.name) bgSub.appendChild(crR);
   card.appendChild(bgSub);
 }
 if(isAdmin){const sr=document.createElement('div');sr.className='th-row';const sb=document.createElement('button');sb.className='th-save-btn';sb.textContent='💾 테마 저장 · 적용';sb.onclick=async()=>{sb.textContent='저장 중...';sb.disabled=true;await DB.saveTheme(S.tmpTheme);_applyTheme(S.tmpTheme);S.operateView=S.tmpTheme.operateView||'grid';S.viewMode=S.tmpTheme.viewMode||'grid';S.progressViewMode=S.tmpTheme.progressViewMode||'timeline';_updateToggleBtn();sb.textContent='💾 테마 저장 · 적용';sb.disabled=false;_toast('🎨 테마 저장 완료!','success',3500);_renderMgTheme();};sr.appendChild(sb);card.appendChild(sr);}else{const nr=document.createElement('div');nr.className='th-row';nr.innerHTML='<div style="font-size:11px;color:var(--tx3)">⚠️ 테마 변경은 관리자 로그인 후 가능합니다</div>';card.appendChild(nr);}wrap.appendChild(card);

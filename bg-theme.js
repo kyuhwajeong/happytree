@@ -58,8 +58,6 @@ const BgTheme = (() => {
     12:['snow winter morning', 'warm winter light cozy'],
   };
 
-  let _creditEl = null;
-
   function _esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   }
@@ -106,27 +104,13 @@ const BgTheme = (() => {
     return _fetchPhoto(_pickQuery(mood || 'season'));
   }
 
-  function _ensureCreditEl() {
-    if (_creditEl) return _creditEl;
-    _creditEl = document.createElement('div');
-    _creditEl.id = 'bg-theme-credit';
-    _creditEl.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:5;font-size:9px;'
-      + 'color:rgba(255,255,255,.85);background:rgba(0,0,0,.28);backdrop-filter:blur(2px);'
-      + 'padding:2px 7px;border-radius:6px;pointer-events:auto;opacity:.75;display:none;'
-      + 'font-family:sans-serif;line-height:1.6;white-space:nowrap';
-    document.body.appendChild(_creditEl);
-    return _creditEl;
-  }
-
   /* ★ 핵심 렌더링 — theme(팔레트 포함) 하나만 넘기면 현재 --bg 색 기준으로 스크림을 계산해 적용 */
   function render(theme) {
     if (typeof document === 'undefined') return;
     _lastTheme = theme;
-    const creditEl = _ensureCreditEl();
     const bg = theme?.bg;
     if (!bg?.enabled || !bg?.url) {
       document.body.style.backgroundImage = '';
-      creditEl.style.display = 'none';
       return;
     }
     const hex = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#f8f9fc';
@@ -139,12 +123,11 @@ const BgTheme = (() => {
     document.body.style.backgroundSize = 'cover';
     document.body.style.backgroundPosition = 'center';
     document.body.style.backgroundAttachment = 'fixed';
-    if (bg.credit?.name) {
-      creditEl.innerHTML = `📷 <a href="${bg.credit.link || '#'}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">${_esc(bg.credit.name)}</a> on <a href="https://unsplash.com/?utm_source=happytree_academy&utm_medium=referral" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">Unsplash</a>`;
-      creditEl.style.display = '';
-    } else {
-      creditEl.style.display = 'none';
-    }
+  }
+
+  /* ★ 화면을 가리던 우하단 고정 출처 표기는 제거 — 필요하면 테마 설정 화면에서만 getCredit()으로 확인 */
+  function getCredit() {
+    return _lastTheme?.bg?.credit || null;
   }
 
   /* ★ app.js의 go(page) 라우팅에서 호출 — 화면이 바뀔 때마다 밀도에 맞춰 스크림을 재계산 */
@@ -178,5 +161,5 @@ const BgTheme = (() => {
     }
   }
 
-  return { init, render, fetchOne, setPage };
+  return { init, render, fetchOne, setPage, getCredit };
 })();
