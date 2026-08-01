@@ -75,11 +75,13 @@ const ScheduleApp = (() => {
 .sch-resize-hint{position:absolute;right:2px;bottom:0px;font-size:12px;color:var(--tx3);opacity:.4;pointer-events:none;line-height:1;z-index:1;}
 .sch-widget-resize-handle{position:absolute;z-index:5;}
 @media (max-width:700px){
-  /* ★ 휴대폰 화면 안전장치 — 드래그 리사이즈 UI를 완전히 숨기고, 달력 영역이
-     어떤 이유로든 화면 폭을 넘지 못하도록 이중으로 막아 좌우 스크롤을 원천 차단 */
+  /* ★ 휴대폰 화면 안전장치 — 드래그 리사이즈 UI를 완전히 숨겨서 터치 오작동을 막는다.
+     (예전엔 여기서 overflow-x:hidden도 걸어뒀는데, 그건 넘치는 원인을 고치는 게
+     아니라 넘친 부분을 숨기기만 해서 수·목·금 칸이 화면에서 통째로 안 보이는
+     문제를 만들었다. 진짜 원인은 grid-template-columns에 minmax(0,1fr)이 없어서
+     긴 일정 제목이 칸 너비를 억지로 늘리던 것이었고, 그건 위에서 직접 고쳤다.) */
   .sch-resize-hint,.sch-widget-resize-handle{display:none}
-  .sch-resizable-wrap{max-width:100%;overflow-x:hidden}
-  .sch-widget-layout{overflow-x:hidden}
+  .sch-resizable-wrap{max-width:100%}
   #sch-cal-zoom{zoom:1 !important}
   /* ★ 손가락으로 누르기 편하도록 날짜 칸 터치 영역을 살짝 넉넉하게 */
   .sch-daynum-cell{padding:5px 0}
@@ -130,12 +132,12 @@ const ScheduleApp = (() => {
 .sch-detail-sec{margin-bottom:14px}
 .sch-detail-sec:last-child{margin-bottom:0}
 .sch-detail-sec-title{font-size:12.5px;font-weight:800;color:var(--tx3);letter-spacing:.4px;margin-bottom:6px}
-.sch-dow-row{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:2px}
+.sch-dow-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));margin-bottom:2px}
 .sch-dow{text-align:center;font-size:10px;font-weight:800;color:var(--tx3);padding:2px 0 6px}
 .sch-dow.sun{color:#ef4444}.sch-dow.sat{color:#3b82f6}
 .sch-week-block{border-bottom:1px solid var(--bdr);padding:3px 0 5px;position:relative}
 .sch-week-block:last-of-type{border-bottom:none}
-.sch-daynum-row{display:grid;grid-template-columns:repeat(7,1fr);position:relative;z-index:1}
+.sch-daynum-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));position:relative;z-index:1}
 .sch-daynum-cell{text-align:center;font-size:11px;font-weight:800;color:var(--tx2);cursor:pointer;padding:2px 0;border-radius:7px}
 .sch-daynum-cell.other{opacity:.32}
 .sch-daynum-cell.sun{color:#ef4444}
@@ -145,7 +147,7 @@ const ScheduleApp = (() => {
 /* ★ 선택한 날짜: 숫자만 동그랗게가 아니라, 그 날짜의 이벤트 막대까지 포함해서
    세로로 길게 박스 하나로 감싸서 "그 날짜 칸 전체"를 고른 것처럼 보이게 함 */
 .sch-sel-col{position:absolute;top:2px;bottom:2px;width:calc(100% / 7);border-radius:10px;background:var(--a10);pointer-events:none;z-index:0}
-.sch-track-row{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-top:2px;position:relative;z-index:1}
+.sch-track-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;margin-top:2px;position:relative;z-index:1}
 .sch-bar{position:relative;grid-row:1;height:15px;line-height:15px;font-size:8.5px;font-weight:700;color:#fff;padding:0 4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;text-shadow:0 1px 1.5px rgba(0,0,0,.35)}
 /* ★ 컴팩트 스타일 전용 — 달력 자체도 더 촘촘하게(한 화면에 더 많은 주가 보이도록) */
 .db-style-compact .sch-week-block{padding:1px 0 3px}
