@@ -181,14 +181,14 @@ const DashboardApp = (() => {
 .db-ar-thumb{flex-shrink:0;width:84px;cursor:pointer}
 .db-ar-thumb img{width:84px;height:84px;object-fit:cover;border-radius:12px;border:1px solid var(--bdr);display:block}
 .db-ar-thumb-ico{width:84px;height:84px;border-radius:12px;border:1px solid var(--bdr);background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:32px}
-.db-ar-thumb-name{font-size:10.5px;font-weight:600;color:var(--tx2);margin-top:5px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.db-ar-thumb-name{font-size:11.5px;font-weight:600;color:var(--tx2);margin-top:5px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .db-fav-thumb{position:relative}
 .db-fav-thumb.db-fav-hide{display:none}
-.db-fav-badge{position:absolute;top:-5px;left:-5px;width:21px;height:21px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10.5px;box-shadow:0 2px 6px rgba(0,0,0,.28);border:2px solid var(--surf);z-index:1}
+.db-fav-badge{position:absolute;top:-5px;left:-5px;width:23px;height:23px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11.5px;box-shadow:0 2px 6px rgba(0,0,0,.28);border:2px solid var(--surf);z-index:1}
 .db-fav-badge.type-archive{background:#3b82f6}
 .db-fav-badge.type-video{background:#ef4444}
 .db-fav-filter{display:flex;gap:6px;margin-bottom:10px}
-.db-fav-filter-btn{padding:5px 10px;border-radius:9px;background:var(--card2);color:var(--tx2);border:1px solid var(--bdr2);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;transition:.15s}
+.db-fav-filter-btn{padding:6px 12px;border-radius:9px;background:var(--card2);color:var(--tx2);border:1px solid var(--bdr2);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:.15s}
 .db-fav-filter-btn.on{background:var(--a);color:#fff;border-color:var(--a)}
 .db-quote-inline{flex:1 1 auto;min-width:80px;margin:0 10px;text-align:right}
 .db-quote-inline.loading{opacity:.4}
@@ -201,9 +201,9 @@ const DashboardApp = (() => {
 .db-body{flex:1;overflow-y:auto;padding:12px 14px 90px;display:flex;flex-direction:column;gap:14px}
 .db-sec{background:var(--surf);border:1px solid var(--bdr);border-radius:16px;padding:14px}
 .db-sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
-.db-sec-title{font-size:13.5px;font-weight:800;color:var(--tx)}
+.db-sec-title{font-size:15px;font-weight:800;color:var(--tx)}
 .db-sec-acts{display:flex;gap:6px}
-.db-mini-btn{padding:6px 11px;border-radius:10px;background:var(--a);color:#fff;border:none;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap}
+.db-mini-btn{padding:7px 13px;border-radius:10px;background:var(--a);color:#fff;border:none;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap}
 .db-mini-btn.ghost{background:var(--card2);color:var(--tx2);border:1px solid var(--bdr2)}
 .db-empty-mini{text-align:center;color:var(--tx3);font-size:12px;padding:16px 8px}
 
@@ -267,13 +267,12 @@ const DashboardApp = (() => {
    * ═══════════════════════════════════════════════════════════ */
   function _canSee(pg) {
     if (typeof DB === 'undefined') return false;
-    const isAdmin = DB.isAdmin(), role = DB.getRole();
+    const isAdmin = DB.isAdmin();
     if (pg === 'operate') return true;
-    if (pg === 'students' || pg === 'staff') return isAdmin;
-    if (pg === 'booklib' || pg === 'grade') {
-      if (isAdmin) return true;
-      if (role === 'teacher') return ((DB.getSession()?.allowedMenus) || []).includes(pg);
-      return false;
+    if (isAdmin) return true;
+    // ★ 교재·성적·학생·직원: admin이 계정별로 지정한 allowedMenus로 판단(강사·운용자 공통)
+    if (['booklib', 'grade', 'students', 'staff'].includes(pg)) {
+      return ((DB.getSession()?.allowedMenus) || []).includes(pg);
     }
     return false;
   }

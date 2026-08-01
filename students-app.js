@@ -1,7 +1,8 @@
 /**
  * students-app.js — v1.0
  *
- * ★ 학생 관리 UI 모듈 (admin 전용)
+ * ★ 학생 관리 UI 모듈 (기본은 admin 전용이며, admin이 계정별로 접근 권한을 부여하면
+ *    강사·운용자 계정도 사용 가능 — 강사는 담당 반 데이터로 자동 범위 제한됨)
  * ★ StudentDB 에 완전히 의존 (students-db.js 보다 뒤에 로드)
  * ★ 기존 App 모듈 함수를 최소한으로만 호출
  *
@@ -332,7 +333,9 @@ const StudentApp = (() => {
 
   /* ──── 필터 칩 빌더 ──── */
   function _buildChips() {
-    const classes = StudentDB.getClasses();
+    const allClasses = StudentDB.getClasses();
+    const tcNames = _teacherClassNames();
+    const classes  = tcNames ? allClasses.filter(c => tcNames.includes(c)) : allClasses;
     const grades  = StudentDB.getGrades();
     const schools = StudentDB.getSchools();
 
@@ -367,7 +370,20 @@ const StudentApp = (() => {
   function _renderStats() {
     const el = document.getElementById('st-stats');
     if (!el) return;
-    const s = StudentDB.getStats();
+    const tcNames = _teacherClassNames();
+    let s;
+    if (tcNames) {
+      // ★ 담당 반이 지정된 강사 계정 — 전체 통계 대신 담당 반 범위로 다시 집계
+      const scoped = StudentDB.getAll().filter(x => tcNames.includes(x.classCode));
+      s = {
+        enrolled: scoped.filter(x => x.status === '재원').length,
+        paused:   scoped.filter(x => x.status === '휴원').length,
+        left:     scoped.filter(x => x.status === '퇴원').length,
+        total:    scoped.length,
+      };
+    } else {
+      s = StudentDB.getStats();
+    }
 
     el.innerHTML = [
       { val: s.enrolled, lbl: '재원', color: '#22c55e', filter: '재원'  },
@@ -398,8 +414,13 @@ const StudentApp = (() => {
     const hintEl = document.getElementById('st-drop-hint');
     if (!listEl) return;
 
-    const all  = StudentDB.getAll();
-    const list = StudentDB.getFiltered(_state);
+    let all  = StudentDB.getAll();
+    let list = StudentDB.getFiltered(_state);
+    const tcNames = _teacherClassNames();
+    if (tcNames) {
+      all  = all.filter(s => tcNames.includes(s.classCode));
+      list = list.filter(s => tcNames.includes(s.classCode));
+    }
 
     if (all.length === 0) {
       listEl.innerHTML = '';
@@ -1218,6 +1239,16 @@ const StudentApp = (() => {
   /** HTML 이스케이프 */
   function _e(v) {
     return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /** ★ 담당 반이 지정된 강사 계정이면 그 반 이름 배열을, 아니면 null(제한 없음)을 반환.
+   *  운용자 계정은 담당 반 개념이 없으므로(교재·성적과 동일 정책) 메뉴가 허용됐다면 전체를 본다. */
+  function _teacherClassNames() {
+    if (typeof DB === 'undefined' || DB.getRole() !== 'teacher') return null;
+    const tcIds = DB.getTeacherClasses ? DB.getTeacherClasses() : [];
+    if (!tcIds.length) return []; // 담당 반 미지정 → 아무 것도 안 보임
+    const allActive = DB.getActiveClasses ? DB.getActiveClasses() : [];
+    return tcIds.map(id => (allActive.find(c => c.id === id) || {}).name).filter(Boolean);
   }
 
   /** 토스트 메시지 (기존 App 토스트 재사용) */

@@ -16,14 +16,14 @@ const App = (() => {
 
   // ★ 하단 탭 정의 (기본 순서)
   const NAV_DEF = [
-    { pg:'dashboard',ico:'🏠', lbl:'홈',    adminOnly:false },
+    { pg:'dashboard',ico:'🏠', lbl:'홈',    adminOnly:true  },
     { pg:'operate',  ico:'📅', lbl:'진도',  adminOnly:false },
     { pg:'manage',   ico:'⚙️', lbl:'관리',  adminOnly:false },
     { pg:'booklib',  ico:'📖', lbl:'교재',  adminOnly:true  },
     { pg:'grade',    ico:'📝', lbl:'성적',  adminOnly:true  },
     { pg:'students', ico:'👨‍🎓', lbl:'학생', adminOnly:true  },
     { pg:'staff',    ico:'👩‍💼', lbl:'직원', adminOnly:true  },
-    { pg:'archive',  ico:'📁', lbl:'콘텐츠', adminOnly:false },
+    { pg:'archive',  ico:'📁', lbl:'콘텐츠', adminOnly:true  },
   ];
   const LS_NAV_ORDER = 'hk10b_nav_order';
 
@@ -221,6 +221,13 @@ const App = (() => {
     DB.on('classes',()=>{_renderChips();if(S.page==='operate')_renderOperateBody();if(S.page==='manage'&&S.mgTab==='classes'){_renderMgCls();if(_q('mg-fee-ov')&&!_q('mg-fee-ov').classList.contains('hidden'))_renderFeePanel();}});
     DB.on('progress',()=>{if(S.page==='operate')_renderOperateBody();if(S.shareActive)_refreshShareProgress();});
     DB.on('theme',()=>{_applyTheme(DB.getTheme());S.progressViewMode=DB.getTheme().progressViewMode||'timeline';if(S.page==='operate')_renderOperateBody();if(S.page==='manage'&&S.mgTab==='theme')_renderMgTheme();});
+    // ★ admin이 다른 기기에서 이 계정의 역할·담당 반·메뉴 접근 권한을 바꾸면,
+    //   재로그인 없이 지금 이 세션에도 즉시 반영(하단 nav 갱신 + 현재 화면 권한 재검사)
+    DB.on('session',()=>{
+      if(!DB.isLoggedIn()){_toast('⚠️ 계정이 삭제되어 로그아웃되었습니다','error',4000);location.reload();return;}
+      _refreshAuthUI();
+      go(S.page); // ★ go() 내부에서 현재 페이지 권한을 다시 검사 — 더 이상 허용되지 않으면 자동으로 안전한 화면으로 이동
+    });
     // ★ 반(교재배정 등) 동기화 충돌 감지 → 사용자에게 선택 요청
     if(typeof DB.onConflict==='function') DB.onConflict(_showSyncConflict);
 
@@ -279,10 +286,25 @@ const App = (() => {
   function go(page){
     if(page==='manage'  &&!DB.isLoggedIn()){_showLogin('manage');return;}
     if(page==='manage'  &&DB.getRole()==='teacher'){go('operate');return;}
-    if(page==='students'&&!DB.isAdmin())  {_showLogin();return;}
-    if(page==='staff'   &&!DB.isAdmin())  {_showLogin();return;}
-    if(page==='archive' &&!DB.canOperate())  {_showLogin();return;}
-    // ★ 교재·성적: admin은 항상 허용, 비관리자는 allowedMenus 포함 여부로 판단
+    // ★ 홈·콘텐츠도 admin이 계정별로 할당한 메뉴에 포함된 경우에만 접근 가능(그 외엔 항상 열려있는 '진도'로 이동)
+    if(page==='dashboard'&&!DB.isAdmin()){
+      const _am=(DB.getSession()?.allowedMenus)||[];
+      if(!_am.includes('dashboard')){ if(DB.canOperate()){go('operate');return;} _showLogin();return; }
+    }
+    if(page==='archive'&&!DB.isAdmin()){
+      if(!DB.canOperate()){_showLogin();return;}
+      const _am=(DB.getSession()?.allowedMenus)||[];
+      if(!_am.includes('archive')){go('operate');return;}
+    }
+    if(page==='students'&&!DB.isAdmin()){
+      const _am=(DB.getSession()?.allowedMenus)||[];
+      if(!_am.includes('students')){_showLogin();return;}
+    }
+    if(page==='staff'   &&!DB.isAdmin()){
+      const _am=(DB.getSession()?.allowedMenus)||[];
+      if(!_am.includes('staff')){_showLogin();return;}
+    }
+    // ★ 교재·성적: admin은 항상 허용, 비관리자는 allowedMenus 포함 여부로 판단(강사·운용자 공통)
     if(page==='booklib'&&!DB.isAdmin()){
       const _am=(DB.getSession()?.allowedMenus)||[];
       if(!_am.includes('booklib')){_showLogin();return;}
@@ -378,13 +400,9 @@ const App = (() => {
     ordered.forEach(def => {
       // 권한 체크: admin은 모두 표시
       if (def.adminOnly && !isAdmin) {
-        // ★ 강사: allowedMenus에 포함된 메뉴(교재·성적)는 탭 표시 허용
-        if (role === 'teacher') {
-          const _am = (DB.getSession()?.allowedMenus) || [];
-          if (!_am.includes(def.pg)) return;
-        } else {
-          return; // operator 등 일반 비관리자는 adminOnly 탭 모두 숨김
-        }
+        // ★ 강사·운용자 공통: allowedMenus에 포함된 메뉴만 탭 표시 허용
+        const _am = (DB.getSession()?.allowedMenus) || [];
+        if (!_am.includes(def.pg)) return;
       }
       if (def.pg === 'manage' && role === 'teacher') return;
 
@@ -1179,22 +1197,31 @@ const App = (() => {
     const menuList=document.getElementById('f-teacher-menu-list');
     if(!wrap||!list) return;
     const isTeacher=role==='teacher';
+    // ★ 메뉴 접근 권한은 강사·운용자 공통(admin 제외 모든 계정에서 설정 가능)
+    const canConfigMenus=role==='teacher'||role==='operator';
     wrap.style.display=isTeacher?'block':'none';
-    if(menuWrap) menuWrap.style.display=isTeacher?'block':'none';
+    if(menuWrap) menuWrap.style.display=canConfigMenus?'block':'none';
     if(isTeacher){
       const classes=typeof DB!=='undefined'?DB.getActiveClasses():[];
       list.innerHTML=classes.map(c=>
         '<label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;padding:3px 8px;background:var(--card);border-radius:6px;border:1px solid var(--bdr)">'
         +'<input type="checkbox" value="'+c.id+'"'+(savedClasses.includes(c.id)?' checked':'')+' style="accent-color:var(--a)"> '+c.name+'</label>'
       ).join('');
-      // ★ 추가 메뉴 권한 체크박스 (교재·성적만)
-      if(menuList){
-        const EXTRA_MENUS=[{pg:'booklib',lbl:'📖 교재'},{pg:'grade',lbl:'📝 성적'}];
-        menuList.innerHTML=EXTRA_MENUS.map(m=>
-          '<label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;padding:3px 8px;background:var(--card);border-radius:6px;border:1px solid var(--a40)">'
-          +'<input type="checkbox" value="'+m.pg+'"'+(savedMenus.includes(m.pg)?' checked':'')+' style="accent-color:var(--a)"> '+m.lbl+'</label>'
-        ).join('');
-      }
+    }
+    // ★ 메뉴 접근 권한 체크박스 — 기존엔 교재·성적 2개뿐이었으나 학생·직원까지 admin이 자유롭게 지정 가능하도록 확장
+    if(menuList&&canConfigMenus){
+      const EXTRA_MENUS=[
+        {pg:'dashboard',lbl:'🏠 홈'},
+        {pg:'archive',  lbl:'📁 콘텐츠'},
+        {pg:'booklib',  lbl:'📖 교재'},
+        {pg:'grade',    lbl:'📝 성적'},
+        {pg:'students', lbl:'👨‍🎓 학생'},
+        {pg:'staff',    lbl:'👩‍💼 직원'},
+      ];
+      menuList.innerHTML=EXTRA_MENUS.map(m=>
+        '<label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;padding:3px 8px;background:var(--card);border-radius:6px;border:1px solid var(--a40)">'
+        +'<input type="checkbox" value="'+m.pg+'"'+(savedMenus.includes(m.pg)?' checked':'')+' style="accent-color:var(--a)"> '+m.lbl+'</label>'
+      ).join('');
     }
   }
 
@@ -1752,9 +1779,9 @@ const App = (() => {
       ck.addEventListener('change',_syncBulkBar);
       row.appendChild(ck);
 
-      // ★ 강사 추가 메뉴 권한 배지
-      const menuBadge=(acc.role==='teacher'&&acc.allowedMenus?.length)
-        ?`<div style="font-size:10px;color:var(--a);margin-top:3px">추가 메뉴: ${acc.allowedMenus.map(m=>m==='booklib'?'📖 교재':m==='grade'?'📝 성적':m).join(' · ')}</div>`:''
+      // ★ 메뉴 접근 권한 배지 (강사·운용자 공통)
+      const menuBadge=((acc.role==='teacher'||acc.role==='operator')&&acc.allowedMenus?.length)
+        ?`<div style="font-size:10px;color:var(--a);margin-top:3px">추가 메뉴: ${acc.allowedMenus.map(m=>m==='dashboard'?'🏠 홈':m==='archive'?'📁 콘텐츠':m==='booklib'?'📖 교재':m==='grade'?'📝 성적':m==='students'?'👨‍🎓 학생':m==='staff'?'👩‍💼 직원':m).join(' · ')}</div>`:''
       ;
 
       // 정보 영역
@@ -1832,8 +1859,8 @@ const App = (() => {
 
   async function saveAccount(){const u=_q('f-aid').value.trim(),p=_q('f-apw').value,role=_q('f-arole').value;
     const teacherClasses=role==='teacher'?[...document.querySelectorAll('#f-teacher-cls-list input:checked')].map(c=>c.value):[];
-    // ★ 강사 추가 메뉴 권한 수집 (강사 아닐 경우 빈 배열로 초기화)
-    const allowedMenus=role==='teacher'?[...document.querySelectorAll('#f-teacher-menu-list input:checked')].map(c=>c.value):[];
+    // ★ 메뉴 접근 권한 수집 — 강사·운용자 공통(admin은 항상 전체 접근이라 별도 저장 불필요)
+    const allowedMenus=(role==='teacher'||role==='operator')?[...document.querySelectorAll('#f-teacher-menu-list input:checked')].map(c=>c.value):[];
     if(!u){_toast('⚠️ 아이디를 입력해주세요','error');return;}if(!S.editAccId&&!p){_toast('⚠️ 비밀번호를 입력해주세요','error');return;}if(S.editAccId){const d=p?{password:p,role,teacherClasses,allowedMenus}:{role,teacherClasses,allowedMenus};await DB.updateAccount(S.editAccId,d);_toast('✅ 계정 수정 완료','success');}else{if(!await DB.addAccount(u,p,role,teacherClasses,allowedMenus)){_toast('⚠️ 이미 존재하는 아이디','error');return;}_toast('✅ 계정 추가 완료','success');}closeModal('acc');_renderMgAcc();}
 
   async function delAcc(id,u){if(DB.getSession()?.id===id){_toast('⚠️ 현재 계정은 삭제 불가','error');return;}if(!confirm(`"${u}" 계정을 삭제하시겠습니까?`))return;await DB.deleteAccount(id);_renderMgAcc();_toast('🗑 삭제 완료');}
