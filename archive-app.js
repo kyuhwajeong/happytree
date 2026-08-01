@@ -699,7 +699,10 @@ const ArchiveApp = (() => {
     if (!post) return;
     // ★ 다른 기기에서 방금 바뀐 내용을 실시간 리스너가 놓쳤을 수 있으니,
     //   열 때마다 이 게시물만 서버에서 한 번 더 확실하게 확인한다.
+    //   (단, 오프라인이면 ArchiveDB.refreshPost가 즉시 로컬 캐시로 돌아옴 — 안 멈춤)
+    const wasOnline = typeof FireDB === 'undefined' || typeof FireDB.isConnected !== 'function' || FireDB.isConnected();
     const fresh = await ArchiveDB.refreshPost(id);
+    if (!wasOnline && typeof App !== 'undefined' && App._toast) App._toast('📴 오프라인 — 최근 저장된 정보로 표시합니다', '', 2400);
     if (!fresh) {
       if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ 이 게시물은 삭제되었거나 찾을 수 없습니다');
       _refreshGrid();

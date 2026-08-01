@@ -122,6 +122,13 @@ const ArchiveDB = (() => {
   //   바뀐 내용이 실시간 리스너로 놓쳤을 경우를 대비한 보정용
   async function refreshPost(id) {
     if (typeof FireDB === 'undefined' || !FireDB.getFromServer) return getById(id);
+    // ★ 지금 오프라인 상태면 서버에 물어봐도 어차피 시간만 끌고 캐시값이
+    //   돌아온다 — 굳이 기다리게 하지 말고 바로 로컬 캐시로 보여준다.
+    //   (연결 끊긴 동안 게시물을 열면 느려지거나 멈춘 것처럼 보이던 문제)
+    if (typeof FireDB.isConnected === 'function' && !FireDB.isConnected()) {
+      console.warn('[ArchiveDB] refreshPost: 오프라인 — 로컬 캐시로 표시');
+      return getById(id);
+    }
     try {
       const fresh = await FireDB.getFromServer(`${FB_PATH}/${id}`);
       const idx = _list.findIndex(x => x.id === id);
