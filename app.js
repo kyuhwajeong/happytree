@@ -2264,6 +2264,55 @@ const App = (() => {
   function _hrgb(h){const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(h);return m?{r:parseInt(m[1],16),g:parseInt(m[2],16),b:parseInt(m[3],16)}:{r:79,g:70,b:229};}
   let _tt;function _toast(msg,type='',dur=2600){const el=_q('toast');if(!el)return;el.textContent=msg;el.className='toast'+(type?` ${type}`:'');el.classList.remove('hidden');clearTimeout(_tt);_tt=setTimeout(()=>el.classList.add('hidden'),dur);}
 
+  // ★ 공용 공유 창 — 자료실 게시물, 영상 워크시트 등 여러 화면에서 재사용.
+  //   opts: { title, links:[{label,url}], warning }
+  function openShareModal(opts){
+    const {title, links, warning} = opts;
+    const ov=document.createElement('div');
+    ov.className='ar-ov'; ov.id='app-share-ov';
+    const bodyText = `${title}\n\n` + links.map(l=>`${l.label}: ${l.url}`).join('\n');
+    ov.innerHTML = `<div class="ar-sheet" style="max-width:380px">
+      <div class="ar-sheet-title">🔗 공유하기</div>
+      ${warning ? `<div class="app-share-warn">⚠️ ${_esc(warning)}</div>` : ''}
+      <div class="app-share-title">${_esc(title)}</div>
+      <div class="app-share-links">${links.map((l,i)=>`
+        <div class="app-share-link-row">
+          <span class="app-share-link-label">${_esc(l.label)}</span>
+          <button class="db-mini-btn ghost" onclick="App._copyShareLink(${i})">복사</button>
+        </div>`).join('')}</div>
+      <div class="ar-btn-row" style="margin-top:6px">
+        <button class="ar-btn ghost" onclick="App._mailtoShare()">📧 이메일로 보내기</button>
+        <button class="ar-btn primary" id="app-share-native-btn" onclick="App._nativeShare()">📤 공유</button>
+      </div>
+      <button class="db-mini-btn ghost" style="width:100%;margin-top:8px" onclick="document.getElementById('app-share-ov').remove()">닫기</button>
+    </div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e=>{ if(e.target===ov) ov.remove(); };
+    ov.dataset.title = title;
+    ov.dataset.links = JSON.stringify(links);
+    ov.dataset.body = bodyText;
+    if (!navigator.share) { const nb=_q('app-share-native-btn'); if(nb) nb.style.display='none'; }
+  }
+  function _copyShareLink(i){
+    const ov = _q('app-share-ov'); if(!ov) return;
+    const links = JSON.parse(ov.dataset.links||'[]');
+    const url = links[i]?.url; if(!url) return;
+    navigator.clipboard?.writeText(url).then(()=>_toast('✅ 링크가 복사되었습니다'))
+      .catch(()=>_toast('⚠️ 복사에 실패했습니다 — 직접 선택해서 복사해주세요'));
+  }
+  function _mailtoShare(){
+    const ov = _q('app-share-ov'); if(!ov) return;
+    const title = ov.dataset.title||'';
+    const body = ov.dataset.body||'';
+    window.location.href = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+  }
+  function _nativeShare(){
+    const ov = _q('app-share-ov'); if(!ov) return;
+    const title = ov.dataset.title||'';
+    const body = ov.dataset.body||'';
+    if (navigator.share) navigator.share({ title, text: body }).catch(()=>{});
+  }
+
   /* ══ 동기화 충돌 알림 (다른 기기가 같은 반을 그 사이 먼저 저장한 경우) ══ */
   function _classBookSummary(cls){
     try{
@@ -2325,7 +2374,7 @@ const App = (() => {
     openAccModal,saveAccount,delAcc,delAccBulk,_cancelAccBulk,
     handleImport,shareUrl,sendSms,shareCurrentClass,
     closeModal,
-    _saveNavOrder, _renderNav, _applyNavOrder, _resetNavOrder, _toast,
+    _saveNavOrder, _renderNav, _applyNavOrder, _resetNavOrder, _toast, openShareModal, _copyShareLink, _mailtoShare, _nativeShare,
     forceSaveNow,
   };
 })();

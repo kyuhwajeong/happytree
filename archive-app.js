@@ -113,7 +113,8 @@ const ArchiveApp = (() => {
 .ar-pw-clear-row{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--tx2);margin:-4px 0 12px}
 .ar-pw-clear-row input{width:14px;height:14px}
 .ar-field label{display:block;font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:5px}
-.ar-field input[type=text],.ar-field textarea,.ar-field select{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--bdr);background:var(--surf);color:var(--tx);font-size:13px;font-family:inherit}
+.ar-field input,.ar-field textarea,.ar-field select{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--bdr);background:var(--surf);color:var(--tx);font-size:13px;font-family:inherit}
+.ar-field input[type=checkbox]{width:auto}
 .ar-field textarea{resize:vertical;min-height:60px}
 .ar-drop{border:2px dashed var(--bdr2);border-radius:12px;padding:22px;text-align:center;color:var(--tx3);font-size:12.5px;cursor:pointer;transition:all .12s}
 .ar-drop.has-file{border-color:var(--a);color:var(--tx);font-weight:700}
@@ -159,6 +160,7 @@ const ArchiveApp = (() => {
 .ar-xlsx-edit-hint{font-size:11px;color:var(--a);font-weight:700;padding:6px 14px;background:var(--a10)}
 .ar-prev-icobtn.accent{background:var(--a);border-color:var(--a);color:#fff}
 .ar-prev-none{padding:40px;text-align:center;color:var(--tx3);font-size:13px}
+.ar-prev-none-file{font-size:14px;font-weight:800;color:var(--tx);margin-bottom:10px;word-break:break-all}
 .ar-link-note{font-size:11px;color:var(--tx3);background:var(--surf2);border-radius:8px;padding:8px 12px;margin-top:8px;line-height:1.5}
 .ar-link-note a{color:var(--a);font-weight:700}
 .ar-desc-view{font-size:12.5px;color:var(--tx2);margin-top:10px;line-height:1.5;white-space:pre-wrap}
@@ -825,6 +827,7 @@ const ArchiveApp = (() => {
           ${post.files.length > 1 ? `<button class="ar-prev-icobtn" onclick="ArchiveApp._downloadPostZip('${post.id}')" title="첨부파일 전체 ZIP으로 받기">📦</button>` : ''}
           ${f.linkUrl ? `<a class="ar-prev-icobtn" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none" href="${_esc(f.linkUrl)}" target="_blank" rel="noopener" title="새 탭에서 열기">↗️</a>`
             : `<a class="ar-prev-icobtn" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none" href="${ArchiveDB.getFileUrl(f.r2Key)}" download="${_esc(f.originalName)}" title="이 파일만 다운로드">⬇️</a>`}
+          <button class="ar-prev-icobtn" onclick="ArchiveApp._sharePost('${post.id}')" title="외부에 공유">🔗</button>
           <button class="ar-prev-icobtn" onclick="document.getElementById('ar-preview-ov').remove()" title="닫기">✕</button>
         </div>
       </div>${!canManage && post.uploadedBy ? `<div class="ar-prev-author">✍️ 작성자: ${_esc(post.uploadedBy)}</div>` : ''}
@@ -1062,6 +1065,18 @@ const ArchiveApp = (() => {
   }
   // ★ 게시물 하나에 첨부된 파일 전체를 ZIP으로 (여러 개 선택 백업과 별개로,
   //   미리보기 화면에서 "이 게시물 전체"만 바로 받고 싶을 때 쓴다)
+  function _sharePost(postId) {
+    const post = ArchiveDB.getById(postId);
+    if (!post) return;
+    let warning = '';
+    if (post.password) warning = '이 자료는 비밀번호로 보호되어 있습니다. 링크를 공유하면 비밀번호 없이도 누구나 열람할 수 있게 됩니다.';
+    else if (post.visibility === 'private') warning = '이 자료는 비공개로 설정되어 있습니다. 링크를 공유하면 로그인 없이도 누구나 열람할 수 있게 됩니다.';
+    const links = post.files.map(f => ({
+      label: f.originalName,
+      url: f.linkUrl || ArchiveDB.getFileUrl(f.r2Key),
+    }));
+    App.openShareModal({ title: post.name, links, warning });
+  }
   async function _downloadPostZip(postId) {
     const post = ArchiveDB.getById(postId);
     if (!post?.files?.length) return;
@@ -1156,6 +1171,7 @@ const ArchiveApp = (() => {
   async function _renderPreviewBody(f) {
     const body = _q('ar-prev-body');
     if (!body) return;
+    body.style.display = ''; // ★ 이전 파일이 미리보기 불가였다면 숨겨져 있었을 수 있으니 매번 원상복구
     if (f.linkUrl) {
       body.innerHTML = `<iframe src="${_esc(f.linkUrl)}" allowfullscreen></iframe>
         <div class="ar-link-note">🔗 본인 계정으로 로그인되어 있으면 이 화면에서 바로 편집할 수 있습니다. 편집이 안 보이면 <a href="${_esc(f.linkUrl)}" target="_blank" rel="noopener">새 탭에서 열기</a>를 눌러주세요.</div>`;
@@ -1234,7 +1250,7 @@ const ArchiveApp = (() => {
       }
       return;
     }
-    body.innerHTML = `<div class="ar-prev-none">이 형식은 미리보기를 지원하지 않아요<br>다운로드 버튼(⬇️)으로 받아서 확인해 주세요</div>`;
+    body.style.display = 'none';
   }
 
   // ★ 엑셀 안에 삽입된 이미지 추출 — 표 렌더링 라이브러리(SheetJS)는 이걸
@@ -1485,7 +1501,7 @@ const ArchiveApp = (() => {
     openPreview, _switchPreviewFile, _addMoreFiles, _toggleFileSelect, _selectAllFilesInPreview, _downloadSelectedFilesInPost, _submitPasswordGate,
     openEdit, _closeEdit, _submitEdit,
     _removeFileInEdit, _addMoreFilesInEdit,
-    _confirmDelete, _toggleFullscreen, _printPreview,
+    _confirmDelete, _toggleFullscreen, _printPreview, _sharePost,
     _switchXlsxSheet, _startXlsxEdit, _cancelXlsxEdit, _saveXlsxEdit,
     _toggleConvertMenu, _convertAndDownload,
     _toggleSelectMode, _toggleSelect, _selectAllVisible, _downloadSelectedZip, _downloadPostZip,
