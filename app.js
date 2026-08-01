@@ -437,9 +437,22 @@ const App = (() => {
     if(acc){
       if(_q('li-remember').checked){localStorage.setItem(LS_REM,id);localStorage.setItem(LS_REM_PW,pw);}
       else{localStorage.removeItem(LS_REM);localStorage.removeItem(LS_REM_PW);}
-      _q('login-gate').classList.add('hidden'); _refreshAuthUI(); const _isT=DB.getRole()==='teacher';
-        go(_isT?'operate':(S._loginRedirect||'manage'));
-        S._loginRedirect='';
+      _q('login-gate').classList.add('hidden'); _refreshAuthUI();
+      const role=DB.getRole();
+      let dest=S._loginRedirect;
+      if(!dest){
+        if(role==='teacher') dest='operate';
+        else if(DB.isAdmin()) dest='manage';
+        else{
+          // ★ 운용자: 예전엔 무조건 admin 전용 색이 짙은 '관리' 화면으로 보내서
+          //   admin이 메뉴 권한을 줘도 뭘 쓸 수 있는지 못 찾는 것처럼 보였던 문제 수정.
+          //   홈(대시보드)이 허용됐으면 홈으로, 아니면 항상 열려있는 '진도'로 보낸다.
+          const _am=(DB.getSession()?.allowedMenus)||[];
+          dest=_am.includes('dashboard')?'dashboard':'operate';
+        }
+      }
+      go(dest);
+      S._loginRedirect='';
       _toast(`✅ ${acc.username} (${acc.role==='admin'?'관리자':acc.role==='teacher'?'강사':'운용자'}) 로그인`,'success');
     } else {_q('li-err').textContent='⚠️ 아이디 또는 비밀번호가 올바르지 않습니다';_q('li-pw').value='';}
   }

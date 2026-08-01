@@ -598,11 +598,9 @@ const DashboardApp = (() => {
    * ═══════════════════════════════════════════════════════════ */
   function _scheduleSectionHtml() {
     if (typeof ScheduleApp === 'undefined') return '';
-    const isAdmin = typeof DB !== 'undefined' && DB.isAdmin();
     return `<div class="db-sec">
       <div class="db-sec-hdr">
         <div class="db-sec-title">🗓️ 일정표</div>
-        ${isAdmin ? '<button class="db-mini-btn" onclick="ScheduleApp.openEditor()">➕ 등록</button>' : ''}
       </div>
       <div id="sch-mini-cal"></div>
     </div>`;

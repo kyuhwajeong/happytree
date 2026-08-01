@@ -42,6 +42,12 @@ const ScheduleApp = (() => {
   function _q(id) { return document.getElementById(id); }
   function _pad(n) { return String(n).padStart(2, '0'); }
   function _todayStr() { const d = new Date(); return `${d.getFullYear()}-${_pad(d.getMonth() + 1)}-${_pad(d.getDate())}`; }
+  // ★ 'YYYY-MM-DD' 문자열에 일수를 더/빼서 새 날짜 문자열을 반환 (미리 알림·반복 등록 계산용)
+  function _addDays(dateStr, delta) {
+    const d = new Date(dateStr + 'T00:00:00');
+    d.setDate(d.getDate() + delta);
+    return `${d.getFullYear()}-${_pad(d.getMonth() + 1)}-${_pad(d.getDate())}`;
+  }
   function _isAdmin() { return typeof DB !== 'undefined' && DB.isAdmin(); }
 
   /* ═══════════════════════════════════════════════════════════
@@ -81,6 +87,20 @@ const ScheduleApp = (() => {
 .sch-notify-ck input{width:17px;height:17px;flex-shrink:0;margin-top:1px;accent-color:var(--a);cursor:pointer}
 .sch-notify-ck span{font-size:13.5px;color:var(--tx);line-height:1.5}
 .sch-notify-ck span em{font-style:normal;color:var(--tx3);font-size:12px}
+/* ── 커스텀 시간 피커 (네이티브 input[type=time]이 다크모드 등에서 글자가 거의 안 보이는 문제 대체) ── */
+.sch-tp-wrap{display:flex;flex-direction:column;gap:4px}
+.sch-tp-lbl{font-size:11px;font-weight:800;color:var(--tx3);letter-spacing:.4px}
+.sch-tp-row{display:flex;align-items:center;gap:8px}
+.sch-tp-ampm{display:flex;border-radius:9px;overflow:hidden;border:1.5px solid var(--bdr);flex-shrink:0}
+.sch-tp-ampm button{padding:9px 12px;font-size:12px;font-weight:800;background:var(--surf2);border:none;cursor:pointer;font-family:var(--font);color:var(--tx3);transition:all .15s;line-height:1}
+.sch-tp-ampm button.active{background:var(--a);color:#fff}
+.sch-tp-ampm button.active.pm{background:#7c3aed;color:#fff}
+.sch-tp-selects{display:flex;align-items:center;gap:4px;flex:1}
+.sch-tp-sel{padding:9px 4px;border-radius:9px;border:1.5px solid var(--bdr);background:var(--surf);font-size:16px;font-weight:800;color:var(--tx);font-family:var(--font);text-align:center;flex:1;outline:none;cursor:pointer;-webkit-appearance:none;appearance:none}
+.sch-tp-sel:focus{border-color:var(--a)}
+.sch-tp-colon{font-size:18px;font-weight:900;color:var(--tx);flex-shrink:0}
+.sch-tp-preview{font-size:12.5px;font-weight:800;padding:4px 2px}
+.sch-repeat-hint{font-size:11px;color:var(--tx3);margin-top:4px;line-height:1.5}
 .sch-today-divider{border-top:1px dashed var(--bdr);margin:16px 0 12px}
 .sch-today-section{width:100%}
 .sch-detail-sec{margin-bottom:14px}
@@ -160,6 +180,7 @@ const ScheduleApp = (() => {
 @keyframes schPop{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
 .sch-pop-ico{font-size:34px;margin-bottom:10px}
 .sch-pop-title{font-size:18px;font-weight:800;color:var(--tx);margin-bottom:6px}
+.sch-pop-dday{font-size:12.5px;font-weight:800;color:var(--a);background:var(--a10);display:inline-block;padding:3px 10px;border-radius:999px;margin-bottom:8px}
 .sch-pop-msg{font-size:14.5px;color:var(--tx2);line-height:1.6;white-space:pre-line;margin-bottom:18px}
 .sch-pop-acts{display:flex;gap:8px}
     `;
@@ -868,7 +889,7 @@ const ScheduleApp = (() => {
         <span class="sch-item-ico">${cat.ico}</span>
         <div class="sch-item-body">
           <div class="sch-item-title">${_esc(s.title)}</div>
-          <div class="sch-item-meta">${cat.label} · ${range}${s.notifyEnabled ? ` · 🔔 ${s.notifyTime}` : ''}</div>
+          <div class="sch-item-meta">${cat.label} · ${range}${s.notifyEnabled ? ` · 🔔 ${s.notifyDaysBefore ? `${s.notifyDaysBefore}일 전 ` : ''}${s.notifyTime}` : ''}</div>
           ${s.memo ? `<div class="sch-item-memo">${_esc(s.memo)}</div>` : ''}
           ${s.suppressClasses ? `<div class="sch-item-suppress-tag">🚫 이 기간 정규 수업 없음${s.specialNote ? ` · 🎤 ${_esc(s.specialNote)}` : ''}</div>` : ''}
         </div>
@@ -1012,6 +1033,58 @@ const ScheduleApp = (() => {
   /* ═══════════════════════════════════════════════════════════
    * 등록 / 수정 폼
    * ═══════════════════════════════════════════════════════════ */
+  /* ═══════════════════════════════════════════════════════════
+   * 커스텀 시간 피커 — 네이티브 <input type="time">가 다크모드 등에서
+   * 글자가 잘 안 보이거나 어중간하게 렌더링되는 문제를 피하기 위해
+   * staff-app.js에서 이미 검증된 방식(오전/오후 + 시·분 select)을 그대로 이식.
+   * ═══════════════════════════════════════════════════════════ */
+  function _timePicker(id, label, def) {
+    const [dh, dm] = (def || '09:00').split(':').map(Number);
+    const isAM = dh < 12;
+    const h12 = dh % 12 || 12;
+    const HOURS = Array.from({ length: 12 }, (_, i) => i + 1);
+    const MINS = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'];
+    return `
+      <div class="sch-tp-wrap">
+        <div class="sch-tp-lbl">${label}</div>
+        <div class="sch-tp-row">
+          <div class="sch-tp-ampm">
+            <button type="button" id="${id}-am" class="${isAM ? 'active' : ''}" onclick="ScheduleApp._tpAmPm('${id}','am')">오전</button>
+            <button type="button" id="${id}-pm" class="pm ${!isAM ? 'active' : ''}" onclick="ScheduleApp._tpAmPm('${id}','pm')">오후</button>
+          </div>
+          <div class="sch-tp-selects">
+            <select class="sch-tp-sel" id="${id}-h" onchange="ScheduleApp._tpChange('${id}')">
+              ${HOURS.map(h => `<option value="${h}" ${h === h12 ? 'selected' : ''}>${h}</option>`).join('')}
+            </select>
+            <span class="sch-tp-colon">:</span>
+            <select class="sch-tp-sel" id="${id}-m" onchange="ScheduleApp._tpChange('${id}')">
+              ${MINS.map(m => `<option value="${m}" ${m === String(dm).padStart(2, '0') ? 'selected' : ''}>${m}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <input type="hidden" id="${id}" value="${def || '09:00'}">
+        <div id="${id}-preview" class="sch-tp-preview" style="color:${isAM ? 'var(--a)' : '#7c3aed'}">${isAM ? '오전' : '오후'} ${h12}:${String(dm).padStart(2, '0')}</div>
+      </div>`;
+  }
+  function _tpAmPm(id, ampm) {
+    const amBtn = _q(`${id}-am`), pmBtn = _q(`${id}-pm`);
+    if (amBtn) amBtn.classList.toggle('active', ampm === 'am');
+    if (pmBtn) pmBtn.classList.toggle('active', ampm === 'pm');
+    _tpChange(id);
+  }
+  function _tpChange(id) {
+    const hSel = _q(`${id}-h`), mSel = _q(`${id}-m`), amBtn = _q(`${id}-am`);
+    if (!hSel || !mSel) return;
+    const isAM = amBtn?.classList.contains('active');
+    let h = parseInt(hSel.value, 10);
+    const m = mSel.value;
+    if (isAM) { if (h === 12) h = 0; } else { if (h !== 12) h += 12; }
+    const inp = _q(id);
+    if (inp) inp.value = `${String(h).padStart(2, '0')}:${m}`;
+    const prev = _q(`${id}-preview`);
+    if (prev) { prev.style.color = isAM ? 'var(--a)' : '#7c3aed'; prev.textContent = `${isAM ? '오전' : '오후'} ${hSel.value}:${m}`; }
+  }
+
   function openEditor(id = null, prefillDate = null) {
     _editId = id;
     ScheduleDB.pauseUpdates(true); // ★ 편집 중엔 서버 갱신이 화면을 덮어쓰지 않도록
@@ -1047,6 +1120,21 @@ const ScheduleApp = (() => {
           <div style="flex:1"><label class="f-lbl">시작일</label><input class="f-inp" id="sch-f-start" type="date" value="${startDate}"></div>
           <div style="flex:1"><label class="f-lbl">종료일</label><input class="f-inp" id="sch-f-end" type="date" value="${endDate}"></div>
         </div>
+        ${!s ? `
+        <div class="f-grp">
+          <label class="f-lbl">🔁 반복 <em style="font-style:normal;color:var(--tx3);font-weight:600">(같은 일정을 여러 번 자동으로 등록)</em></label>
+          <div class="ntc-pill-row" id="sch-f-repeat">
+            <button type="button" class="ntc-pill on" data-v="none">안함</button>
+            <button type="button" class="ntc-pill" data-v="weekly">매주</button>
+            <button type="button" class="ntc-pill" data-v="monthly">매월</button>
+            <button type="button" class="ntc-pill" data-v="yearly">매년</button>
+          </div>
+        </div>
+        <div class="f-grp" id="sch-f-repeat-end-wrap" style="display:none">
+          <label class="f-lbl">반복 종료일</label>
+          <input class="f-inp" id="sch-f-repeat-end" type="date" value="${_addDays(startDate, 90)}">
+          <div class="sch-repeat-hint" id="sch-f-repeat-hint"></div>
+        </div>` : ''}
         <div class="f-grp">
           <label class="sch-notify-ck">
             <input type="checkbox" id="sch-f-suppress" ${s?.suppressClasses ? 'checked' : ''} onchange="document.getElementById('sch-f-note-wrap').style.display=this.checked?'block':'none'">
@@ -1063,9 +1151,18 @@ const ScheduleApp = (() => {
             <span>🔔 알림 사용 <em>(끄면 조용히 캘린더에만 표시됩니다)</em></span>
           </label>
         </div>
-        <div class="f-grp" id="sch-f-notify-wrap" style="display:${notify ? 'flex' : 'none'};gap:10px">
-          <div style="width:110px"><label class="f-lbl">알림 시간</label><input class="f-inp" id="sch-f-time" type="time" value="${s?.notifyTime || '09:00'}"></div>
-          <div style="flex:1">
+        <div class="f-grp" id="sch-f-notify-wrap" style="display:${notify ? 'flex' : 'none'};flex-wrap:wrap;gap:12px">
+          <div style="width:150px">${_timePicker('sch-f-time', '알림 시간', s?.notifyTime || '09:00')}</div>
+          <div style="flex:1;min-width:160px">
+            <label class="f-lbl">미리 알림 <em style="font-style:normal;color:var(--tx3);font-weight:600">(도래 며칠 전부터 알릴지)</em></label>
+            <div class="ntc-pill-row" id="sch-f-remind">
+              <button type="button" class="ntc-pill${(s?.notifyDaysBefore || 0) === 0 ? ' on' : ''}" data-v="0">당일</button>
+              <button type="button" class="ntc-pill${(s?.notifyDaysBefore || 0) === 1 ? ' on' : ''}" data-v="1">1일 전</button>
+              <button type="button" class="ntc-pill${(s?.notifyDaysBefore || 0) === 3 ? ' on' : ''}" data-v="3">3일 전</button>
+              <button type="button" class="ntc-pill${(s?.notifyDaysBefore || 0) === 7 ? ' on' : ''}" data-v="7">7일 전</button>
+            </div>
+          </div>
+          <div style="flex:1 1 100%">
             <label class="f-lbl">알림 대상</label>
             <div class="ntc-pill-row" id="sch-f-aud">
               <button type="button" class="ntc-pill${(s?.audience || 'all') === 'admin' ? ' on' : ''}" data-v="admin">🔑 원장만</button>
@@ -1085,9 +1182,45 @@ const ScheduleApp = (() => {
     ov.querySelectorAll('#sch-f-aud .ntc-pill').forEach(b => b.onclick = () => {
       ov.querySelectorAll('#sch-f-aud .ntc-pill').forEach(x => x.classList.remove('on')); b.classList.add('on');
     });
+    ov.querySelectorAll('#sch-f-remind .ntc-pill').forEach(b => b.onclick = () => {
+      ov.querySelectorAll('#sch-f-remind .ntc-pill').forEach(x => x.classList.remove('on')); b.classList.add('on');
+    });
+    const repeatRow = ov.querySelector('#sch-f-repeat');
+    if (repeatRow) {
+      const hintEl = ov.querySelector('#sch-f-repeat-hint');
+      const endWrap = ov.querySelector('#sch-f-repeat-end-wrap');
+      const _updateHint = () => {
+        const freq = repeatRow.querySelector('.ntc-pill.on')?.dataset.v || 'none';
+        const endVal = ov.querySelector('#sch-f-repeat-end')?.value || '';
+        if (freq === 'none' || !endVal) { if (hintEl) hintEl.textContent = ''; return; }
+        const n = _repeatCount(freq, startDate, endVal);
+        if (hintEl) hintEl.textContent = `📌 ${startDate} ~ ${endVal} 사이 총 ${n}회 등록됩니다 (최대 104회)`;
+      };
+      repeatRow.querySelectorAll('.ntc-pill').forEach(b => b.onclick = () => {
+        repeatRow.querySelectorAll('.ntc-pill').forEach(x => x.classList.remove('on')); b.classList.add('on');
+        if (endWrap) endWrap.style.display = b.dataset.v === 'none' ? 'none' : 'block';
+        _updateHint();
+      });
+      ov.querySelector('#sch-f-repeat-end')?.addEventListener('change', _updateHint);
+    }
     setTimeout(() => _q('sch-f-title')?.focus(), 150);
   }
   function closeEditor() { _q('sch-editor-ov')?.remove(); _editId = null; ScheduleDB.pauseUpdates(false); }
+
+  // ★ 반복 등록 시 실제로 몇 건이 생성될지 미리 계산(안전장치: 최대 104회로 제한)
+  function _repeatCount(freq, startDate, endStr) {
+    const stepDays = freq === 'weekly' ? 7 : null;
+    let cur = startDate, n = 0;
+    while (cur <= endStr && n < 104) {
+      n++;
+      if (freq === 'weekly') cur = _addDays(cur, 7);
+      else if (freq === 'monthly') { const d = new Date(cur + 'T00:00:00'); d.setMonth(d.getMonth() + 1); cur = `${d.getFullYear()}-${_pad(d.getMonth() + 1)}-${_pad(d.getDate())}`; }
+      else if (freq === 'yearly') { const d = new Date(cur + 'T00:00:00'); d.setFullYear(d.getFullYear() + 1); cur = `${d.getFullYear()}-${_pad(d.getMonth() + 1)}-${_pad(d.getDate())}`; }
+      else break;
+    }
+    return n;
+  }
+
 
   async function saveEditor() {
     const title = _q('sch-f-title')?.value.trim();
@@ -1098,13 +1231,36 @@ const ScheduleApp = (() => {
     if (endDate < startDate) endDate = startDate;
     const notifyEnabled = _q('sch-f-notify')?.checked || false;
     const notifyTime = _q('sch-f-time')?.value || '09:00';
+    const notifyDaysBefore = parseInt(document.querySelector('#sch-f-remind .ntc-pill.on')?.dataset.v || '0', 10);
     const audience = document.querySelector('#sch-f-aud .ntc-pill.on')?.dataset.v || 'all';
     const memo = _q('sch-f-memo')?.value.trim() || '';
     const suppressClasses = _q('sch-f-suppress')?.checked || false;
     const specialNote = _q('sch-f-note')?.value.trim() || '';
-    const data = { title, memo, category: cat, startDate, endDate, notifyEnabled, notifyTime, audience, suppressClasses, specialNote };
-    if (_editId) await ScheduleDB.update(_editId, data);
-    else await ScheduleDB.add(data);
+    const data = { title, memo, category: cat, startDate, endDate, notifyEnabled, notifyTime, notifyDaysBefore, audience, suppressClasses, specialNote };
+
+    const repeatFreq = document.querySelector('#sch-f-repeat .ntc-pill.on')?.dataset.v || 'none';
+    const repeatEnd = _q('sch-f-repeat-end')?.value || '';
+
+    if (_editId) {
+      // 수정은 항상 그 항목 하나만 대상으로 함(반복 일괄 수정은 지원하지 않음)
+      await ScheduleDB.update(_editId, data);
+    } else if (repeatFreq !== 'none' && repeatEnd && repeatEnd >= startDate) {
+      // ★ 반복 등록 — 시작일~종료일 사이 간격만큼 자동으로 여러 건 생성 (안전장치: 최대 104회)
+      const spanDays = Math.round((new Date(endDate + 'T00:00:00') - new Date(startDate + 'T00:00:00')) / 86400000);
+      let cur = startDate, n = 0;
+      while (cur <= repeatEnd && n < 104) {
+        await ScheduleDB.add({ ...data, startDate: cur, endDate: _addDays(cur, spanDays) });
+        n++;
+        if (repeatFreq === 'weekly') cur = _addDays(cur, 7);
+        else if (repeatFreq === 'monthly') { const d = new Date(cur + 'T00:00:00'); d.setMonth(d.getMonth() + 1); cur = `${d.getFullYear()}-${_pad(d.getMonth() + 1)}-${_pad(d.getDate())}`; }
+        else { const d = new Date(cur + 'T00:00:00'); d.setFullYear(d.getFullYear() + 1); cur = `${d.getFullYear()}-${_pad(d.getMonth() + 1)}-${_pad(d.getDate())}`; }
+      }
+      closeEditor(); refresh();
+      if (typeof App !== 'undefined' && App._toast) App._toast(`✅ 반복 일정 ${n}건이 등록되었습니다`, 'success');
+      return;
+    } else {
+      await ScheduleDB.add(data);
+    }
     closeEditor();
     refresh();
     if (typeof App !== 'undefined' && App._toast) App._toast('✅ 일정이 저장되었습니다', 'success');
@@ -1130,8 +1286,10 @@ const ScheduleApp = (() => {
     const due = ScheduleDB.getAll().filter(s => {
       if (!s.notifyEnabled || s.notifiedAt) return false;
       if (s.audience === 'admin' && !isAdmin) return false;
-      if (s.startDate > todayStr) return false;
-      if (s.startDate === todayStr) {
+      // ★ 미리 알림: startDate에서 notifyDaysBefore일만큼 앞당긴 날짜부터 알림 대상이 됨
+      const remindFrom = _addDays(s.startDate, -(s.notifyDaysBefore || 0));
+      if (remindFrom > todayStr) return false;
+      if (remindFrom === todayStr) {
         const [hh, mm] = (s.notifyTime || '09:00').split(':').map(Number);
         const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh || 9, mm || 0);
         if (now < target) return false;
@@ -1144,12 +1302,16 @@ const ScheduleApp = (() => {
   function _showPopup(s) {
     _q('sch-pop-ov')?.remove();
     const cat = CATS[s.category] || CATS.general;
+    const todayStr = _todayStr();
+    const dLeft = Math.round((new Date(s.startDate + 'T00:00:00') - new Date(todayStr + 'T00:00:00')) / 86400000);
+    const dHint = dLeft > 0 ? `<div class="sch-pop-dday">📅 D-${dLeft} · ${s.startDate}</div>` : '';
     const ov = document.createElement('div');
     ov.id = 'sch-pop-ov'; ov.className = 'sch-pop-ov';
     ov.innerHTML = `
       <div class="sch-pop-box">
         <div class="sch-pop-ico">${cat.ico}</div>
         <div class="sch-pop-title">${_esc(s.title)}</div>
+        ${dHint}
         ${s.memo ? `<div class="sch-pop-msg">${_esc(s.memo)}</div>` : '<div style="height:12px"></div>'}
         <div class="sch-pop-acts">
           <button class="btn-x" id="sch-pop-later">⏰ 나중에</button>
@@ -1168,5 +1330,6 @@ const ScheduleApp = (() => {
     openEditor, closeEditor, saveEditor, deleteItem,
     openWorkQuickAdd, closeWorkQuickAdd, saveWorkQuickAdd,
     _navMonth, _goToday, _goStudentDetail,
+    _tpAmPm, _tpChange,
   };
 })();

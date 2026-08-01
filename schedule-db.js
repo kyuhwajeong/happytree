@@ -150,6 +150,7 @@ const ScheduleDB = (() => {
       endDate: data.endDate || data.startDate || '',
       notifyEnabled: !!data.notifyEnabled,
       notifyTime: data.notifyTime || '09:00',
+      notifyDaysBefore: data.notifyDaysBefore || 0, // ★ 도래 며칠 전부터 미리 알릴지(0=당일)
       notifiedAt: null,
       audience: data.audience || 'all',
       suppressClasses: !!data.suppressClasses, // ★ true면 이 기간의 "오늘의 수업"에서 정규 반 목록을 숨김 (방학·임시휴강 등)
