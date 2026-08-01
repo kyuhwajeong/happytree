@@ -220,7 +220,7 @@ const App = (() => {
 
     DB.on('classes',()=>{_renderChips();if(S.page==='operate')_renderOperateBody();if(S.page==='manage'&&S.mgTab==='classes'){_renderMgCls();if(_q('mg-fee-ov')&&!_q('mg-fee-ov').classList.contains('hidden'))_renderFeePanel();}});
     DB.on('progress',()=>{if(S.page==='operate')_renderOperateBody();if(S.shareActive)_refreshShareProgress();});
-    DB.on('theme',()=>{_applyTheme(DB.getTheme());S.progressViewMode=DB.getTheme().progressViewMode||'timeline';if(S.page==='operate')_renderOperateBody();if(S.page==='manage'&&S.mgTab==='theme')_renderMgTheme();});
+    DB.on('theme',()=>{_applyTheme(DB.getTheme());S.progressViewMode=DB.getTheme().progressViewMode||'timeline';if(S.page==='operate')_renderOperateBody();if(S.page==='manage'&&S.mgTab==='theme')_renderMgTheme();if(S.page==='dashboard'&&typeof DashboardApp!=='undefined')DashboardApp.render();});
     // ★ admin이 다른 기기에서 이 계정의 역할·담당 반·메뉴 접근 권한을 바꾸면,
     //   재로그인 없이 지금 이 세션에도 즉시 반영(하단 nav 갱신 + 현재 화면 권한 재검사)
     DB.on('session',()=>{
@@ -414,6 +414,9 @@ const App = (() => {
       btn.onclick = () => App.go(def.pg);
       nav.insertBefore(btn, verLbl);
     });
+    // ★ 작은 폰 화면(≤400px)에서 탭이 5개를 넘으면 라벨을 숨기고 아이콘만 크게 보여
+    //   공간을 확보한다(style.css의 @media(max-width:400px) .bnav-dense 규칙과 짝).
+    nav.classList.toggle('bnav-dense', nav.querySelectorAll('.bni').length > 5);
   }
 
   /* ══ LOGIN ══ */
@@ -1880,6 +1883,36 @@ const App = (() => {
 
   /* 테마 */
   function _renderMgTheme(){const wrap=document.getElementById('mg-theme');if(!wrap)return;wrap.innerHTML='';const t=DB.getTheme();S.tmpTheme={...t};const isAdmin=DB.isAdmin();const card=document.createElement('div');card.className='th-card';const prev=document.createElement('div');prev.className='th-row';prev.innerHTML='<div class="th-preview" id="th-prev"></div>';card.appendChild(prev);_upPrev(PALETTES.find(p=>p.id===(t.palette||'light1'))?.accent||'#4f46e5');const pr=document.createElement('div');pr.className='th-row';pr.innerHTML='<div class="th-lbl">🎨 테마</div>';const palRow=document.createElement('div');palRow.className='pal-row';PALETTES.forEach(pal=>{const item=document.createElement('div');item.className='pal-item'+(pal.id===(t.palette||'light1')?' on':'');const swBg=pal.id==='system'?'linear-gradient(135deg,#f8f9fc 50%,#0b0b14 50%)':pal.bg;item.innerHTML=`<div class="pal-swatch" style="background:${swBg}">${pal.emoji}</div><div class="pal-name">${pal.name}</div>`;if(!isAdmin){item.style.pointerEvents='none';item.style.opacity='.5';}item.onclick=()=>{S.tmpTheme.palette=pal.id;if(pal.id!=='system')S.tmpTheme.accent=pal.accent;_applyTheme(S.tmpTheme);_upPrev(pal.accent||'#4f46e5');palRow.querySelectorAll('.pal-item').forEach((el,i)=>el.classList.toggle('on',PALETTES[i].id===pal.id));};palRow.appendChild(item);});pr.appendChild(palRow);card.appendChild(pr);const fr=document.createElement('div');fr.className='th-row';fr.innerHTML='<div class="th-lbl">🔤 폰트</div>';const ffList=document.createElement('div');ffList.className='ff-list';FONTS.forEach(f=>{const item=document.createElement('div');item.className='ff-item'+(f.key===(t.fontFamily||'Noto Sans KR')?' on':'');item.style.fontFamily=`'${f.key}',sans-serif`;item.innerHTML=`<span class="ff-name">${f.label}</span><span class="ff-sample">${f.sample}</span>`;if(!isAdmin){item.style.pointerEvents='none';item.style.opacity='.45';}item.onclick=()=>{S.tmpTheme.fontFamily=f.key;_applyTheme(S.tmpTheme);ffList.querySelectorAll('.ff-item').forEach((el,i)=>el.classList.toggle('on',FONTS[i].key===f.key));};ffList.appendChild(item);});fr.appendChild(ffList);card.appendChild(fr);const szr=document.createElement('div');szr.className='th-row';szr.innerHTML='<div class="th-lbl">📐 전체 글자 크기</div>';const szW=document.createElement('div');szW.className='sl-row';const sl=document.createElement('input');sl.type='range';sl.className='sl';sl.min=11;sl.max=22;sl.step=1;sl.value=t.fontSize||14;sl.disabled=!isAdmin;const fzv=document.createElement('div');fzv.className='sl-val';fzv.textContent=`${t.fontSize||14}px`;sl.addEventListener('input',()=>{S.tmpTheme.fontSize=+sl.value;fzv.textContent=`${sl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});szW.appendChild(sl);szW.appendChild(fzv);szr.appendChild(szW);card.appendChild(szr);const mfr=document.createElement('div');mfr.className='th-row';mfr.innerHTML='<div class="th-lbl">📘 주교재명 글자 크기</div>';const mfW=document.createElement('div');mfW.className='sl-row';const msl=document.createElement('input');msl.type='range';msl.className='sl';msl.min=10;msl.max=22;msl.step=1;msl.value=t.mainFontSize||t.fontSize||14;msl.disabled=!isAdmin;const mfv=document.createElement('div');mfv.className='sl-val';mfv.style.color='var(--a)';mfv.textContent=`${t.mainFontSize||t.fontSize||14}px`;msl.addEventListener('input',()=>{S.tmpTheme.mainFontSize=+msl.value;mfv.textContent=`${msl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});mfW.appendChild(msl);mfW.appendChild(mfv);mfr.appendChild(mfW);card.appendChild(mfr);const sfr=document.createElement('div');sfr.className='th-row';sfr.innerHTML='<div class="th-lbl">📗 부교재명 글자 크기</div>';const sfW=document.createElement('div');sfW.className='sl-row';const ssl=document.createElement('input');ssl.type='range';ssl.className='sl';ssl.min=10;ssl.max=22;ssl.step=1;ssl.value=t.subFontSize||Math.max((t.fontSize||14)-1,10);ssl.disabled=!isAdmin;const sfv=document.createElement('div');sfv.className='sl-val';sfv.style.color='var(--green)';sfv.textContent=`${t.subFontSize||Math.max((t.fontSize||14)-1,10)}px`;ssl.addEventListener('input',()=>{S.tmpTheme.subFontSize=+ssl.value;sfv.textContent=`${ssl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});sfW.appendChild(ssl);sfW.appendChild(sfv);sfr.appendChild(sfW);card.appendChild(sfr);const bpRow=document.createElement('div');bpRow.className='th-row';bpRow.innerHTML='<div class="th-lbl">👁 교재 미리보기</div>';const bpBox=document.createElement('div');bpBox.className='bk-preview-box';bpBox.id='bk-preview-box';['main','sub'].forEach(type=>{const row=document.createElement('div');row.className='bk-preview-row';const tag=document.createElement('span');tag.className=`bk-tag ${type}`;tag.textContent=type==='main'?'주':'부';const nm=document.createElement('span');nm.className='bk-preview-nm';nm.id=`bk-preview-nm-${type}`;nm.textContent=type==='main'?'수학의 정석(상)':'쎈 수학';nm.style.fontSize=type==='main'?`${S.tmpTheme.mainFontSize||t.mainFontSize||t.fontSize||14}px`:`${S.tmpTheme.subFontSize||t.subFontSize||Math.max((t.fontSize||14)-1,10)}px`;const inp2=document.createElement('div');inp2.className='bk-preview-inp';inp2.textContent='p.123~130';inp2.style.fontSize=`${S.tmpTheme.fontSize||t.fontSize||14}px`;inp2.style.width=`${S.tmpTheme.inputBoxWidth||t.inputBoxWidth||140}px`;row.appendChild(tag);row.appendChild(nm);row.appendChild(inp2);bpBox.appendChild(row);});bpRow.appendChild(bpBox);card.appendChild(bpRow);const iwr=document.createElement('div');iwr.className='th-row';iwr.innerHTML='<div class="th-lbl">📏 진도 입력칸 너비</div>';const iwW=document.createElement('div');iwW.className='sl-row';const isl=document.createElement('input');isl.type='range';isl.className='sl';isl.min=80;isl.max=260;isl.step=10;isl.value=t.inputBoxWidth||140;isl.disabled=!isAdmin;const iwv=document.createElement('div');iwv.className='sl-val';iwv.textContent=`${t.inputBoxWidth||140}px`;isl.addEventListener('input',()=>{S.tmpTheme.inputBoxWidth=+isl.value;iwv.textContent=`${isl.value}px`;_applyTheme(S.tmpTheme);_updateBkPreview();});iwW.appendChild(isl);iwW.appendChild(iwv);iwr.appendChild(iwW);card.appendChild(iwr);const ovr=document.createElement('div');ovr.className='th-row';ovr.innerHTML='<div class="th-lbl">📱 운용화면 기본 보기</div>';const vrow=document.createElement('div');vrow.className='view-sel-row';[{v:'grid',l:'⊞ 그리드'},{v:'list',l:'☰ 리스트'}].forEach(({v,l})=>{const btn=document.createElement('button');btn.className='view-sel-btn'+(v===(t.operateView||'grid')?' on':'');btn.textContent=l;if(!isAdmin){btn.disabled=true;btn.style.opacity='.45';}btn.onclick=()=>{S.tmpTheme.operateView=v;S.operateView=v;vrow.querySelectorAll('.view-sel-btn').forEach((b,i)=>b.classList.toggle('on',['grid','list'][i]===v));};vrow.appendChild(btn);});ovr.appendChild(vrow);card.appendChild(ovr);const pvr=document.createElement('div');pvr.className='th-row';pvr.innerHTML='<div class="th-lbl">📅 진도 탭 표시 방식</div>';const pvRow=document.createElement('div');pvRow.className='view-sel-row';[{v:'timeline',l:'📅 타임라인(권장)'},{v:'weekly',l:'🗓️ 주간(기존)'}].forEach(({v,l})=>{const btn=document.createElement('button');btn.className='view-sel-btn'+(v===(t.progressViewMode||'timeline')?' on':'');btn.textContent=l;if(!isAdmin){btn.disabled=true;btn.style.opacity='.45';}btn.onclick=()=>{S.tmpTheme.progressViewMode=v;pvRow.querySelectorAll('.view-sel-btn').forEach((b,i)=>b.classList.toggle('on',['timeline','weekly'][i]===v));};pvRow.appendChild(btn);});pvr.appendChild(pvRow);card.appendChild(pvr);
+/* ══ 대시보드 스타일 3종 — 색상과 별개로 구도·톤을 바꾼다 ══ */
+{
+  const dsr = document.createElement('div'); dsr.className = 'th-row';
+  dsr.innerHTML = '<div class="th-lbl">🖥️ 대시보드 스타일</div>';
+  const dsRow = document.createElement('div'); dsRow.className = 'pal-row';
+  const DASH_STYLES = [
+    { v:'minimal', emoji:'📄', name:'미니멀', desc:'여백 중심의 카드형 (Notion·Linear풍)' },
+    { v:'compact', emoji:'📊', name:'컴팩트', desc:'촘촘한 정보 밀집형 (Linear·Vercel풍)' },
+    { v:'hero',    emoji:'✨', name:'히어로', desc:'상단 강조 배너형 (Stripe·Attio풍)' },
+  ];
+  DASH_STYLES.forEach(ds => {
+    const item = document.createElement('div');
+    item.className = 'pal-item' + ((S.tmpTheme.dashboardStyle||'minimal') === ds.v ? ' on' : '');
+    item.title = ds.desc;
+    item.innerHTML = `<div class="pal-swatch" style="background:var(--card2);font-size:20px">${ds.emoji}</div><div class="pal-name">${ds.name}</div>`;
+    if (!isAdmin) { item.style.pointerEvents='none'; item.style.opacity='.5'; }
+    item.onclick = () => {
+      S.tmpTheme.dashboardStyle = ds.v;
+      dsRow.querySelectorAll('.pal-item').forEach((el,i)=>el.classList.toggle('on', DASH_STYLES[i].v===ds.v));
+    };
+    dsRow.appendChild(item);
+  });
+  dsr.appendChild(dsRow);
+  const dsHint = document.createElement('div');
+  dsHint.style.cssText = 'font-size:10px;color:var(--tx3);margin-top:6px;line-height:1.5';
+  dsHint.textContent = '저장하면 홈(대시보드) 화면에 바로 적용됩니다. 색상 팔레트는 그대로 유지된 채 배치·여백·강조 방식만 바뀝니다.';
+  dsr.appendChild(dsHint);
+  card.appendChild(dsr);
+}
+
 /* ══ 배경 이미지(BgTheme) — 무료 이미지 연동, 무드/강도/교체주기 설정 ══ */
 if (typeof BgTheme !== 'undefined') {
   // ★ t.bg는 DB.getTheme()가 반환하는 라이브 참조이므로, 얕은 복사라도 반드시
