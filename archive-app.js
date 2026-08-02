@@ -5,6 +5,7 @@
 const ArchiveApp = (() => {
   const _q = id => document.getElementById(id);
   const _esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const _fmtLimitLabel = mb => mb >= 1000 ? `${(mb / 1000).toFixed(mb % 1000 === 0 ? 0 : 1)}GB` : `${mb}MB`;
   const _fmtSize = b => {
     if (b == null) return '';
     if (b < 1024) return `${b}B`;
@@ -453,7 +454,7 @@ const ArchiveApp = (() => {
     const maxMb = (typeof ArchiveDB !== 'undefined' && ArchiveDB.MAX_UPLOAD_MB) || 95;
     return `<div class="ar-field">
       <label>파일 선택 (여러 개 선택·드래그 가능)</label>
-      <div class="ar-upload-limit-hint">📌 파일 1개당 최대 ${maxMb}MB까지 업로드할 수 있습니다 (그보다 크면 압축하거나 나눠서 올려주세요)</div>
+      <div class="ar-upload-limit-hint">📌 파일 1개당 최대 ${_fmtLimitLabel(maxMb)}까지 업로드할 수 있습니다 (그보다 크면 압축하거나 나눠서 올려주세요)</div>
       <div class="ar-drop" id="ar-drop" onclick="document.getElementById('ar-file-inp').click()">파일을 선택하거나 여러 개를 끌어다 놓으세요</div>
       <input type="file" id="ar-file-inp" multiple style="display:none" onchange="ArchiveApp._onPickFiles(this.files)">
       <div id="ar-picked-list"></div>
@@ -572,7 +573,7 @@ const ArchiveApp = (() => {
       </div>`;
     }).join('')}</div>
     <div class="ar-upload-limit-hint" style="margin-top:6px;margin-bottom:0">
-      총 ${_pickedFiles.length}개 · ${_fmtSize(totalBytes)}${overIdx >= 0 ? ` · <span style="color:#ef4444;font-weight:700">⚠️ ${maxMb}MB 초과 파일이 있어 업로드가 실패합니다</span>` : ''}
+      총 ${_pickedFiles.length}개 · ${_fmtSize(totalBytes)}${overIdx >= 0 ? ` · <span style="color:#ef4444;font-weight:700">⚠️ ${_fmtLimitLabel(maxMb)} 초과 파일이 있어 업로드가 실패합니다</span>` : ''}
     </div>`;
     const drop = _q('ar-drop');
     if (drop) { drop.textContent = `✓ ${_pickedFiles.length}개 파일 선택됨 — 더 추가하려면 다시 눌러주세요`; drop.classList.add('has-file'); }
@@ -590,7 +591,7 @@ const ArchiveApp = (() => {
     const overNow = files.filter(f => f.size > maxMb * 1024 * 1024);
     if (overNow.length && typeof App !== 'undefined' && App._toast) {
       const names = overNow.map(f => f.name).join(', ');
-      App._toast(`⚠️ ${maxMb}MB 초과: ${names} — 이 파일은 업로드에 실패합니다`, 'error', 5000);
+      App._toast(`⚠️ ${_fmtLimitLabel(maxMb)} 초과: ${names} — 이 파일은 업로드에 실패합니다`, 'error', 5000);
     }
   }
   function _removePickedFile(idx) {
