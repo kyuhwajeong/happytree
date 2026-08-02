@@ -179,11 +179,11 @@ const ArchiveDB = (() => {
     const m = (name || '').match(/\.([a-zA-Z0-9]+)$/);
     return m ? m[1].toLowerCase() : '';
   }
-  // ★ Cloudflare Worker(파일 업로드 중계) 플랫폼 자체의 요청 크기 제한 때문에,
-  //   너무 큰 파일은 업로드가 도중에 뚝 끊기면서 브라우저에는 애매한
-  //   "네트워크 오류"/CORS 오류로만 보인다("몇 %에서 멈춤"으로 보이던 증상의
-  //   실제 원인). 그 상태까지 가지 않도록 보내기 전에 미리 걸러서 명확히 안내한다.
-  const MAX_UPLOAD_MB = 95;
+  // ★ v2: Worker가 파일을 직접 받아 중계하던 방식(95MB 근처에서 실패하던 원인 —
+  //   Cloudflare Workers 자체의 메모리 한도)에서, "Worker는 임시 서명 URL만
+  //   발급하고 브라우저가 B2로 직접 업로드"하는 방식으로 바꿨다. Worker를 거치지
+  //   않으니 그 메모리 한도가 아예 적용되지 않는다 — 이제 B2 자체 한도(약 5GB)가 기준.
+  const MAX_UPLOAD_MB = 2000;
 
   function _uploadToWorker(key, file, onProgress) {
     return new Promise((resolve, reject) => {
@@ -192,18 +192,30 @@ const ArchiveDB = (() => {
         reject(new Error(`업로드 실패: 파일이 너무 큽니다 (${sizeMB.toFixed(0)}MB). ${MAX_UPLOAD_MB}MB 이하로 압축하거나 나눠서 올려주세요.`));
         return;
       }
-      const xhr = new XMLHttpRequest();
-      xhr.open('PUT', `${WORKER_BASE}/file/${encodeURIComponent(key)}`);
-      xhr.setRequestHeader('Authorization', `Bearer ${UPLOAD_TOKEN}`);
-      xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-      if (onProgress) xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
-      xhr.onload = () => { if (xhr.status >= 200 && xhr.status < 300) resolve(true); else reject(new Error(`업로드 실패: HTTP ${xhr.status}`)); };
-      // ★ 큰 파일이 업로드 도중 연결이 끊기면 브라우저가 CORS 오류처럼 보여주는
-      //   경우가 있어(실제 원인은 서버 쪽 크기 제한/연결 끊김), 이 사실을 메시지에 함께 안내
-      xhr.onerror = () => reject(new Error('업로드 실패: 네트워크 오류(파일이 크거나 연결이 불안정하면 발생할 수 있습니다)'));
-      xhr.ontimeout = () => reject(new Error('업로드 실패: 응답 시간 초과'));
-      xhr.timeout = 5 * 60 * 1000; // 5분 — 대용량 업로드가 무한정 멈춰있지 않도록
-      xhr.send(file);
+      (async () => {
+        try {
+          // 1) Worker에서 이 파일 전용 임시 업로드 주소(presigned URL)를 받는다
+          const presignRes = await fetch(`${WORKER_BASE}/presign/${encodeURIComponent(key)}`, {
+            headers: { 'Authorization': `Bearer ${UPLOAD_TOKEN}` },
+          });
+          if (!presignRes.ok) { reject(new Error(`업로드 준비 실패: HTTP ${presignRes.status}`)); return; }
+          const presignData = await presignRes.json();
+          if (!presignData?.uploadUrl) { reject(new Error('업로드 준비 실패: 서명 URL을 받지 못했습니다')); return; }
+
+          // 2) 그 주소로 파일을 B2에 직접 전송 — Worker를 거치지 않아 용량 제한이 없다
+          const xhr = new XMLHttpRequest();
+          xhr.open('PUT', presignData.uploadUrl);
+          xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+          if (onProgress) xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+          xhr.onload = () => { if (xhr.status >= 200 && xhr.status < 300) resolve(true); else reject(new Error(`업로드 실패: HTTP ${xhr.status}`)); };
+          xhr.onerror = () => reject(new Error('업로드 실패: 네트워크 오류(연결이 불안정하면 발생할 수 있습니다)'));
+          xhr.ontimeout = () => reject(new Error('업로드 실패: 응답 시간 초과'));
+          xhr.timeout = 15 * 60 * 1000; // 15분 — 대용량 파일 고려해 넉넉하게
+          xhr.send(file);
+        } catch (e) {
+          reject(new Error(`업로드 준비 실패: ${e.message || String(e)}`));
+        }
+      })();
     });
   }
   async function _deleteFromWorker(key) {
