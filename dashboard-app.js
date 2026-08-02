@@ -114,13 +114,24 @@ const DashboardApp = (() => {
   // ★ 영어가 아직 없으면(주로 실시간 명언) GeminiAI로 번역해서 채운다 —
   //   로컬 27개는 이미 영어 원문이 있어 AI 호출 자체가 안 일어난다.
   //   번역 성공 시 캐시에도 같이 저장해서 같은 명언을 다시 번역하지 않는다.
+  // ★ 번역이 실패하면(주로 Gemini API 한도 소진 429) 잠시 재시도를 쉰다.
+  //   대시보드는 Firebase 실시간 변경마다 자주 다시 그려지는데, 그때마다
+  //   바로 재번역을 시도하면 이미 소진된 키를 계속 두드려서 회복을 더
+  //   늦추기만 했다 — 실패 후 3분간은 재시도하지 않고 한글만 보여준다.
+  let _lastTranslateFailAt = 0;
+  const TRANSLATE_RETRY_COOLDOWN_MS = 3 * 60 * 1000;
+
   async function _ensureEnglish(item) {
     if (!item || item.en) return item;
     if (typeof GeminiAI === 'undefined' || !GeminiAI.translateToEnglish) return item;
+    if (Date.now() - _lastTranslateFailAt < TRANSLATE_RETRY_COOLDOWN_MS) return item;
     try {
       const en = await GeminiAI.translateToEnglish(item.q);
       if (en) { item.en = en; if (item.ts) _saveLiveQuoteCache(item); }
-    } catch (e) { /* 번역 실패해도 한글은 이미 떠 있으니 조용히 넘어감 */ }
+      else { _lastTranslateFailAt = Date.now(); }
+    } catch (e) {
+      _lastTranslateFailAt = Date.now(); // ★ 번역 실패해도 한글은 이미 떠 있으니 조용히 넘어감
+    }
     return item;
   }
   function _renderQuoteInto(item) {
