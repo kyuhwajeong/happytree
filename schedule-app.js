@@ -34,6 +34,8 @@ const ScheduleApp = (() => {
   let _mountId = null;
   let _st = { year: 0, month: 0 }; // 캘린더에 표시 중인 연/월 (month: 1~12)
   let _selDate = null; // ★ 우측 패널에 상세를 보여주고 있는 선택된 날짜 (기본값=오늘)
+  // ★ 날씨 배경 — { 'YYYY-MM-DD': {code, tMax, tMin} }, Open-Meteo(무료·키 불필요)에서 받아옴
+  let _weatherMap = {};
   let _workAddFor = null; // ★ 근무 등록 폼이 열려있는 날짜 (해당 날짜의 상세 패널 안에 인라인으로 표시)
   let _editId = null;
   let _editScope = 'this'; // ★ 반복 일정 수정 범위: 'this'(이 건만) | 'future'(이 건부터 전체) | 'all'(전체)
@@ -105,6 +107,7 @@ const ScheduleApp = (() => {
 .sch-selday-title{font-size:15px;font-weight:800;color:var(--tx)}
 .sch-selday-title-btn{cursor:pointer;border-radius:8px;padding:2px 6px;margin:-2px -6px;transition:background .15s}
 .sch-selday-title-btn:hover{background:var(--card2)}
+.sch-selday-wx{font-size:12px;font-weight:700;color:var(--tx3);background:var(--card2);border-radius:999px;padding:3px 10px;flex-shrink:0}
 .sch-date-jump-inp{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;border:none}
 .sch-detail-sec-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
 .sch-mini-add-btn{padding:6px 11px;border-radius:8px;background:var(--card2);border:1px solid var(--bdr2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer}
@@ -139,7 +142,8 @@ const ScheduleApp = (() => {
 .sch-week-block{border-bottom:1px solid var(--bdr);padding:3px 0 5px;position:relative}
 .sch-week-block:last-of-type{border-bottom:none}
 .sch-daynum-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));position:relative;z-index:1}
-.sch-daynum-cell{text-align:center;font-size:11px;font-weight:800;color:var(--tx2);cursor:pointer;padding:2px 0;border-radius:7px}
+.sch-daynum-cell{text-align:center;font-size:11px;font-weight:800;color:var(--tx2);cursor:pointer;padding:2px 0;border-radius:7px;position:relative}
+.sch-wx-ico{position:absolute;top:-1px;right:1px;font-size:7px;line-height:1;opacity:.9;pointer-events:none}
 .sch-daynum-cell.other{opacity:.32}
 .sch-daynum-cell.sun{color:#ef4444}
 .sch-daynum-cell.sat{color:#3b82f6}
@@ -272,10 +276,76 @@ const ScheduleApp = (() => {
     clearInterval(_timer);
     _timer = setInterval(_checkPopup, 30000);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') _checkPopup(); });
+    _fetchWeather().catch(e => console.warn('[ScheduleApp] 날씨 로드 실패(달력은 정상 표시됨):', e.message));
   }
 
   function refresh() {
     if (_mountId && _q(_mountId)) renderMiniCalendar(_mountId);
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+   * 날씨 배경 — Open-Meteo(무료, API 키 불필요)에서 현재 위치의 16일 예보를 받아와
+   * 달력 날짜 칸에 은은한 배경으로 깔아준다. 위치 권한이 없거나 실패하면
+   * 조용히 서울 좌표로 대체하고, 그마저 실패하면 그냥 날씨 없이 달력만 정상 표시.
+   * ═══════════════════════════════════════════════════════════ */
+  const WEATHER_CACHE_KEY = 'sch_weather_cache_v1';
+  const WEATHER_TTL_MS = 3 * 60 * 60 * 1000; // 3시간마다 갱신
+  const SEOUL_COORD = { lat: 37.5665, lon: 126.9780 };
+
+  function _wmoInfo(code) {
+    // WMO Weather Code → {아이콘, 배경 톤}. 톤은 --a 등 팔레트 변수를 안 쓰고
+    // 날씨 자체의 색감(하늘/비/눈 등)을 아주 옅게 써서 "그날의 분위기"처럼 자연스럽게.
+    if (code === 0) return { ico: '☀️', rgb: '250,204,21' };            // 맑음
+    if (code <= 2) return { ico: '🌤️', rgb: '250,204,21' };             // 대체로 맑음
+    if (code === 3) return { ico: '☁️', rgb: '148,163,184' };           // 흐림
+    if (code === 45 || code === 48) return { ico: '🌫️', rgb: '148,163,184' }; // 안개
+    if (code >= 51 && code <= 67) return { ico: '🌧️', rgb: '59,130,246' };    // 비
+    if (code >= 71 && code <= 77) return { ico: '❄️', rgb: '125,211,252' };   // 눈
+    if (code >= 80 && code <= 82) return { ico: '🌦️', rgb: '59,130,246' };    // 소나기
+    if (code >= 85 && code <= 86) return { ico: '🌨️', rgb: '125,211,252' };   // 눈 소나기
+    if (code >= 95) return { ico: '⛈️', rgb: '99,102,241' };            // 뇌우
+    return null;
+  }
+
+  function _getCoords() {
+    return new Promise(resolve => {
+      if (!navigator.geolocation) { resolve(SEOUL_COORD); return; }
+      const timer = setTimeout(() => resolve(SEOUL_COORD), 4000); // ★ 응답이 늦으면 서울로 대체(달력 로딩을 무한정 막지 않도록)
+      navigator.geolocation.getCurrentPosition(
+        pos => { clearTimeout(timer); resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }); },
+        () => { clearTimeout(timer); resolve(SEOUL_COORD); }, // 권한 거부 등 → 서울로 조용히 대체
+        { timeout: 4000, maximumAge: 60 * 60 * 1000 }
+      );
+    });
+  }
+
+  async function _fetchWeather() {
+    // ★ 캐시가 3시간 이내면 재사용(위치 권한 팝업·API 호출을 매번 반복하지 않도록)
+    try {
+      const cached = JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY) || 'null');
+      if (cached && Date.now() - cached.fetchedAt < WEATHER_TTL_MS && cached.days) {
+        _weatherMap = cached.days;
+        refresh();
+        return;
+      }
+    } catch (e) {}
+
+    const { lat, lon } = await _getCoords();
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=16`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Open-Meteo 응답 오류: HTTP ' + res.status);
+    const data = await res.json();
+    const days = {};
+    (data?.daily?.time || []).forEach((dateStr, i) => {
+      days[dateStr] = {
+        code: data.daily.weathercode[i],
+        tMax: Math.round(data.daily.temperature_2m_max[i]),
+        tMin: Math.round(data.daily.temperature_2m_min[i]),
+      };
+    });
+    _weatherMap = days;
+    try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), days })); } catch (e) {}
+    refresh();
   }
 
   /* ═══════════════════════════════════════════════════════════
@@ -750,9 +820,18 @@ const ScheduleApp = (() => {
 
     const weeksHtml = weeks.map(week => {
       const { tracks, overflowByDay } = _layoutWeek(week, events);
-      const daynumHtml = week.map(d => `
-        <div class="sch-daynum-cell${d.other ? ' other' : ''}${d.dateStr === todayStr ? ' today' : ''}${d.dateStr === _selDate ? ' selected' : ''}${d.dow === 0 ? ' sun' : ''}${d.dow === 6 ? ' sat' : ''}"
-          onclick="ScheduleApp.openDayDetail('${d.dateStr}')">${d.cellDay}</div>`).join('');
+      const daynumHtml = week.map(d => {
+        const isToday = d.dateStr === todayStr;
+        const wx = _weatherMap[d.dateStr];
+        const wi = wx ? _wmoInfo(wx.code) : null;
+        // ★ 날씨는 배경에 아주 옅게만 깔아서 숫자 가독성을 절대 해치지 않도록 함(8% 배경 + 아이콘 1개)
+        //   단, "오늘" 표시(진한 배경 원)는 인라인 style보다 우선순위가 밀리므로 오늘은 배경 틴트를 건너뜀
+        const wxStyle = (wi && !isToday) ? ` style="background:linear-gradient(rgba(${wi.rgb},.16),rgba(${wi.rgb},.05))"` : '';
+        const wxIco = wi ? `<span class="sch-wx-ico" title="${wx.tMin}° / ${wx.tMax}°">${wi.ico}</span>` : '';
+        return `
+        <div class="sch-daynum-cell${d.other ? ' other' : ''}${isToday ? ' today' : ''}${d.dateStr === _selDate ? ' selected' : ''}${d.dow === 0 ? ' sun' : ''}${d.dow === 6 ? ' sat' : ''}"${wxStyle}
+          onclick="ScheduleApp.openDayDetail('${d.dateStr}')">${wxIco}${d.cellDay}</div>`;
+      }).join('');
       const trackRowsHtml = tracks.map(track => {
         const barsHtml = track.map(seg => {
           const span = seg.segEndIdx - seg.segStartIdx + 1;
@@ -1059,6 +1138,7 @@ const ScheduleApp = (() => {
 
     let html = `<div class="sch-selday-hdr">
       <span class="sch-selday-title sch-selday-title-btn" onclick="ScheduleApp._openDateJump()" title="날짜로 바로 이동">🗓️ ${dateLabel}</span>
+      ${(() => { const wx = _weatherMap[dateStr]; const wi = wx ? _wmoInfo(wx.code) : null; return wi ? `<span class="sch-selday-wx">${wi.ico} ${wx.tMin}° / ${wx.tMax}°</span>` : ''; })()}
       <input type="date" id="sch-date-jump-inp" value="${dateStr}" class="sch-date-jump-inp" onchange="ScheduleApp._jumpToDate(this.value)">
       <div class="sch-selday-navs">
         <button class="sch-today-btn" onclick="ScheduleApp._goToday()">오늘</button>
