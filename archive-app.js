@@ -117,6 +117,7 @@ const ArchiveApp = (() => {
 .ar-field input[type=checkbox]{width:auto}
 .ar-field textarea{resize:vertical;min-height:60px}
 .ar-drop{border:2px dashed var(--bdr2);border-radius:12px;padding:22px;text-align:center;color:var(--tx3);font-size:12.5px;cursor:pointer;transition:all .12s}
+.ar-upload-limit-hint{font-size:11px;color:var(--tx3);background:var(--card2);border-radius:8px;padding:6px 10px;margin-bottom:8px;line-height:1.5}
 .ar-drop.has-file{border-color:var(--a);color:var(--tx);font-weight:700}
 .ar-drop.dragover{border-color:var(--a);background:var(--a10);color:var(--a);font-weight:700}
 .ar-sheet.ar-dropping{outline:3px dashed var(--a);outline-offset:-6px;background:var(--a10)}
@@ -436,8 +437,10 @@ const ArchiveApp = (() => {
 
   let _uploadMode = 'file'; // 'file' | 'link'
   function _uploadFileFieldsHtml() {
+    const maxMb = (typeof ArchiveDB !== 'undefined' && ArchiveDB.MAX_UPLOAD_MB) || 95;
     return `<div class="ar-field">
       <label>파일 선택 (여러 개 선택·드래그 가능)</label>
+      <div class="ar-upload-limit-hint">📌 파일 1개당 최대 ${maxMb}MB까지 업로드할 수 있습니다 (그보다 크면 압축하거나 나눠서 올려주세요)</div>
       <div class="ar-drop" id="ar-drop" onclick="document.getElementById('ar-file-inp').click()">파일을 선택하거나 여러 개를 끌어다 놓으세요</div>
       <input type="file" id="ar-file-inp" multiple style="display:none" onchange="ArchiveApp._onPickFiles(this.files)">
       <div id="ar-picked-list"></div>
@@ -458,6 +461,11 @@ const ArchiveApp = (() => {
     _q('ar-mode-link-tab')?.classList.toggle('on', mode === 'link');
     const body = _q('ar-upload-mode-body');
     if (body) body.innerHTML = mode === 'file' ? _uploadFileFieldsHtml() : _uploadLinkFieldsHtml();
+    // ★ 버그 수정: '온라인 문서 링크' 탭을 눌렀다가 '파일 업로드'로 되돌아오면
+    //   패널이 빈 템플릿으로 통째로 다시 그려지면서, 이미 골라둔 파일이 있어도
+    //   화면엔 하나도 안 보였다(내부 _pickedFiles엔 그대로 남아있는데 표시만 안 됨).
+    //   그래서 "없어진 줄 알고" 다시 선택하다가 같은 파일이 중복으로 쌓이는 문제가 있었다.
+    if (mode === 'file') _renderPickedList();
   }
   function openUpload() {
     _pickedFiles = []; _uploadMode = 'file';
@@ -537,12 +545,22 @@ const ArchiveApp = (() => {
     const wrap = _q('ar-picked-list');
     if (!wrap) return;
     if (!_pickedFiles.length) { wrap.innerHTML = ''; return; }
-    wrap.innerHTML = `<div class="ar-picked-list">${_pickedFiles.map((file, i) => `
-      <div class="ar-picked-item">
-        <span class="ar-picked-name">📄 ${_esc(file.name)}</span>
-        <span class="ar-picked-size">${_fmtSize(file.size)}</span>
+    const maxMb = (typeof ArchiveDB !== 'undefined' && ArchiveDB.MAX_UPLOAD_MB) || 95;
+    const maxBytes = maxMb * 1024 * 1024;
+    const totalBytes = _pickedFiles.reduce((s, f) => s + f.size, 0);
+    const overIdx = _pickedFiles.findIndex(f => f.size > maxBytes);
+    wrap.innerHTML = `<div class="ar-picked-list">${_pickedFiles.map((file, i) => {
+      const over = file.size > maxBytes;
+      return `
+      <div class="ar-picked-item"${over ? ' style="border-color:#ef4444"' : ''}>
+        <span class="ar-picked-name">${over ? '⚠️' : '📄'} ${_esc(file.name)}</span>
+        <span class="ar-picked-size"${over ? ' style="color:#ef4444;font-weight:700"' : ''}>${_fmtSize(file.size)}${over ? ` (초과!)` : ''}</span>
         <button type="button" onclick="ArchiveApp._removePickedFile(${i})" title="빼기">✕</button>
-      </div>`).join('')}</div>`;
+      </div>`;
+    }).join('')}</div>
+    <div class="ar-upload-limit-hint" style="margin-top:6px;margin-bottom:0">
+      총 ${_pickedFiles.length}개 · ${_fmtSize(totalBytes)}${overIdx >= 0 ? ` · <span style="color:#ef4444;font-weight:700">⚠️ ${maxMb}MB 초과 파일이 있어 업로드가 실패합니다</span>` : ''}
+    </div>`;
     const drop = _q('ar-drop');
     if (drop) { drop.textContent = `✓ ${_pickedFiles.length}개 파일 선택됨 — 더 추가하려면 다시 눌러주세요`; drop.classList.add('has-file'); }
   }
@@ -553,6 +571,14 @@ const ArchiveApp = (() => {
     _renderPickedList();
     const nameInp = _q('ar-name-inp');
     if (nameInp && !nameInp.value) nameInp.value = _pickedFiles[0].name.replace(/\.[^.]+$/, '');
+    // ★ 방금 고른 파일 중 용량 초과가 있으면 그 자리에서 바로 알림(목록의 ⚠️ 표시만으로는
+    //   놓치기 쉬워서, 선택하는 순간 토스트로도 확실히 짚어준다)
+    const maxMb = (typeof ArchiveDB !== 'undefined' && ArchiveDB.MAX_UPLOAD_MB) || 95;
+    const overNow = files.filter(f => f.size > maxMb * 1024 * 1024);
+    if (overNow.length && typeof App !== 'undefined' && App._toast) {
+      const names = overNow.map(f => f.name).join(', ');
+      App._toast(`⚠️ ${maxMb}MB 초과: ${names} — 이 파일은 업로드에 실패합니다`, 'error', 5000);
+    }
   }
   function _removePickedFile(idx) {
     _pickedFiles.splice(idx, 1);
