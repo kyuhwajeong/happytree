@@ -1462,10 +1462,17 @@ const ScheduleApp = (() => {
     if (_editId) {
       const orig = ScheduleDB.getById(_editId);
       if (orig?.seriesId && _editScope !== 'this') {
-        // ★ 반복 일정 일괄 수정 — 제목/메모/알림 등 "내용"만 함께 바꾸고, 각 회차 고유의 날짜는 그대로 둔다.
+        // ★ 반복 일정 일괄 수정 — 제목/메모/알림 등 "내용"만 다른 회차에 함께 반영하고
+        //   그 회차들 고유의 날짜는 그대로 둔다. 단, 지금 직접 수정 중인 이 항목 자체는
+        //   폼에서 날짜를 바꿨을 수 있으므로 날짜까지 포함해서 온전히 반영한다.
+        //   (예전엔 이 항목마저 날짜가 무시돼서, 9/9→8/9로 옮기고 "전체 반영"을 눌러도
+        //   실제로는 계속 9/9에 남아있고 8/9엔 아무것도 안 뜨는 버그가 있었다)
         const { startDate: _s, endDate: _e, ...contentOnly } = data;
         const targets = ScheduleDB.getAll().filter(x => x.seriesId === orig.seriesId && (_editScope === 'all' || x.startDate >= orig.startDate));
-        for (const t of targets) await ScheduleDB.update(t.id, contentOnly);
+        for (const t of targets) {
+          if (t.id === _editId) await ScheduleDB.update(t.id, data); // 날짜 포함 전체 반영
+          else await ScheduleDB.update(t.id, contentOnly); // 다른 회차는 날짜 유지, 내용만
+        }
         closeEditor(); refresh();
         if (typeof App !== 'undefined' && App._toast) App._toast(`✅ 반복 일정 ${targets.length}건이 수정되었습니다`, 'success');
         return;
