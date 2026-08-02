@@ -78,7 +78,7 @@ const DashboardApp = (() => {
   ];
   const QUOTE_API = 'https://korean-advice-open-api.vercel.app/api/advice';
   const QUOTE_CACHE_KEY = 'db_live_quote';
-  const QUOTE_REFRESH_MS = 4 * 60 * 60 * 1000; // ★ 4시간마다 자동으로 새 명언(그 사이엔 캐시 재사용)
+  const QUOTE_REFRESH_MS = 24 * 60 * 60 * 1000; // ★ 4시간→하루 1번으로 줄임(AI 번역 호출 자체를 최소화)
 
   // ★ 오프라인이거나 API 응답이 없을 때만 쓰는 최소한의 대비용 목록 —
   //   온라인일 땐 실시간으로 계속 새 명언을 가져오므로 이 목록 크기와
@@ -92,13 +92,13 @@ const DashboardApp = (() => {
   }
   function _getCachedLiveQuote() {
     try {
-      const c = JSON.parse(sessionStorage.getItem(QUOTE_CACHE_KEY) || 'null');
+      const c = JSON.parse(localStorage.getItem(QUOTE_CACHE_KEY) || 'null');
       if (c && c.ts && Date.now() - c.ts < QUOTE_REFRESH_MS) return c;
     } catch (e) {}
     return null;
   }
   function _saveLiveQuoteCache(item) {
-    try { sessionStorage.setItem(QUOTE_CACHE_KEY, JSON.stringify(item)); } catch (e) {}
+    try { localStorage.setItem(QUOTE_CACHE_KEY, JSON.stringify(item)); } catch (e) {}
   }
   async function _fetchLiveQuote() {
     try {
@@ -114,23 +114,29 @@ const DashboardApp = (() => {
   // ★ 영어가 아직 없으면(주로 실시간 명언) GeminiAI로 번역해서 채운다 —
   //   로컬 27개는 이미 영어 원문이 있어 AI 호출 자체가 안 일어난다.
   //   번역 성공 시 캐시에도 같이 저장해서 같은 명언을 다시 번역하지 않는다.
-  // ★ 번역이 실패하면(주로 Gemini API 한도 소진 429) 잠시 재시도를 쉰다.
-  //   대시보드는 Firebase 실시간 변경마다 자주 다시 그려지는데, 그때마다
-  //   바로 재번역을 시도하면 이미 소진된 키를 계속 두드려서 회복을 더
-  //   늦추기만 했다 — 실패 후 3분간은 재시도하지 않고 한글만 보여준다.
-  let _lastTranslateFailAt = 0;
-  const TRANSLATE_RETRY_COOLDOWN_MS = 3 * 60 * 1000;
+  // ★ 번역이 실패하면(주로 Gemini API 한도 소진 429) 한동안 재시도를 쉰다.
+  //   예전엔 이 값을 메모리 변수에만 뒀는데, 이 앱은 자동 업데이트·세션 재개 등으로
+  //   페이지가 자주 새로고침된다 — 그때마다 메모리가 초기화되면서 쿨다운이 매번
+  //   0으로 리셋돼, "3분 쉬기"가 사실상 새로고침마다 무시되고 있었다(진짜 원인).
+  //   localStorage에 저장해서 새로고침·재접속에도 쿨다운이 그대로 유지되게 하고,
+  //   한도가 하루 단위로 초기화되는 경우도 있어 주기도 3분→1시간으로 늘렸다
+  //   (분당 제한이면 1시간 안에 자연히 복구, 일일 한도여도 하루에 24번 정도만
+  //   시도하니 쓸데없이 두드리지 않으면서도 복구되면 바로 다시 붙는다).
+  const TRANSLATE_FAIL_KEY = 'db_translate_fail_at';
+  const TRANSLATE_RETRY_COOLDOWN_MS = 60 * 60 * 1000;
 
   async function _ensureEnglish(item) {
     if (!item || item.en) return item;
     if (typeof GeminiAI === 'undefined' || !GeminiAI.translateToEnglish) return item;
-    if (Date.now() - _lastTranslateFailAt < TRANSLATE_RETRY_COOLDOWN_MS) return item;
+    let lastFailAt = 0;
+    try { lastFailAt = parseInt(localStorage.getItem(TRANSLATE_FAIL_KEY) || '0', 10) || 0; } catch (e) {}
+    if (Date.now() - lastFailAt < TRANSLATE_RETRY_COOLDOWN_MS) return item;
     try {
       const en = await GeminiAI.translateToEnglish(item.q);
-      if (en) { item.en = en; if (item.ts) _saveLiveQuoteCache(item); }
-      else { _lastTranslateFailAt = Date.now(); }
+      if (en) { item.en = en; if (item.ts) _saveLiveQuoteCache(item); try { localStorage.removeItem(TRANSLATE_FAIL_KEY); } catch (e) {} }
+      else { try { localStorage.setItem(TRANSLATE_FAIL_KEY, String(Date.now())); } catch (e) {} }
     } catch (e) {
-      _lastTranslateFailAt = Date.now(); // ★ 번역 실패해도 한글은 이미 떠 있으니 조용히 넘어감
+      try { localStorage.setItem(TRANSLATE_FAIL_KEY, String(Date.now())); } catch (e2) {} // ★ 번역 실패해도 한글은 이미 떠 있으니 조용히 넘어감
     }
     return item;
   }

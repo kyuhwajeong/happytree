@@ -202,6 +202,7 @@ const ScheduleApp = (() => {
 .sch-legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;padding-top:10px;border-top:1px dashed var(--bdr)}
 .sch-legend-item{display:flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;color:var(--tx3);background:var(--card2);border-radius:999px;padding:3px 8px 3px 6px}
 .sch-legend-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.sch-wx-loc{text-align:right;font-size:9.5px;color:var(--tx3);opacity:.7;margin-top:6px}
 
 /* 오늘의 수업 (캘린더 우측 패널) */
 .sch-tdc-hdr{display:flex;align-items:baseline;gap:7px;margin-bottom:9px}
@@ -308,9 +309,10 @@ const ScheduleApp = (() => {
    * 달력 날짜 칸에 은은한 배경으로 깔아준다. 위치 권한이 없거나 실패하면
    * 조용히 서울 좌표로 대체하고, 그마저 실패하면 그냥 날씨 없이 달력만 정상 표시.
    * ═══════════════════════════════════════════════════════════ */
-  const WEATHER_CACHE_KEY = 'sch_weather_cache_v3'; // ★ v2→v3: 캐시에 좌표(coord)도 같이 저장하도록 구조 변경
+  const WEATHER_CACHE_KEY = 'sch_weather_cache_v4'; // ★ v3→v4: 지역명(locationLabel) 캐시 필드 추가
   const WEATHER_TTL_MS = 3 * 60 * 60 * 1000; // 3시간마다 갱신
   const SEOUL_COORD = { lat: 37.5665, lon: 126.9780 }; // ★ 위치 권한이 없거나 실패했을 때만 쓰는 대체 좌표(평상시엔 실제 현재 위치 사용)
+  let _locationLabel = ''; // ★ "대구광역시" 같은 사람이 읽을 수 있는 지역명 — 달력 하단에 표시
 
   function _wmoInfo(code) {
     // WMO Weather Code → {아이콘, 배경 톤, 애니메이션 종류}. 톤은 --a 등 팔레트 변수를 안 쓰고
@@ -376,6 +378,17 @@ const ScheduleApp = (() => {
     });
   }
 
+  // ★ 좌표 → "대구광역시" 같은 사람이 읽을 수 있는 지역명 (Nominatim/OpenStreetMap, 무료·키 불필요)
+  //   Open-Meteo는 정방향(지명→좌표) 지오코딩만 지원하고 역방향은 없어서 별도 서비스를 씀.
+  async function _reverseGeocode(lat, lon) {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=ko&zoom=10`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('지역명 조회 오류: HTTP ' + res.status);
+    const data = await res.json();
+    const a = data?.address || {};
+    return a.city || a.town || a.county || a.state || a.province || data.display_name?.split(',')[0] || '';
+  }
+
   async function _fetchWeather() {
     // ★ 캐시가 3시간 이내면 재사용(API 호출·위치 확인을 매번 반복하지 않도록).
     //   단, 저장된 좌표와 지금 위치가 크게 다르면(다른 도시로 이동) 캐시를 쓰지 않고 새로 받는다.
@@ -385,6 +398,7 @@ const ScheduleApp = (() => {
       const sameSpot = cached?.coord && Math.abs(cached.coord.lat - coords.lat) < 0.3 && Math.abs(cached.coord.lon - coords.lon) < 0.3;
       if (cached && sameSpot && Date.now() - cached.fetchedAt < WEATHER_TTL_MS && cached.days) {
         _weatherMap = cached.days;
+        _locationLabel = cached.location || '';
         refresh();
         return;
       }
@@ -406,8 +420,10 @@ const ScheduleApp = (() => {
       };
     });
     _weatherMap = days;
-    try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), coord: coords, days })); } catch (e) {}
-    console.log(`[ScheduleApp] 🌤️ 날씨 ${Object.keys(days).length}일치 로드 완료 (좌표: ${lat.toFixed(2)}, ${lon.toFixed(2)})`);
+    // ★ 지역명은 실패해도 날씨 자체엔 지장 없게 완전히 별도로 감싸서 처리
+    try { _locationLabel = await _reverseGeocode(lat, lon); } catch (e) { _locationLabel = ''; console.warn('[ScheduleApp] 지역명 조회 실패(날씨는 정상 표시됨):', e.message); }
+    try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), coord: coords, days, location: _locationLabel })); } catch (e) {}
+    console.log(`[ScheduleApp] 🌤️ 날씨 ${Object.keys(days).length}일치 로드 완료 (좌표: ${lat.toFixed(2)}, ${lon.toFixed(2)}, 지역: ${_locationLabel || '알수없음'})`);
     refresh();
   }
 
@@ -962,7 +978,8 @@ const ScheduleApp = (() => {
         </div>
       </div>
       <div class="sch-today-divider"></div>
-      <div class="sch-today-section">${_todayClassesHtml()}</div>`;
+      <div class="sch-today-section">${_todayClassesHtml()}</div>
+      ${_locationLabel ? `<div class="sch-wx-loc">📍 ${_esc(_locationLabel)} 날씨 기준</div>` : ''}`;
     _restoreWidgetSize();
     _bindWidgetResizeSave();
 
