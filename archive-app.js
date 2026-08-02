@@ -397,6 +397,19 @@ const ArchiveApp = (() => {
     await ArchiveDB.addCategory(name.trim());
     render();
   }
+  // ★ 파일 첨부/수정 화면의 "분류" 드롭다운에서 바로 새 분류를 만들어 즉시 선택 상태로
+  //   반영한다 — 분류 관리 화면까지 따로 안 가도 되게.
+  async function _onCatSelectChange(selectEl) {
+    if (!selectEl || selectEl.value !== '__new__') return;
+    const prevValue = '기타';
+    const name = prompt('새 분류(폴더) 이름을 입력하세요');
+    if (!name?.trim()) { selectEl.value = prevValue; return; } // 취소하면 기본값으로 되돌림
+    await ArchiveDB.addCategory(name.trim());
+    const cats = ArchiveDB.getCategories();
+    selectEl.innerHTML = cats.map(c => `<option value="${_esc(c)}">${_esc(c)}</option>`).join('') + `<option value="__new__">➕ 새 분류 추가...</option>`;
+    selectEl.value = name.trim();
+    if (typeof App !== 'undefined' && App._toast) App._toast(`✅ "${name.trim()}" 분류가 추가됐습니다`, 'success', 2500);
+  }
   function openManageCategories() {
     const cats = ArchiveDB.getCategories();
     const ov = document.createElement('div');
@@ -480,7 +493,7 @@ const ArchiveApp = (() => {
       <div id="ar-upload-mode-body">${_uploadFileFieldsHtml()}</div>
       <div class="ar-field"><label>표시할 이름 (게시물 제목)</label><input type="text" id="ar-name-inp" placeholder="예: 2026년 여름방학 안내문"></div>
       <div class="ar-field"><label>분류</label>
-        <select id="ar-cat-inp">${ArchiveDB.getCategories().map(c => `<option value="${_esc(c)}">${_esc(c)}</option>`).join('')}</select>
+        <select id="ar-cat-inp" onchange="ArchiveApp._onCatSelectChange(this)">${ArchiveDB.getCategories().map(c => `<option value="${_esc(c)}">${_esc(c)}</option>`).join('')}<option value="__new__">➕ 새 분류 추가...</option></select>
       </div>
       <div class="ar-field"><label>설명 (선택)</label><textarea id="ar-desc-inp" placeholder="메모나 설명을 남겨두면 나중에 찾기 편해요"></textarea></div>
       <div class="ar-field-row">
@@ -1396,7 +1409,7 @@ const ArchiveApp = (() => {
       <div class="ar-sheet-title">✏️ 자료 정보 수정</div>
       <div class="ar-field"><label>표시할 이름</label><input type="text" id="ar-edit-name" value="${_esc(f.name)}"></div>
       <div class="ar-field"><label>분류</label>
-        <select id="ar-edit-cat">${ArchiveDB.getCategories().map(c => `<option value="${_esc(c)}"${c===f.category?' selected':''}>${_esc(c)}</option>`).join('')}</select>
+        <select id="ar-edit-cat" onchange="ArchiveApp._onCatSelectChange(this)">${ArchiveDB.getCategories().map(c => `<option value="${_esc(c)}"${c===f.category?' selected':''}>${_esc(c)}</option>`).join('')}<option value="__new__">➕ 새 분류 추가...</option></select>
       </div>
       <div class="ar-field"><label>설명</label><textarea id="ar-edit-desc">${_esc(f.description||'')}</textarea></div>
       <div class="ar-field-row">
@@ -1522,7 +1535,7 @@ const ArchiveApp = (() => {
   }
 
   return {
-    init, render, _selectCategory, _promptNewCategory, openManageCategories, _removeCategory, _onSearchInput, _togglePin, _setViewMode, _selectTool,
+    init, render, _selectCategory, _promptNewCategory, _onCatSelectChange, openManageCategories, _removeCategory, _onSearchInput, _togglePin, _setViewMode, _selectTool,
     openUpload, _closeUpload, _setUploadMode, _onPickFiles, _removePickedFile, _submitUpload,
     openPreview, _switchPreviewFile, _addMoreFiles, _toggleFileSelect, _selectAllFilesInPreview, _downloadSelectedFilesInPost, _submitPasswordGate,
     openEdit, _closeEdit, _submitEdit,
