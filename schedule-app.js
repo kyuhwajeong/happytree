@@ -127,6 +127,7 @@ const ScheduleApp = (() => {
 .sch-tp-colon{font-size:18px;font-weight:900;color:var(--tx);flex-shrink:0}
 .sch-tp-preview{font-size:12.5px;font-weight:800;padding:4px 2px}
 .sch-repeat-hint{font-size:11px;color:var(--tx3);margin-top:4px;line-height:1.5}
+.sch-repeat-status{font-size:12px;color:var(--tx2);background:var(--a10);border:1px solid var(--a40);border-radius:9px;padding:9px 11px;line-height:1.5}
 .sch-today-divider{border-top:1px dashed var(--bdr);margin:16px 0 12px}
 .sch-today-section{width:100%}
 .sch-detail-sec{margin-bottom:14px}
@@ -1266,6 +1267,20 @@ const ScheduleApp = (() => {
    * 반복 일정 수정/삭제 범위 선택 — "이 건만 / 이 건부터 전체 / 전체" 같은
    * 흔히 쓰는 캘린더 앱 패턴을 반복 등록된 일정에도 그대로 적용한다.
    * ═══════════════════════════════════════════════════════════ */
+  // ★ 이 항목만 반복 묶음에서 빼서 독립된 단일 일정으로 만든다(다른 회차는 영향 없음)
+  async function _confirmUnlinkSeries(id) {
+    const s = ScheduleDB.getById(id); if (!s) return;
+    if (!_canEdit(s)) {
+      if (typeof App !== 'undefined' && App._toast) App._toast('⚠️ 다른 사람이 등록한 일정은 수정할 수 없습니다', 'error');
+      return;
+    }
+    if (!confirm('이 항목만 반복 묶음에서 뺄까요? 다른 회차들은 그대로 유지됩니다.')) return;
+    await ScheduleDB.update(id, { seriesId: null });
+    closeEditor();
+    refresh();
+    if (typeof App !== 'undefined' && App._toast) App._toast('🔓 반복에서 빠졌습니다', 'success');
+  }
+
   function _showScopePicker(mode, s, onPick) {
     _q('sch-scope-ov')?.remove();
     const ov = document.createElement('div');
@@ -1338,9 +1353,9 @@ const ScheduleApp = (() => {
           <div style="flex:1"><label class="f-lbl">시작일</label><input class="f-inp" id="sch-f-start" type="date" value="${startDate}"></div>
           <div style="flex:1"><label class="f-lbl">종료일</label><input class="f-inp" id="sch-f-end" type="date" value="${endDate}"></div>
         </div>
-        ${!s ? `
+        ${(!s || !s.seriesId) ? `
         <div class="f-grp">
-          <label class="f-lbl">🔁 반복 <em style="font-style:normal;color:var(--tx3);font-weight:600">(같은 일정을 여러 번 자동으로 등록)</em></label>
+          <label class="f-lbl">🔁 반복 ${s ? '<em style="font-style:normal;color:var(--tx3);font-weight:600">(지금부터 반복 등록으로 전환)</em>' : '<em style="font-style:normal;color:var(--tx3);font-weight:600">(같은 일정을 여러 번 자동으로 등록)</em>'}</label>
           <div class="ntc-pill-row" id="sch-f-repeat">
             <button type="button" class="ntc-pill on" data-v="none">안함</button>
             <button type="button" class="ntc-pill" data-v="weekly">매주</button>
@@ -1352,7 +1367,12 @@ const ScheduleApp = (() => {
           <label class="f-lbl">반복 종료일</label>
           <input class="f-inp" id="sch-f-repeat-end" type="date" value="${_addDays(startDate, 90)}">
           <div class="sch-repeat-hint" id="sch-f-repeat-hint"></div>
-        </div>` : ''}
+        </div>` : `
+        <div class="f-grp">
+          <label class="f-lbl">🔁 반복 일정</label>
+          <div class="sch-repeat-status">이 일정은 반복 등록의 일부입니다. 날짜를 바꿔서 저장하면 적용 범위(이 건만/이 건부터/전체)를 다시 물어봅니다.</div>
+          <button type="button" class="btn-x" style="width:100%;margin-top:6px" onclick="ScheduleApp._confirmUnlinkSeries('${s.id}')">🔓 이 항목만 반복에서 빼기</button>
+        </div>`}
         <div class="f-grp">
           <label class="sch-notify-ck">
             <input type="checkbox" id="sch-f-suppress" ${s?.suppressClasses ? 'checked' : ''} onchange="document.getElementById('sch-f-note-wrap').style.display=this.checked?'block':'none'">
@@ -1477,6 +1497,28 @@ const ScheduleApp = (() => {
         if (typeof App !== 'undefined' && App._toast) App._toast(`✅ 반복 일정 ${targets.length}건이 수정되었습니다`, 'success');
         return;
       }
+      // ★ 원래 단일 일정이었는데 수정하면서 반복을 새로 켠 경우 — 이 항목을 시리즈의
+      //   첫 회차로 삼고, 그 뒤 회차들을 추가로 생성한다.
+      if (!orig?.seriesId && repeatFreq !== 'none' && repeatEnd && repeatEnd >= startDate) {
+        const seriesId = 'ser' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        await ScheduleDB.update(_editId, { ...data, seriesId });
+        const spanDays = Math.round((new Date(endDate + 'T00:00:00') - new Date(startDate + 'T00:00:00')) / 86400000);
+        const _nextDate = cur => {
+          if (repeatFreq === 'weekly') return _addDays(cur, 7);
+          const d = new Date(cur + 'T00:00:00');
+          if (repeatFreq === 'monthly') d.setMonth(d.getMonth() + 1); else d.setFullYear(d.getFullYear() + 1);
+          return `${d.getFullYear()}-${_pad(d.getMonth() + 1)}-${_pad(d.getDate())}`;
+        };
+        let cur = _nextDate(startDate), n = 1; // 원본 1건은 이미 반영됨
+        while (cur <= repeatEnd && n < 104) {
+          await ScheduleDB.add({ ...data, startDate: cur, endDate: _addDays(cur, spanDays), seriesId });
+          n++;
+          cur = _nextDate(cur);
+        }
+        closeEditor(); refresh();
+        if (typeof App !== 'undefined' && App._toast) App._toast(`✅ 반복 일정으로 전환되어 총 ${n}건이 등록되었습니다`, 'success');
+        return;
+      }
       // 이 건만 수정(반복이 아니거나 'this' 선택) — 날짜도 함께 반영
       await ScheduleDB.update(_editId, data);
     } else if (repeatFreq !== 'none' && repeatEnd && repeatEnd >= startDate) {
@@ -1583,7 +1625,7 @@ const ScheduleApp = (() => {
   return {
     init, refresh, renderMiniCalendar,
     openDayDetail, closeDayDetail,
-    openEditor, closeEditor, saveEditor, deleteItem,
+    openEditor, closeEditor, saveEditor, deleteItem, _confirmUnlinkSeries,
     openWorkQuickAdd, closeWorkQuickAdd, saveWorkQuickAdd,
     _navMonth, _goToday, _navDay, _openDateJump, _jumpToDate, _goStudentDetail,
     _tpAmPm, _tpChange,
