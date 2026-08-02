@@ -160,7 +160,17 @@ const ScheduleApp = (() => {
 .sch-resize-handle{position:absolute;top:0;bottom:0;width:9px;cursor:col-resize;touch-action:none}
 .sch-resize-handle.l{left:0}
 .sch-resize-handle.r{right:0}
-.sch-resize-handle::after{content:'';position:absolute;top:50%;left:50%;width:3px;height:9px;background:rgba(255,255,255,.85);border-radius:2px;transform:translate(-50%,-50%)}
+.sch-resize-handle::after{content:'';position:absolute;top:50%;left:50%;width:3px;height:9px;background:rgba(255,255,255,.85);border-radius:2px;transform:translate(-50%,-50%);opacity:0;transition:opacity .15s}
+/* ★ 마우스가 있는 PC 등: 평소엔 안 보이다가 그 막대에 올렸을 때만 옅게, 정확히
+   테두리에 올렸을 때 또렷하게 — 항상 하얀 막대가 박혀있는 것처럼 보이던 문제 개선 */
+@media (hover:hover){
+  .sch-bar-draggable:hover .sch-resize-handle::after{opacity:.55}
+  .sch-resize-handle:hover::after{opacity:1}
+}
+/* ★ 터치 기기(호버 없음): 존재 자체를 못 찾을 수 있으니 아주 옅게는 항상 보이게 */
+@media (hover:none){
+  .sch-resize-handle::after{opacity:.4}
+}
 .sch-bar-dragging{box-shadow:0 0 0 2px #fff,0 2px 6px rgba(0,0,0,.3);z-index:5}
 .sch-drag-tip{position:fixed;transform:translate(-50%,0);background:var(--tx,#111);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:8px;pointer-events:none;z-index:4000;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.25)}
 .sch-overflow-row{margin-top:1px}
