@@ -95,7 +95,13 @@
     //   반영된 오프라인 큐는 새로고침으로 사라지지 않으므로 재시작 후
     //   자동으로 이어서 전송된다.
     try { window.dispatchEvent(new Event('fb:force-flush-before-reload')); } catch (e) {}
-    setTimeout(() => location.reload(), 400);
+    // ★ 버그 수정: location.reload()는 변경을 감지해놓고도 문서 자체는
+    //   조건부 요청(If-None-Match)으로 재검증만 하다가 304(변경 없음)를
+    //   받아 예전 헤더/캐시가 그대로 다시 쓰이는 경우가 있었다(CSP처럼
+    //   "헤더만" 바뀐 배포에서 특히). 쿼리스트링을 매번 다르게 붙여
+    //   완전히 새로운 URL로 이동시키면 캐시 매칭 자체가 안 돼서 반드시
+    //   네트워크로 새로 받아온다.
+    setTimeout(() => { location.href = location.pathname + '?_v=' + Date.now(); }, 400);
   }
 
   /* ★ 업데이트 알림 배너 — 조용히 알아서 새로고침하는 대신, 새 버전이

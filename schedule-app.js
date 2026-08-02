@@ -112,15 +112,18 @@ const ScheduleApp = (() => {
 #sch-selday-panel{position:relative}
 .sch-selday-content{position:relative;z-index:1} /* ★ 배경 애니메이션 위에 내용이 항상 또렷하게 그려지도록 */
 .sch-wx-bg{position:absolute;inset:-4px;overflow:hidden;pointer-events:none;z-index:0;border-radius:14px}
-.sch-wx-bg-rain{background:linear-gradient(180deg,rgba(59,130,246,.07),rgba(59,130,246,.01) 60%)}
-.sch-wx-drop{position:absolute;top:-10%;width:2px;height:16px;background:linear-gradient(rgba(96,165,250,0),rgba(96,165,250,.55));border-radius:2px;animation-name:sch-wx-fall;animation-timing-function:linear;animation-iteration-count:infinite}
-@keyframes sch-wx-fall{to{transform:translateY(720%)}}
-.sch-wx-bg-snow{background:linear-gradient(180deg,rgba(125,211,252,.08),rgba(125,211,252,.01) 60%)}
-.sch-wx-flake{position:absolute;top:-10%;color:rgba(186,230,253,.9);animation-name:sch-wx-snowfall;animation-timing-function:linear;animation-iteration-count:infinite}
-@keyframes sch-wx-snowfall{0%{transform:translateY(0) translateX(0)}50%{transform:translateY(340%) translateX(9px)}100%{transform:translateY(720%) translateX(-6px)}}
+.sch-wx-bg-rain{background:linear-gradient(180deg,rgba(59,130,246,.12),rgba(59,130,246,.02) 60%)}
+.sch-wx-drop{position:absolute;top:-24px;width:2.5px;height:20px;background:linear-gradient(rgba(96,165,250,0),rgba(59,130,246,.75));border-radius:2px;animation-name:sch-wx-fall;animation-timing-function:linear;animation-iteration-count:infinite}
+/* ★ 버그 수정: translateY(%)는 컨테이너가 아니라 "그 요소 자신의 높이" 기준으로 계산돼서,
+   20px짜리 빗방울이 겨우 그 몇 배 안 되는 거리만 움직이고 있었다(그래서 사실상 안 보였음).
+   컨테이너를 확실히 가로지르도록 고정 px 값으로 크게 이동시킨다. */
+@keyframes sch-wx-fall{to{transform:translateY(560px)}}
+.sch-wx-bg-snow{background:linear-gradient(180deg,rgba(125,211,252,.13),rgba(125,211,252,.02) 60%)}
+.sch-wx-flake{position:absolute;top:-24px;color:rgba(191,219,254,.95);text-shadow:0 0 3px rgba(255,255,255,.4);animation-name:sch-wx-snowfall;animation-timing-function:linear;animation-iteration-count:infinite}
+@keyframes sch-wx-snowfall{0%{transform:translateY(0) translateX(0)}50%{transform:translateY(280px) translateX(9px)}100%{transform:translateY(560px) translateX(-6px)}}
 .sch-wx-bg-cloud{background:linear-gradient(180deg,rgba(148,163,184,.06),rgba(148,163,184,.01) 70%)}
-.sch-wx-cloud{position:absolute;left:-18%;opacity:.28;animation-name:sch-wx-drift;animation-timing-function:linear;animation-iteration-count:infinite}
-@keyframes sch-wx-drift{to{transform:translateX(160%)}}
+.sch-wx-cloud{position:absolute;left:-18%;opacity:.32;animation-name:sch-wx-drift;animation-timing-function:linear;animation-iteration-count:infinite}
+@keyframes sch-wx-drift{to{transform:translateX(420px)}}
 .sch-wx-bg-sun{background:radial-gradient(circle at 88% 4%,rgba(250,204,21,.12),rgba(250,204,21,0) 55%)}
 .sch-wx-flash{position:absolute;inset:0;background:rgba(255,255,255,.4);opacity:0;animation:sch-wx-flash 7s infinite}
 @keyframes sch-wx-flash{0%,93%,100%{opacity:0}94%{opacity:.55}95%{opacity:0}96%{opacity:.3}97%{opacity:0}}
@@ -160,7 +163,7 @@ const ScheduleApp = (() => {
 .sch-week-block:last-of-type{border-bottom:none}
 .sch-daynum-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));position:relative;z-index:1}
 .sch-daynum-cell{text-align:center;font-size:11px;font-weight:800;color:var(--tx2);cursor:pointer;padding:2px 0;border-radius:7px;position:relative}
-.sch-wx-ico{position:absolute;top:-1px;right:1px;font-size:7px;line-height:1;opacity:.9;pointer-events:none}
+.sch-wx-ico{position:absolute;top:-3px;right:-3px;font-size:9px;line-height:1;width:13px;height:13px;display:flex;align-items:center;justify-content:center;background:var(--surf);border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.22);pointer-events:none;z-index:2}
 .sch-daynum-cell.other{opacity:.32}
 .sch-daynum-cell.sun{color:#ef4444}
 .sch-daynum-cell.sat{color:#3b82f6}
@@ -330,7 +333,7 @@ const ScheduleApp = (() => {
     if (kind === 'rain' || kind === 'storm') {
       const drops = Array.from({ length: 22 }, () => {
         const left = (Math.random() * 100).toFixed(1);
-        const dur = (0.55 + Math.random() * 0.45).toFixed(2);
+        const dur = (0.9 + Math.random() * 0.5).toFixed(2);
         const delay = (-Math.random() * 2).toFixed(2);
         return `<span class="sch-wx-drop" style="left:${left}%;animation-duration:${dur}s;animation-delay:${delay}s"></span>`;
       }).join('');
@@ -884,12 +887,12 @@ const ScheduleApp = (() => {
         const isToday = d.dateStr === todayStr;
         const wx = _weatherMap[d.dateStr];
         const wi = wx ? _wmoInfo(wx.code) : null;
-        // ★ 날씨는 배경에 아주 옅게만 깔아서 숫자 가독성을 절대 해치지 않도록 함(8% 배경 + 아이콘 1개)
-        //   단, "오늘" 표시(진한 배경 원)는 인라인 style보다 우선순위가 밀리므로 오늘은 배경 틴트를 건너뜀
-        const wxStyle = (wi && !isToday) ? ` style="background:linear-gradient(rgba(${wi.rgb},.16),rgba(${wi.rgb},.05))"` : '';
+        // ★ 날씨는 숫자 칸 전체를 물들이지 않고, 우측 상단의 작은 원형 배지 아이콘 하나로만
+        //   깔끔하게 표시한다(기존엔 옅은 배경색을 깔았는데 오히려 어색하고 눈에 잘 안 띄었음 —
+        //   구글 캘린더·애플 날씨처럼 작은 뱃지 하나가 훨씬 또렷하고 프로페셔널하게 인식된다)
         const wxIco = wi ? `<span class="sch-wx-ico" title="${wx.tMin}° / ${wx.tMax}°">${wi.ico}</span>` : '';
         return `
-        <div class="sch-daynum-cell${d.other ? ' other' : ''}${isToday ? ' today' : ''}${d.dateStr === _selDate ? ' selected' : ''}${d.dow === 0 ? ' sun' : ''}${d.dow === 6 ? ' sat' : ''}"${wxStyle}
+        <div class="sch-daynum-cell${d.other ? ' other' : ''}${isToday ? ' today' : ''}${d.dateStr === _selDate ? ' selected' : ''}${d.dow === 0 ? ' sun' : ''}${d.dow === 6 ? ' sat' : ''}"
           onclick="ScheduleApp.openDayDetail('${d.dateStr}')">${wxIco}${d.cellDay}</div>`;
       }).join('');
       const trackRowsHtml = tracks.map(track => {
