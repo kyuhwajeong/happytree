@@ -108,6 +108,23 @@ const ScheduleApp = (() => {
 .sch-selday-title-btn{cursor:pointer;border-radius:8px;padding:2px 6px;margin:-2px -6px;transition:background .15s}
 .sch-selday-title-btn:hover{background:var(--card2)}
 .sch-selday-wx{font-size:12px;font-weight:700;color:var(--tx3);background:var(--card2);border-radius:999px;padding:3px 10px;flex-shrink:0}
+/* ══ 날씨 배경 애니메이션(일정 상세 패널) ══ */
+#sch-selday-panel{position:relative}
+.sch-selday-content{position:relative;z-index:1} /* ★ 배경 애니메이션 위에 내용이 항상 또렷하게 그려지도록 */
+.sch-wx-bg{position:absolute;inset:-4px;overflow:hidden;pointer-events:none;z-index:0;border-radius:14px}
+.sch-wx-bg-rain{background:linear-gradient(180deg,rgba(59,130,246,.07),rgba(59,130,246,.01) 60%)}
+.sch-wx-drop{position:absolute;top:-10%;width:2px;height:16px;background:linear-gradient(rgba(96,165,250,0),rgba(96,165,250,.55));border-radius:2px;animation-name:sch-wx-fall;animation-timing-function:linear;animation-iteration-count:infinite}
+@keyframes sch-wx-fall{to{transform:translateY(720%)}}
+.sch-wx-bg-snow{background:linear-gradient(180deg,rgba(125,211,252,.08),rgba(125,211,252,.01) 60%)}
+.sch-wx-flake{position:absolute;top:-10%;color:rgba(186,230,253,.9);animation-name:sch-wx-snowfall;animation-timing-function:linear;animation-iteration-count:infinite}
+@keyframes sch-wx-snowfall{0%{transform:translateY(0) translateX(0)}50%{transform:translateY(340%) translateX(9px)}100%{transform:translateY(720%) translateX(-6px)}}
+.sch-wx-bg-cloud{background:linear-gradient(180deg,rgba(148,163,184,.06),rgba(148,163,184,.01) 70%)}
+.sch-wx-cloud{position:absolute;left:-18%;opacity:.28;animation-name:sch-wx-drift;animation-timing-function:linear;animation-iteration-count:infinite}
+@keyframes sch-wx-drift{to{transform:translateX(160%)}}
+.sch-wx-bg-sun{background:radial-gradient(circle at 88% 4%,rgba(250,204,21,.12),rgba(250,204,21,0) 55%)}
+.sch-wx-flash{position:absolute;inset:0;background:rgba(255,255,255,.4);opacity:0;animation:sch-wx-flash 7s infinite}
+@keyframes sch-wx-flash{0%,93%,100%{opacity:0}94%{opacity:.55}95%{opacity:0}96%{opacity:.3}97%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.sch-wx-drop,.sch-wx-flake,.sch-wx-cloud,.sch-wx-flash{animation:none!important}}
 .sch-date-jump-inp{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;border:none}
 .sch-detail-sec-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
 .sch-mini-add-btn{padding:6px 11px;border-radius:8px;background:var(--card2);border:1px solid var(--bdr2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer}
@@ -293,18 +310,55 @@ const ScheduleApp = (() => {
   const SEOUL_COORD = { lat: 37.5665, lon: 126.9780 }; // ★ 위치 권한이 없거나 실패했을 때만 쓰는 대체 좌표(평상시엔 실제 현재 위치 사용)
 
   function _wmoInfo(code) {
-    // WMO Weather Code → {아이콘, 배경 톤}. 톤은 --a 등 팔레트 변수를 안 쓰고
+    // WMO Weather Code → {아이콘, 배경 톤, 애니메이션 종류}. 톤은 --a 등 팔레트 변수를 안 쓰고
     // 날씨 자체의 색감(하늘/비/눈 등)을 아주 옅게 써서 "그날의 분위기"처럼 자연스럽게.
-    if (code === 0) return { ico: '☀️', rgb: '250,204,21' };            // 맑음
-    if (code <= 2) return { ico: '🌤️', rgb: '250,204,21' };             // 대체로 맑음
-    if (code === 3) return { ico: '☁️', rgb: '148,163,184' };           // 흐림
-    if (code === 45 || code === 48) return { ico: '🌫️', rgb: '148,163,184' }; // 안개
-    if (code >= 51 && code <= 67) return { ico: '🌧️', rgb: '59,130,246' };    // 비
-    if (code >= 71 && code <= 77) return { ico: '❄️', rgb: '125,211,252' };   // 눈
-    if (code >= 80 && code <= 82) return { ico: '🌦️', rgb: '59,130,246' };    // 소나기
-    if (code >= 85 && code <= 86) return { ico: '🌨️', rgb: '125,211,252' };   // 눈 소나기
-    if (code >= 95) return { ico: '⛈️', rgb: '99,102,241' };            // 뇌우
+    if (code === 0) return { ico: '☀️', rgb: '250,204,21', kind: 'sun' };             // 맑음
+    if (code <= 2) return { ico: '🌤️', rgb: '250,204,21', kind: 'cloud' };            // 대체로 맑음
+    if (code === 3) return { ico: '☁️', rgb: '148,163,184', kind: 'cloud' };          // 흐림
+    if (code === 45 || code === 48) return { ico: '🌫️', rgb: '148,163,184', kind: 'cloud' }; // 안개
+    if (code >= 51 && code <= 67) return { ico: '🌧️', rgb: '59,130,246', kind: 'rain' };     // 비
+    if (code >= 71 && code <= 77) return { ico: '❄️', rgb: '125,211,252', kind: 'snow' };     // 눈
+    if (code >= 80 && code <= 82) return { ico: '🌦️', rgb: '59,130,246', kind: 'rain' };      // 소나기
+    if (code >= 85 && code <= 86) return { ico: '🌨️', rgb: '125,211,252', kind: 'snow' };     // 눈 소나기
+    if (code >= 95) return { ico: '⛈️', rgb: '99,102,241', kind: 'storm' };            // 뇌우
     return null;
+  }
+
+  /* ★ 날씨 종류별 배경 애니메이션 HTML — 비/눈은 낙하하는 입자를, 흐림은 떠다니는 구름을,
+     맑음은 은은한 빛 번짐만. 전부 pointer-events:none이라 클릭·터치에는 전혀 영향 없다. */
+  function _wxAnimHtml(kind) {
+    if (kind === 'rain' || kind === 'storm') {
+      const drops = Array.from({ length: 22 }, () => {
+        const left = (Math.random() * 100).toFixed(1);
+        const dur = (0.55 + Math.random() * 0.45).toFixed(2);
+        const delay = (-Math.random() * 2).toFixed(2);
+        return `<span class="sch-wx-drop" style="left:${left}%;animation-duration:${dur}s;animation-delay:${delay}s"></span>`;
+      }).join('');
+      const flash = kind === 'storm' ? '<div class="sch-wx-flash"></div>' : '';
+      return `<div class="sch-wx-bg sch-wx-bg-rain">${drops}${flash}</div>`;
+    }
+    if (kind === 'snow') {
+      const flakes = Array.from({ length: 16 }, () => {
+        const left = (Math.random() * 100).toFixed(1);
+        const dur = (4.5 + Math.random() * 3.5).toFixed(2);
+        const delay = (-Math.random() * 6).toFixed(2);
+        const size = (7 + Math.random() * 6).toFixed(0);
+        return `<span class="sch-wx-flake" style="left:${left}%;font-size:${size}px;animation-duration:${dur}s;animation-delay:${delay}s">❄</span>`;
+      }).join('');
+      return `<div class="sch-wx-bg sch-wx-bg-snow">${flakes}</div>`;
+    }
+    if (kind === 'cloud') {
+      const clouds = Array.from({ length: 3 }, (_, i) => {
+        const top = (6 + i * 24 + Math.random() * 10).toFixed(0);
+        const dur = (20 + Math.random() * 12).toFixed(1);
+        const delay = (-Math.random() * 20).toFixed(1);
+        const size = (22 + Math.random() * 12).toFixed(0);
+        return `<span class="sch-wx-cloud" style="top:${top}%;font-size:${size}px;animation-duration:${dur}s;animation-delay:${delay}s">☁️</span>`;
+      }).join('');
+      return `<div class="sch-wx-bg sch-wx-bg-cloud">${clouds}</div>`;
+    }
+    if (kind === 'sun') return `<div class="sch-wx-bg sch-wx-bg-sun"></div>`;
+    return '';
   }
 
   function _getCoords() {
@@ -350,6 +404,7 @@ const ScheduleApp = (() => {
     });
     _weatherMap = days;
     try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), coord: coords, days })); } catch (e) {}
+    console.log(`[ScheduleApp] 🌤️ 날씨 ${Object.keys(days).length}일치 로드 완료 (좌표: ${lat.toFixed(2)}, ${lon.toFixed(2)})`);
     refresh();
   }
 
@@ -1140,10 +1195,13 @@ const ScheduleApp = (() => {
       (StaffDB.getActive ? StaffDB.getActive() : []).filter(s => (StaffDB.getWorkDay ? StaffDB.getWorkDay(s.id, dateStr) : []).length > 0);
     const notices = (_buildNoticeMap(y, m)[dateStr]) || [];
     const dueIds = (typeof NoticeApp !== 'undefined' && NoticeApp.getDueList) ? NoticeApp.getDueList().map(n => n.id) : [];
+    // ★ 이 날짜의 날씨 — 뱃지 표시와 아래쪽 애니메이션 배경 둘 다 여기서 한 번만 계산
+    const wx = _weatherMap[dateStr];
+    const wi = wx ? _wmoInfo(wx.code) : null;
 
     let html = `<div class="sch-selday-hdr">
       <span class="sch-selday-title sch-selday-title-btn" onclick="ScheduleApp._openDateJump()" title="날짜로 바로 이동">🗓️ ${dateLabel}</span>
-      ${(() => { const wx = _weatherMap[dateStr]; const wi = wx ? _wmoInfo(wx.code) : null; return wi ? `<span class="sch-selday-wx">${wi.ico} ${wx.tMin}° / ${wx.tMax}°</span>` : ''; })()}
+      ${wi ? `<span class="sch-selday-wx">${wi.ico} ${wx.tMin}° / ${wx.tMax}°</span>` : ''}
       <input type="date" id="sch-date-jump-inp" value="${dateStr}" class="sch-date-jump-inp" onchange="ScheduleApp._jumpToDate(this.value)">
       <div class="sch-selday-navs">
         <button class="sch-today-btn" onclick="ScheduleApp._goToday()">오늘</button>
@@ -1254,7 +1312,9 @@ const ScheduleApp = (() => {
       html += `</div>`;
     }
 
-    return html;
+    // ★ 날씨 배경 애니메이션 — 비/눈/구름 등, 그 날짜 분위기를 은은하게 깔아준다(가독성 위해 내용은 항상 위에 그려짐)
+    const wxBg = wi ? _wxAnimHtml(wi.kind) : '';
+    return `${wxBg}<div class="sch-selday-content">${html}</div>`;
   }
 
   /* ═══════════════════════════════════════════════════════════
