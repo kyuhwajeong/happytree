@@ -288,9 +288,9 @@ const ScheduleApp = (() => {
    * 달력 날짜 칸에 은은한 배경으로 깔아준다. 위치 권한이 없거나 실패하면
    * 조용히 서울 좌표로 대체하고, 그마저 실패하면 그냥 날씨 없이 달력만 정상 표시.
    * ═══════════════════════════════════════════════════════════ */
-  const WEATHER_CACHE_KEY = 'sch_weather_cache_v1';
+  const WEATHER_CACHE_KEY = 'sch_weather_cache_v3'; // ★ v2→v3: 캐시에 좌표(coord)도 같이 저장하도록 구조 변경
   const WEATHER_TTL_MS = 3 * 60 * 60 * 1000; // 3시간마다 갱신
-  const SEOUL_COORD = { lat: 37.5665, lon: 126.9780 };
+  const SEOUL_COORD = { lat: 37.5665, lon: 126.9780 }; // ★ 위치 권한이 없거나 실패했을 때만 쓰는 대체 좌표(평상시엔 실제 현재 위치 사용)
 
   function _wmoInfo(code) {
     // WMO Weather Code → {아이콘, 배경 톤}. 톤은 --a 등 팔레트 변수를 안 쓰고
@@ -310,41 +310,46 @@ const ScheduleApp = (() => {
   function _getCoords() {
     return new Promise(resolve => {
       if (!navigator.geolocation) { resolve(SEOUL_COORD); return; }
-      const timer = setTimeout(() => resolve(SEOUL_COORD), 4000); // ★ 응답이 늦으면 서울로 대체(달력 로딩을 무한정 막지 않도록)
+      const timer = setTimeout(() => resolve(SEOUL_COORD), 4000); // ★ 응답이 늦으면 대체 좌표로(달력 로딩을 무한정 막지 않도록)
       navigator.geolocation.getCurrentPosition(
         pos => { clearTimeout(timer); resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }); },
-        () => { clearTimeout(timer); resolve(SEOUL_COORD); }, // 권한 거부 등 → 서울로 조용히 대체
-        { timeout: 4000, maximumAge: 60 * 60 * 1000 }
+        () => { clearTimeout(timer); resolve(SEOUL_COORD); }, // 권한 거부 등 → 대체 좌표로 조용히 전환
+        { timeout: 4000, maximumAge: 30 * 60 * 1000 }
       );
     });
   }
 
   async function _fetchWeather() {
-    // ★ 캐시가 3시간 이내면 재사용(위치 권한 팝업·API 호출을 매번 반복하지 않도록)
+    // ★ 캐시가 3시간 이내면 재사용(API 호출·위치 확인을 매번 반복하지 않도록).
+    //   단, 저장된 좌표와 지금 위치가 크게 다르면(다른 도시로 이동) 캐시를 쓰지 않고 새로 받는다.
+    const coords = await _getCoords();
     try {
       const cached = JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY) || 'null');
-      if (cached && Date.now() - cached.fetchedAt < WEATHER_TTL_MS && cached.days) {
+      const sameSpot = cached?.coord && Math.abs(cached.coord.lat - coords.lat) < 0.3 && Math.abs(cached.coord.lon - coords.lon) < 0.3;
+      if (cached && sameSpot && Date.now() - cached.fetchedAt < WEATHER_TTL_MS && cached.days) {
         _weatherMap = cached.days;
         refresh();
         return;
       }
     } catch (e) {}
 
-    const { lat, lon } = await _getCoords();
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=16`;
+    // ★ Open-Meteo가 daily 파라미터명을 weathercode → weather_code로 바꿨는데
+    //   예전 이름을 그대로 쓰고 있어서 응답에 해당 값이 아예 없었다(그래서 안 보였음). 여기서 고침.
+    const { lat, lon } = coords;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Asia%2FSeoul&forecast_days=16`;
     const res = await fetch(url);
     if (!res.ok) throw new Error('Open-Meteo 응답 오류: HTTP ' + res.status);
     const data = await res.json();
     const days = {};
     (data?.daily?.time || []).forEach((dateStr, i) => {
       days[dateStr] = {
-        code: data.daily.weathercode[i],
+        code: data.daily.weather_code[i],
         tMax: Math.round(data.daily.temperature_2m_max[i]),
         tMin: Math.round(data.daily.temperature_2m_min[i]),
       };
     });
     _weatherMap = days;
-    try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), days })); } catch (e) {}
+    try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), coord: coords, days })); } catch (e) {}
     refresh();
   }
 
