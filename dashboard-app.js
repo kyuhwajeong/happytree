@@ -217,6 +217,9 @@ const DashboardApp = (() => {
 .db-mini-btn{padding:7px 13px;border-radius:10px;background:var(--a);color:#fff;border:none;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap}
 .db-mini-btn.ghost{background:var(--card2);color:var(--tx2);border:1px solid var(--bdr2)}
 .db-empty-mini{text-align:center;color:var(--tx3);font-size:12px;padding:16px 8px}
+/* ★ 배경 무드 문구 — 평소엔 숨겨져 있다가 날짜/부제 영역에 마우스를 올렸을 때만 스르륵 나타남 */
+.db-mood-hover-wrap{display:inline-block;max-width:0;overflow:hidden;white-space:nowrap;opacity:0;vertical-align:bottom;transition:max-width .25s ease,opacity .2s ease}
+.ph-sub:hover .db-mood-hover-wrap{max-width:220px;opacity:1}
 
 /* ══════════════════════════════════════════════════════════════
  * 대시보드 스타일 3종 — 관리 > 테마에서 admin이 선택 (색상 팔레트와 별개)
@@ -402,7 +405,7 @@ const DashboardApp = (() => {
           <div class="logo-badge" onclick="DashboardApp.render()" title="새로고침" style="cursor:pointer"><img id="db-logo" src="" alt=""></div>
           <div style="min-width:0">
             <div class="ph-title">${_esc(_greeting())} <span id="db-admin-badge" class="admin-badge hidden">🔑 관리자</span></div>
-            <div class="ph-sub">${dateStr}${_esc(_bgMoodCaption())}</div>
+            <div class="ph-sub">${dateStr}<span class="db-mood-hover-wrap">${_esc(_bgMoodCaption())}</span></div>
           </div>
         </div>
         ${_quoteBannerHtml()}
