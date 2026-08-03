@@ -1198,11 +1198,20 @@ const App = (() => {
   /* ══ 관리 PAGE ══ */
   function _renderManage(){
     const sess=DB.getSession();
-    _q('mg-sess').textContent=sess?`${sess.username} (${sess.role==='admin'?'관리자':'운용자'}) 로그인 중`:'로그인 필요';
+    const _roleLbl={admin:'관리자',manager:'매니저',operator:'운용자',teacher:'강사'}[sess?.role]||'운용자';
+    _q('mg-sess').textContent=sess?`${sess.username} (${_roleLbl}) 로그인 중`:'로그인 필요';
     _updateToggleBtn();
     const isAdmin=DB.isAdmin();
-    document.querySelectorAll('.mg-tab').forEach((t,i)=>{if(i<2)t.style.display=isAdmin?'':'none';});
-    if(!isAdmin&&S.mgTab==='classes')S.mgTab='theme';
+    // ★ 버그 수정: '반' 탭(index 0)까지 계정 탭(index 1)과 함께 묶여서
+    //   admin 아니면 통째로 숨겨지고 있었음 — 그래서 operator는 카드 내부
+    //   버튼 권한을 열어줘도 '반' 탭 자체를 못 봐서 반/교재 추가가 불가능했음.
+    //   '반' 탭은 operator에게도 열어주고(canManageCls), '계정' 탭만 admin 전용 유지.
+    const canManageCls=isAdmin||DB.getRole()==='operator';
+    document.querySelectorAll('.mg-tab').forEach((t,i)=>{
+      if(i===0) t.style.display=canManageCls?'':'none';
+      else if(i===1) t.style.display=isAdmin?'':'none';
+    });
+    if(!canManageCls&&S.mgTab==='classes')S.mgTab='theme';
     if(!isAdmin&&S.mgTab==='accounts')S.mgTab='theme';
     mgTab(S.mgTab);
   }
