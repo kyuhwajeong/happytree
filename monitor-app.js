@@ -13,6 +13,15 @@
  *   MENU[key]||key 폴백 구조라 라벨이 없어도 동작은 했지만, 원문 키 대신 사람이
  *   읽을 수 있는 이름으로 표시되도록 보강.
  *
+ * ■ v4.2 — 🧹 원격 캐시 전체 삭제 (신규)
+ *   세션 상세 패널(PC/모바일 둘 다)에 "🧹 원격 캐시 삭제" 버튼 추가.
+ *   MonitorDB.sendRemoteCommand(sessionId,'clearAll')를 호출해 Firebase에
+ *   명령을 기록하면, 대상 세션의 브라우저(탭이 열려 연결된 상태)가
+ *   monitor-db.js의 리스너로 감지해 Cache Storage·IndexedDB·쿠키·
+ *   localStorage/sessionStorage를 전부 지우고 새로고침한다.
+ *   ※ FCM 푸시 기반이 아니라 탭이 열려 있어야 즉시 반영됨 (monitor-db.js
+ *     v5.2 주석 참고)
+ *
  * ■ 정상 사용자에게는 아무 영향 없음
  *   - 알림은 admin/master 모니터링 창에서만 발생
  *   - 플래그·통계는 모니터링 대시보드 전용 UI
@@ -684,6 +693,7 @@ const MonitorApp = (() => {
               ? '<span style="color:#4ade80;font-size:11px">● 접속 중</span>'
               : '<span style="color:#475569;font-size:11px">○ 오프라인</span>'}
             <button class="mon-ddel-btn" onclick="MonitorApp.deleteOne('${s.id}')">🗑 이 세션 삭제</button>
+            <button class="mon-ddel-btn" style="background:#0891b2" onclick="MonitorApp.remoteWipe('${s.id}')" title="이 세션의 브라우저 캐시·저장소를 원격으로 전체 삭제하고 새로고침시킵니다 (탭이 열려있어야 즉시 반영)">🧹 원격 캐시 삭제</button>
           </div>
           <div class="mon-dmeta">
             <span>🌐 ${_e(s.ip)}</span>
@@ -863,6 +873,43 @@ const MonitorApp = (() => {
     } catch(err) {
       console.warn('[MonitorApp] deleteOne Firebase 오류:', err);
       _toast('⚠️ Firebase 삭제 실패 — 새로고침 후 재시도');
+    }
+  }
+
+  /* 원격 캐시 전체 삭제 (v5.2 신규)
+   * 대상 세션의 브라우저 탭이 열려 Firebase에 연결돼 있으면 즉시 실행됨.
+   * 실행 시 Cache Storage/IndexedDB/쿠키/localStorage/sessionStorage가
+   * 전부 삭제되고 새로고침되므로, 그 기기는 재로그인이 필요해진다. */
+  async function remoteWipe(id, e) {
+    if (e) e.stopPropagation();
+    const s = _sessions.find(x => x.id === id);
+    if (!s) return;
+    const name   = `${s.username} (${_ts(s.loginAt)})`;
+    const online = MonitorDB.isOnline(s);
+
+    if (!online) {
+      if (!window.confirm(`[${name}]
+
+현재 오프라인(탭이 닫혀있을 가능성) 세션입니다.
+지금 명령을 보내도 그 브라우저가 다시 열릴 때까지는 반영되지 않습니다.
+
+그래도 예약해둘까요?`)) return;
+    } else {
+      if (!window.confirm(`[${name}]
+
+이 기기의 브라우저 캐시·저장소를 전체 삭제하고 새로고침시킵니다.
+로그인 세션도 함께 지워져 재로그인이 필요해집니다.
+
+진행하시겠습니까?`)) return;
+    }
+
+    _toast('🧹 원격 캐시 삭제 명령 전송 중...');
+    try {
+      const ok = await MonitorDB.sendRemoteCommand(id, 'clearAll');
+      _toast(ok ? '🧹 명령 전송 완료 — 대상 화면이 곧 초기화됩니다' : '⚠️ 명령 전송 실패 — 다시 시도해주세요');
+    } catch (err) {
+      console.warn('[MonitorApp] remoteWipe 오류:', err);
+      _toast('⚠️ 명령 전송 실패 — 다시 시도해주세요');
     }
   }
 
@@ -1068,10 +1115,14 @@ const MonitorApp = (() => {
           <div class="mon-flags" style="margin-bottom:8px;">
             ${anomalies.map(f=>`<span class="mon-flag ${f.type}">${f.icon} ${f.label}</span>`).join('')}
           </div>` : ''}
-        <!-- 삭제 버튼 -->
+        <!-- 삭제 / 원격 초기화 버튼 -->
         <button onclick="MonitorApp.deleteOne('${s.id}')"
-          style="font-size:11px;font-weight:700;color:#ef4444;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:7px;padding:5px 12px;cursor:pointer;margin-bottom:10px;">
+          style="font-size:11px;font-weight:700;color:#ef4444;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:7px;padding:5px 12px;cursor:pointer;margin-bottom:10px;margin-right:6px;">
           🗑 이 세션 삭제
+        </button>
+        <button onclick="MonitorApp.remoteWipe('${s.id}')"
+          style="font-size:11px;font-weight:700;color:#0891b2;background:rgba(8,145,178,.12);border:1px solid rgba(8,145,178,.3);border-radius:7px;padding:5px 12px;cursor:pointer;margin-bottom:10px;">
+          🧹 원격 캐시 삭제
         </button>
         <!-- 타임라인 -->
         <div style="font-size:10px;color:#475569;margin-bottom:5px;">액션 로그 ${acts.length}건 (최신순)</div>
@@ -1326,6 +1377,7 @@ const MonitorApp = (() => {
     selectSession,
     switchRightTab,
     deleteOne, clearFinished, clearAll,
+    remoteWipe,
     _toggleNotif,
     /* 모바일 바텀 시트 */
     showStatsSheet, hideStatsSheet, _closeSheet,
