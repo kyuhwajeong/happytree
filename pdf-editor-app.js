@@ -35,6 +35,7 @@ const PdfEditorApp = (() => {
   let _cssInjected = false;
   let _fontReady = null;  // Promise
   let _dragSrcIdx = null; // 그리드 드래그 재정렬용
+  let _fileDragCounter = 0; // 파일 드래그&드롭(dragenter/leave 중첩 처리용)
   let _editingId = null;  // 편집 중인 페이지 id
   let _editorScale = 1;   // 편집기 캔버스 px per pt
   let _selAnnotId = null;
@@ -58,6 +59,9 @@ const PdfEditorApp = (() => {
 .pe-spacer{flex:1}
 .pe-count{font-size:11.5px;color:var(--tx3);font-weight:700}
 .pe-body{flex:1;overflow-y:auto;padding:14px}
+.pe-wrap.pe-filedrop .pe-body{outline:3px dashed var(--a);outline-offset:-3px;background:var(--a10);border-radius:10px}
+.pe-filedrop-hint{position:sticky;top:0;z-index:5;text-align:center;font-size:12px;font-weight:700;color:var(--a);background:var(--a10);padding:8px;border-radius:8px;margin-bottom:10px;pointer-events:none;display:none}
+.pe-wrap.pe-filedrop .pe-filedrop-hint{display:block}
 .pe-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--tx3);padding:60px 20px;text-align:center}
 .pe-empty-ico{font-size:44px}
 .pe-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
@@ -314,7 +318,7 @@ const PdfEditorApp = (() => {
   function _rerender() { if (_cid) render(_cid); }
 
   function _shellHtml() {
-    const body = `<div class="pe-wrap">${_toolbarHtml()}<div class="pe-body" id="pe-body">${_pages.length ? _gridHtml() : _emptyHtml()}</div></div>`;
+    const body = `<div class="pe-wrap" ondragenter="PdfEditorApp._onBodyDragEnter(event)" ondragover="PdfEditorApp._onBodyDragOver(event)" ondragleave="PdfEditorApp._onBodyDragLeave(event)" ondrop="PdfEditorApp._onBodyDrop(event)">${_toolbarHtml()}<div class="pe-body" id="pe-body"><div class="pe-filedrop-hint">📥 여기에 놓으면 새 페이지로 추가됩니다</div>${_pages.length ? _gridHtml() : _emptyHtml()}</div></div>`;
     const editor = _editingId ? _editorOverlayHtml() : '';
     const picker = _pickerOpen ? _pickerModalHtml() : '';
     const save = _saveOpen ? _saveModalHtml() : '';
@@ -337,7 +341,7 @@ const PdfEditorApp = (() => {
   }
   function _emptyHtml() {
     return `<div class="pe-empty"><div class="pe-empty-ico">📝</div>
-      <div>PDF나 이미지를 추가해서 워크시트를 만들어보세요.<br>여러 PDF를 올려 페이지 순서를 자유롭게 배치하고,<br>텍스트·이미지를 얹은 뒤 하나의 PDF로 내보낼 수 있어요.</div></div>`;
+      <div>PDF나 이미지를 추가해서 워크시트를 만들어보세요.<br>여러 PDF를 올려 페이지 순서를 자유롭게 배치하고,<br>텍스트·이미지를 얹은 뒤 하나의 PDF로 내보낼 수 있어요.<br><br>💡 파일을 여기로 드래그해서 놓아도 바로 추가됩니다.</div></div>`;
   }
   function _gridHtml() {
     return `<div class="pe-grid" id="pe-grid">${_pages.map((p, i) => _cardHtml(p, i)).join('')}</div>`;
@@ -368,6 +372,73 @@ const PdfEditorApp = (() => {
     _rerender();
   }
   function _onDragEnd() { _dragSrcIdx = null; }
+
+  /* ══════════════════ 파일 드래그&드롭으로 추가 ══════════════════ */
+  function _isFileDrag(e) {
+    const types = e.dataTransfer && e.dataTransfer.types;
+    return !!(types && Array.from(types).includes('Files'));
+  }
+  function _onBodyDragEnter(e) {
+    if (!_isFileDrag(e)) return;
+    e.preventDefault();
+    _fileDragCounter++;
+    const wrap = e.currentTarget; if (wrap) wrap.classList.add('pe-filedrop');
+  }
+  function _onBodyDragOver(e) { if (_isFileDrag(e)) e.preventDefault(); }
+  function _onBodyDragLeave(e) {
+    if (!_isFileDrag(e)) return;
+    _fileDragCounter = Math.max(0, _fileDragCounter - 1);
+    if (_fileDragCounter === 0) { const wrap = e.currentTarget; if (wrap) wrap.classList.remove('pe-filedrop'); }
+  }
+  async function _onBodyDrop(e) {
+    _fileDragCounter = 0;
+    const wrap = e.currentTarget; if (wrap) wrap.classList.remove('pe-filedrop');
+    if (!_isFileDrag(e)) return; // 내부 페이지 재정렬 드래그 — 각 카드 핸들러가 이미 처리함
+    e.preventDefault();
+    await _addDroppedFiles(e.dataTransfer.files);
+  }
+  async function _addDroppedFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const pdfs = files.filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
+    const imgs = files.filter(f => f.type.startsWith('image/'));
+    const otherCount = files.length - pdfs.length - imgs.length;
+    if (!pdfs.length && !imgs.length) { _toast('⚠️ PDF 또는 이미지 파일만 추가할 수 있습니다'); return; }
+    _setBusy('파일 추가하는 중...');
+    for (const f of pdfs) {
+      try { await _addPdfBytes(f.name, await f.arrayBuffer()); }
+      catch (e) { _toast('⚠️ ' + (e.message || 'PDF를 불러오지 못했습니다')); }
+    }
+    for (const f of imgs) {
+      try { await _addImageFile(f); }
+      catch (e) { _toast('⚠️ 이미지를 불러오지 못했습니다: ' + (e.message || '')); }
+    }
+    _clearBusy();
+    if (otherCount > 0) _toast(`⚠️ 지원하지 않는 파일 ${otherCount}개는 제외했습니다`);
+  }
+  function _stageDragOver(e) { if (_isFileDrag(e)) e.preventDefault(); }
+  async function _stageDrop(e) {
+    if (!_isFileDrag(e)) return;
+    e.preventDefault();
+    const files = e.dataTransfer && e.dataTransfer.files;
+    const file = files && Array.from(files).find(f => f.type.startsWith('image/'));
+    if (!file) { _toast('⚠️ 이미지 파일만 페이지 위에 바로 추가할 수 있어요(PDF는 워크스페이스로 드래그해주세요)'); return; }
+    const page = _pages.find(p => p.id === _editingId); if (!page) return;
+    const stage = _q('pe-stage'); if (!stage) return;
+    const rect = stage.getBoundingClientRect();
+    const scale = _editorScaleFor(page);
+    const dropX = (e.clientX - rect.left) / scale, dropY = (e.clientY - rect.top) / scale;
+    try {
+      const dataUrl = await _readFileAsDataUrl(file);
+      const img = await _loadImgEl(dataUrl);
+      const maxW = page.width * 0.5;
+      const s = Math.min(maxW / (img.naturalWidth || img.width), 1);
+      const w = (img.naturalWidth || img.width) * s, h = (img.naturalHeight || img.height) * s;
+      const a = { id: _nid(), type: 'image', x: Math.max(0, Math.min(page.width - w, dropX - w / 2)), y: Math.max(0, Math.min(page.height - h, dropY - h / 2)), w, h, dataUrl, _imgEl: img };
+      page.annots.push(a); _selAnnotId = a.id; page._thumbUrl = null;
+      _rerender();
+    } catch (err) { _toast('⚠️ 이미지를 추가하지 못했습니다'); }
+  }
   function _deletePage(id) {
     if (!confirm('이 페이지를 삭제할까요?')) return;
     _pages = _pages.filter(p => p.id !== id);
@@ -413,7 +484,7 @@ const PdfEditorApp = (() => {
       </div>
       <div class="pe-editor-main">
         <div class="pe-editor-canvas-wrap">
-          <div class="pe-page-stage" id="pe-stage" style="width:${_editorW()}px;height:${_editorH(page)}px" onmousedown="PdfEditorApp._stageMouseDown(event)">
+          <div class="pe-page-stage" id="pe-stage" style="width:${_editorW()}px;height:${_editorH(page)}px" onmousedown="PdfEditorApp._stageMouseDown(event)" ondragover="PdfEditorApp._stageDragOver(event)" ondrop="PdfEditorApp._stageDrop(event)">
             <canvas id="pe-stage-cv"></canvas>
             ${page.annots.map(a => _annotOverlayHtml(a, page)).join('')}
           </div>
@@ -760,6 +831,8 @@ const PdfEditorApp = (() => {
     _toggleSelectMode, _toggleSelect, _deleteSelected, _deletePage,
     _exportAll, _exportSelected,
     _onDragStart, _onDragOver, _onDrop, _onDragEnd,
+    _onBodyDragEnter, _onBodyDragOver, _onBodyDragLeave, _onBodyDrop,
+    _stageDragOver, _stageDrop,
     _openEditor, _closeEditor, _editorAddText, _editorAddImage, _editorDeleteAnnot,
     _annotMouseDown, _annotResizeStart, _annotUpdate, _stageMouseDown,
     _saveTitleInput, _saveCatInput, _saveVisInput, _cancelSave, _confirmSave,
