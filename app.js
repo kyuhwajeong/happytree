@@ -119,6 +119,7 @@ const App = (() => {
   let _autoLogoutTimer=null;
   let _drag={item:null,bookId:null,name:'',fromZone:null,clsId:null,mk:null};
   let _lpTimer=null, _lpActive=false, _lpStartX=0, _lpStartY=0;
+  let _lastPoolFocusCls=null; // ★ 교재 목록 입력창 중 "마지막으로 실제 사용한 반"만 재포커스하기 위한 추적 (자동 스크롤 이동 버그 수정용)
 
   function _resetAutoLogout(){
     clearTimeout(_autoLogoutTimer);
@@ -1381,7 +1382,8 @@ const App = (() => {
       const btn=document.createElement('button'); btn.className='bm-add-btn'; btn.textContent='추가';
       const doAdd=async()=>{
         if(btn.disabled) return; // ★ 이미 처리 중이면 무시 (연타 방어 2중 안전장치)
-        const name=inp.value.trim(); if(!name){_toast('⚠️ 교재명을 입력해주세요','error');inp.focus();return;}
+        const name=inp.value.trim(); if(!name){_toast('⚠️ 교재명을 입력해주세요','error');inp.focus({preventScroll:true});return;}
+        _lastPoolFocusCls=clsId; // ★ 지금 이 반에서 교재를 추가 중이었다는 걸 기록 (재렌더링 후 재포커스 대상 판단용)
         // ★ 네트워크 왕복(충돌검사 포함) 도중에도 "눌렸다"는 걸 즉시 알 수 있게
         //   버튼을 먼저 잠그고 입력칸도 먼저 비운다 → 응답이 늦어도 재클릭으로 중복 추가되지 않음
         btn.disabled=true; const _origTxt=btn.textContent; btn.textContent='추가 중...';
@@ -1394,14 +1396,20 @@ const App = (() => {
           console.warn('[교재추가]',e);
         }finally{
           btn.disabled=false; btn.textContent=_origTxt; inp.disabled=false;
-          setTimeout(()=>inp.focus(),50);
+          setTimeout(()=>inp.focus({preventScroll:true}),50);
         }
       };
       btn.onclick=doAdd;
+      inp.addEventListener('focus',()=>{_lastPoolFocusCls=clsId;}); // ★ 사용자가 직접 클릭해 포커스한 경우도 추적
       inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();doAdd();}});
       ar.appendChild(inp); ar.appendChild(btn); zone.appendChild(ar);
-      // 추가 직후 포커스
-      setTimeout(()=>inp.focus(),100);
+      /* ★ 버그 수정: 반 목록이 여러 개일 때, 어느 반에서 교재를 추가·삭제·이동해도
+       *   Firebase 'classes' 리스너가 전체 카드를 다시 그리면서 이 setTimeout(focus)이
+       *   "모든" 카드에 대해 실행돼, 마지막 카드의 입력창이 포커스를 가져가며
+       *   화면이 그쪽으로 자동 스크롤되던 문제(전체삭제·X삭제·추가 모두 동일 증상).
+       *   → 방금 실제로 사용하던 반의 입력창일 때만, 그리고 preventScroll로
+       *   스크롤 이동 없이 포커스한다. */
+      if(_lastPoolFocusCls===clsId) setTimeout(()=>inp.focus({preventScroll:true}),100);
     }
     _setupDropZone(list,'pool',clsId,mk);
     return zone;
