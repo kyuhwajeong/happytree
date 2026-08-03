@@ -1,5 +1,5 @@
 /**
- * guest-mode.js — HappyTree Guest Narration System v3.0
+ * guest-mode.js — HappyTree Guest Narration System v3.1
  * ══════════════════════════════════════════════════════
  * 변경사항 v3.0:
  *  ① 이전 버튼 추가 (첫 스텝 제외)
@@ -8,6 +8,16 @@
  *  ④ SVG 마스크 구멍 뚫기 → 하이라이트 영역 선명하게
  *  ⑤ 말풍선 라벨 + 펄스 링
  *  ⑥ 모든 입력 완전 차단 + 토스트
+ *
+ * 변경사항 v3.1 (dev 브랜치 신규 모듈 반영):
+ *  ⑦ NARRATIONS.dashboard 추가 — 🏠 홈 대시보드(일정위젯·교재현황·섹션순서·명언)
+ *  ⑧ NARRATIONS.archive 추가 — 🗂 콘텐츠(자료실·영상워크시트·학습게임 3탭 통합)
+ *  ⑨ 🔒 보안 수정: _patchModules() 화이트리스트에 ScheduleDB/NoticeDB/
+ *     ArchiveDB/EduVideoDB가 빠져 있어 게스트 세션에서도 이 4개 모듈은
+ *     실제 Firebase에 쓰기가 가능한 상태였음(다른 4개 모듈만 보호되고
+ *     있었음) — 배열에 추가해서 동일하게 no-op 처리되도록 수정
+ *  ⑩ (참고) students/staff 나레이션은 이미 존재했으나 README에는 누락되어
+ *     있던 것으로 확인 — 문서만 별도로 정정함(코드 변경 없음)
  */
 const GuestMode = (() => {
   'use strict';
@@ -903,6 +913,77 @@ const GuestMode = (() => {
         },
       ],
     },
+
+    /* ── 홈 대시보드 (v3.1 신규) ── */
+    dashboard: {
+      title: '🏠 홈 대시보드',
+      accent: '#f59e0b',
+      steps: [
+        {
+          text: '🏠 <b>홈 대시보드</b> 화면입니다.\n\n로그인 후 가장 먼저 볼 수 있는 요약 화면으로, 오늘 챙겨야 할 일정과 교재 진도 현황을 한눈에 모아 보여줍니다.\n\n(운용자 계정은 관리자가 "홈" 메뉴 권한을 별도로 열어줘야 접근할 수 있어요.)',
+          highlight: '#page-dashboard',
+          highlightLabel: '홈 대시보드 화면',
+        },
+        {
+          text: '🗓️ <b>일정표 위젯</b>입니다.\n\n방학·공휴일·일반 일정은 물론, 직원 근무 기록과 급여일, 예약된 공지 알림까지 이 캘린더 하나에 통합되어 표시됩니다.\n\n오늘 날짜가 기본으로 선택되어 있고, 다른 날짜를 탭하면 그날의 상세 내용으로 바로 바뀝니다. 배경에는 그날의 <b>날씨</b>도 은은하게 표시돼요.',
+          highlight: '#sch-mini-cal',
+          highlightLabel: '통합 일정 캘린더',
+        },
+        {
+          text: '📊 <b>교재 학습 현황 요약</b>입니다.\n\n반·교재별로 아직 수행하지 못한 학생과 챕터 수를 카드로 보여줍니다.\n\n카드를 탭하면 바로 해당 반·교재의 학습 현황(매트릭스) 화면으로 이동해서 세부 체크까지 이어서 할 수 있어요.',
+          highlight: '#db-book-sec',
+          highlightLabel: '교재 학습 현황 카드',
+        },
+        {
+          text: '≡ <b>화면 구성 순서 변경</b> 버튼입니다.\n\n일정표·교재현황·즐겨찾기 콘텐츠 등 섹션의 표시 순서를 원하는 대로 바꿀 수 있어요. 설정은 기기별로 저장되어, 내 화면에서만 원하는 순서로 보입니다.',
+          highlight: '.db-reorder-btn',
+          highlightLabel: '섹션 순서 변경',
+        },
+        {
+          text: '💬 화면 상단의 <b>오늘의 명언</b>도 매일 자동으로 바뀌면서 짧게 하루를 시작하는 기분을 더해줍니다.\n\n홈 화면은 이렇게 "오늘 뭘 해야 하지?"를 가장 빠르게 파악하는 용도로 만들어졌어요. 🎉',
+          highlight: '#db-quote-banner',
+          highlightLabel: '오늘의 명언',
+        },
+      ],
+    },
+
+    /* ── 콘텐츠: 자료실 · 영상 워크시트 · 학습 게임 (v신규) ── */
+    archive: {
+      title: '🗂 콘텐츠 (자료실 · 영상 · 게임)',
+      accent: '#e11d48',
+      steps: [
+        {
+          text: '🗂 <b>콘텐츠</b> 화면입니다.\n\n파일 <b>자료실</b>, 🎬 <b>영상 워크시트</b>, 🎮 <b>학습 게임</b> 3가지 도구가 탭 하나로 묶여 있습니다.\n\n먼저 기본 탭인 자료실부터 살펴볼게요.',
+          highlight: '#page-archive .ar-tool-tabs',
+          highlightLabel: '3개 도구 탭',
+          action: () => { if (typeof ArchiveApp !== 'undefined') ArchiveApp._selectTool('files'); },
+        },
+        {
+          text: '🔍 <b>검색 · 분류</b> 영역입니다.\n\n파일명·설명은 물론 문서 내용(엑셀 등)까지 검색되고, 분류 탭으로 원하는 카테고리만 골라 볼 수 있어요.\n\n"＋ 분류" 버튼으로 새 분류도 바로 추가할 수 있습니다.',
+          highlight: '#page-archive .ar-cats',
+          highlightLabel: '검색 & 분류',
+          action: () => { if (typeof ArchiveApp !== 'undefined') ArchiveApp._selectTool('files'); },
+        },
+        {
+          text: '📁 자료 카드를 탭하면 이미지는 바로, PDF·엑셀은 미리보기 화면에서 바로 확인할 수 있어요.\n\n오른쪽 아래 <b>＋ 버튼</b>으로 파일을 올리고, 여러 개를 선택해서 zip으로 한 번에 내려받을 수도 있습니다.\n\n비밀번호를 걸어 특정 자료만 보호하는 것도 가능해요.',
+          highlight: '#page-archive .ar-fab',
+          highlightLabel: '자료 올리기',
+          action: () => { if (typeof ArchiveApp !== 'undefined') ArchiveApp._selectTool('files'); },
+        },
+        {
+          text: '🎬 <b>영상 워크시트</b> 탭입니다.\n\n유튜브 영상을 등록하면 대본에서 AI가 자동으로 단어·뜻·예문을 뽑아주고, 이미지가 포함된 학습지 PDF까지 바로 만들어줍니다.\n\n주제별(여행·동물·음식 등)로 영상을 분류해서 관리할 수 있어요.',
+          highlight: '#page-archive .ev-cats-row',
+          highlightLabel: '영상 워크시트',
+          action: () => { if (typeof ArchiveApp !== 'undefined') ArchiveApp._selectTool('video-worksheet'); },
+        },
+        {
+          text: '🎮 <b>학습 게임</b> 탭입니다.\n\n짝맞추기 · 스펠링 · 퀴즈 3종 게임을 만들 수 있어요. 영상 대본이나 직접 입력한 단어를 그대로 재활용하기 때문에 새로 준비할 필요가 없습니다.\n\n빔프로젝터로 다 같이 하는 화면 게임과, 인쇄용 워크시트를 둘 다 만들 수 있어요.',
+          highlight: '#page-archive .gm-source-tabs',
+          highlightLabel: '학습 게임 만들기',
+          action: () => { if (typeof ArchiveApp !== 'undefined') ArchiveApp._selectTool('games'); },
+        },
+      ],
+    },
   };
 
   /* ══════════════════════════════════════════════
@@ -1479,7 +1560,11 @@ input[data-gm-ro], textarea[data-gm-ro] {
     WRITE_M.forEach(m=>{ if(typeof DB[m]==='function') DB[m]=()=>{_toast();return Promise.resolve(null);}; });
   }
   function _patchModules() {
-    ['StudentDB','StaffDB','GradeDB','BookLibDB'].forEach(name=>{
+    /* v3.1: ScheduleDB/NoticeDB/ArchiveDB/EduVideoDB 4개 신규 모듈이 이 배열에
+       빠져 있어서, 게스트 세션에서도 실제 Firebase에 일정·공지·자료·영상을
+       쓸 수 있는 상태였음(다른 4개 모듈만 보호되고 있었음) — 추가해서 동일하게 차단 */
+    ['StudentDB','StaffDB','GradeDB','BookLibDB',
+     'ScheduleDB','NoticeDB','ArchiveDB','EduVideoDB'].forEach(name=>{
       const db=window[name]; if(!db)return;
       Object.keys(db).forEach(m=>{
         if(typeof db[m]!=='function')return;

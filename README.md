@@ -41,8 +41,15 @@ Firebase Realtime DB를 백엔드로 사용하며, 별도 서버 없이 **Vercel
 | **📝 성적 관리** | 단어·리딩 성취율 입력, AI 코멘트 생성, 리포트 전달 |
 | **👨‍🎓 학생 관리** | 재원생 정보, 반 배정, MakEdu 엑셀 가져오기 |
 | **👩‍💼 직원 관리** | 강사 정보, 근태 기록, 급여 정산, 즉시 시급 계산기 |
+| **🏠 홈 대시보드** | 일정·교재 학습 현황 요약, 바로가기, 섹션 순서 커스터마이즈 |
+| **📅 일정관리** | 방학·공휴일·일반 일정, 직원 근무기록 캘린더, 날씨 배경 |
+| **🔔 공지사항** | 교재비·수업료 등 예약 공지 자동 팝업 (1회성/매월 반복) |
+| **🗂 콘텐츠(자료실)** | 파일 자료실 + 🎬 영상 워크시트 + 🎮 학습 게임 3종 통합 탭 |
 | **🔒 모니터링** | 히든 실시간 접속 추적, FCM 푸시 알림, 통계 대시보드 |
 | **🎭 게스트 데모** | 나레이션 스포트라이트 투어 (비로그인 체험용) |
+
+> ⚠️ 위 표는 dev 브랜치 실제 소스(2026-08 기준)를 직접 대조해 8개 항목에서
+> 12개 항목으로 보강한 것입니다. 아래 각 섹션도 동일 기준으로 갱신했습니다.
 
 ---
 
@@ -56,10 +63,39 @@ Firebase Realtime DB를 백엔드로 사용하며, 별도 서버 없이 **Vercel
 | **PWA** | Web App Manifest (standalone), Service Worker (FCM 백그라운드) |
 | **AI** | Google Gemini API (gemini-2.5-flash-lite / gemini-2.5-flash) |
 | **Push** | FCM V1 API (서비스 계정 JWT 방식, Vercel `/api/notify`) |
-| **xlsx** | SheetJS (XLSX.js v0.18.5) |
-| **캡처** | html2canvas v1.4.1 |
-| **지오코딩** | api.ipify.org + ip-api.com (Vercel `/api/geoip` 프록시) |
+| **xlsx** | SheetJS (XLSX.js v0.18.5), ExcelJS v4.4.0 |
+| **캡처/PDF** | html2canvas v1.4.1, jsPDF v2.5.1, pdf.js v3.11.174 |
+| **압축** | JSZip v3.10.1 (자료실 zip 다운로드) |
+| **지오코딩** | api.ipify.org + ip-api.com (Vercel `/api/geoip` 프록시, 모니터링용) |
+| **파일 스토리지** | Cloudflare Worker(`*.workers.dev`) → R2 / Backblaze B2 (자료실 파일 업로드·다운로드) |
+| **영상** | YouTube Data API v3 (교육영상 검색/등록) |
+| **이미지** | Unsplash API (배경 이미지, 영상 워크시트 삽화) |
+| **날씨/위치** | Open-Meteo(무료, 키 불필요) + Nominatim 역지오코딩 (일정표 날씨 배경) |
+| **명언 API** | korean-advice-open-api (홈 대시보드 오늘의 명언, 24h 캐시) |
+| **HWP 변환** | `@rhwp/core` (esm.sh 동적 import, 자료실 한글 문서 미리보기/변환) |
 | **폰트** | Google Fonts — Noto Sans KR, IBM Plex Sans KR, Nanum Gothic, Nanum Myeongjo |
+| **한글 PDF 폰트** | nanum-gothic-base64.js — jsPDF용 나눔고딕 base64 임베드 (약 2.7MB) |
+
+---
+
+### ⚠️ 보안 참고사항 (2026-08 소스 점검 시 발견 — 사용자 확인 필요)
+
+클라이언트 JS 소스(공개 GitHub 저장소 + 배포 사이트 view-source로 누구나 열람 가능)에
+아래 6개 키/토큰이 하드코딩되어 있습니다. 서버 프록시 없이 브라우저에서 직접
+호출하는 구조라 코드 안에 있을 수밖에 없는 것들도 있지만, 위험도가 서로 다르므로
+구분해서 인지하고 계시는 게 좋습니다.
+
+| 키/토큰 | 위치 | 위험도 | 비고 |
+|---|---|---|---|
+| Gemini API 키 3개 | `gemini-ai.js` | 🔴 높음 | 유출 시 과금·쿼터를 제3자가 소모 가능 |
+| Cloudflare Worker 업로드 토큰 | `archive-db.js` (`UPLOAD_TOKEN`) | 🔴 높음 | presign(업로드) + **삭제(DELETE)** 권한까지 있는 Bearer 토큰. 유출 시 자료실 파일을 임의로 올리거나 지울 수 있음 |
+| YouTube Data API 키 | `edu-video-app.js` | 🟡 중간 | 일일 쿼터 소모형, 유출 시 쿼터 고갈 가능 |
+| Unsplash Access Key | `edu-video-app.js`, `bg-theme.js` | 🟢 낮음 | 검색 전용 무료 키, 시간당 호출 제한만 존재 |
+
+이미 배포된 상태이므로 즉시 장애가 나는 것은 아니지만, 특히 Gemini 키와 Worker 업로드
+토큰은 **키 로테이션 + 서버리스 프록시(이미 있는 `/api/notify`, `/api/geoip`와 같은 방식)로
+이전**하는 걸 권장합니다. 학원 내부용 소규모 서비스라 실제 악용 가능성은 낮을 수 있지만,
+결정은 운영자 판단이 필요한 부분이라 별도로 표시해 둡니다.
 
 ---
 
@@ -68,28 +104,35 @@ Firebase Realtime DB를 백엔드로 사용하며, 별도 서버 없이 **Vercel
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                      index.html (PWA Shell)                       │
+│  🏠 홈(대시보드) — 로그인 후 첫 화면, 하단 네비 없이 로고 탭으로 복귀│
 │  ┌──────────────────────────────────────────────────────────┐    │
 │  │ 하단 네비게이션 (권한+순서 동적 렌더 / localStorage 저장) │    │
-│  │ [📅진도] [⚙️관리] [📖교재] [📝성적] [👨‍🎓학생] [👩‍💼직원]   │    │
+│  │ [📅진도][⚙️관리][📖교재][📝성적][👨‍🎓학생][👩‍💼직원][🗂콘텐츠]│    │
 │  └──────────────────────────────────────────────────────────┘    │
+│  🔔 공지 팝업(헤더 아이콘, 전 페이지 공통) — 예약 공지 자동 표시   │
 └──────────────────────────────────────────────────────────────────┘
-         │         │          │          │          │
-         ▼         ▼          ▼          ▼          ▼
-      app.js  booklib-app  grade-app  students-app  staff-app
-   (진도·관리)  (교재관리)  (성적관리)  (학생관리)   (직원·급여)
-         │         │          │    ↑AI
-         ▼         ▼          ▼   │
-       db.js  booklib-db  grade-db  gemini-ai.js
-   (반·계정·테마) (교재·챕터) (성적·설정) (Gemini API)
-         │         │          │
-         └─────────┴──────────┘
-                   │
-                   ▼
-         Firebase Realtime DB
+      │        │         │          │           │          │
+      ▼        ▼         ▼          ▼           ▼          ▼
+  app.js  booklib-app grade-app students-app staff-app  archive-app
+(진도·관리) (교재관리) (성적관리)  (학생관리)  (직원·급여) (자료실)
+      │        │         │    ↑AI      │           │      ├─ EduVideoApp (🎬영상)
+      ▼        ▼         ▼   │         │           │      └─ GameApp (🎮게임)
+   db.js  booklib-db  grade-db  gemini-ai.js   staff-db  archive-db
+(반·계정·테마)(교재·챕터)(성적·설정)(Gemini API) (직원DB)  (자료+영상+게임 데이터)
+      │        │         │                        │           │
+      └────────┴─────────┴───────────┬────────────┴───────────┘
+                                      │
+   dashboard-app.js(🏠홈, ScheduleApp 캘린더 위임 렌더)
+   schedule-app.js/-db.js(📅일정 — 홈에 내장, 근무기록 빠른등록)
+   notice-app.js/-db.js(🔔공지 — 헤더 팝업, 전 페이지 공통)
+   bg-theme.js(배경 이미지, theme.bg 경로 공유)
+                                      │
+                                      ▼
+                         Firebase Realtime DB
            hakwon10/
            ├── classes/        반 목록 (termStart/termEnd 기간 관리)
            ├── accounts/       계정 목록
-           ├── theme/          테마·설정
+           ├── theme/          테마·설정 (theme.bg = 배경 이미지 설정)
            ├── progress/       주간 진도 + 메모
            ├── bookdata/       교재 정보·챕터
            ├── bookcheck/      수행 체크 데이터
@@ -99,6 +142,12 @@ Firebase Realtime DB를 백엔드로 사용하며, 별도 서버 없이 **Vercel
            ├── grades/         성적 데이터
            ├── globalPins/     AI 공용 고정 멘트
            ├── sharedReports/  성적 리포트 공유 HTML 임시 저장
+           ├── schedules/      일정(방학·공휴일·일반) + schedulesMeta/
+           ├── notices/        예약 공지
+           ├── archive/        자료실 게시물(메타데이터, 파일 본체는 R2/B2)
+           ├── archiveCategories/ 자료실 분류 목록
+           ├── eduVideos/      교육 영상(유튜브 링크+대본+AI추출단어)
+           ├── eduVideoTopics/ 교육 영상 주제 목록
            └── monitor/        히든 모니터링
                ├── sessions/   접속 세션 (48시간 TTL)
                ├── fcm_tokens/ FCM 디바이스 토큰
@@ -112,6 +161,11 @@ Firebase Realtime DB를 백엔드로 사용하며, 별도 서버 없이 **Vercel
 [성적 리포트 공유 링크 흐름]
 리포트 HTML 생성 → Firebase sharedReports/{id} 저장
 → ?rpt={id} URL 공유 → 수신자 브라우저 직접 렌더
+
+[자료실 파일 업로드 흐름]
+파일 선택 → archive-db.js가 Cloudflare Worker(*.workers.dev)에 presign 요청
+→ Bearer 토큰 인증 → R2/B2에 실제 파일 저장
+→ 게시물 메타데이터(제목·분류·첨부목록)만 Firebase hakwon10/archive/ 에 저장
 
 [FCM 푸시 흐름]
 사용자 로그인 → monitor-db.js 세션 기록
@@ -175,6 +229,43 @@ htdev/
 │                           · 결과 저장·공유·인쇄
 ├── staff-db.js               직원 DB 모듈
 │
+├── dashboard-app.js    v3    홈(첫 화면) 대시보드
+│                           · ScheduleApp 캘린더 위임 렌더 + 교재 학습 현황 요약
+│                           · 섹션 순서 커스터마이즈(헤더 ≡ 버튼, hk10b_dashboardOrder)
+│                           · 오늘의 명언(korean-advice-open-api, 24h 캐시)
+│
+├── schedule-app.js     v5    일정관리 UI (홈 대시보드 내장, 별도 하단 탭 없음)
+│                           · 방학/공휴일/일반 일정 + 직원 근무기록 캘린더 통합 표시
+│                           · Open-Meteo 날씨 배경 + Nominatim 역지오코딩(위치명)
+│                           · 근무기록 빠른등록(➕등록) — 직원선택+시간→시급 자동반영
+├── schedule-db.js      v1    일정 DB 모듈 (독립 Firebase 경로, 공휴일 자동 시딩 1회)
+│
+├── notice-app.js       v1    공지 알림 팝업 (헤더 🔔 버튼, 전 페이지 공통)
+│                           · 예약 시점 도래 시 30초 주기 감지 자동 팝업
+│                           · 1회성(onceDate)/매월반복(monthDay) 스케줄
+├── notice-db.js        v1    공지 DB 모듈 (독립 Firebase 경로)
+│
+├── archive-app.js            자료실 화면 (하단 탭 "🗂 콘텐츠")
+│                           · 이미지/PDF/엑셀 직접 미리보기, HWP 변환(@rhwp/core)
+│                           · 게시물당 다중 파일 첨부, zip 일괄 다운로드
+│                           · 하위 탭으로 EduVideoApp(영상)·GameApp(게임) 포함
+├── archive-db.js             자료실 DB 모듈
+│                           · 파일 본체는 Cloudflare Worker → R2/B2 저장
+│                           · 게시물 메타데이터만 Firebase 저장
+│
+├── edu-video-app.js          교육 영상 화면 (콘텐츠 탭 하위 도구)
+│                           · 유튜브 영상 등록/재생, YouTube Data API 검색
+│                           · 대본에서 AI 단어 추출 → 이미지 포함 워크시트 PDF
+├── edu-video-db.js           교육 영상 DB 모듈
+│
+├── game-app.js                학습 게임 (콘텐츠 탭 하위 도구, 별도 DB 없음)
+│                           · 짝맞추기/스펠링/퀴즈 3종, 빔프로젝터용 화면+인쇄 워크시트
+│                           · EduVideoDB 단어 추출 파이프라인 재사용
+│
+├── bg-theme.js          v1.0 배경 이미지 시스템
+│                           · Unsplash API로 무드별 배경사진 자동 교체
+│                           · hakwon10/theme.bg 경로 공유 (전 기기 동기화)
+│
 │── monitor-fcm.js      v1.0  FCM 토큰 관리 + 푸시 전송
 ├── monitor-db.js       v5.0  세션 추적 + IP 지오코딩
 │                           · ip-api.com 한국어 위치 조회
@@ -186,18 +277,24 @@ htdev/
 │                           · 메뉴 사용 히트맵 (요일×시간대)
 ├── monitor-patch.js    v4.0  전 메뉴 액션 추적 (monkey-patch)
 │
-├── guest-mode.js       v3.0  게스트 나레이션 데모 시스템
+├── guest-mode.js       v3.1  게스트 나레이션 데모 시스템
 │                           · SVG 마스크 스포트라이트 + 말풍선
 │                           · 이전/다음/다시보기 스텝 내비게이션
 │                           · 탭·서브메뉴 자동 전환 (action 콜백)
+│                           · 홈(dashboard)·콘텐츠(archive) 나레이션 신규 추가
+│                           · Write 차단 화이트리스트에 4개 신규 DB 모듈 추가(보안 수정)
+│
+├── nanum-gothic-base64.js     jsPDF용 나눔고딕 base64 폰트 (약 2.7MB)
+│                           · game/edu-video/archive의 한글 PDF 생성에서 공용 사용
 │
 ├── vercel.json               CSP 헤더 + SW 헤더 설정
 ├── package.json              Vercel 서버리스 함수용
-├── notify.js           v2.0  /api/notify — FCM V1 푸시 전송
-│                           · 서비스 계정 JWT → Google OAuth2 토큰
-│                           · Node.js 내장 crypto만 사용 (npm 불필요)
-└── geoip.js                  /api/geoip — IP → 위치 조회 프록시
-                              · ip-api.com HTTP 혼합 콘텐츠 우회
+└── api/                       Vercel 서버리스 함수 (실제로는 이 폴더 하위에 위치 — 기존 문서엔 루트로 잘못 표기돼 있었음)
+    ├── notify.js        v2.0  /api/notify — FCM V1 푸시 전송
+    │                           · 서비스 계정 JWT → Google OAuth2 토큰
+    │                           · Node.js 내장 crypto만 사용 (npm 불필요)
+    └── geoip.js               /api/geoip — IP → 위치 조회 프록시
+                               · ip-api.com HTTP 혼합 콘텐츠 우회
 ```
 
 ---
@@ -226,6 +323,7 @@ hakwon10/
 │   └── allowedMenus[]    강사 추가 메뉴 권한 (booklib / grade)
 │
 ├── theme/                전역 테마·폰트·글자 크기·입력칸 너비
+│   └── bg/               배경 이미지 설정 (bg-theme.js) — enabled/mood/strength/rotateDays/url/credit
 │
 ├── progress/{classId__{weekKey}__{dayName}__{bookId}__progress}
 │   └── 진도 텍스트         "p.32~38" 형태
@@ -260,6 +358,40 @@ hakwon10/
 │
 ├── sharedReports/{id}    성적 리포트 공유 HTML (임시)
 │   └── html / createdAt
+│
+├── schedules/{id}        일정 (schedule-db.js v1)
+│   ├── title / memo
+│   ├── category          'general' | 'vacation-summer' | 'vacation-winter' | 'holiday'
+│   ├── startDate / endDate   YYYY-MM-DD (하루짜리는 start=end)
+│   ├── notifyEnabled / notifyTime / notifiedAt
+│   ├── audience           'admin' | 'all'
+│   └── createdAt / createdBy / seedKey (공휴일 자동시딩 항목만)
+├── schedulesMeta/holidaySeedVersion   공휴일 자동 시딩 버전 플래그 (최초 1회만 실행)
+│
+├── notices/{id}          예약 공지 (notice-db.js v1)
+│   ├── title / body
+│   ├── category           'textbook' | 'tuition' | 'general'
+│   ├── scheduleType        'once' | 'monthly'
+│   ├── onceDate / monthDay / time
+│   ├── audience            'admin' | 'all'
+│   ├── active
+│   ├── completedPeriods/{'YYYY-MM'|'YYYY-MM-DD'}  회차별 완료 처리 기록 {at, by}
+│   └── createdAt / createdBy
+│
+├── archive/{id}           자료실 게시물 (archive-db.js) — 파일 본체는 R2/B2, 메타데이터만 여기
+│   ├── name / category / description
+│   ├── uploadedBy / password(선택) / visibility('public'|'private')
+│   ├── files[]             { r2Key, originalName, ext, size, mimeType, thumbnail, contentText }
+│   │                        (링크 게시물은 r2Key 대신 linkUrl/linkType)
+│   └── uploadedAt / updatedAt
+├── archiveCategories/      자료실 분류 목록 (기본: 공지/양식·학사자료·교재자료·행정서류·기타)
+│
+├── eduVideos/{id}          교육 영상 (edu-video-db.js)
+│   ├── youtubeId / youtubeUrl / title / topic
+│   ├── script / words[]     AI로 추출한 단어(뜻+예문)
+│   ├── visibility('public'|'private')
+│   └── createdAt / updatedAt / createdBy
+├── eduVideoTopics/         교육 영상 주제 목록 (기본: 여행·가구·학교·과일·동물·음식·날씨·가족)
 │
 └── monitor/
     ├── sessions/{sessionId}
@@ -451,6 +583,94 @@ terminateClass(id)  → termEnd를 이전달로 설정
 
 ---
 
+### 🏠 홈 대시보드 (dashboard-app.js v3)
+
+> 로그인 후 첫 화면. 하단 네비게이션에는 없고, 헤더 로고 탭으로 복귀.
+
+| 기능 | 설명 |
+|---|---|
+| 일정표 위젯 | ScheduleApp 미니 캘린더를 그대로 위임 렌더 — 방학/공휴일/일반일정 + 직원 급여일 + 공지 알림 + 오늘의 수업(우측 패널) 한 화면에 |
+| 교재 학습 현황 요약 | 반/교재별 미수행 학생·챕터 수 요약, 탭하면 해당 학습현황(매트릭스) 화면으로 이동 |
+| 즐겨찾기 필터 | 관심 반/교재만 골라보기 |
+| 섹션 순서 변경 | 헤더 ≡ 버튼으로 드래그 재배치, 기기별 `hk10b_dashboardOrder`에 저장 |
+| 오늘의 명언 | korean-advice-open-api에서 24시간 주기로 새 명언 수신, 오프라인 시 로컬 폴백 목록 사용 |
+| 바로가기 | 학습현황(goMatrix) / 자료실 미리보기(goArchivePreview) / 영상 상세(goEduVideo) |
+| 일괄 업데이트 요청 | 오늘 갱신이 필요한 교재를 모아 CustomEvent로 알림 요청 |
+
+---
+
+### 📅 일정관리 (schedule-app.js v5)
+
+> 별도 하단 탭 없이 홈 대시보드 캘린더 위젯으로 통합 제공.
+
+| 기능 | 설명 |
+|---|---|
+| 캘린더 표시 | 기간이 있는 일정(방학 등)은 색띠로 이어서 표시, 하루에 많으면 "+N" 요약 |
+| 공휴일 자동 시딩 | 최초 1회만 대한민국 공휴일 자동 등록 (이후 자유롭게 수정/삭제 가능) |
+| 날짜 상세 패널 | 캘린더 우측에 선택 날짜 상세 표시 (기본값 항상 "오늘") |
+| 직원 근무기록 | 근무일에 색띠로 표시, "➕등록"으로 직원선택+시간 입력만으로 시급 자동 반영 빠른등록 |
+| 반복 일정 | 반복 등록 + 특정 회차만 시리즈에서 해제 가능 |
+| 알림 팝업 | 예약 시점 도래 시 자동 팝업, "나중에"(세션 한정 닫기)/"확인"(서버 기록) |
+| 날씨 배경 | Open-Meteo 16일 예보 + Nominatim 역지오코딩으로 날짜 셀에 날씨 분위기 표시 (API 키 불필요) |
+
+---
+
+### 🔔 공지사항 (notice-app.js v1)
+
+> 헤더 🔔 아이콘 — 전 페이지 공통으로 접근 가능한 독립 팝업 시스템.
+
+| 기능 | 설명 |
+|---|---|
+| 예약 공지 등록 | 1회성(특정 날짜) 또는 매월 반복(특정 일자) 스케줄 |
+| 자동 팝업 | 예약 시점 도래를 30초 주기로 감지해 자동 표시 |
+| 완료 처리 | "✅ 완료 처리" → 서버 기록, 모든 기기에서 해당 회차 종료 |
+| 나중에 보기 | "⏰ 나중에" → 이번 세션만 임시로 닫음, 다음 접속 시 재표시 |
+| 대상 지정 | admin 전용 또는 전체(all) 공개 범위 지정 |
+| 분류 | 교재비 / 수업료 / 일반 |
+
+---
+
+### 🗂 콘텐츠 (archive-app.js + edu-video-app.js + game-app.js)
+
+> 하단 탭 "🗂 콘텐츠" 하나에 자료실·영상·게임 3개 도구가 탭으로 통합.
+
+#### 🗂 자료실 (기본 탭)
+
+| 기능 | 설명 |
+|---|---|
+| 파일 미리보기 | 이미지는 `<img>`, PDF는 `<iframe>`, 엑셀은 SheetJS로 표 변환해 직접 표시 |
+| 다중 파일 첨부 | 게시물 하나에 여러 파일 첨부 가능 |
+| 온라인 문서 링크 | OneDrive/구글시트 등 링크만 등록해 해당 서비스 뷰어로 열람 |
+| 비밀번호/공개범위 | 게시물별 비밀번호 보호, 공개(public)/비공개(private) 설정 |
+| HWP 변환 | `@rhwp/core`(esm.sh 동적 import)로 한글 문서 변환 |
+| 엑셀 인라인 편집 | 미리보기 화면에서 셀 직접 수정 후 저장 |
+| 일괄 다운로드 | 선택 자료/게시물 전체를 zip으로 다운로드 (JSZip) |
+| 파일 스토리지 | Cloudflare Worker → R2/B2 (Firebase에는 메타데이터만 저장) |
+
+#### 🎬 영상 워크시트 (edu-video-app.js)
+
+| 기능 | 설명 |
+|---|---|
+| 유튜브 영상 등록 | 링크 붙여넣기 또는 YouTube Data API 검색/추천으로 등록 |
+| 대본 기반 AI 단어 추출 | GeminiAI로 대본에서 단어+뜻+예문 추출 |
+| 영상 기반 AI 단어 추출 | 대본 없이 영상 자체에서 바로 추출 |
+| 워크시트 PDF | 추출 단어 + Unsplash 이미지 포함 학습지 PDF 생성 |
+| 주제별 분류 | 여행/가구/학교 등 주제 태그, 즐겨찾기 핀 고정 |
+
+#### 🎮 학습 게임 (game-app.js)
+
+| 기능 | 설명 |
+|---|---|
+| 짝맞추기 | 단어-뜻 카드 매칭 게임 |
+| 스펠링 | 철자 맞추기 게임 |
+| 퀴즈 | 객관식 퀴즈 게임 |
+| 소스 재사용 | EduVideo/자료실에서 이미 추출한 단어 파이프라인을 그대로 재활용 |
+| 빔프로젝터 모드 | 전체화면 토글, 틀린 문제만 다시 풀기 |
+| 인쇄용 워크시트 | 화면 게임과 별도로 인쇄용 PDF도 생성 가능 |
+| 데이터 저장 없음 | 게임 자체는 저장하지 않고 그때그때 생성 (구조 단순화) |
+
+---
+
 ## 7. 🤖 Gemini AI 코멘트 생성
 
 > **파일** : `gemini-ai.js` v9.0 | **사용 위치** : 성적 관리 → 엑셀뷰
@@ -499,11 +719,17 @@ KEY_3 ──┘
 | 파일 | 역할 |
 |---|---|
 | `monitor-db.js` v5.0 | 세션 생성·갱신·액션 로그·IP 지오코딩 |
-| `monitor-app.js` v4.0 | 히든 대시보드 UI (전체 화면 오버레이) |
-| `monitor-patch.js` v4.0 | 전 메뉴 함수 monkey-patch → 액션 자동 기록 |
+| `monitor-app.js` v4.1 | 히든 대시보드 UI (전체 화면 오버레이) + 신규 모듈 MENU 라벨 |
+| `monitor-patch.js` v5.1 | 전 메뉴(신규 6종 포함) 함수 monkey-patch → 액션 자동 기록, 전수 재점검 보강 |
 | `monitor-fcm.js` v1.0 | FCM 토큰 발급/관리 + 신규 접속 시 푸시 전송 |
 | `firebase-messaging-sw.js` | FCM 백그라운드 수신 → OS 알림 표시 |
 | `notify.js` v2.0 (서버리스) | FCM V1 API 호출 (서비스 계정 JWT) |
+
+> ⚠️ **커버리지 주의**: 위 표의 "전 메뉴"는 monitor-patch.js v5.0 기준입니다.
+> v4.0까지는 진도/관리/교재/성적만 실제로 추적되었고, 학생·직원은 페이지
+> 이동만 기록될 뿐 상세 액션은 기록되지 않았습니다(문서와 구현 불일치).
+> 일정관리·공지사항·학습게임·교육영상·자료실·홈 대시보드 6개 모듈은
+> v5.0 이전까지 MENU 라벨·액션 추적 어디에도 없어 완전히 사각지대였습니다.
 
 ### 세션 추적 정보
 
@@ -529,15 +755,33 @@ actions[] — 메뉴 이동, 진도 입력, xlsx 반영 등 최대 200건
 | IP 라벨 관리 | IP 대역에 장소명 지정 (예: "211.234.12" → "해피트리영어학원") |
 | 세션 강제 종료 | 개별 세션 로그아웃 처리 |
 
-### 추적 액션 범위 (monitor-patch.js v4.0)
+### 추적 액션 범위 (monitor-patch.js v5.1)
+
+> v5.1은 사용자 요청으로 v5.0에서 다룬 6개 신규 모듈의 전체 함수 목록을
+> 다시 한번 전수 대조해 놓친 액션을 보강한 버전입니다. 아래 표는 v5.1 기준
+> 최신 상태이며, 진행 중 발견한 버그 2건도 함께 수정했습니다(하단 참고).
 
 | 메뉴 | 추적 항목 |
 |---|---|
 | 진도 | 진도 입력(반·교재·요일·값), SMS 전송, 그리드/리스트 전환, 달력 |
 | 교재 | 탭 전환, 반·교재 선택, 공유, 리포트, 교재 추가·삭제·편집, xlsx 일괄 반영, 메모, 완결·복사, 예외 설정 |
 | 성적 | 성적 저장, 리포트 생성, AI 코멘트, 캡처·공유 |
-| 학생 | 학생 상세 보기, 재원 상태 변경 |
-| 직원 | 근태 입력, 급여 정산 |
+| 학생 | 상세 보기, 재원 상태 변경, 삭제, 정보 수정, 엑셀 가져오기, 학원비 계산기, **필터 변경**(v5.1) |
+| 직원 | 상세/편집 열기, 저장·삭제, 근태 일괄 등록, 근무 기록 등록·삭제·**수정 시작**(v5.1), 급여 일괄 정산, 급여 엑셀 다운로드, 즉시 시급계산기 저장·공유, **등록폼 열기·급여탭 이동·근무 템플릿 추가·급여이력 열기·급여기록 삭제**(v5.1) |
+| 일정 | 일정 저장·삭제, 근무기록 빠른등록, 반복 일정 해제, **"오늘의 수업"→학생상세 이동**(v5.1) |
+| 공지 | 공지함 열기, 공지 저장·삭제·완료 처리 |
+| 콘텐츠·자료실 | 하위 탭 전환, 업로드, 열람, 삭제, 수정, 공유, zip 다운로드, 엑셀 편집, 파일 변환, **업로드 폼 열기·분류 추가/삭제·즐겨찾기·인쇄·비밀번호 보호 자료 열람 시도**(v5.1) |
+| 영상 | 영상 등록·삭제·상세보기, AI 단어 추출, 워크시트 PDF 생성, 공유, **주제 추가·AI 추천 검색·추천에서 등록·대본 수정·즐겨찾기**(v5.1) |
+| 게임 | 게임 유형 선택, 시작, 워크시트 인쇄, **콘텐츠 소스 선택**(v5.1) |
+| 홈 | 바로가기 이동(학습현황/자료실/영상), 섹션 순서 변경, 일괄 업데이트 요청, **즐겨찾기 필터·교재현황 날짜탭 이동**(v5.1) |
+
+#### v5.1에서 발견·수정한 버그 2건
+
+- `ArchiveApp._selectTool` 라벨 매핑에서 파일 탭 키를 `'library'`로 잘못
+  가정했는데 실제 코드는 `'files'`를 씀 — 라벨이 안 붙고 원문 키로만
+  표시되던 문제 수정
+- `GameApp._selectSource` 라벨 매핑에 없는 값(`'manual'`)을 썼는데 실제
+  값은 `'video'|'paste'|'words'` — 마찬가지로 라벨 누락 수정
 
 ### FCM 푸시 흐름
 
@@ -559,8 +803,10 @@ actions[] — 메뉴 이동, 진도 입력, xlsx 반영 등 최대 200건
 
 ## 9. 🎭 게스트 데모 모드
 
-> **파일** : `guest-mode.js` v3.0  
+> **파일** : `guest-mode.js` v3.1  
 > 비로그인 게스트 계정으로 앱 체험 시 자동 실행되는 나레이션 투어.
+> 게스트 로그인 시 가상 **admin 세션**이 부여되어(role:'admin'), 메뉴 권한과
+> 무관하게 전 화면에 접근할 수 있습니다 — 그만큼 Write 차단이 중요합니다.
 
 ### 기능
 
@@ -580,6 +826,22 @@ actions[] — 메뉴 이동, 진도 입력, xlsx 반영 등 최대 200건
 - ⚙️ 관리 화면 (manage) — 반·계정·테마 탭 포함
 - 📖 교재 학습 관리 (booklib)
 - 📝 성적 관리 (grade)
+- 👨‍🎓 학생 관리 (students)
+- 👩‍💼 직원 관리 (staff)
+- 🏠 홈 대시보드 (dashboard) — **v3.1 신규**: 일정 위젯·교재현황 요약·섹션순서·오늘의 명언 소개
+- 🗂 콘텐츠 (archive) — **v3.1 신규**: 자료실·🎬영상 워크시트·🎮학습 게임 3탭을 순서대로 소개 (`_selectTool` action으로 탭 자동 전환)
+
+> ℹ️ 일정관리·공지사항은 별도 페이지가 아니라 홈/헤더에 내장된 기능이라
+> 독립된 나레이션 페이지를 두지 않았습니다(홈 나레이션에서 함께 소개).
+
+### 🔒 v3.1 보안 수정: Write 차단 범위 누락
+
+기존 `_patchModules()`는 `StudentDB/StaffDB/GradeDB/BookLibDB` 4개 모듈만
+화이트리스트에 넣어 쓰기 함수를 no-op으로 막고 있었습니다. **일정·공지·
+자료실·교육영상 4개 신규 DB 모듈(ScheduleDB/NoticeDB/ArchiveDB/EduVideoDB)이
+이 목록에서 빠져 있어서, 게스트 세션에서도 이 영역들은 실제 Firebase에 쓰기가
+가능한 상태**였습니다(다른 4개 모듈만 안전하게 보호되고 있었음). 목록에 추가해서
+동일한 수준으로 차단되도록 수정했습니다.
 
 ---
 
@@ -632,6 +894,24 @@ actions[] — 메뉴 이동, 진도 입력, xlsx 반영 등 최대 200건
 | `ht_style_analysis` | 스타일 분석 캐시 |
 | `ht_style_pins:{bookId}` | 교재별 고정 멘트 |
 
+### 홈 대시보드 / 일정 / 공지 / 콘텐츠 (신규)
+
+| 키 | 내용 |
+|---|---|
+| `hk10b_dashboardOrder` | 홈 대시보드 섹션 순서 (기기별) |
+| `db_live_quote` | 오늘의 명언 캐시 (24h) |
+| `hk10b_schedules` | 일정 로컬 캐시 |
+| `sch_weather_cache_v4` | 날씨 예보 캐시 (위치명 포함) |
+| `sch_dismiss_{scheduleId}` (sessionStorage) | 일정 알림 팝업 "나중에" 임시 닫기 |
+| `hk10b_notices` | 공지 로컬 캐시 |
+| 공지 알림 dismiss 키 (sessionStorage) | 공지 팝업 "나중에" 임시 닫기 |
+| `hk10b_archive` | 자료실 게시물 로컬 캐시 |
+| `hk10b_archiveCategories` | 자료실 분류 목록 캐시 |
+| `hk10b_archiveViewMode` | 자료실 보기 모드(그리드/리스트 등) |
+| `hk10b_eduvideo` | 교육 영상 로컬 캐시 |
+| `hk10b_eduvideo_topics` | 교육 영상 주제 목록 캐시 |
+| `hk10b_staff_home` | 직원 관리 화면 시작 탭 설정 |
+
 ---
 
 ## 11. 권한 체계
@@ -640,10 +920,9 @@ actions[] — 메뉴 이동, 진도 입력, xlsx 반영 등 최대 200건
 ┌──────────────────────────────────────────────────────────────────┐
 │  역할        접근 가능 메뉴                                       │
 ├──────────────────────────────────────────────────────────────────┤
-│  admin       진도·관리·교재·성적·학생·직원 (전체)                │
-│  operator    진도·관리 (반 관리 제외)                             │
-│  teacher     진도 (담당 반만)                                     │
-│              + allowedMenus에 등록된 메뉴 (교재/성적)            │
+│  admin       진도·관리·교재·성적·학생·직원·홈·콘텐츠 (전체)      │
+│  operator    진도·관리(반 관리 제외) + allowedMenus 등록 메뉴     │
+│  teacher     진도 (담당 반만) + allowedMenus 등록 메뉴            │
 │              ※ 담당 반 데이터에 한해서만 접근                     │
 │  master      (비밀번호) 히든 모니터링 대시보드 전용               │
 │  guest       진도 읽기 전용 + 게스트 데모 나레이션               │
@@ -652,6 +931,31 @@ actions[] — 메뉴 이동, 진도 입력, xlsx 반영 등 최대 200건
 자동 로그아웃: 3시간 미사용 시
 세션 저장:     localStorage (ID·PW remember me 체크 시)
 ```
+
+> ⚠️ **정정**: 기존 문서는 "allowedMenus로 교재/성적만 추가 권한 부여 가능"이라고
+> 설명했지만, 실제 `app.js`의 `go()` 함수를 확인한 결과 admin이 아닌 계정
+> (operator/teacher)은 **booklib·grade·students·staff·dashboard·archive 6개
+> 메뉴 전부**가 `accounts/{id}.allowedMenus[]` 등록 여부로 게이트되고 있습니다.
+> 즉 "학생/직원/홈/콘텐츠 메뉴도 강사·운용자 계정에 개별적으로 열어줄 수 있다"는
+> 뜻이라 기존 설명보다 실제 권한 체계가 더 유연합니다. manage(관리) 메뉴만
+> teacher에게는 항상 차단되고(자동으로 operate로 리다이렉트), operate 자체는
+> 로그인만 하면 누구나 접근 가능합니다.
+
+#### 메뉴별 게이트 로직 요약 (app.js `go()` 기준)
+
+| 메뉴 | admin | 비admin(operator/teacher) |
+|---|---|---|
+| operate(진도) | 항상 허용 | 항상 허용 |
+| manage(관리) | 항상 허용 | teacher는 강제로 operate로 리다이렉트, operator는 허용 |
+| dashboard(홈) | 항상 허용 | `allowedMenus`에 `dashboard` 있어야 함 (없으면 canOperate 시 operate로, 아니면 로그인 요구) |
+| archive(콘텐츠) | 항상 허용 | canOperate 필요 + `allowedMenus`에 `archive` 있어야 함 |
+| students(학생) | 항상 허용 | `allowedMenus`에 `students` 있어야 함 |
+| staff(직원) | 항상 허용 | `allowedMenus`에 `staff` 있어야 함 |
+| booklib(교재) | 항상 허용 | `allowedMenus`에 `booklib` 있어야 함 |
+| grade(성적) | 항상 허용 | `allowedMenus`에 `grade` 있어야 함 |
+
+> 일정(schedule)·공지(notice)는 별도 페이지가 아니라 홈/헤더에 내장되어 있어
+> 이 게이트 목록에 없습니다 — 홈 대시보드 접근 권한을 따라갑니다.
 
 ---
 
@@ -678,19 +982,110 @@ ip-api.com HTTP 혼합 콘텐츠 우회 프록시.
 
 ### CSP 화이트리스트 (vercel.json)
 
+> ⚠️ 기존 문서는 6개 도메인만 기재되어 있었지만, 실제 `vercel.json`의
+> `connect-src`에는 최근 추가된 기능들의 API 도메인이 다수 더 등록돼 있습니다.
+> 아래는 실제 파일 내용 기준 전체 목록입니다.
+
 ```
+script-src:
+  www.gstatic.com, cdnjs.cloudflare.com, apis.google.com, esm.sh
+  (+ 'unsafe-inline' 'unsafe-eval' — 기존 코드 구조상 필요)
+
 connect-src:
-  api.ipify.org          클라이언트 실IP 조회
-  ip-api.com             geoip 프록시 대상
-  *.firebaseio.com       Firebase RTDB
-  fcm.googleapis.com     FCM 푸시
-  generativelanguage.googleapis.com  Gemini AI
-  identitytoolkit.googleapis.com     Firebase Auth
+  api.ipify.org                       클라이언트 실IP 조회 (모니터링)
+  ip-api.com (https/http)             geoip 프록시 대상 (모니터링)
+  *.firebaseio.com, wss://*.firebaseio.com   Firebase RTDB
+  firebaseinstallations.googleapis.com / firebase.googleapis.com
+  www.googleapis.com                  YouTube Data API
+  firestore.googleapis.com
+  fcm.googleapis.com                  FCM 푸시
+  generativelanguage.googleapis.com   Gemini AI
+  identitytoolkit.googleapis.com      Firebase Auth
+  esm.sh                              동적 import (@rhwp/core, HWP 변환)
+  cdnjs.cloudflare.com                라이브러리 CDN
+  api.unsplash.com / images.unsplash.com   배경·워크시트 이미지
+  api.open-meteo.com                  일정표 날씨 예보
+  nominatim.openstreetmap.org         일정표 역지오코딩(위치명)
+  *.workers.dev                       자료실 업로드용 Cloudflare Worker
+  *.backblazeb2.com                   자료실 파일 저장소(B2)
+  korean-advice-open-api.vercel.app   홈 대시보드 오늘의 명언
+
+frame-src:
+  view.officeapps.live.com, docs.google.com, onedrive.live.com,
+  *.sharepoint.com, www.youtube.com, *.workers.dev
 ```
 
 ---
 
 ## 13. 최근 주요 변경 이력
+
+### 🔁 재점검: 모니터링 v5.1 + 게스트모드 v3.1 (2026-08, 2차)
+
+사용자가 GitHub 재동기화 후 "콘텐츠 부분이 빠져 있다"고 재확인을 요청하여
+1차 패치(v5.0)에서 다룬 6개 신규 모듈의 **전체 public 함수 목록을 처음부터
+다시 전수 대조**함. dev/main 브랜치 커밋은 1차 점검 때와 동일했음(별도 신규
+커밋 없음) — 즉 코드가 바뀐 게 아니라 1차 점검 자체가 완전하지 않았던 것.
+
+- **monitor-patch.js v5.0 → v5.1**: 자료실(분류관리·즐겨찾기·인쇄·비밀번호
+  검증)·영상(주제추가·AI추천검색·대본수정·즐겨찾기)·게임(소스선택)·일정
+  (학생상세 이동)·홈(즐겨찾기필터·날짜탭)·직원(등록폼·급여탭이동·근무수정·
+  템플릿·급여이력)·학생(필터변경) 총 23개 액션 추가 (110개 → 133개 wrap)
+- **버그 2건 수정**: `ArchiveApp._selectTool` 라벨이 실제 키(`'files'`)가
+  아닌 잘못된 키(`'library'`)를 참조해 라벨이 안 붙던 문제, `GameApp.
+  _selectSource` 라벨에 존재하지 않는 값(`'manual'`)을 매핑해두던 문제
+- **guest-mode.js v3.0 → v3.1**: 🏠 홈 대시보드, 🗂 콘텐츠(자료실/영상/게임)
+  나레이션 신규 작성 — 실제 렌더링된 DOM 클래스명을 코드에서 직접 확인 후
+  하이라이트 셀렉터 작성(추측 금지 원칙 적용)
+- **🔒 보안 수정(guest-mode.js)**: Write 차단 화이트리스트
+  (`_patchModules`)에 ScheduleDB/NoticeDB/ArchiveDB/EduVideoDB가 빠져있어
+  게스트 데모 세션에서도 이 4개 모듈은 실제 Firebase에 쓰기가 가능한
+  상태였음 — 목록에 추가해 차단
+
+### 📝 README 전체 소스 대조 감사 (2026-08)
+
+- dev 브랜치 전체 파일을 직접 열어 문서-코드 불일치를 점검하고 반영함.
+- **누락된 파일/모듈 문서화**: schedule-app/db.js, notice-app/db.js,
+  archive-app/db.js, edu-video-app/db.js, game-app.js, dashboard-app.js,
+  bg-theme.js, nanum-gothic-base64.js — 8개 파일이 섹션 3·4·6에서
+  통째로 빠져 있었음
+- **Firebase 경로 보강**: schedules/, notices/, archive/, archiveCategories/,
+  eduVideos/, eduVideoTopics/, theme/bg 추가
+- **권한 체계 정정**: "allowedMenus는 교재/성적에만 적용"이라던 기존 설명이
+  틀렸음 — 실제로는 students/staff/dashboard/archive까지 6개 메뉴 모두
+  allowedMenus로 게이트됨을 `app.js go()` 확인 후 반영
+- **게스트 데모 나레이션 목록 정정**: students·staff 화면도 이미 나레이션이
+  있었는데 문서에서 누락돼 있었음
+- **CSP 화이트리스트 보강**: vercel.json 기준 실제로는 6개가 아니라
+  YouTube/Unsplash/Open-Meteo/Nominatim/Workers/B2/명언API 등 다수 도메인이
+  더 등록되어 있었음
+- **api/ 폴더 구조 정정**: notify.js·geoip.js가 루트가 아니라 `api/` 하위에
+  있음을 반영
+- **보안 참고사항 신규 추가**: Gemini API 키 3개, YouTube API 키, Unsplash
+  키, Cloudflare Worker 업로드(+삭제) 토큰이 클라이언트 소스에 하드코딩되어
+  공개 저장소로 노출되고 있는 상태를 확인 — 섹션 2 하단에 위험도별로 정리.
+  즉시 장애 요인은 아니지만 운영자 판단이 필요해 별도 표시함
+
+### 🔍 모니터링 커버리지 확대 (monitor-app.js v4.1 / monitor-patch.js v5.0)
+
+- **배경**: dev 브랜치에 일정관리(schedule-app.js)·공지사항(notice-app.js)·
+  학습게임(game-app.js)·교육영상(edu-video-app.js)·자료실(archive-app.js)·
+  홈 대시보드(dashboard-app.js) 6개 모듈이 추가되었지만, 히든 모니터링
+  시스템에는 전혀 반영되어 있지 않았음(MENU 라벨 없음, 액션 추적 없음).
+  또한 README가 설명하던 "학생/직원 상세 액션 추적"도 실제 코드에는
+  구현되어 있지 않았음.
+- **monitor-app.js v4.1** — MENU 라벨에 dashboard/archive/schedule/notice/
+  game/video 6개 추가
+- **monitor-patch.js v5.0**
+  - ScheduleApp / NoticeApp / GameApp / EduVideoApp / ArchiveApp /
+    DashboardApp 신규 액션 추적 추가
+  - StudentApp / StaffApp 상세 액션 추적을 실제로 구현 (기존엔 페이지
+    이동만 기록)
+  - 버그 수정: `_stuName()` 헬퍼가 존재하지 않는 `StudentDB.getStudents()`를
+    호출해 항상 raw ID만 표시되던 문제 수정 (→ `StudentDB.getAll()`).
+    booklib/grade 로그의 학생 이름 표시에도 영향을 주던 버그.
+  - 구 `_watchStudentEvents`/`_watchStaffEvents`의 DOM 셀렉터 기반 추적
+    (`.st-name`, `[data-status]`, `.sf-name` 등)이 실제 마크업과 달라
+    항상 무동작이었던 부분을 함수 직접 후킹(`_wrap`) 방식으로 교체
 
 ### 🆕 히든 모니터링 시스템 (신규)
 
@@ -800,4 +1195,4 @@ guest-mode.js        게스트 데모
 
 ---
 
-*최종 업데이트: 2026년 6월*
+*최종 업데이트: 2026년 8월 (모니터링 v5.1 재점검 + 게스트모드 v3.1 업그레이드 + 전체 소스 대조 문서 감사)*

@@ -1,7 +1,48 @@
 /**
- * monitor-patch.js — v4.0 (전 메뉴 완전 추적)
+ * monitor-patch.js — v5.1 (신규 모듈 커버리지 확대 + 기존 버그 수정)
  *
- * ■ v4.0 추가 항목
+ * ■ v5.1 — 사용자 재점검 요청으로 v5.0에서 다룬 6개 신규 모듈의 전체
+ *   public API를 다시 한 번 전수 대조하여 놓친 의미있는 액션을 추가:
+ *   [자료실] 업로드 폼 열기, 분류 추가/삭제, 즐겨찾기, 인쇄,
+ *            비밀번호 보호 자료 열람 시도(보안 관련 — 성공/실패 무관 기록)
+ *   [영상]   주제 추가, AI 추천 검색(YouTube API 쿼터 소모 지점), 추천에서 등록,
+ *            대본 수정, 즐겨찾기
+ *   [게임]   콘텐츠 소스 선택(영상 대본 vs 직접입력)
+ *   [일정]   "오늘의 수업" 패널 → 학생 상세 크로스 내비게이션
+ *   [홈]     즐겨찾기 필터, 교재현황 날짜 탭 이동
+ *   [직원]   등록폼 열기, 급여탭 이동, 근무기록 수정 시작, 근무 템플릿 추가,
+ *            급여이력 열기, 급여 저장기록 삭제
+ *   [학생]   필터 변경(재원상태/반/학년/학교)
+ *   (게임/영상의 재생 중 클릭형 인터랙션 — 카드뒤집기·정답체크·재생 등 —은
+ *    키 입력 수준으로 너무 촘촘해 기존 방침대로 액션 로그 대상에서 제외)
+ *
+ * ■ v5.0 추가/수정 항목
+ *   [배경] GitHub dev 브랜치 코드 점검 결과, README가 "학생/직원 상세 액션까지
+ *   추적한다"고 설명하고 있었지만 실제로는 페이지 이동만 기록되고 있었고
+ *   (StudentApp/StaffApp에는 _wrap이 전혀 없었음), 최근 추가된 6개 모듈
+ *   (일정관리/공지사항/학습게임/교육영상/자료실/홈 대시보드)은 monitor-app.js의
+ *   MENU 라벨에도, 이 파일의 추적 대상에도 전혀 없어 세션 타임라인·통계·
+ *   히트맵에 완전히 누락되고 있었음. 이번 버전에서 아래를 모두 보강함.
+ *
+ *   [신규 추적] ScheduleApp(일정 저장/삭제/근무 빠른등록/반복해제),
+ *               NoticeApp(공지 저장/삭제/완료처리/공지함 열기),
+ *               GameApp(게임 유형선택/시작/인쇄),
+ *               EduVideoApp(영상 등록/삭제/AI단어추출/PDF생성/공유/상세보기),
+ *               ArchiveApp(업로드/열람/삭제/수정/공유/다운로드/엑셀편집/변환),
+ *               DashboardApp(바로가기 이동/섹션순서변경/일괄업데이트 요청)
+ *   [보강] StudentApp(상세보기/재원상태변경/삭제/수정/엑셀가져오기/학원비계산기)
+ *          — README에 있던 항목을 실제로 구현
+ *   [보강] StaffApp(상세·편집열기/저장/삭제/근태등록·삭제/급여일괄정산/
+ *          엑셀다운로드/즉시계산기 저장·공유) — 위와 동일
+ *   [버그 수정] _stuName() 헬퍼가 존재하지 않는 StudentDB.getStudents()를
+ *          호출하고 있어 항상 예외로 빠지고 raw ID만 표시되던 문제 수정
+ *          (→ StudentDB.getAll()). booklib/grade 로그의 학생 이름 표시에도
+ *          영향을 주던 버그.
+ *   [정리] 구 _watchStudentEvents/_watchStaffEvents의 DOM 셀렉터 기반 추적은
+ *          실제 마크업(.st-card-name 등)과 불일치해 항상 무동작이었음 —
+ *          함수 직접 후킹(_wrap) 방식으로 교체, _watchStaffEvents는 제거
+ *
+ * ■ v4.0 (유지)
  *   [진도] sendSms(SMS 전송), toggleView(그리드/리스트), openCal/calToday(달력),
  *          진도 입력 시 반·교재·요일·값 정확히 추출
  *   [교재] switchTab(탭 전환), _onClsChange/_onBkChange(반·교재 선택),
@@ -15,6 +56,7 @@
  *
  * ■ 로드 순서 (index.html)
  *   app.js → monitor-db.js → monitor-app.js → monitor-patch.js
+ *   (신규 모듈은 모두 monitor-patch.js보다 먼저 로드되므로 typeof 가드로 충분)
  */
 
 (function () {
@@ -74,12 +116,22 @@
     return sel ? (sel.options[sel.selectedIndex]?.text?.trim() || '') : '';
   }
 
-  /* StudentDB 학생명 */
+  /* StudentDB 학생명
+   * ★ v5.0 버그 수정: StudentDB.getStudents()는 존재하지 않는 메서드였음
+   *   (실제 API는 getAll()) → 항상 예외로 빠져 이름 대신 raw ID만 표시되던 문제 수정.
+   *   이 버그는 booklib/grade 로그의 학생 이름 표시에도 영향을 주고 있었음. */
   function _stuName(stuId) {
     try {
-      return (typeof StudentDB !== 'undefined' ? StudentDB.getStudents() : [])
+      return (typeof StudentDB !== 'undefined' ? StudentDB.getAll() : [])
         .find(s => s.id === stuId)?.name || stuId || '';
     } catch { return stuId || ''; }
+  }
+
+  /* StaffDB 직원명 (v5.0 신규) */
+  function _staffName(staffId) {
+    try {
+      return (typeof StaffDB !== 'undefined' ? StaffDB.getById?.(staffId) : null)?.name || staffId || '';
+    } catch { return staffId || ''; }
   }
 
   /* BookLibDB 교재명 — 다중 폴백으로 최대한 이름 조회
@@ -552,12 +604,329 @@
         _wrap(GradeApp, '_captureAllReports', async () => { _log('grade', '📸 전체 리포트 캡처'); });
     }
 
+
+    /* ╔══════════════════════════════════════════════════╗
+     * ║  ScheduleApp — 일정관리 (홈 대시보드 내장, v5.0 신규) ║
+     * ╚══════════════════════════════════════════════════╝ */
+    if (typeof ScheduleApp !== 'undefined') {
+
+      _wrap(ScheduleApp, 'saveEditor', async () => {
+        const title = document.getElementById('sch-f-title')?.value?.trim() || '';
+        _log('schedule', `일정 저장: ${title}`);
+      });
+
+      _wrap(ScheduleApp, 'deleteItem', async (id) => {
+        const title = (typeof ScheduleDB !== 'undefined' ? ScheduleDB.getById?.(id)?.title : '') || id || '';
+        _log('schedule', `일정 삭제: ${title}`);
+      });
+
+      _wrap(ScheduleApp, 'saveWorkQuickAdd', async (dateStr) => {
+        const sid = document.getElementById('sch-wa-staff')?.value;
+        _log('schedule', `⚡ 근무기록 빠른등록: ${_staffName(sid)}`, dateStr || '');
+      });
+
+      _wrap(ScheduleApp, '_confirmUnlinkSeries', async (id) => {
+        _log('schedule', '반복 일정 시리즈에서 해제');
+      });
+
+      /* v5.1 보강 — "오늘의 수업" 패널에서 학생 상세로 바로 이동하는 크로스 내비게이션 */
+      _wrap(ScheduleApp, '_goStudentDetail', async (studentId) => {
+        _log('schedule', `학생 상세로 이동: ${_stuName(studentId)}`);
+      });
+    }
+
+    /* ╔══════════════════════════════════════════════════╗
+     * ║  NoticeApp — 공지사항 (헤더 🔔 팝업, v5.0 신규)  ║
+     * ╚══════════════════════════════════════════════════╝ */
+    if (typeof NoticeApp !== 'undefined') {
+
+      _wrap(NoticeApp, 'openCenter', async () => { _log('notice', '공지함 열기'); });
+
+      _wrap(NoticeApp, 'saveEditor', async () => {
+        const title = document.getElementById('ntc-f-title')?.value?.trim() || '';
+        _log('notice', `공지 저장: ${title}`);
+      });
+
+      _wrap(NoticeApp, 'completeNow', async (id) => {
+        const title = (typeof NoticeDB !== 'undefined' ? NoticeDB.getById?.(id)?.title : '') || id || '';
+        _log('notice', `✅ 공지 완료 처리: ${title}`);
+      });
+
+      _wrap(NoticeApp, 'deleteNotice', async (id) => {
+        const title = (typeof NoticeDB !== 'undefined' ? NoticeDB.getById?.(id)?.title : '') || id || '';
+        _log('notice', `공지 삭제: ${title}`);
+      });
+    }
+
+    /* ╔══════════════════════════════════════════════════╗
+     * ║  GameApp — 학습 게임 (콘텐츠 탭 내 도구, v5.0 신규) ║
+     * ╚══════════════════════════════════════════════════╝ */
+    if (typeof GameApp !== 'undefined') {
+
+      _wrap(GameApp, '_selectSource', async (mode) => {
+        /* v5.1 버그 수정: 실제 소스 모드 값은 video/paste/words (manual 아님) */
+        const lbl = { video:'🎬 영상에서', paste:'📝 지문 붙여넣기', words:'🔤 단어만 입력' };
+        _log('game', `콘텐츠 소스 선택: ${lbl[mode] || mode}`);
+      });
+
+      _wrap(GameApp, '_selectType', async (type) => {
+        const lbl = { match:'🃏 짝맞추기', spell:'🔤 스펠링', quiz:'❓ 퀴즈' };
+        _log('game', `게임 유형 선택: ${lbl[type] || type}`);
+      });
+
+      _wrap(GameApp, '_startGame', async () => { _log('game', '🎮 게임 시작'); });
+
+      _wrap(GameApp, '_printMatch', async () => { _log('game', '🖨 짝맞추기 워크시트 인쇄'); });
+      _wrap(GameApp, '_printSpell', async () => { _log('game', '🖨 스펠링 워크시트 인쇄'); });
+      _wrap(GameApp, '_printQuiz',  async () => { _log('game', '🖨 퀴즈 워크시트 인쇄'); });
+    }
+
+    /* ╔══════════════════════════════════════════════════╗
+     * ║  EduVideoApp — 교육 영상 (콘텐츠 탭 내 도구, v5.0 신규) ║
+     * ╚══════════════════════════════════════════════════╝ */
+    if (typeof EduVideoApp !== 'undefined') {
+
+      _wrap(EduVideoApp, 'openDetail', async (id) => {
+        const v = (typeof EduVideoDB !== 'undefined') ? EduVideoDB.getById?.(id) : null;
+        _log('video', `영상 상세 보기: ${v?.title || id || ''}`);
+      });
+
+      _wrap(EduVideoApp, '_submitAdd', async () => {
+        const title = document.getElementById('ev-title-inp')?.value?.trim() || '';
+        _log('video', `영상 등록: ${title}`);
+      });
+
+      _wrap(EduVideoApp, '_confirmDeleteVideo', async (id) => {
+        const v = (typeof EduVideoDB !== 'undefined') ? EduVideoDB.getById?.(id) : null;
+        _log('video', `영상 삭제: ${v?.title || id || ''}`);
+      });
+
+      _wrap(EduVideoApp, '_extractWords', async (id) => {
+        const v = (typeof EduVideoDB !== 'undefined') ? EduVideoDB.getById?.(id) : null;
+        _log('video', `🤖 AI 단어 추출(대본): ${v?.title || id || ''}`);
+      });
+
+      _wrap(EduVideoApp, '_extractWordsFromVideo', async (id) => {
+        const v = (typeof EduVideoDB !== 'undefined') ? EduVideoDB.getById?.(id) : null;
+        _log('video', `🤖 AI 단어 추출(영상): ${v?.title || id || ''}`);
+      });
+
+      _wrap(EduVideoApp, '_makePdf', async (id) => {
+        const v = (typeof EduVideoDB !== 'undefined') ? EduVideoDB.getById?.(id) : null;
+        _log('video', `📄 워크시트 PDF 생성: ${v?.title || id || ''}`);
+      });
+
+      _wrap(EduVideoApp, '_shareVideo', async (id) => {
+        const v = (typeof EduVideoDB !== 'undefined') ? EduVideoDB.getById?.(id) : null;
+        _log('video', `📤 영상 공유: ${v?.title || id || ''}`);
+      });
+
+      /* v5.1 보강 — 주제 추가, AI 추천 검색(YouTube API 쿼터 소모 지점), 대본 수정, 즐겨찾기 */
+      _wrap(EduVideoApp, '_promptNewTopic', async () => { _log('video', '🏷 주제 추가 시도'); });
+
+      _wrap(EduVideoApp, 'openRecommend', async () => { _log('video', '🤖 AI 영상 추천 열기'); });
+
+      _wrap(EduVideoApp, '_runRecommend', async () => {
+        const topic = document.getElementById('ev-rec-topic')?.value || '';
+        _log('video', `🤖 AI 영상 추천 검색 (YouTube API): ${topic}`);
+      });
+
+      _wrap(EduVideoApp, '_addFromRecommend', async (btn) => {
+        _log('video', `🤖 추천 영상 등록: ${btn?.dataset?.title || ''}`);
+      });
+
+      _wrap(EduVideoApp, '_submitEditScript', async (id) => {
+        const v = (typeof EduVideoDB !== 'undefined') ? EduVideoDB.getById?.(id) : null;
+        _log('video', `대본 수정: ${v?.title || id || ''}`);
+      });
+
+      _wrap(EduVideoApp, '_togglePin', async (id) => {
+        const v = (typeof EduVideoDB !== 'undefined') ? EduVideoDB.getById?.(id) : null;
+        _log('video', `⭐ 즐겨찾기 토글: ${v?.title || id || ''}`);
+      });
+    }
+
+    /* ╔══════════════════════════════════════════════════╗
+     * ║  ArchiveApp — 자료실 (콘텐츠 탭 기본, v5.0 신규) ║
+     * ╚══════════════════════════════════════════════════╝ */
+    if (typeof ArchiveApp !== 'undefined') {
+
+      /* 콘텐츠 하위 도구 전환 (자료실/영상/게임) — currentMenu도 함께 갱신 */
+      _wrap(ArchiveApp, '_selectTool', async (key) => {
+        /* v5.1 버그 수정: 실제 TOOL_TABS 키는 'files'인데 'library'로 잘못 매핑돼 있어
+           자료실 탭 전환 시 라벨이 안 붙고 raw key로만 표시되고 있었음 */
+        const lbl = { files:'🗂 자료실', 'video-worksheet':'🎬 영상 워크시트', games:'🎮 학습 게임' };
+        _menuLog('archive', lbl[key] || key);
+        _log('archive', `콘텐츠 탭 전환: ${lbl[key] || key}`);
+      });
+
+      _wrap(ArchiveApp, '_submitUpload', async () => { _log('archive', '📤 자료 업로드'); });
+
+      _wrap(ArchiveApp, 'openPreview', async (id) => {
+        const p = (typeof ArchiveDB !== 'undefined') ? ArchiveDB.getById?.(id) : null;
+        _log('archive', `자료 열람: ${p?.name || id || ''}`);
+      });
+
+      _wrap(ArchiveApp, '_confirmDelete', async (id) => {
+        const p = (typeof ArchiveDB !== 'undefined') ? ArchiveDB.getById?.(id) : null;
+        _log('archive', `자료 삭제: ${p?.name || id || ''}`);
+      });
+
+      _wrap(ArchiveApp, '_submitEdit', async (id) => {
+        const p = (typeof ArchiveDB !== 'undefined') ? ArchiveDB.getById?.(id) : null;
+        _log('archive', `자료 수정: ${p?.name || id || ''}`);
+      });
+
+      _wrap(ArchiveApp, '_sharePost', async (postId) => {
+        const p = (typeof ArchiveDB !== 'undefined') ? ArchiveDB.getById?.(postId) : null;
+        _log('archive', `📤 자료 공유: ${p?.name || postId || ''}`);
+      });
+
+      _wrap(ArchiveApp, '_downloadPostZip', async (postId) => {
+        const p = (typeof ArchiveDB !== 'undefined') ? ArchiveDB.getById?.(postId) : null;
+        _log('archive', `📥 게시물 전체 다운로드(zip): ${p?.name || postId || ''}`);
+      });
+
+      _wrap(ArchiveApp, '_downloadSelectedZip', async () => { _log('archive', '📥 선택 자료 일괄 다운로드(zip)'); });
+
+      _wrap(ArchiveApp, '_saveXlsxEdit', async () => { _log('archive', '💾 엑셀 미리보기 편집 저장'); });
+
+      _wrap(ArchiveApp, '_convertAndDownload', async (targetExt) => {
+        _log('archive', `🔄 파일 변환 다운로드 → ${targetExt}`);
+      });
+
+      /* v5.1 보강 — 1차 패치에서 빠졌던 분류 관리·업로드 열기·비밀번호 검증·즐겨찾기·인쇄 */
+      _wrap(ArchiveApp, 'openUpload', async () => { _log('archive', '📤 업로드 폼 열기'); });
+
+      _wrap(ArchiveApp, '_promptNewCategory', async () => { _log('archive', '🗂 자료실 분류 추가 시도'); });
+
+      _wrap(ArchiveApp, '_removeCategory', async (name) => { _log('archive', `🗂 자료실 분류 삭제: ${name}`); });
+
+      _wrap(ArchiveApp, '_togglePin', async (id) => {
+        const p = (typeof ArchiveDB !== 'undefined') ? ArchiveDB.getById?.(id) : null;
+        _log('archive', `⭐ 즐겨찾기 토글: ${p?.name || id || ''}`);
+      });
+
+      _wrap(ArchiveApp, '_printPreview', async () => { _log('archive', '🖨 자료 인쇄'); });
+
+      /* 보안 관련: 비밀번호로 보호된 자료 열람 시도 — 성공/실패와 무관하게 시도 자체를 기록 */
+      _wrap(ArchiveApp, '_submitPasswordGate', async (id) => {
+        const p = (typeof ArchiveDB !== 'undefined') ? ArchiveDB.getById?.(id) : null;
+        _log('archive', `🔒 비밀번호 보호 자료 열람 시도: ${p?.name || id || ''}`);
+      });
+    }
+
+    /* ╔══════════════════════════════════════════════════╗
+     * ║  DashboardApp — 홈 대시보드 (v5.0 신규)          ║
+     * ╚══════════════════════════════════════════════════╝ */
+    if (typeof DashboardApp !== 'undefined') {
+
+      _wrap(DashboardApp, 'goMatrix', async (clsId, bkId) => {
+        const cls = DB?.getActiveClasses?.().find(c => c.id === clsId)?.name || clsId || '';
+        _log('dashboard', `바로가기 → 학습 현황: ${cls}`, _bkName(bkId));
+      });
+
+      _wrap(DashboardApp, 'goArchivePreview', async (id) => {
+        _log('dashboard', '바로가기 → 자료실 미리보기', id || '');
+      });
+
+      _wrap(DashboardApp, 'goEduVideo', async (id) => {
+        _log('dashboard', '바로가기 → 영상 상세', id || '');
+      });
+
+      _wrap(DashboardApp, '_saveReorder', async () => { _log('dashboard', '🧩 홈 섹션 순서 변경'); });
+
+      _wrap(DashboardApp, '_requestBulkUpdate', async () => { _log('dashboard', '📤 일괄 진도 업데이트 요청'); });
+
+      /* v5.1 보강 */
+      _wrap(DashboardApp, '_filterFavorites', async (type) => { _log('dashboard', `즐겨찾기 필터: ${type}`); });
+
+      _wrap(DashboardApp, '_selectBookDay', async (off) => { _log('dashboard', `교재현황 날짜 탭 이동: ${off}`); });
+    }
+
+    /* ╔══════════════════════════════════════════════════╗
+     * ║  StudentApp — 학생 관리 세부 추적                ║
+     * ║  ★ v5.0: README에는 "학생 상세보기·재원상태변경  ║
+     * ║    추적"이라 적혀 있었지만 실제 코드엔 없었음     ║
+     * ║    (구 _watchStudentEvents가 .st-name/[data-status]║
+     * ║    를 찾았는데 실제 DOM엔 .st-card-name만 존재 →  ║
+     * ║    항상 매칭 실패). _wrap 직접 후킹으로 교체.     ║
+     * ╚══════════════════════════════════════════════════╝ */
+    if (typeof StudentApp !== 'undefined') {
+
+      _wrap(StudentApp, 'openDetail', async (id) => { _log('students', `학생 상세 보기: ${_stuName(id)}`); });
+
+      _wrap(StudentApp, 'quickStatus', async (id, status) => {
+        _log('students', `재원 상태 변경: ${_stuName(id)}`, `→ ${status}`);
+      });
+
+      _wrap(StudentApp, 'confirmDelete', async (id) => { _log('students', `학생 삭제: ${_stuName(id)}`); });
+
+      _wrap(StudentApp, 'saveEdit', async (id) => { _log('students', `학생 정보 수정: ${_stuName(id)}`); });
+
+      _wrap(StudentApp, 'handleFile', async (file) => {
+        if (file) _log('students', `엑셀 학생 가져오기: ${file.name}`);
+      });
+
+      _wrap(StudentApp, 'openTuitionCalc', async (id) => {
+        _log('students', `학원비 계산기 열기${id ? ': ' + _stuName(id) : ''}`);
+      });
+
+      /* v5.1 보강 — 필터 변경(재원상태/반/학년/학교) */
+      _wrap(StudentApp, '_onFilter', async (key, val) => { _log('students', `필터 변경: ${key} = ${val}`); });
+    }
+
+    /* ╔══════════════════════════════════════════════════╗
+     * ║  StaffApp — 직원 관리 세부 추적                  ║
+     * ║  ★ v5.0: README의 "근태입력·급여정산 추적"도     ║
+     * ║    동일하게 미구현 상태였음 — 신규 추가           ║
+     * ╚══════════════════════════════════════════════════╝ */
+    if (typeof StaffApp !== 'undefined') {
+
+      _wrap(StaffApp, 'openEdit', async (id) => { _log('staff', `직원 상세/편집 열기: ${_staffName(id)}`); });
+
+      _wrap(StaffApp, 'saveStaff', async () => {
+        const name = document.getElementById('sf-f-name')?.value?.trim() || '';
+        _log('staff', `직원 정보 저장: ${name}`);
+      });
+
+      _wrap(StaffApp, 'deleteStaff', async (id) => { _log('staff', `직원 삭제: ${_staffName(id)}`); });
+
+      _wrap(StaffApp, '_doBatch', async () => { _log('staff', '📋 근태 일괄 등록'); });
+
+      _wrap(StaffApp, '_addEntry', async () => { _log('staff', '근무 기록 등록'); });
+
+      _wrap(StaffApp, '_delEntry', async () => { _log('staff', '근무 기록 삭제'); });
+
+      _wrap(StaffApp, '_calcAll', async () => { _log('staff', '💰 전 직원 급여 일괄 정산'); });
+
+      _wrap(StaffApp, '_downloadExcel', async () => { _log('staff', '📥 급여 엑셀 다운로드'); });
+
+      _wrap(StaffApp, '_doQSave', async () => { _log('staff', '⚡ 즉시 시급계산 결과 저장'); });
+
+      _wrap(StaffApp, '_qShare', async () => { _log('staff', '⚡ 즉시 시급계산 결과 공유'); });
+
+      /* v5.1 보강 — 등록폼 열기, 급여탭 이동, 근무기록 수정, 근무 템플릿, 급여이력 */
+      _wrap(StaffApp, 'openAdd', async () => { _log('staff', '➕ 직원 등록 폼 열기'); });
+
+      _wrap(StaffApp, 'goToSalary', async (staffId) => {
+        _log('staff', `급여 탭으로 이동${staffId ? ': ' + _staffName(staffId) : ''}`);
+      });
+
+      _wrap(StaffApp, '_editEntry', async (id) => { _log('staff', '근무 기록 수정 시작'); });
+
+      _wrap(StaffApp, '_addTemplEntry', async () => { _log('staff', '📋 근무 템플릿 항목 추가'); });
+
+      _wrap(StaffApp, '_openPayHistory', async () => { _log('staff', '📜 급여 이력 열기'); });
+
+      _wrap(StaffApp, '_deletePaySnap', async (sid) => { _log('staff', `급여 저장 기록 삭제: ${_staffName(sid)}`); });
+    }
+
     /* 이벤트 위임 */
     _watchOperateEvents();
     _watchStudentEvents();
-    _watchStaffEvents();
 
-    console.log('[MonitorPatch] ✅ v4.0 전체 패치 완료');
+    console.log('[MonitorPatch] ✅ v5.0 전체 패치 완료 (일정·공지·게임·영상·자료실·홈·학생·직원 커버리지 확대)');
   }
 
   /* ═══════════════════════════════════════════════════════
@@ -602,24 +971,21 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-   * 이벤트 위임 — 학생 관리
+   * 이벤트 위임 — 학생 관리 (검색어 입력만 담당)
+   * ★ v5.0: 학생 상세보기·재원상태변경·삭제·수정·가져오기는
+   *   위쪽 StudentApp _wrap 섹션에서 함수 직접 후킹으로 추적.
+   *   (구버전은 .st-name/.st-nm/[data-status] 셀렉터로 DOM을 뒤졌으나
+   *   실제 마크업은 .st-card-name이라 이름 조회가 항상 빈 문자열로
+   *   실패했고, [data-status] 속성 자체가 존재하지 않아 상태변경도
+   *   전혀 기록되지 않고 있었음 — 함수 후킹 방식이 DOM 구조 변경에도
+   *   안전하므로 이 방식으로 교체)
    * ═══════════════════════════════════════════════════════ */
   function _watchStudentEvents() {
     const pg = document.getElementById('page-students');
     if (!pg || pg._monPatched) return;
     pg._monPatched = true;
 
-    pg.addEventListener('click', e => {
-      const card = e.target.closest('.st-card,.st-row');
-      if (card) {
-        const name = card.querySelector('.st-name,.st-nm')?.textContent?.trim() || '';
-        if (name) _log('students', `학생 조회: ${name}`);
-      }
-      const btn = e.target.closest('[data-status]');
-      if (btn) _log('students', `재원 상태 변경: ${btn.dataset.status}`);
-    });
-
-    const srch = pg.querySelector('#st-search,.st-search');
+    const srch = pg.querySelector('#st-q,.st-search');
     if (srch && !srch._monPatched) {
       srch._monPatched = true;
       let t;
@@ -630,23 +996,6 @@
         }, 800);
       });
     }
-  }
-
-  /* ═══════════════════════════════════════════════════════
-   * 이벤트 위임 — 직원 관리
-   * ═══════════════════════════════════════════════════════ */
-  function _watchStaffEvents() {
-    const pg = document.getElementById('page-staff');
-    if (!pg || pg._monPatched) return;
-    pg._monPatched = true;
-
-    pg.addEventListener('click', e => {
-      const card = e.target.closest('.sf-card,.sf-row');
-      if (card) {
-        const name = card.querySelector('.sf-name,.sf-nm')?.textContent?.trim() || '';
-        if (name) _log('staff', `직원 조회: ${name}`);
-      }
-    });
   }
 
 })();

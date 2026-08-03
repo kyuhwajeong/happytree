@@ -1,11 +1,17 @@
 /**
- * monitor-app.js — v4.0
+ * monitor-app.js — v4.1
  *
  * ■ 신규 기능
  *   1. 브라우저 알림  — 새 세션 감지 시 OS 알림 (모니터링 창에서만)
  *   2. 이상 접속 플래그 — 심야/중복/과다액션 배지 자동 표시
  *   3. 통계 대시보드 탭 — 48h 집계: 총 접속/평균 사용시간/메뉴 점유율/사용자별 활동
  *   4. 메뉴 사용 히트맵 — 요일×시간대 2D 그리드 (0~24h, 일~토)
+ *
+ * ■ v4.1 — MENU 라벨 확장 (커버리지 확대, monitor-patch.js v5.0과 짝)
+ *   dashboard(홈)·archive(콘텐츠)·schedule(일정)·notice(공지)·game(게임)·video(영상)
+ *   신규 모듈이 monitor-patch.js에서 로깅하는 action.menu 값과 매칭되도록 라벨 추가.
+ *   MENU[key]||key 폴백 구조라 라벨이 없어도 동작은 했지만, 원문 키 대신 사람이
+ *   읽을 수 있는 이름으로 표시되도록 보강.
  *
  * ■ 정상 사용자에게는 아무 영향 없음
  *   - 알림은 admin/master 모니터링 창에서만 발생
@@ -18,6 +24,9 @@ const MonitorApp = (() => {
   const MENU = {
     operate:'📅 진도', manage:'⚙️ 관리', booklib:'📖 교재',
     grade:'📝 성적', students:'👨‍🎓 학생', staff:'👩‍💼 직원',
+    /* v5.0 확장 — 신규 모듈 커버리지 */
+    dashboard:'🏠 홈', archive:'🗂 콘텐츠', schedule:'📅 일정',
+    notice:'🔔 공지', game:'🎮 게임', video:'🎬 영상',
   };
   const ROLE = { admin:'관리자', manager:'매니저', operator:'운용자', teacher:'강사' };
   const ROLE_COLOR = {
