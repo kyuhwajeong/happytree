@@ -44,10 +44,13 @@ const PdfEditorApp = (() => {
   let _fontReady = null;  // Promise
   let _dragIds = null; // 그리드 드래그 재정렬용(선택한 순서대로의 페이지 id 배열)
   let _selectAnchorId = null; // Shift+클릭 범위 선택의 기준점
+  let _insertAt = null; // "➕ 이 앞에 삽입"으로 지정한 목표 위치(없으면 맨 끝에 추가)
+  let _insertMenuOpen = false;
   let _fileDragCounter = 0; // 파일 드래그&드롭(dragenter/leave 중첩 처리용)
   let _editingId = null;  // 편집 중인 페이지 id
   let _editorScale = 1;   // 편집기 캔버스 px per pt
   let _selAnnotId = null;
+  let _editingTextId = null; // 지금 실제로 캐럿을 놓고 타이핑 중인 텍스트 상자(더블클릭으로 진입)
   let _drag = null;       // 편집기 내 드래그/리사이즈 상태
   let _busy = false;
 
@@ -72,6 +75,8 @@ const PdfEditorApp = (() => {
 .pe-filedrop-hint{position:sticky;top:0;z-index:5;text-align:center;font-size:12px;font-weight:700;color:var(--a);background:var(--a10);padding:8px;border-radius:8px;margin-bottom:10px;pointer-events:none;display:none}
 .pe-wrap.pe-filedrop .pe-filedrop-hint{display:block}
 .pe-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--tx3);padding:60px 20px;text-align:center}
+.pe-restore-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--a10);border:1px solid var(--a40);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:var(--tx)}
+.pe-restore-bar span{flex:1;min-width:200px}
 .pe-empty-ico{font-size:44px}
 .pe-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
 .pe-card{background:var(--card);border:2px solid var(--bdr);border-radius:12px;overflow:hidden;cursor:grab;position:relative;transition:border-color .12s}
@@ -101,7 +106,10 @@ const PdfEditorApp = (() => {
 .pe-page-stage canvas{display:block;background:#fff}
 .pe-annot{position:absolute;border:1.5px dashed rgba(79,70,229,.6);cursor:move;box-sizing:border-box}
 .pe-annot.sel{border:2px solid var(--a);box-shadow:0 0 0 2px var(--a40)}
-.pe-annot-handle{position:absolute;right:-6px;bottom:-6px;width:13px;height:13px;background:var(--a);border-radius:50%;cursor:nwse-resize;border:2px solid #fff}
+.pe-annot-handle{position:absolute;right:-6px;bottom:-6px;width:13px;height:13px;background:var(--a);border-radius:50%;cursor:nwse-resize;border:2px solid #fff;z-index:2}
+.pe-annot-input{position:absolute;inset:0;width:100%;height:100%;border:none;outline:none;resize:none;background:transparent;box-sizing:border-box;line-height:1.32;overflow:hidden;white-space:pre-wrap;cursor:move}
+.pe-annot-input:focus{cursor:text}
+.pe-annot-input::placeholder{color:rgba(120,120,140,.55)}
 .pe-side{width:270px;flex-shrink:0;background:var(--surf);border-left:1px solid var(--bdr);padding:16px;overflow-y:auto}
 .pe-side h4{margin:0 0 12px;font-size:13px;color:var(--tx)}
 .pe-field{margin-bottom:12px}
@@ -179,24 +187,39 @@ const PdfEditorApp = (() => {
   function _loadImgEl(dataUrl) { return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = dataUrl; }); }
   function _fitA4(w, h) { const scale = Math.min(A4.w / w, A4.h / h, 1); return { w: w * scale, h: h * scale }; }
 
+  // ★ _insertAt이 지정돼 있으면(카드의 "➕ 이 앞에 삽입"으로 들어온 경우) 그 위치에 끼워 넣고,
+  //   여러 쪽짜리 파일이면 그 다음 파일이 바로 뒤에 이어지도록 위치를 그만큼 밀어준다.
+  //   지정이 없으면(기본 툴바 버튼) 항상 맨 끝에 추가한다 — 기존 동작 그대로.
+  function _insertPages(newPages) {
+    if (!newPages.length) return;
+    if (_insertAt !== null) {
+      _pages.splice(_insertAt, 0, ...newPages);
+      _insertAt += newPages.length;
+    } else {
+      _pages.push(...newPages);
+    }
+  }
   async function _addPdfBytes(name, arrayBuffer) {
     if (typeof PDFLib === 'undefined') { _toast('⚠️ PDF 편집 라이브러리를 불러오지 못했습니다'); return; }
     _ensurePdfjsWorker();
     const bytes1 = new Uint8Array(arrayBuffer.slice(0));
     const bytes2 = new Uint8Array(arrayBuffer.slice(0));
+    const bytes3 = new Uint8Array(arrayBuffer.slice(0)); // ★ 자동저장(새로고침 복구)용 원본 바이트 보관
     let pdfDoc, pdfjsDoc;
     try {
       pdfDoc = await PDFLib.PDFDocument.load(bytes1, { ignoreEncryption: true });
     } catch (e) { throw new Error(`"${name}" 파일을 열 수 없습니다 (손상되었거나 암호로 보호됨)`); }
     pdfjsDoc = await pdfjsLib.getDocument({ data: bytes2 }).promise;
     const srcId = _nid();
-    _sources.push({ id: srcId, name, kind: 'pdf', pdfDoc, pdfjsDoc });
+    _sources.push({ id: srcId, name, kind: 'pdf', pdfDoc, pdfjsDoc, rawBytes: bytes3.buffer });
     const n = pdfDoc.getPageCount();
+    const newPages = [];
     for (let i = 0; i < n; i++) {
       const pg = pdfDoc.getPage(i);
       const { width, height } = pg.getSize();
-      _pages.push({ id: _nid(), kind: 'pdf', srcId, srcPageIndex: i, width, height, annots: [] });
+      newPages.push({ id: _nid(), kind: 'pdf', srcId, srcPageIndex: i, width, height, annots: [] });
     }
+    _insertPages(newPages);
   }
 
   async function _addImageFile(file) {
@@ -204,30 +227,33 @@ const PdfEditorApp = (() => {
     const img = await _loadImgEl(dataUrl);
     const fit = _fitA4(img.naturalWidth || img.width, img.naturalHeight || img.height);
     const srcId = _nid();
-    _sources.push({ id: srcId, name: file.name, kind: 'image', img });
-    _pages.push({ id: _nid(), kind: 'image', srcId, width: fit.w, height: fit.h, annots: [] });
+    _sources.push({ id: srcId, name: file.name, kind: 'image', img, dataUrl });
+    _insertPages([{ id: _nid(), kind: 'image', srcId, width: fit.w, height: fit.h, annots: [] }]);
   }
 
   async function _onPickPdf(fileList) {
-    const files = Array.from(fileList || []); if (!files.length) return;
+    const files = Array.from(fileList || []); if (!files.length) { _insertAt = null; return; }
     _setBusy('PDF 불러오는 중...');
     for (const f of files) {
       try { await _addPdfBytes(f.name, await f.arrayBuffer()); }
       catch (e) { _toast('⚠️ ' + (e.message || 'PDF를 불러오지 못했습니다')); }
     }
+    _insertAt = null; _insertMenuOpen = false;
     _clearBusy();
   }
   async function _onPickImage(fileList) {
-    const files = Array.from(fileList || []); if (!files.length) return;
+    const files = Array.from(fileList || []); if (!files.length) { _insertAt = null; return; }
     _setBusy('이미지 불러오는 중...');
     for (const f of files) {
       try { await _addImageFile(f); }
       catch (e) { _toast('⚠️ 이미지를 불러오지 못했습니다: ' + (e.message || '')); }
     }
+    _insertAt = null; _insertMenuOpen = false;
     _clearBusy();
   }
   function _addBlankPage() {
-    _pages.push({ id: _nid(), kind: 'blank', width: A4.w, height: A4.h, annots: [] });
+    _insertPages([{ id: _nid(), kind: 'blank', width: A4.w, height: A4.h, annots: [] }]);
+    _insertAt = null; _insertMenuOpen = false;
     _rerender();
     _toast('✅ 빈 페이지가 추가되었습니다');
   }
@@ -292,7 +318,8 @@ const PdfEditorApp = (() => {
     lines.forEach(line => { if (ty < originY + a.h * scale) ctx.fillText(line, alignX, ty); ty += lh; });
     ctx.restore();
   }
-  async function _renderPageComposite(page, targetW) {
+  async function _renderPageComposite(page, targetW, opts) {
+    opts = opts || {};
     const scale = targetW / page.width;
     const targetH = Math.max(1, Math.round(page.height * scale));
     const cv = document.createElement('canvas'); cv.width = Math.max(1, Math.round(targetW)); cv.height = targetH;
@@ -305,6 +332,9 @@ const PdfEditorApp = (() => {
         if (!a._imgEl) { try { a._imgEl = await _loadImgEl(a.dataUrl); } catch (e) { continue; } }
         ctx.drawImage(a._imgEl, a.x * scale, a.y * scale, a.w * scale, a.h * scale);
       } else if (a.type === 'text') {
+        // ★ 편집기 화면에서는 실제 <textarea>를 페이지 위에 겹쳐서 바로 입력할 수 있게 하므로,
+        //   캔버스에는 텍스트를 그리지 않는다(안 그러면 이중으로 보임). 썸네일·PDF 내보내기에서는 그대로 굽는다.
+        if (opts.skipText) continue;
         await _paintText(ctx, a, a.x * scale, a.y * scale, scale);
       } else if (a.type === 'erase') {
         ctx.fillStyle = a.color || '#ffffff';
@@ -330,9 +360,133 @@ const PdfEditorApp = (() => {
     const w = Math.round(page.width * scale), h = Math.round(page.height * scale);
     cvEl.width = w; cvEl.height = h;
     try {
-      const composite = await _renderPageComposite(page, w);
+      const composite = await _renderPageComposite(page, w, { skipText: true });
       const ctx = cvEl.getContext('2d'); ctx.clearRect(0, 0, w, h); ctx.drawImage(composite, 0, 0);
     } catch (e) { console.warn('[PdfEditorApp] 캔버스 렌더 실패', e); }
+  }
+
+  /* ══════════════════ 자동저장(새로고침·실수로 나가기 대비) — IndexedDB ══════════════════ */
+  //   PDF·이미지 원본 바이트까지 통째로 남겨서, 페이지가 새로고침되거나 실수로 닫혀도
+  //   다음에 다시 열었을 때 "복원하기"로 그대로 이어서 작업할 수 있게 한다.
+  const AUTOSAVE_DB = 'pe_autosave_db', AUTOSAVE_STORE = 'sessions', AUTOSAVE_KEY = 'current';
+  let _autosaveTimer = null, _restoreChecked = false, _restoreAvailable = null;
+  function _openAutosaveDB() {
+    return new Promise((resolve, reject) => {
+      if (typeof indexedDB === 'undefined') { reject(new Error('IndexedDB 미지원')); return; }
+      const req = indexedDB.open(AUTOSAVE_DB, 1);
+      req.onupgradeneeded = () => { req.result.createObjectStore(AUTOSAVE_STORE); };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function _idbPut(record) {
+    const db = await _openAutosaveDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(AUTOSAVE_STORE, 'readwrite');
+      tx.objectStore(AUTOSAVE_STORE).put(record, AUTOSAVE_KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+  async function _idbGet() {
+    const db = await _openAutosaveDB();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(AUTOSAVE_STORE, 'readonly').objectStore(AUTOSAVE_STORE).get(AUTOSAVE_KEY);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function _idbClear() {
+    try {
+      const db = await _openAutosaveDB();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(AUTOSAVE_STORE, 'readwrite');
+        tx.objectStore(AUTOSAVE_STORE).delete(AUTOSAVE_KEY);
+        tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+      });
+    } catch (e) {}
+  }
+  function _scheduleAutosave() {
+    if (_autosaveTimer) clearTimeout(_autosaveTimer);
+    _autosaveTimer = setTimeout(_runAutosave, 1200);
+  }
+  async function _runAutosave() {
+    try {
+      if (!_pages.length) { await _idbClear(); return; }
+      const record = {
+        savedAt: Date.now(),
+        sources: _sources.map(s => ({
+          id: s.id, name: s.name, kind: s.kind,
+          rawBytes: s.kind === 'pdf' ? s.rawBytes : undefined,
+          dataUrl: s.kind === 'image' ? s.dataUrl : undefined,
+        })),
+        pages: _pages.map(p => ({
+          id: p.id, kind: p.kind, srcId: p.srcId, srcPageIndex: p.srcPageIndex, width: p.width, height: p.height,
+          annots: p.annots.map(a => { const { _imgEl, ...rest } = a; return rest; }),
+        })),
+      };
+      await _idbPut(record);
+    } catch (e) { console.warn('[PdfEditorApp] 자동저장 실패(작업은 계속 가능)', e); }
+  }
+  async function _checkRestore() {
+    try {
+      const record = await _idbGet();
+      if (record && record.pages && record.pages.length) { _restoreAvailable = record; _rerender(); }
+    } catch (e) {}
+  }
+  async function _doRestore() {
+    const record = _restoreAvailable; _restoreAvailable = null;
+    if (!record) return;
+    _setBusy('이전 작업 내용을 복원하는 중...');
+    try {
+      await _restoreFromRecord(record);
+      _toast('✅ 이전 작업을 복원했습니다');
+    } catch (e) {
+      console.error('[PdfEditorApp] 복원 실패', e);
+      _toast('⚠️ 일부 파일을 복원하지 못했습니다: ' + (e.message || ''));
+    }
+    _clearBusy();
+  }
+  function _discardRestore() {
+    _restoreAvailable = null;
+    _idbClear();
+    _rerender();
+  }
+  async function _restoreFromRecord(record) {
+    _sources = []; _pages = [];
+    for (const s of record.sources || []) {
+      if (s.kind === 'pdf' && s.rawBytes) {
+        try {
+          _ensurePdfjsWorker();
+          const b1 = new Uint8Array(s.rawBytes.slice(0)), b2 = new Uint8Array(s.rawBytes.slice(0)), b3 = new Uint8Array(s.rawBytes.slice(0));
+          const pdfDoc = await PDFLib.PDFDocument.load(b1, { ignoreEncryption: true });
+          const pdfjsDoc = await pdfjsLib.getDocument({ data: b2 }).promise;
+          _sources.push({ id: s.id, name: s.name, kind: 'pdf', pdfDoc, pdfjsDoc, rawBytes: b3.buffer });
+        } catch (e) { console.warn('[PdfEditorApp] 복원 중 PDF 로드 실패', s.name, e); }
+      } else if (s.kind === 'image' && s.dataUrl) {
+        try { const img = await _loadImgEl(s.dataUrl); _sources.push({ id: s.id, name: s.name, kind: 'image', img, dataUrl: s.dataUrl }); }
+        catch (e) { console.warn('[PdfEditorApp] 복원 중 이미지 로드 실패', s.name, e); }
+      }
+    }
+    for (const p of record.pages || []) {
+      const annots = [];
+      for (const a of p.annots || []) {
+        if (a.type === 'image' && a.dataUrl) { try { a._imgEl = await _loadImgEl(a.dataUrl); } catch (e) {} }
+        annots.push(a);
+      }
+      _pages.push({ id: p.id, kind: p.kind, srcId: p.srcId, srcPageIndex: p.srcPageIndex, width: p.width, height: p.height, annots });
+    }
+    _rerender();
+  }
+  function _restoreBannerHtml() {
+    const n = (_restoreAvailable.pages || []).length;
+    let when = '';
+    try { when = new Date(_restoreAvailable.savedAt).toLocaleString('ko-KR'); } catch (e) {}
+    return `<div class="pe-restore-bar">
+      <span>💾 이전에 작업하던 내용(${n}쪽${when ? ` · ${_esc(when)}` : ''})이 남아있어요. 새로고침 등으로 끊긴 작업을 이어서 할 수 있어요.</span>
+      <button class="pe-btn primary" onclick="PdfEditorApp._doRestore()">복원하기</button>
+      <button class="pe-btn" onclick="PdfEditorApp._discardRestore()">새로 시작</button>
+    </div>`;
   }
 
   /* ══════════════════ 메인 화면(그리드) ══════════════════ */
@@ -340,19 +494,21 @@ const PdfEditorApp = (() => {
   function render(cid) {
     _cid = cid; _css();
     const el = _q(cid); if (!el) return;
+    if (!_pages.length && !_sources.length && !_restoreChecked) { _restoreChecked = true; _checkRestore(); }
     el.innerHTML = _shellHtml();
     _renderGridThumbs();
     if (_editingId) _renderEditorCanvas();
   }
-  function _rerender() { if (_cid) render(_cid); }
+  function _rerender() { if (_cid) render(_cid); _scheduleAutosave(); }
 
   function _shellHtml() {
-    const body = `<div class="pe-wrap" ondragenter="PdfEditorApp._onBodyDragEnter(event)" ondragover="PdfEditorApp._onBodyDragOver(event)" ondragleave="PdfEditorApp._onBodyDragLeave(event)" ondrop="PdfEditorApp._onBodyDrop(event)">${_toolbarHtml()}<div class="pe-body" id="pe-body"><div class="pe-filedrop-hint">📥 여기에 놓으면 새 페이지로 추가됩니다</div>${_pages.length ? _gridHtml() : _emptyHtml()}</div></div>`;
+    const body = `<div class="pe-wrap" ondragenter="PdfEditorApp._onBodyDragEnter(event)" ondragover="PdfEditorApp._onBodyDragOver(event)" ondragleave="PdfEditorApp._onBodyDragLeave(event)" ondrop="PdfEditorApp._onBodyDrop(event)">${_toolbarHtml()}<div class="pe-body" id="pe-body">${_restoreAvailable ? _restoreBannerHtml() : ''}<div class="pe-filedrop-hint">📥 여기에 놓으면 새 페이지로 추가됩니다</div>${_pages.length ? _gridHtml() : _emptyHtml()}</div></div>`;
     const editor = _editingId ? _editorOverlayHtml() : '';
+    const insertMenu = _insertMenuOpen ? _insertMenuHtml() : '';
     const picker = _pickerOpen ? _pickerModalHtml() : '';
     const save = _saveOpen ? _saveModalHtml() : '';
     const busy = _busy ? _busyHtml() : '';
-    return body + editor + picker + save + busy;
+    return body + editor + insertMenu + picker + save + busy;
   }
   function _toolbarHtml() {
     return `<div class="pe-toolbar">
@@ -374,12 +530,41 @@ const PdfEditorApp = (() => {
       <div>PDF나 이미지를 추가해서 워크시트를 만들어보세요.<br>여러 PDF를 올려 페이지 순서를 자유롭게 배치하고,<br>텍스트·이미지를 얹은 뒤 하나의 PDF로 내보낼 수 있어요.<br><br>💡 파일을 여기로 드래그해서 놓아도 바로 추가됩니다.</div></div>`;
   }
   function _gridHtml() {
-    return `<div class="pe-grid" id="pe-grid" onclick="PdfEditorApp._onGridBackgroundClick(event)">${_pages.map((p, i) => _cardHtml(p, i)).join('')}</div>`;
+    return `<div class="pe-grid" id="pe-grid" onclick="PdfEditorApp._onGridBackgroundClick(event)"
+      ondragover="PdfEditorApp._onGridDragOver(event)" ondrop="PdfEditorApp._onGridDrop(event)">${_pages.map((p, i) => _cardHtml(p, i)).join('')}</div>`;
   }
   // ★ 표준 탐색기 관례 — 빈 공간(카드가 아닌 곳)을 클릭하면 선택이 모두 해제된다.
   function _onGridBackgroundClick(e) {
     if (e.target !== e.currentTarget) return; // 카드 자체 클릭은 각 카드 핸들러가 처리
     if (_selected.size) { _selected.clear(); _rerender(); }
+  }
+  // ★ 카드와 카드 "사이" 또는 마지막 카드 뒤의 빈 영역처럼, 정확히 카드 위가 아닌 곳에 놓아도
+  //   재정렬이 되도록 그리드 컨테이너 자체에도 놓기를 허용한다(그렇지 않으면 카드 경계를
+  //   1px이라도 벗어나 놓았을 때 브라우저가 드롭을 그냥 무시해버린다).
+  function _onGridDragOver(e) {
+    if (e.target.closest('.pe-card')) return; // 카드 위는 카드 자체 핸들러가 이미 처리
+    if (_isFileDrag(e)) return; // 외부 파일 드래그는 pe-wrap 핸들러가 처리
+    e.preventDefault();
+    try { e.dataTransfer.dropEffect = (e.ctrlKey || e.metaKey) ? 'copy' : 'move'; } catch (err) {}
+  }
+  function _onGridDrop(e) {
+    if (e.target.closest('.pe-card')) return; // 카드 위에 정확히 놓았으면 카드의 _onDrop이 이미 처리
+    const ids = _dragIds; _dragIds = null;
+    if (!ids || !ids.length) return; // 외부 파일 드래그는 _onBodyDrop이 처리
+    e.preventDefault();
+    // ★ 카드가 아닌 빈 영역(카드 사이·마지막 카드 뒤)에 놓았을 땐 "맨 끝으로 이동"으로 처리한다
+    if (e.ctrlKey || e.metaKey) {
+      const clones = ids.map(id => { const src = _pages.find(p => p.id === id); return src ? _clonePage(src) : null; }).filter(Boolean);
+      if (!clones.length) return;
+      _pages.push(...clones);
+      _selected = new Set(clones.map(c => c.id));
+      _toast(`✅ ${clones.length}쪽 복사됨`);
+    } else {
+      const moving = ids.map(id => _pages.find(p => p.id === id)).filter(Boolean);
+      _pages = _pages.filter(p => !ids.includes(p.id));
+      _pages.push(...moving);
+    }
+    _rerender();
   }
   function _cardHtml(p, i) {
     const src = _sources.find(s => s.id === p.srcId);
@@ -389,6 +574,7 @@ const PdfEditorApp = (() => {
         ondrop="PdfEditorApp._onDrop(event,${i})" ondragend="PdfEditorApp._onDragEnd(event)">
       ${_selectMode ? `<input type="checkbox" class="pe-card-chk" ${_selected.has(p.id) ? 'checked' : ''} onclick="event.stopPropagation();PdfEditorApp._toggleSelect('${p.id}')">` : ''}
       <div class="pe-card-acts">
+        <button class="pe-mini-btn" title="이 페이지 앞에 삽입" onclick="PdfEditorApp._openInsertMenu(${i})">➕</button>
         <button class="pe-mini-btn edit" title="편집" onclick="PdfEditorApp._openEditor('${p.id}')">✏️</button>
         <button class="pe-mini-btn" title="삭제" onclick="PdfEditorApp._deletePage('${p.id}')">✕</button>
       </div>
@@ -594,6 +780,25 @@ const PdfEditorApp = (() => {
   function _annotOverlayHtml(a, page) {
     const scale = _editorScaleFor(page);
     const x = Math.round(a.x * scale), y = Math.round(a.y * scale), w = Math.round(a.w * scale), h = Math.round(a.h * scale);
+    if (a.type === 'text') {
+      const fs = Math.max(1, (a.fontSize || 14) * scale);
+      const fam = a.fontFamily || DEFAULT_TEXT_FONT;
+      const pad = Math.round(3 * scale);
+      const editing = _editingTextId === a.id;
+      // ★ 실제 <textarea>를 페이지 위에 그대로 겹쳐서 클릭하면 바로 입력할 수 있게 한다.
+      //   선택만 된 상태(더블클릭 전)에서는 pointer-events:none으로 클릭이 그대로 부모(이동/리사이즈)로
+      //   전달되고, 더블클릭하면 pointer-events:auto가 되어 실제로 커서를 놓고 타이핑할 수 있다.
+      return `<div class="pe-annot${a.id === _selAnnotId ? ' sel' : ''}" data-id="${a.id}" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px"
+        onmousedown="PdfEditorApp._annotMouseDown(event,'${a.id}')" ondblclick="PdfEditorApp._annotEnterEditMode(event,'${a.id}')">
+        <textarea class="pe-annot-input" data-id="${a.id}" spellcheck="false"
+          style="pointer-events:${editing ? 'auto' : 'none'};font-family:'${_esc(fam)}','${FONT_FAMILY}',sans-serif;font-size:${fs}px;font-weight:${a.bold ? '700' : '400'};color:${_esc(a.color || '#111111')};text-align:${a.align || 'left'};padding:${pad}px;"
+          placeholder="텍스트를 입력하세요"
+          onmousedown="event.stopPropagation()"
+          oninput="PdfEditorApp._annotTextInput('${a.id}',this.value)"
+          onblur="PdfEditorApp._annotExitEditMode()">${_esc(a.text)}</textarea>
+        <div class="pe-annot-handle" onmousedown="event.stopPropagation();PdfEditorApp._annotResizeStart(event,'${a.id}')"></div>
+      </div>`;
+    }
     return `<div class="pe-annot${a.id === _selAnnotId ? ' sel' : ''}" data-id="${a.id}" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px"
       onmousedown="PdfEditorApp._annotMouseDown(event,'${a.id}')">
       <div class="pe-annot-handle" onmousedown="event.stopPropagation();PdfEditorApp._annotResizeStart(event,'${a.id}')"></div>
@@ -627,6 +832,9 @@ const PdfEditorApp = (() => {
   function _updateSelectionUI() {
     const stage = _q('pe-stage'); if (!stage) return;
     stage.querySelectorAll('.pe-annot').forEach(el => el.classList.toggle('sel', el.getAttribute('data-id') === _selAnnotId));
+    stage.querySelectorAll('.pe-annot-input').forEach(el => {
+      el.style.pointerEvents = el.getAttribute('data-id') === _editingTextId ? 'auto' : 'none';
+    });
     const side = document.querySelector('.pe-side');
     const page = _pages.find(p => p.id === _editingId);
     const sel = page ? page.annots.find(a => a.id === _selAnnotId) : null;
@@ -637,6 +845,7 @@ const PdfEditorApp = (() => {
   function _stageMouseDown(e) {
     if (e.target.closest('.pe-annot')) return;
     _selAnnotId = null;
+    _editingTextId = null;
     _updateSelectionUI();
   }
   // ★ 표준 모달 관례 — 편집 화면 바깥(어두운 배경)을 클릭하면 목록으로 돌아간다.
@@ -644,12 +853,52 @@ const PdfEditorApp = (() => {
   function _backdropMouseDown(e) {
     if (e.target === e.currentTarget) _closeEditor();
   }
+  // ★ 더블클릭 — 실제로 박스 안에 캐럿을 놓고 타이핑할 수 있는 "입력 모드"로 들어간다.
+  //   (한 번 클릭은 선택/이동만, 더블클릭해야 입력 — PowerPoint·구글슬라이드 등과 같은 방식)
+  function _annotEnterEditMode(e, id) {
+    e.stopPropagation();
+    _selAnnotId = id;
+    _editingTextId = id;
+    _updateSelectionUI();
+    const ta = document.querySelector(`.pe-annot-input[data-id="${id}"]`);
+    if (ta) { ta.focus(); const v = ta.value; try { ta.setSelectionRange(v.length, v.length); } catch (err) {} }
+  }
+  // ★ 포커스를 잃으면(다른 곳 클릭 등) 자동으로 입력 모드를 빠져나와, 다시 박스 이동/리사이즈가 되게 한다.
+  function _annotExitEditMode() {
+    if (!_editingTextId) return;
+    _editingTextId = null;
+    _updateSelectionUI();
+  }
+  // ★ 페이지 위 박스에서 직접 타이핑 — 캐럿·포커스를 잃지 않도록 전체 재렌더링 없이 데이터만 갱신한다.
+  //   (편집기 캔버스에는 텍스트를 안 그리므로 다시 그릴 필요도 없다 — 그리드 썸네일만 다음에 최신화됨)
+  function _annotTextInput(id, value) {
+    const page = _pages.find(p => p.id === _editingId); if (!page) return;
+    const a = page.annots.find(x => x.id === id); if (!a) return;
+    a.text = value;
+    page._thumbUrl = null;
+    _scheduleAutosave(); // ★ 타이핑 중엔 _rerender()를 안 부르므로(캐럿 유지) 여기서 직접 예약
+  }
+  // ★ 사이드 패널에서 글자크기·색상·굵기·정렬·폰트를 바꾸면, 캐럿을 잃지 않도록 스타일만 즉시 반영한다.
+  function _syncTextInputStyle(a) {
+    const ta = document.querySelector(`.pe-annot-input[data-id="${a.id}"]`); if (!ta) return;
+    const page = _pages.find(p => p.id === _editingId); if (!page) return;
+    const scale = _editorScaleFor(page);
+    const fs = Math.max(1, (a.fontSize || 14) * scale);
+    ta.style.fontFamily = `'${a.fontFamily || DEFAULT_TEXT_FONT}','${FONT_FAMILY}',sans-serif`;
+    ta.style.fontSize = fs + 'px';
+    ta.style.fontWeight = a.bold ? '700' : '400';
+    ta.style.color = a.color || '#111111';
+    ta.style.textAlign = a.align || 'left';
+    if (ta.value !== (a.text || '')) ta.value = a.text || ''; // 사이드 패널 텍스트창에서 바뀐 경우만 반영(보통은 이미 동일)
+  }
   function _editorAddText() {
     const page = _pages.find(p => p.id === _editingId); if (!page) return;
     const w = Math.min(220, page.width * 0.55), h = 44;
-    const a = { id: _nid(), type: 'text', x: (page.width - w) / 2, y: (page.height - h) / 2, w, h, text: '텍스트를 입력하세요', fontSize: 16, color: '#111111', bold: false, align: 'left', fontFamily: DEFAULT_TEXT_FONT };
-    page.annots.push(a); _selAnnotId = a.id; page._thumbUrl = null;
+    const a = { id: _nid(), type: 'text', x: (page.width - w) / 2, y: (page.height - h) / 2, w, h, text: '', fontSize: 16, color: '#111111', bold: false, align: 'left', fontFamily: DEFAULT_TEXT_FONT };
+    page.annots.push(a); _selAnnotId = a.id; _editingTextId = a.id; page._thumbUrl = null;
     _rerender();
+    const ta = document.querySelector(`.pe-annot-input[data-id="${a.id}"]`);
+    if (ta) { ta.style.pointerEvents = 'auto'; ta.focus(); }
   }
   async function _editorAddImage(fileList) {
     const file = fileList && fileList[0]; if (!file) return;
@@ -684,11 +933,13 @@ const PdfEditorApp = (() => {
     const a = page.annots.find(x => x.id === id); if (!a) return;
     Object.assign(a, patch);
     page._thumbUrl = null;
+    if (a.type === 'text') _syncTextInputStyle(a); // 캐럿을 안 잃도록 스타일만 바로 반영
     _renderEditorCanvas();
   }
   function _annotMouseDown(e, id) {
     e.stopPropagation();
     _selAnnotId = id;
+    if (_editingTextId && _editingTextId !== id) _editingTextId = null; // 다른 박스를 클릭하면 이전 박스의 입력 모드는 빠져나옴
     const page = _pages.find(p => p.id === _editingId); if (!page) return;
     const annot = page.annots.find(a => a.id === id); if (!annot) return;
     const scale = _editorScaleFor(page);
@@ -737,6 +988,37 @@ const PdfEditorApp = (() => {
     _drag = null;
     _renderEditorCanvas();
     _renderGridThumbs();
+  }
+
+  /* ══════════════════ "이 페이지 앞에 삽입" 메뉴 ══════════════════ */
+  //   기존 PDF의 페이지들 사이에 새 PDF·이미지·자료실 파일·빈 페이지를 바로 끼워 넣을 때 쓴다.
+  //   (드래그로 옮겨서 순서를 바꾸는 방법도 그대로 가능 — 이건 더 직접적인 지름길)
+  function _openInsertMenu(i) {
+    _insertAt = i;
+    _insertMenuOpen = true;
+    _rerender();
+  }
+  function _closeInsertMenu() {
+    _insertMenuOpen = false;
+    _insertAt = null;
+    _rerender();
+  }
+  function _insertMenuOpenArchive() {
+    _insertMenuOpen = false; // 자료실 선택 모달로 넘어가고, _insertAt은 그대로 유지해서 실제 삽입에 쓴다
+    _openArchivePicker();
+  }
+  function _insertMenuHtml() {
+    return `<div class="pe-modal-ov" onmousedown="if(event.target===this)PdfEditorApp._closeInsertMenu()">
+      <div class="pe-modal">
+        <div class="pe-modal-hd"><span>➕ ${(_insertAt || 0) + 1}쪽 위치에 삽입</span><button onclick="PdfEditorApp._closeInsertMenu()">✕</button></div>
+        <div class="pe-modal-body" style="display:flex;flex-direction:column;gap:8px">
+          <label class="pe-btn" style="justify-content:flex-start">📄 PDF 파일<input type="file" accept="application/pdf" multiple style="display:none" onchange="PdfEditorApp._onPickPdf(this.files);this.value=''"></label>
+          <label class="pe-btn" style="justify-content:flex-start">🖼 이미지 파일<input type="file" accept="image/*" multiple style="display:none" onchange="PdfEditorApp._onPickImage(this.files);this.value=''"></label>
+          <button class="pe-btn" style="justify-content:flex-start" onclick="PdfEditorApp._insertMenuOpenArchive()">📚 자료실에서 가져오기</button>
+          <button class="pe-btn" style="justify-content:flex-start" onclick="PdfEditorApp._addBlankPage()">＋ 빈 페이지</button>
+        </div>
+      </div>
+    </div>`;
   }
 
   /* ══════════════════ 자료실에서 가져오기 ══════════════════ */
@@ -795,6 +1077,7 @@ const PdfEditorApp = (() => {
         }
       } catch (e) { _toast(`⚠️ "${it.f.originalName}" 불러오기 실패: ${e.message || ''}`); }
     }
+    _insertAt = null; _insertMenuOpen = false;
     _clearBusy();
   }
 
@@ -947,6 +1230,7 @@ const PdfEditorApp = (() => {
     } else {
       _toast('✅ 다운로드 완료');
     }
+    _idbClear(); // ★ 내보내기가 끝났으니, 다음에 다시 열었을 때 이 작업을 "복원하시겠습니까"로 다시 묻지 않는다
     _pendingBytes = null;
     _rerender();
   }
@@ -971,18 +1255,27 @@ const PdfEditorApp = (() => {
   document.addEventListener('keydown', _onDocKeyDown);
   document.addEventListener('mousemove', _onDocMouseMove);
   document.addEventListener('mouseup', _onDocMouseUp);
+  // ★ 새로고침·탭 닫기 등으로 작업 중인 내용이 날아가지 않도록, 저장 안 된 페이지가 있으면
+  //   브라우저 자체의 "이 페이지를 나가시겠습니까?" 확인창을 띄운다(자동저장은 별도로 계속 진행됨).
+  window.addEventListener('beforeunload', (e) => {
+    if (_pages.length > 0) { e.preventDefault(); e.returnValue = ''; }
+  });
 
   return {
     render,
     _onPickPdf, _onPickImage, _addBlankPage,
+    _openInsertMenu, _closeInsertMenu, _insertMenuOpenArchive,
     _openArchivePicker, _closeArchivePicker, _pickerToggle, _pickerConfirm,
     _toggleSelectMode, _toggleSelect, _deleteSelected, _deletePage,
     _exportAll, _exportSelected,
     _onDragStart, _onDragOver, _onDrop, _onDragEnd, _onCardClick, _onGridBackgroundClick,
+    _onGridDragOver, _onGridDrop,
     _onBodyDragEnter, _onBodyDragOver, _onBodyDragLeave, _onBodyDrop,
     _stageDragOver, _stageDrop,
     _openEditor, _closeEditor, _editorAddText, _editorAddImage, _editorAddErase, _editorDeleteAnnot,
     _annotMouseDown, _annotResizeStart, _annotUpdate, _stageMouseDown, _backdropMouseDown,
+    _annotEnterEditMode, _annotExitEditMode, _annotTextInput,
     _saveTitleInput, _saveCatInput, _saveVisInput, _cancelSave, _confirmSave,
+    _doRestore, _discardRestore,
   };
 })();
