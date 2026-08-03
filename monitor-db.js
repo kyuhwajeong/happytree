@@ -1,11 +1,14 @@
 /**
- * monitor-db.js — v5.0
+ * monitor-db.js — v5.2
  *
  * ■ 신규 기능
  *   1. IP 지오코딩 — ip-api.com 으로 한국 도시·지역명 자동 조회
  *   2. IP 라벨 관리 — 특정 IP 대역에 장소명 지정
  *      (예: "211.234.12" → "해피트리영어학원")
  *      Firebase: hakwon10/monitor/ip_labels/{id}
+ *   3. (v5.2) 원격 명령 — 관리자가 특정 세션에 원격으로 "캐시 전체 삭제 +
+ *      새로고침"을 지시할 수 있음. 대상 브라우저 탭이 열려 Firebase에
+ *      연결된 상태여야 즉시 반영됨 (FCM 푸시 기반 아님 — 하단 함수 주석 참고)
  */
 const MonitorDB = (() => {
 
@@ -25,6 +28,8 @@ const MonitorDB = (() => {
   let _hbTimer = null;
   let _actions = [];
   let _wTimer  = null;
+  let _cmdUnlisten = null;
+  let _lastCmdId   = null;
 
   /* ══════════════════════════════════════════════════════
    * 공개 유틸
@@ -135,8 +140,10 @@ const MonitorDB = (() => {
     await FireDB.set(`${PATH}/${sid}`, session);
     _sid     = sid;
     _actions = [];
+    _lastCmdId = null;
     _startHB();
     _cleanupExpired();
+    listenRemoteCommand();
 
     /* FCM 푸시 */
     if (typeof MonitorFCM !== 'undefined') {
@@ -144,6 +151,95 @@ const MonitorDB = (() => {
     }
 
     return sid;
+  }
+
+  /* ══════════════════════════════════════════════════════
+   * 원격 명령 (v5.2 신규)
+   *
+   * 관리자가 모니터링 대시보드에서 특정 세션에 원격으로 명령을 보내고,
+   * 그 세션의 브라우저(탭이 열려 실시간 연결된 상태)가 즉시 실행한다.
+   *
+   *   hakwon10/monitor/sessions/{sessionId}/remoteCmd
+   *     { type:'clearAll', at, cmdId }
+   *
+   * ★ 제약: FCM 푸시가 아니라 Firebase 실시간 리스너 기반이라, 대상 탭이
+   *   "지금 열려서 Firebase에 연결돼 있어야" 즉시 반영된다. 탭이 닫혀
+   *   있으면 다음에 그 탭을 다시 열 때 반영된다(닫힌 브라우저를 강제로
+   *   깨우는 방식은 아님 — FCM 토큰은 관리자 기기에만 등록돼 있어서
+   *   일반 사용자 기기를 푸시로 깨울 수 없기 때문).
+   * ══════════════════════════════════════════════════════ */
+  async function sendRemoteCommand(sessionId, type) {
+    if (!sessionId || !FireDB.ready()) return false;
+    const cmd = {
+      type,
+      at: Date.now(),
+      cmdId: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    };
+    return await FireDB.set(`${PATH}/${sessionId}/remoteCmd`, cmd).catch(() => false);
+  }
+
+  function listenRemoteCommand() {
+    if (!_sid || !FireDB.ready()) return;
+    if (_cmdUnlisten) { _cmdUnlisten(); _cmdUnlisten = null; }
+    _cmdUnlisten = FireDB.listen(`${PATH}/${_sid}/remoteCmd`, cmd => {
+      if (!cmd || !cmd.cmdId || cmd.cmdId === _lastCmdId) return;
+      _lastCmdId = cmd.cmdId;
+      _handleRemoteCommand(cmd);
+    });
+  }
+
+  function _handleRemoteCommand(cmd) {
+    if (!cmd || !cmd.type) return;
+    if (cmd.type === 'clearAll') {
+      try {
+        if (typeof App !== 'undefined' && App._toast)
+          App._toast('🧹 관리자 요청으로 브라우저 저장소를 초기화합니다...', '', 2500);
+      } catch (e) {}
+      setTimeout(_execFullWipe, 1200);
+    }
+  }
+
+  /* 이 브라우저(현재 origin)의 캐시·저장소를 전부 지우고 새로고침
+   * - Service Worker 등록 해제
+   * - Cache Storage 전체 삭제
+   * - IndexedDB 전체 삭제 (Firebase SDK 로컬 캐시 등)
+   * - 쿠키 삭제 (JS로 접근 가능한 범위)
+   * - localStorage / sessionStorage 전체 삭제
+   *   (로그인 세션·테마·탭순서 등 로컬 설정도 함께 사라짐 — "완전 초기화"가
+   *    목적이므로 의도된 동작. 재로그인이 필요해짐)
+   */
+  async function _execFullWipe() {
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister().catch(() => {})));
+      }
+    } catch (e) {}
+    try {
+      if (window.caches && caches.keys) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k).catch(() => {})));
+      }
+    } catch (e) {}
+    try {
+      if (window.indexedDB && indexedDB.databases) {
+        const dbs = await indexedDB.databases();
+        await Promise.all((dbs || []).map(d => new Promise(res => {
+          if (!d.name) return res();
+          const req = indexedDB.deleteDatabase(d.name);
+          req.onsuccess = req.onerror = req.onblocked = () => res();
+        })));
+      }
+    } catch (e) {}
+    try {
+      document.cookie.split(';').forEach(c => {
+        const name = c.split('=')[0].trim();
+        if (name) document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+      });
+    } catch (e) {}
+    try { localStorage.clear(); sessionStorage.clear(); } catch (e) {}
+
+    location.href = location.pathname + '?_rc=' + Date.now();
   }
 
   /* ══════════════════════════════════════════════════════
@@ -174,6 +270,7 @@ const MonitorDB = (() => {
     if (!_sid || !FireDB.ready()) return;
     clearInterval(_hbTimer); _hbTimer = null;
     clearTimeout(_wTimer);
+    if (_cmdUnlisten) { _cmdUnlisten(); _cmdUnlisten = null; }
     if (_actions.length) {
       await FireDB.set(`${PATH}/${_sid}/actions`, _actions);
     }
@@ -349,5 +446,7 @@ const MonitorDB = (() => {
     /* IP 라벨 */
     getIpLabels, saveIpLabel, deleteIpLabel, matchIpLabel, listenIpLabels,
     ONLINE_MS,
+    /* 원격 명령 (v5.2 신규) */
+    sendRemoteCommand,
   };
 })();

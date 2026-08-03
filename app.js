@@ -1262,9 +1262,11 @@ const App = (() => {
     const wrap=_q('mg-classes'); if(!wrap)return;
     wrap.innerHTML='';
     const isAdmin=DB.isAdmin();
+    // ★ 운용자(operator)에게도 반 추가·수정 + 교재풀 관리 권한 개방 (수업료/엑셀/교재복사/반삭제는 admin·manager 전용 유지)
+    const canManageCls=isAdmin||DB.getRole()==='operator';
     // ★ sticky 상단 (반추가 + 월이동 + 달력)
     const top=document.createElement('div'); top.className='mg-cls-top';
-    if(isAdmin){
+    if(canManageCls){
       const btn=document.createElement('button'); btn.className='add-cls';
       btn.innerHTML='<span style="font-size:18px">＋</span> 반 추가';
       btn.onclick=()=>openClassModal(); top.appendChild(btn);
@@ -1289,6 +1291,7 @@ const App = (() => {
   function _renderMgClsContent(wrap){
     wrap.innerHTML='';
     const isAdmin=DB.isAdmin();
+    const canManageCls=isAdmin||DB.getRole()==='operator';
     // ★ 현재 mgMk 기준 반만 표시
     const classes=DB.getClassesForMonth(S.mgMk);
     if(!classes.length){
@@ -1296,11 +1299,14 @@ const App = (() => {
       return;
     }
     const cont=document.createElement('div'); cont.className=S.viewMode==='grid'?'cls-grid':'cls-list';
-    classes.forEach(cls=>cont.appendChild(_buildClsCard(cls,isAdmin)));
+    classes.forEach(cls=>cont.appendChild(_buildClsCard(cls,canManageCls)));
     wrap.appendChild(cont);
   }
 
   function _buildClsCard(cls,isAdmin){
+    // ★ isAdmin 파라미터는 이제 "canManageCls"(admin/manager 또는 operator) 의미로 넘어옴.
+    //   교재복사·반삭제처럼 더 민감한 동작은 아래 isAdminStrict(진짜 admin/manager)로 별도 체크.
+    const isAdminStrict=DB.isAdmin();
     const card=document.createElement('div'); card.className='cls-card';
     const mk=S.mgMk; const books=DB.getMonthBooks(cls.id,mk);
     const dayBadges=(cls.days||[]).map(d=>{
@@ -1326,6 +1332,8 @@ const App = (() => {
         <div class="cls-chdr-r">
           ${isAdmin?`
             <button class="ibtn" onclick="App.openClassModal('${cls.id}')" title="수정">✏️</button>
+          `:''}
+          ${isAdminStrict?`
             <button class="ibtn" onclick="App.openCopyModal('${cls.id}')" title="교재복사" style="background:rgba(5,150,105,.1);border-color:rgba(5,150,105,.3);color:var(--green)">📋</button>
             <button class="ibtn red" onclick="App.delClass('${cls.id}')" title="이 편성 삭제">🗑</button>
           `:''}
@@ -1485,10 +1493,16 @@ const App = (() => {
     return right;
   }
 
-  /* ★ PC Drag */
+  /* ★ PC Drag
+   * ★ 버그 수정: el(.bm-pool-item 등)이 draggable=true라서, 안에 중첩된
+   *   삭제(✕)/주교재(主)/부교재(副) 버튼을 클릭해도 브라우저가 클릭 대신
+   *   드래그로 인식해버려 버튼이 반응 없는 것처럼 보이던 문제.
+   *   → 드래그가 버튼 위에서 시작되면 즉시 취소해서 평범한 클릭으로 넘긴다.
+   */
   function _setupPCDrag(el,bookId,name,fromZone,clsId,mk){
     el.draggable=true;
     el.addEventListener('dragstart',e=>{
+      if(e.target.closest?.('.bm-pool-btn,.bm-back-btn')){ e.preventDefault(); return; }
       _drag={item:el,bookId,name,fromZone,clsId,mk};
       el.classList.add('dragging');
       e.dataTransfer.effectAllowed='move';
@@ -1498,9 +1512,12 @@ const App = (() => {
     el.addEventListener('dragend',()=>{el.classList.remove('dragging');document.querySelectorAll('.drop-hover').forEach(z=>z.classList.remove('drop-hover'));});
   }
 
-  /* ★ 모바일 Long-press */
+  /* ★ 모바일 Long-press
+   * ★ 동일한 이유로 버튼 위에서 시작된 터치는 롱프레스 드래그 감지 자체를
+   *   하지 않도록 방어 (PC 드래그 수정과 짝) */
   function _setupLongPressDrag(el,bookId,name,fromZone,clsId,mk){
     el.addEventListener('touchstart',e=>{
+      if(e.target.closest?.('.bm-pool-btn,.bm-back-btn')) return;
       const t=e.touches[0]; _lpStartX=t.clientX; _lpStartY=t.clientY;
       _lpTimer=setTimeout(()=>{
         _lpActive=true; _drag={item:el,bookId,name,fromZone,clsId,mk};

@@ -399,7 +399,8 @@ hakwon10/
     │   ├── ip / city / region / isp
     │   ├── device / browser / os
     │   ├── startedAt / lastSeen / loggedOut
-    │   └── actions[]     메뉴·액션 로그 (최대 200건)
+    │   ├── actions[]     메뉴·액션 로그 (최대 200건)
+    │   └── remoteCmd     {type,at,cmdId} — 원격 명령 (v5.2, 예: clearAll)
     ├── fcm_tokens/{deviceId}
     │   ├── token / createdAt / lastUpdated
     │   └── username / role
@@ -718,8 +719,8 @@ KEY_3 ──┘
 
 | 파일 | 역할 |
 |---|---|
-| `monitor-db.js` v5.0 | 세션 생성·갱신·액션 로그·IP 지오코딩 |
-| `monitor-app.js` v4.1 | 히든 대시보드 UI (전체 화면 오버레이) + 신규 모듈 MENU 라벨 |
+| `monitor-db.js` v5.2 | 세션 생성·갱신·액션 로그·IP 지오코딩, 🧹 원격 명령 채널(신규) |
+| `monitor-app.js` v4.2 | 히든 대시보드 UI (전체 화면 오버레이) + 신규 모듈 MENU 라벨, 🧹 원격 캐시 삭제 버튼(신규) |
 | `monitor-patch.js` v5.1 | 전 메뉴(신규 6종 포함) 함수 monkey-patch → 액션 자동 기록, 전수 재점검 보강 |
 | `monitor-fcm.js` v1.0 | FCM 토큰 발급/관리 + 신규 접속 시 푸시 전송 |
 | `firebase-messaging-sw.js` | FCM 백그라운드 수신 → OS 알림 표시 |
@@ -753,7 +754,8 @@ actions[] — 메뉴 이동, 진도 입력, xlsx 반영 등 최대 200건
 | 통계 대시보드 | 48h 집계: 총 접속·평균 사용시간·메뉴 점유율·사용자별 활동 |
 | 메뉴 히트맵 | 요일×시간대 2D 그리드 (0~24h, 일~토) |
 | IP 라벨 관리 | IP 대역에 장소명 지정 (예: "211.234.12" → "해피트리영어학원") |
-| 세션 강제 종료 | 개별 세션 로그아웃 처리 |
+| 세션 삭제 | `deleteOne()` — Firebase 기록만 삭제, 실제 사용자는 계속 이용 가능 (기존 README가 "강제 종료/로그아웃 처리"로 잘못 설명하고 있었음 — 실제로는 원격으로 로그아웃시키지 않음, 정정) |
+| **🧹 원격 캐시 삭제 (v5.2 신규)** | 특정 세션에 원격 명령 전송 → 대상 브라우저의 Cache Storage·IndexedDB·쿠키·localStorage/sessionStorage 전부 삭제 + 새로고침. 아래 상세 설명 참고 |
 
 ### 추적 액션 범위 (monitor-patch.js v5.1)
 
@@ -782,6 +784,36 @@ actions[] — 메뉴 이동, 진도 입력, xlsx 반영 등 최대 200건
   표시되던 문제 수정
 - `GameApp._selectSource` 라벨 매핑에 없는 값(`'manual'`)을 썼는데 실제
   값은 `'video'|'paste'|'words'` — 마찬가지로 라벨 누락 수정
+
+### 🧹 원격 캐시 전체 삭제 흐름 (v5.2 신규)
+
+> "상대방 PC의 사이트가 이상해져서 캐시를 지워 정상화해야 하는데, 원격 데스크톱
+> 없이 직접 해주고 싶다"는 요청으로 추가된 기능. 별도 원격조종 프로그램 없이
+> 진도사이트 자체에서 특정 세션의 브라우저 저장소를 초기화할 수 있다.
+
+```
+관리자: 모니터링 대시보드 → 세션 상세 → "🧹 원격 캐시 삭제" 클릭
+→ MonitorDB.sendRemoteCommand(sessionId, 'clearAll')
+→ Firebase hakwon10/monitor/sessions/{sessionId}/remoteCmd 기록
+
+대상 PC (브라우저 탭이 열려 Firebase에 연결된 상태):
+→ 자신의 세션 경로를 실시간으로 듣고 있던 리스너가 명령 감지
+→ Service Worker 해제 → Cache Storage 전체 삭제 → IndexedDB 전체 삭제
+→ 쿠키 삭제 → localStorage/sessionStorage 전체 삭제
+→ 새로고침(캐시 무효화 쿼리 파라미터 포함)
+```
+
+**제약 사항**
+
+- FCM 푸시가 아니라 Firebase 실시간 리스너 기반이라, **대상 탭이 지금 열려서
+  Firebase에 연결돼 있어야 즉시 반영**됩니다. 탭이 완전히 닫혀 있으면 다음에
+  그 탭을 다시 열 때 반영됩니다 (닫힌 브라우저를 강제로 깨우는 방식은 아님).
+- 일반 사용자 기기는 FCM 토큰을 등록하지 않으므로(토큰은 모니터링 창을 연
+  관리자 기기에만 등록됨) 지금 구조로는 푸시로 깨우는 방식 자체가 불가능함 —
+  향후 필요하면 일반 로그인 시에도 FCM 토큰을 등록하도록 확장해야 함(알림
+  권한 요청 UX가 추가로 필요).
+- 초기화 대상에 **로그인 세션도 포함**되므로, 실행되면 그 기기는 재로그인이
+  필요해집니다. "완전 초기화"가 목적이라 의도된 동작입니다.
 
 ### FCM 푸시 흐름
 
@@ -947,6 +979,8 @@ actions[] — 메뉴 이동, 진도 입력, xlsx 반영 등 최대 200건
 |---|---|---|
 | operate(진도) | 항상 허용 | 항상 허용 |
 | manage(관리) | 항상 허용 | teacher는 강제로 operate로 리다이렉트, operator는 허용 |
+| manage 내 반 추가·수정·교재풀 관리 | 항상 허용 | **operator도 허용 (2026-08 변경)**, teacher는 manage 자체가 막혀 있어 접근 불가 |
+| manage 내 반 삭제·교재복사·수업료 일괄편집·엑셀추출 | 항상 허용 | admin/manager 전용 유지 (operator도 불가) |
 | dashboard(홈) | 항상 허용 | `allowedMenus`에 `dashboard` 있어야 함 (없으면 canOperate 시 operate로, 아니면 로그인 요구) |
 | archive(콘텐츠) | 항상 허용 | canOperate 필요 + `allowedMenus`에 `archive` 있어야 함 |
 | students(학생) | 항상 허용 | `allowedMenus`에 `students` 있어야 함 |
@@ -1018,6 +1052,37 @@ frame-src:
 ---
 
 ## 13. 최근 주요 변경 이력
+
+### 🛠 app.js — 운용자 권한 확장 + 교재풀 삭제버튼 버그 수정
+
+- **운용자(operator) 권한 확장**: 관리 화면의 반 관리에서 그동안 admin/manager만
+  할 수 있던 "반 추가·수정"과 교재풀(주교재/부교재/목록) 추가·이동·삭제를
+  operator 역할에도 개방함. 사용자 요청 시 "반 삭제·교재복사·수업료 일괄편집·
+  엑셀추출은 admin/manager 전용으로 유지"를 명시적으로 선택해, 이 4개
+  기능만 그대로 admin/manager 전용으로 남겨둠. `_renderMgCls`/
+  `_buildClsCard`에 `canManageCls`(admin 또는 operator) 판정을 추가하고,
+  `isAdminStrict`(진짜 admin/manager)로 민감한 동작만 별도 체크하도록 분리.
+- **교재풀 삭제(✕) 버튼 무반응 버그 수정**: "교재를 추가한 뒤 ✕ 버튼을
+  눌러도 반응이 없고 전체삭제만 동작한다"는 제보로 원인 확인. 교재풀
+  아이템(`.bm-pool-item`)이 PC 드래그 기능 때문에 `draggable=true`로
+  설정돼 있는데, 그 안에 중첩된 ✕/主/副 버튼을 클릭하면 브라우저가 이를
+  클릭이 아니라 드래그 시작으로 인식해버려 클릭 이벤트가 씹히는 문제였음
+  (전체삭제 버튼은 draggable 영역 밖에 있어 정상 동작했던 것).
+  `_setupPCDrag`/`_setupLongPressDrag`의 드래그 시작 지점이 버튼
+  (`.bm-pool-btn`, `.bm-back-btn`) 위일 때는 드래그를 취소하도록 수정.
+
+### 🧹 원격 캐시 전체 삭제 기능 (monitor-db.js v5.2 / monitor-app.js v4.2)
+
+원격 데스크톱 프로그램 없이도, 모니터링 대시보드에서 특정 세션에 "브라우저
+캐시·저장소를 전부 지우고 새로고침"하도록 원격 명령을 보낼 수 있는 기능을
+신규 추가함. Firebase 실시간 리스너 기반이라 대상 탭이 열려 연결된 상태여야
+즉시 반영되며(FCM 푸시 아님), Cache Storage·IndexedDB·쿠키·localStorage/
+sessionStorage를 전부 삭제하므로 로그인 세션도 함께 초기화됨(재로그인 필요).
+세션 상세 패널(PC/모바일)에 "🧹 원격 캐시 삭제" 버튼으로 노출.
+
+부수적으로, 기존 README가 "세션 강제 종료 = 개별 세션 로그아웃 처리"라고
+설명하던 부분이 실제로는 Firebase 기록만 지우는 `deleteOne()`이라 실사용자를
+강제로 로그아웃시키지 않는다는 점을 확인해 문서를 정정함.
 
 ### 🔁 재점검: 모니터링 v5.1 + 게스트모드 v3.1 (2026-08, 2차)
 
