@@ -1,5 +1,12 @@
 /**
- * monitor-patch.js — v5.1 (신규 모듈 커버리지 확대 + 기존 버그 수정)
+ * monitor-patch.js — v5.2 (PdfEditorApp 신규 커버리지 추가)
+ *
+ * ■ v5.2 — 공유 폴더 소스 재점검 결과, archive-app.js TOOL_TABS에 4번째
+ *   도구로 이미 추가돼 있던 'pdf-editor'(PdfEditorApp, PDF 워크시트 제작)가
+ *   이 파일의 추적 대상 어디에도 없어 완전한 사각지대였음을 확인.
+ *   [PDF워크시트] 원본 PDF/이미지 추가, 저장(→자료실 등록) 3개 액션 추가.
+ *   ArchiveApp._selectTool 라벨 맵에도 'pdf-editor' 항목이 없어 탭 전환 시
+ *   raw key로만 표시되던 것을 '📝 PDF 워크시트'로 보강.
  *
  * ■ v5.1 — 사용자 재점검 요청으로 v5.0에서 다룬 6개 신규 모듈의 전체
  *   public API를 다시 한 번 전수 대조하여 놓친 의미있는 액션을 추가:
@@ -755,7 +762,8 @@
       _wrap(ArchiveApp, '_selectTool', async (key) => {
         /* v5.1 버그 수정: 실제 TOOL_TABS 키는 'files'인데 'library'로 잘못 매핑돼 있어
            자료실 탭 전환 시 라벨이 안 붙고 raw key로만 표시되고 있었음 */
-        const lbl = { files:'🗂 자료실', 'video-worksheet':'🎬 영상 워크시트', games:'🎮 학습 게임' };
+        /* v5.2: TOOL_TABS에 신규 추가된 'pdf-editor'(PDF 워크시트 제작) 라벨 보강 */
+        const lbl = { files:'🗂 자료실', 'video-worksheet':'🎬 영상 워크시트', 'pdf-editor':'📝 PDF 워크시트', games:'🎮 학습 게임' };
         _menuLog('archive', lbl[key] || key);
         _log('archive', `콘텐츠 탭 전환: ${lbl[key] || key}`);
       });
@@ -813,6 +821,30 @@
       _wrap(ArchiveApp, '_submitPasswordGate', async (id) => {
         const p = (typeof ArchiveDB !== 'undefined') ? ArchiveDB.getById?.(id) : null;
         _log('archive', `🔒 비밀번호 보호 자료 열람 시도: ${p?.name || id || ''}`);
+      });
+    }
+
+    /* ╔══════════════════════════════════════════════════╗
+     * ║  PdfEditorApp — PDF 워크시트 제작 (콘텐츠 탭 내   ║
+     * ║  4번째 도구, v5.2 신규)                          ║
+     * ║  archive-app.js TOOL_TABS에 'pdf-editor'로 이미  ║
+     * ║  추가돼 있었으나(pdf-editor-app.js), 이 파일의   ║
+     * ║  추적 대상에는 전혀 없어 완전한 사각지대였음      ║
+     * ╚══════════════════════════════════════════════════╝ */
+    if (typeof PdfEditorApp !== 'undefined') {
+
+      _wrap(PdfEditorApp, '_onPickPdf', async (fileList) => {
+        const names = Array.from(fileList || []).map(f => f.name).join(', ');
+        _log('archive', `📝 PDF워크시트: 원본 PDF 추가${names ? ' (' + names + ')' : ''}`);
+      });
+
+      _wrap(PdfEditorApp, '_onPickImage', async (fileList) => {
+        const names = Array.from(fileList || []).map(f => f.name).join(', ');
+        _log('archive', `📝 PDF워크시트: 원본 이미지 추가${names ? ' (' + names + ')' : ''}`);
+      });
+
+      _wrap(PdfEditorApp, '_confirmSave', async () => {
+        _log('archive', '📝 PDF워크시트: 저장 → 콘텐츠 자료실 등록');
       });
     }
 

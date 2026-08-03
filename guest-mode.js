@@ -1,6 +1,12 @@
 /**
- * guest-mode.js — HappyTree Guest Narration System v3.1
+ * guest-mode.js — HappyTree Guest Narration System v3.2
  * ══════════════════════════════════════════════════════
+ * 변경사항 v3.2 (공유 폴더 소스 재점검):
+ *  ⑪ archive-app.js TOOL_TABS에 4번째 도구로 이미 추가돼 있던 'pdf-editor'
+ *     (PdfEditorApp, PDF 워크시트 제작)가 v3.1 나레이션에서 통째로 빠져
+ *     있었음(3개 도구로만 소개) — 콘텐츠 나레이션에 스텝 추가, 제목도
+ *     "자료실·영상·게임"→"자료실·영상·PDF·게임"으로 정정
+ *
  * 변경사항 v3.0:
  *  ① 이전 버튼 추가 (첫 스텝 제외)
  *  ② 완료 후 "다시 보기" 버튼 → 나레이션 재시작
@@ -949,13 +955,13 @@ const GuestMode = (() => {
 
     /* ── 콘텐츠: 자료실 · 영상 워크시트 · 학습 게임 (v신규) ── */
     archive: {
-      title: '🗂 콘텐츠 (자료실 · 영상 · 게임)',
+      title: '🗂 콘텐츠 (자료실 · 영상 · PDF · 게임)',
       accent: '#e11d48',
       steps: [
         {
-          text: '🗂 <b>콘텐츠</b> 화면입니다.\n\n파일 <b>자료실</b>, 🎬 <b>영상 워크시트</b>, 🎮 <b>학습 게임</b> 3가지 도구가 탭 하나로 묶여 있습니다.\n\n먼저 기본 탭인 자료실부터 살펴볼게요.',
+          text: '🗂 <b>콘텐츠</b> 화면입니다.\n\n파일 <b>자료실</b>, 🎬 <b>영상 워크시트</b>, 📝 <b>PDF 워크시트 제작</b>, 🎮 <b>학습 게임</b> 4가지 도구가 탭 하나로 묶여 있습니다.\n\n먼저 기본 탭인 자료실부터 살펴볼게요.',
           highlight: '#page-archive .ar-tool-tabs',
-          highlightLabel: '3개 도구 탭',
+          highlightLabel: '4개 도구 탭',
           action: () => { if (typeof ArchiveApp !== 'undefined') ArchiveApp._selectTool('files'); },
         },
         {
@@ -975,6 +981,12 @@ const GuestMode = (() => {
           highlight: '#page-archive .ev-cats-row',
           highlightLabel: '영상 워크시트',
           action: () => { if (typeof ArchiveApp !== 'undefined') ArchiveApp._selectTool('video-worksheet'); },
+        },
+        {
+          text: '📝 <b>PDF 워크시트 제작</b> 탭입니다.\n\n여러 개의 PDF·이미지를 페이지 단위로 모아서 자르고 합친 뒤, 텍스트와 이미지를 자유롭게 얹어 나만의 학습지 PDF를 새로 만들 수 있어요.\n\n완성한 워크시트는 다운로드와 동시에 <b>자료실에도 자동 등록</b>됩니다.',
+          highlight: '#page-archive .pe-toolbar',
+          highlightLabel: 'PDF 워크시트 제작',
+          action: () => { if (typeof ArchiveApp !== 'undefined') ArchiveApp._selectTool('pdf-editor'); },
         },
         {
           text: '🎮 <b>학습 게임</b> 탭입니다.\n\n짝맞추기 · 스펠링 · 퀴즈 3종 게임을 만들 수 있어요. 영상 대본이나 직접 입력한 단어를 그대로 재활용하기 때문에 새로 준비할 필요가 없습니다.\n\n빔프로젝터로 다 같이 하는 화면 게임과, 인쇄용 워크시트를 둘 다 만들 수 있어요.',
