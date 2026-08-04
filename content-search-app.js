@@ -23,8 +23,15 @@ const ContentSearchApp = (() => {
   let _results = [];            // { postId, name, category, matches: [{page, snippet, ocr}] }
   let _cancelToken = 0;         // ★ 검색 도중 다시 검색하거나 닫으면 이전 루프를 조용히 무시시키기 위함
 
+  // ★ 관리자 전용 "기존 자료 일괄 인덱싱" 상태 — 검색 상태와 완전히 분리
+  let _backfillRunning = false;
+  let _backfillProgress = { done: 0, total: 0, indexed: 0, skipped: 0, failed: 0 };
+  let _backfillToken = 0;
+  let _adminOpen = false; // ★ 관리자 패널은 기본적으로 접혀 있음(평소엔 검색만 깔끔하게 보이도록)
+
   function _q(id) { return document.getElementById(id); }
   function _esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  function _isAdmin() { return typeof DB !== 'undefined' && DB.isAdmin && DB.isAdmin(); }
 
   function _css() {
     if (_q('cs-style')) return;
@@ -60,8 +67,66 @@ const ContentSearchApp = (() => {
 .cs-match-snippet{font-size:12px;color:var(--tx2);line-height:1.4}
 .cs-match-snippet b{color:var(--tx);background:rgba(99,102,241,.18);border-radius:3px;padding:0 2px}
 .cs-ocr-badge{font-size:9.5px;color:#a855f7;font-weight:700}
+.cs-admin-box{margin-top:18px;padding-top:16px;border-top:1px dashed var(--bdr)}
+.cs-admin-toggle{font-family:var(--mono);font-size:11px;color:var(--tx3);background:none;border:none;cursor:pointer;padding:0}
+.cs-admin-toggle:hover{color:var(--tx2)}
+.cs-admin-panel{margin-top:10px;padding:12px 14px;border:1px solid var(--bdr);border-radius:10px;background:var(--card2)}
+.cs-admin-desc{font-size:11.5px;color:var(--tx3);margin-bottom:10px;line-height:1.5}
+.cs-admin-btn{padding:8px 14px;border-radius:8px;border:1px solid var(--bdr);background:var(--card2);color:var(--tx2);font-size:12px;cursor:pointer}
+.cs-admin-btn:disabled{opacity:.5;cursor:default}
+.cs-admin-result{font-family:var(--mono);font-size:11.5px;color:var(--tx2);margin-top:8px;line-height:1.7}
 `;
+
     document.head.appendChild(s);
+  }
+
+  function _adminBoxHtml() {
+    return `
+      <div class="cs-admin-box">
+        <button class="cs-admin-toggle" onclick="ContentSearchApp._toggleAdmin()">${_adminOpen ? '▲' : '▼'} 관리자 도구 — 기존 자료 일괄 인덱싱</button>
+        ${_adminOpen ? `
+          <div class="cs-admin-panel" id="cs-admin-panel">
+            <div class="cs-admin-desc">이 검색 기능이 생기기 전에 이미 올라와 있던 PDF들은 아직 검색 대상이 아닙니다.
+              아래 버튼을 누르면 자료실 전체를 훑어서 <b style="color:var(--tx)">아직 인덱싱 안 된 PDF만</b> 찾아 처리합니다.
+              이미 처리된 파일은 건너뛰므로 여러 번 눌러도 안전합니다. (파일 수·OCR 필요 여부에 따라 시간이 걸릴 수 있어요)</div>
+            <button class="cs-admin-btn" id="cs-backfill-btn" ${_backfillRunning ? 'disabled' : ''} onclick="ContentSearchApp._runBackfill()">${_backfillRunning ? '처리 중...' : '▶ 기존 자료 인덱싱 시작'}</button>
+            <div id="cs-backfill-progress"></div>
+          </div>` : ''}
+      </div>`;
+  }
+  function _toggleAdmin() { _adminOpen = !_adminOpen; _render(); }
+  function _renderBackfillProgress() {
+    const slot = _q('cs-backfill-progress');
+    if (!slot) return;
+    if (!_backfillRunning && !_backfillProgress.total) { slot.innerHTML = ''; return; }
+    const pct = _backfillProgress.total ? Math.round((_backfillProgress.done / _backfillProgress.total) * 100) : 0;
+    slot.innerHTML = `
+      <div class="cs-progress-wrap">
+        <div class="cs-progress-label"><span>${_backfillRunning ? '⚙️ 처리 중' : '✅ 완료'} — 게시물 ${_backfillProgress.done} / ${_backfillProgress.total}건 확인</span><span>${pct}%</span></div>
+        <div class="cs-progress-bar"><div class="cs-progress-fill" style="width:${pct}%"></div></div>
+      </div>
+      <div class="cs-admin-result">신규 인덱싱: ${_backfillProgress.indexed}건 · 이미 처리됨(건너뜀): ${_backfillProgress.skipped}건 · 실패: ${_backfillProgress.failed}건</div>`;
+  }
+  async function _runBackfill() {
+    if (typeof ArchiveDB === 'undefined' || typeof ArchiveApp === 'undefined') return;
+    const myToken = ++_backfillToken;
+    _backfillRunning = true;
+    _backfillProgress = { done: 0, total: 0, indexed: 0, skipped: 0, failed: 0 };
+    const targets = ArchiveDB.getAll().filter(p => (p.files || []).some(f => (f.ext || '').toLowerCase() === 'pdf'));
+    _backfillProgress.total = targets.length;
+    _render();
+    for (const post of targets) {
+      if (myToken !== _backfillToken) return; // ★ 도중에 다시 실행되거나 모달이 닫히면 조용히 중단
+      try {
+        const r = await ArchiveApp.indexExistingPost(post);
+        _backfillProgress.indexed += r.done; _backfillProgress.skipped += r.skipped; _backfillProgress.failed += r.failed;
+      } catch (e) { console.warn('[ContentSearchApp] 일괄 인덱싱 실패:', post.name, e.message); _backfillProgress.failed++; }
+      _backfillProgress.done++;
+      _renderBackfillProgress();
+    }
+    if (myToken !== _backfillToken) return;
+    _backfillRunning = false;
+    _render();
   }
 
   function open() {
@@ -77,6 +142,7 @@ const ContentSearchApp = (() => {
   function close() {
     _isOpen = false;
     _cancelToken++; // ★ 진행 중이던 검색 루프가 있으면 다음 체크에서 스스로 멈춤
+    _backfillToken++; // ★ 일괄 인덱싱 도중 닫아도 다음 체크에서 스스로 멈춤
     _q('cs-ov')?.remove();
   }
   function _setScope(v) { _scope = v; _render(); }
@@ -105,6 +171,7 @@ const ContentSearchApp = (() => {
           <div class="cs-scopes">${scopes.map(s => `<button class="cs-scope-chip${s === _scope ? ' on' : ''}" onclick="ContentSearchApp._setScope('${_esc(s)}')">${_esc(s)}</button>`).join('')}</div>
           <div id="cs-progress-slot"></div>
           <div id="cs-results-slot">${_resultsHtml()}</div>
+          ${_isAdmin() ? _adminBoxHtml() : ''}
         </div>
       </div>`;
     document.body.appendChild(ov);
@@ -206,5 +273,5 @@ const ContentSearchApp = (() => {
     _render();
   }
 
-  return { open, close, _setScope, _run };
+  return { open, close, _setScope, _run, _toggleAdmin, _runBackfill };
 })();
