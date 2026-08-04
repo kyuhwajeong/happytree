@@ -296,7 +296,13 @@ const ScheduleApp = (() => {
     _checkPopup();
     clearInterval(_timer);
     _timer = setInterval(_checkPopup, 30000);
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') _checkPopup(); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      _checkPopup();
+      // ★ 백그라운드 탭에서는 브라우저가 setTimeout을 늦출 수 있어, 다시 보일 때
+      //   캐시가 TTL을 넘겼으면 즉시 한 번 더 확인(중복 호출은 _fetchWeather 내부 캐시 검사가 걸러줌)
+      _fetchWeather().catch(e => console.warn('[ScheduleApp] 날씨 갱신 실패:', e.message));
+    });
     _fetchWeather().catch(e => console.warn('[ScheduleApp] 날씨 로드 실패(달력은 정상 표시됨):', e.message));
   }
 
@@ -309,10 +315,13 @@ const ScheduleApp = (() => {
    * 달력 날짜 칸에 은은한 배경으로 깔아준다. 위치 권한이 없거나 실패하면
    * 조용히 서울 좌표로 대체하고, 그마저 실패하면 그냥 날씨 없이 달력만 정상 표시.
    * ═══════════════════════════════════════════════════════════ */
-  const WEATHER_CACHE_KEY = 'sch_weather_cache_v4'; // ★ v3→v4: 지역명(locationLabel) 캐시 필드 추가
-  const WEATHER_TTL_MS = 3 * 60 * 60 * 1000; // 3시간마다 갱신
+  const WEATHER_CACHE_KEY = 'sch_weather_cache_v5'; // ★ v4→v5: 날씨(1h) 캐시와 지역명(24h) 캐시를 분리
+  const WEATHER_TTL_MS = 60 * 60 * 1000; // ★ 3h→1h: 1시간마다 갱신 (재조회해도 실시간 관측치라 큰 API 부담 없음)
+  const LOCATION_CACHE_KEY = 'sch_location_cache_v1'; // ★ 지역명은 좌표가 거의 안 바뀌므로 훨씬 긴 주기로 별도 캐시 (Nominatim 호출 최소화)
+  const LOCATION_TTL_MS = 24 * 60 * 60 * 1000; // 24시간마다 갱신
   const SEOUL_COORD = { lat: 37.5665, lon: 126.9780 }; // ★ 위치 권한이 없거나 실패했을 때만 쓰는 대체 좌표(평상시엔 실제 현재 위치 사용)
   let _locationLabel = ''; // ★ "대구광역시" 같은 사람이 읽을 수 있는 지역명 — 달력 하단에 표시
+  let _weatherRefreshTimer = null; // ★ 탭을 계속 켜놓은 상태에서도 TTL 간격으로 재조회하기 위한 타이머
 
   function _wmoInfo(code) {
     // WMO Weather Code → {아이콘, 배경 톤, 애니메이션 종류}. 톤은 --a 등 팔레트 변수를 안 쓰고
@@ -389,25 +398,32 @@ const ScheduleApp = (() => {
     return a.city || a.town || a.county || a.state || a.province || data.display_name?.split(',')[0] || '';
   }
 
-  async function _fetchWeather() {
-    // ★ 캐시가 3시간 이내면 재사용(API 호출·위치 확인을 매번 반복하지 않도록).
+  async function _fetchWeather(force = false) {
+    // ★ 캐시가 1시간 이내면 재사용(API 호출·위치 확인을 매번 반복하지 않도록).
     //   단, 저장된 좌표와 지금 위치가 크게 다르면(다른 도시로 이동) 캐시를 쓰지 않고 새로 받는다.
+    //   force=true면(재로그인 직후 등) 캐시가 신선해도 무조건 새로 받는다.
     const coords = await _getCoords();
-    try {
-      const cached = JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY) || 'null');
-      const sameSpot = cached?.coord && Math.abs(cached.coord.lat - coords.lat) < 0.3 && Math.abs(cached.coord.lon - coords.lon) < 0.3;
-      if (cached && sameSpot && Date.now() - cached.fetchedAt < WEATHER_TTL_MS && cached.days) {
-        _weatherMap = cached.days;
-        _locationLabel = cached.location || '';
-        refresh();
-        return;
-      }
-    } catch (e) {}
+    if (!force) {
+      try {
+        const cached = JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY) || 'null');
+        const sameSpot = cached?.coord && Math.abs(cached.coord.lat - coords.lat) < 0.3 && Math.abs(cached.coord.lon - coords.lon) < 0.3;
+        if (cached && sameSpot && Date.now() - cached.fetchedAt < WEATHER_TTL_MS && cached.days) {
+          _weatherMap = cached.days;
+          _locationLabel = cached.location || _locationLabel;
+          refresh();
+          _armWeatherTimer();
+          return;
+        }
+      } catch (e) {}
+    }
 
     // ★ Open-Meteo가 daily 파라미터명을 weathercode → weather_code로 바꿨는데
     //   예전 이름을 그대로 쓰고 있어서 응답에 해당 값이 아예 없었다(그래서 안 보였음). 여기서 고침.
+    // ★ daily.weather_code는 "그날 하루 전체"를 요약한 예보 코드라서, 오후 늦게 잠깐 비 소식만
+    //   있어도 하루 종일 비로 표시되는 문제가 있었다(예: 실제론 흐린데 화면엔 비). current 파라미터로
+    //   실시간 관측치를 따로 받아 "오늘"만큼은 그걸로 덮어써서 지금 하늘과 어긋나지 않게 한다.
     const { lat, lon } = coords;
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Asia%2FSeoul&forecast_days=16`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=weather_code,temperature_2m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Asia%2FSeoul&forecast_days=16`;
     const res = await fetch(url);
     if (!res.ok) throw new Error('Open-Meteo 응답 오류: HTTP ' + res.status);
     const data = await res.json();
@@ -419,12 +435,42 @@ const ScheduleApp = (() => {
         tMin: Math.round(data.daily.temperature_2m_min[i]),
       };
     });
+    // ★ 오늘 날짜만 실시간 관측치(current)로 덮어쓰기 — 나머지 미래 날짜는 예보(daily) 그대로 유지
+    const todayStr = _todayStr();
+    if (data?.current && days[todayStr] && typeof data.current.weather_code === 'number') {
+      days[todayStr] = { ...days[todayStr], code: data.current.weather_code, isCurrent: true };
+    }
     _weatherMap = days;
-    // ★ 지역명은 실패해도 날씨 자체엔 지장 없게 완전히 별도로 감싸서 처리
-    try { _locationLabel = await _reverseGeocode(lat, lon); } catch (e) { _locationLabel = ''; console.warn('[ScheduleApp] 지역명 조회 실패(날씨는 정상 표시됨):', e.message); }
+
+    // ★ 지역명은 좌표가 거의 안 바뀌므로 날씨(1h)와 별도로 24시간 캐시. 실패해도 날씨 자체엔 지장 없음.
+    try {
+      const locCached = JSON.parse(localStorage.getItem(LOCATION_CACHE_KEY) || 'null');
+      const sameSpot = locCached?.coord && Math.abs(locCached.coord.lat - coords.lat) < 0.3 && Math.abs(locCached.coord.lon - coords.lon) < 0.3;
+      if (!force && locCached && sameSpot && Date.now() - locCached.fetchedAt < LOCATION_TTL_MS && locCached.label) {
+        _locationLabel = locCached.label;
+      } else {
+        _locationLabel = await _reverseGeocode(lat, lon);
+        localStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), coord: coords, label: _locationLabel }));
+      }
+    } catch (e) { console.warn('[ScheduleApp] 지역명 조회 실패(날씨는 정상 표시됨):', e.message); }
+
     try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), coord: coords, days, location: _locationLabel })); } catch (e) {}
-    console.log(`[ScheduleApp] 🌤️ 날씨 ${Object.keys(days).length}일치 로드 완료 (좌표: ${lat.toFixed(2)}, ${lon.toFixed(2)}, 지역: ${_locationLabel || '알수없음'})`);
+    console.log(`[ScheduleApp] 🌤️ 날씨 ${Object.keys(days).length}일치 로드 완료 (오늘=실시간, 좌표: ${lat.toFixed(2)}, ${lon.toFixed(2)}, 지역: ${_locationLabel || '알수없음'})`);
     refresh();
+    _armWeatherTimer();
+  }
+
+  // ★ 탭을 계속 켜놓은 상태에서도(재방문/새로고침 없이) 화면이 보이는 동안엔 TTL 간격으로 재조회.
+  //   화면이 백그라운드(다른 탭/최소화)일 땐 굳이 돌리지 않고, 다시 보일 때 한 번 확인한다.
+  function _armWeatherTimer() {
+    clearTimeout(_weatherRefreshTimer);
+    _weatherRefreshTimer = setTimeout(() => {
+      if (document.visibilityState === 'visible') {
+        _fetchWeather().catch(e => console.warn('[ScheduleApp] 날씨 갱신 실패:', e.message));
+      } else {
+        _armWeatherTimer(); // 숨겨진 동안은 그냥 다시 나중에 확인
+      }
+    }, WEATHER_TTL_MS);
   }
 
   /* ═══════════════════════════════════════════════════════════
@@ -1797,8 +1843,14 @@ const ScheduleApp = (() => {
     _q('sch-pop-ok').onclick = async () => { await ScheduleDB.update(s.id, { notifiedAt: new Date().toISOString() }); _close(); };
   }
 
+  // ★ 재로그인 성공 시 app.js에서 호출 — 12시간 세션 만료 후 재로그인처럼, TTL이 안 지났어도
+  //   세션 경계에서는 무조건 최신 날씨를 다시 받아오기 위함(캐시 나이 무시)
+  function refreshWeather() {
+    _fetchWeather(true).catch(e => console.warn('[ScheduleApp] 로그인 후 날씨 갱신 실패:', e.message));
+  }
+
   return {
-    init, refresh, renderMiniCalendar,
+    init, refresh, renderMiniCalendar, refreshWeather,
     openDayDetail, closeDayDetail,
     openEditor, closeEditor, saveEditor, deleteItem, _confirmUnlinkSeries,
     openWorkQuickAdd, closeWorkQuickAdd, saveWorkQuickAdd,
