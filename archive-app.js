@@ -121,6 +121,7 @@ const ArchiveApp = (() => {
 .ar-field input[type=checkbox]{width:auto}
 .ar-field textarea{resize:vertical;min-height:60px}
 .ar-drop{border:2px dashed var(--bdr2);border-radius:12px;padding:22px;text-align:center;color:var(--tx3);font-size:12.5px;cursor:pointer;transition:all .12s}
+.ar-drop-sub{display:inline-block;margin-top:6px;font-size:11px;color:var(--tx3);opacity:.85}
 .ar-upload-limit-hint{font-size:11px;color:var(--tx3);background:var(--card2);border-radius:8px;padding:6px 10px;margin-bottom:8px;line-height:1.5}
 .ar-drop.has-file{border-color:var(--a);color:var(--tx);font-weight:700}
 .ar-drop.dragover{border-color:var(--a);background:var(--a10);color:var(--a);font-weight:700}
@@ -465,7 +466,7 @@ const ArchiveApp = (() => {
     return `<div class="ar-field">
       <label>파일 선택 (여러 개 선택·드래그 가능)</label>
       <div class="ar-upload-limit-hint">📌 파일 1개당 최대 ${_fmtLimitLabel(maxMb)}까지 업로드할 수 있습니다 (그보다 크면 압축하거나 나눠서 올려주세요)</div>
-      <div class="ar-drop" id="ar-drop" onclick="document.getElementById('ar-file-inp').click()">파일을 선택하거나 여러 개를 끌어다 놓으세요</div>
+      <div class="ar-drop" id="ar-drop" onclick="document.getElementById('ar-file-inp').click()">파일을 선택하거나 여러 개를 끌어다 놓으세요<br><span class="ar-drop-sub">📋 Ctrl+V로 클립보드의 이미지·텍스트도 바로 첨부할 수 있어요</span></div>
       <input type="file" id="ar-file-inp" multiple style="display:none" onchange="ArchiveApp._onPickFiles(this.files)">
       <div id="ar-picked-list"></div>
     </div>`;
@@ -1079,6 +1080,7 @@ const ArchiveApp = (() => {
   function _bindDropZone(el, onDrop) {
     if (!el || el.dataset.dropBound) return;
     el.dataset.dropBound = '1';
+    _pasteZones.push({ el, onFiles: onDrop }); // ★ 같은 드롭존에서 Ctrl+V 붙여넣기도 함께 받는다
     ['dragenter', 'dragover'].forEach(ev => el.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); el.classList.add('ar-dropping'); }));
     ['dragleave', 'dragend'].forEach(ev => el.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); el.classList.remove('ar-dropping'); }));
     el.addEventListener('drop', e => {
@@ -1087,6 +1089,54 @@ const ArchiveApp = (() => {
       if (e.dataTransfer?.files?.length) onDrop(Array.from(e.dataTransfer.files));
     });
   }
+  // ═══════════════ 클립보드 붙여넣기(Ctrl+V) 지원 ═══════════════
+  // ★ 캡처한 이미지는 이미지 파일로, 복사한 텍스트는 .txt 파일로 자동 변환해
+  //   기존 파일 첨부 파이프라인(_onPickFiles / _handleAddFiles 등)에 그대로 태운다.
+  //   이름/설명/링크 같은 입력창에 붙여넣을 때는 절대 가로채지 않는다.
+  let _pasteZones = []; // {el, onFiles}[] — _bindDropZone으로 등록된 활성 드롭존들
+  const _CLIP_IMG_EXT = { 'image/png':'png','image/jpeg':'jpg','image/gif':'gif','image/webp':'webp','image/bmp':'bmp','image/svg+xml':'svg' };
+  function _extFromMime(mime) { return _CLIP_IMG_EXT[mime] || (mime.split('/')[1] || 'png'); }
+  function _pasteTimestamp() {
+    const d = new Date(), p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+  }
+  function _activePasteZone() {
+    _pasteZones = _pasteZones.filter(z => z.el?.isConnected); // 닫힌 창의 좀비 항목 정리
+    return _pasteZones[_pasteZones.length - 1] || null; // 가장 최근에 열린(=현재 활성) 드롭존
+  }
+  function _onGlobalPaste(e) {
+    const tag = (e.target?.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return; // 이름/설명/링크 입력은 건드리지 않음
+    const zone = _activePasteZone();
+    if (!zone) return;
+    const items = e.clipboardData?.items;
+    if (!items || !items.length) return;
+
+    const imgFiles = [];
+    for (const item of items) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const blob = item.getAsFile();
+        if (blob) imgFiles.push(new File([blob], `클립보드이미지_${_pasteTimestamp()}.${_extFromMime(item.type)}`, { type: item.type }));
+      }
+    }
+    if (imgFiles.length) {
+      e.preventDefault();
+      zone.onFiles(imgFiles);
+      if (typeof App !== 'undefined' && App._toast) App._toast(`📋 클립보드 이미지 ${imgFiles.length}개를 첨부했어요`);
+      return;
+    }
+    const textItem = Array.from(items).find(it => it.kind === 'string' && it.type === 'text/plain');
+    if (textItem) {
+      e.preventDefault();
+      textItem.getAsString(text => {
+        if (!text || !text.trim()) return;
+        const file = new File([text], `클립보드텍스트_${_pasteTimestamp()}.txt`, { type: 'text/plain' });
+        zone.onFiles([file]);
+        if (typeof App !== 'undefined' && App._toast) App._toast('📋 클립보드 텍스트를 .txt 파일로 첨부했어요');
+      });
+    }
+  }
+  document.addEventListener('paste', _onGlobalPaste);
   function _previewHeaderHtml() {
     const post = _previewPost, f = _currentPreviewFile();
     const convOpts = _convertOptionsFor(f.ext);
