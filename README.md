@@ -1091,6 +1091,18 @@ frame-src:
 
 ## 13. 최근 주요 변경 이력
 
+### 🛠 vercel.json — 콘텐츠(자료실) 영상 재생 안 되는 버그 수정 (2026-08)
+
+Cloudflare Worker(`*.workers.dev`)에 업로드한 mp4가 이미지·PDF와 달리 앱 내
+미리보기 팝업에서 재생되지 않는다는 제보(링크를 새 탭에서 직접 열면 재생됨).
+archive-app.js의 영상 미리보기는 `<video src="...">` 태그를 쓰는데, CSP에
+`media-src` 지시어가 없어 명시 안 된 리소스는 `default-src 'self'`로 폴백 —
+즉 앱 페이지 안에 삽입된 영상은 같은 도메인 파일만 허용되고 Worker에서 오는
+영상은 조용히 차단되고 있었음(새 탭 직접 열기는 그 자체가 최상위 탐색이라
+CSP 영향을 안 받아서 재생됨 — 이미지는 `img-src`에 `https:`가 이미 있어서
+문제없었음). `media-src 'self' blob: https://*.workers.dev https://*.backblazeb2.com;`를
+CSP에 추가해서 해결.
+
 ### 📝 모니터링·게스트모드 재점검 — PDF 워크시트 제작 사각지대 발견 및 보강 (2026-08, 3차)
 
 공유 폴더의 최신 소스를 기준으로 모니터링(monitor-patch.js)·게스트 데모
