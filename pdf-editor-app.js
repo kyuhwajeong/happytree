@@ -35,6 +35,157 @@ const PdfEditorApp = (() => {
   ];
   const DEFAULT_TEXT_FONT = 'Noto Sans KR';
 
+  /* ══════════════════ 도형·스탬프 정의 ══════════════════ */
+  // ★ "사각형/화살표"만 있던 걸 한곳에 묶어 고를 수 있게 확장한다.
+  //   각 도형은 (x,y,w,h) 박스 안에 그려지는 draw(ctx,x,y,w,h,a) 함수를 갖고,
+  //   기존 rect/arrow와 동일하게 박스 드래그·리사이즈 UI를 그대로 재사용한다.
+  function _fillOrStroke(ctx, a) { if (a.fill) ctx.fill(); else ctx.stroke(); }
+  function _roundRectPath(ctx, x, y, w, h, r) {
+    r = Math.max(0, Math.min(r, w / 2, h / 2));
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function _regularPolyPath(ctx, cx, cy, r, sides, rot) {
+    ctx.beginPath();
+    for (let i = 0; i < sides; i++) {
+      const ang = rot + i * 2 * Math.PI / sides;
+      const px = cx + r * Math.cos(ang), py = cy + r * Math.sin(ang);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+  }
+  function _starPath(ctx, cx, cy, rOuter, rInner, points, rot) {
+    ctx.beginPath();
+    for (let i = 0; i < points * 2; i++) {
+      const r = i % 2 === 0 ? rOuter : rInner;
+      const ang = rot + i * Math.PI / points;
+      const px = cx + r * Math.cos(ang), py = cy + r * Math.sin(ang);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+  }
+  function _heartPath(ctx, x, y, w, h) {
+    const cx = x + w / 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, y + h * 0.28);
+    ctx.bezierCurveTo(cx, y, x, y, x, y + h * 0.28);
+    ctx.bezierCurveTo(x, y + h * 0.55, cx, y + h * 0.75, cx, y + h);
+    ctx.bezierCurveTo(cx, y + h * 0.75, x + w, y + h * 0.55, x + w, y + h * 0.28);
+    ctx.bezierCurveTo(x + w, y, cx, y, cx, y + h * 0.28);
+    ctx.closePath();
+  }
+  // ★ "오른쪽" 화살표를 단위 좌표(0~1)로 만들어두고 방향에 맞게 중심점 기준으로 회전시켜 재사용
+  function _arrowPoly(ctx, x, y, w, h, dir) {
+    const pts = [[0, 0.32], [0.58, 0.32], [0.58, 0.08], [1, 0.5], [0.58, 0.92], [0.58, 0.68], [0, 0.68]];
+    const rot = { right: 0, down: Math.PI / 2, left: Math.PI, up: -Math.PI / 2 }[dir] || 0;
+    ctx.beginPath();
+    pts.forEach(([u, v], i) => {
+      const du = u - 0.5, dv = v - 0.5;
+      const ru = du * Math.cos(rot) - dv * Math.sin(rot) + 0.5;
+      const rv = du * Math.sin(rot) + dv * Math.cos(rot) + 0.5;
+      const px = x + ru * w, py = y + rv * h;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    });
+    ctx.closePath();
+  }
+  function _drawCat(ctx, x, y, w, h) {
+    const cx = x + w / 2, cy = y + h * 0.58, r = Math.min(w, h) * 0.4;
+    ctx.beginPath(); ctx.moveTo(cx - r * 0.75, cy - r * 0.55); ctx.lineTo(cx - r * 1.05, cy - r * 1.35); ctx.lineTo(cx - r * 0.15, cy - r * 0.85); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cx + r * 0.75, cy - r * 0.55); ctx.lineTo(cx + r * 1.05, cy - r * 1.35); ctx.lineTo(cx + r * 0.15, cy - r * 0.85); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx, cy, r, r * 0.92, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.save(); ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(cx - r * 0.3, cy - r * 0.02, r * 0.09, r * 0.12, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + r * 0.3, cy - r * 0.02, r * 0.09, r * 0.12, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  function _drawDog(ctx, x, y, w, h) {
+    const cx = x + w / 2, cy = y + h * 0.55, r = Math.min(w, h) * 0.38;
+    ctx.beginPath(); ctx.ellipse(cx - r * 0.95, cy - r * 0.1, r * 0.42, r * 0.68, -0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + r * 0.95, cy - r * 0.1, r * 0.42, r * 0.68, 0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx, cy, r, r * 0.92, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.save(); ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(cx, cy + r * 0.32, r * 0.28, r * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  function _drawRabbit(ctx, x, y, w, h) {
+    const cx = x + w / 2, cy = y + h * 0.62, r = Math.min(w, h * 0.7) * 0.42;
+    ctx.beginPath(); _roundRectPath(ctx, cx - r * 0.62, y, r * 0.42, r * 1.5, r * 0.2); ctx.fill();
+    ctx.beginPath(); _roundRectPath(ctx, cx + r * 0.2, y, r * 0.42, r * 1.5, r * 0.2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx, cy, r, r * 0.92, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  function _drawBird(ctx, x, y, w, h) {
+    const cx = x + w * 0.42, cy = y + h / 2, r = Math.min(w, h) * 0.38;
+    ctx.beginPath(); ctx.ellipse(cx, cy, r, r * 0.88, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cx + r * 0.85, cy - r * 0.15); ctx.lineTo(x + w * 0.98, cy); ctx.lineTo(cx + r * 0.85, cy + r * 0.15); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx - r * 0.15, cy + r * 0.1, r * 0.55, r * 0.32, 0.5, 0, Math.PI * 2); ctx.fill();
+  }
+  function _drawFish(ctx, x, y, w, h) {
+    const cx = x + w * 0.42, cy = y + h / 2, rw = w * 0.42, rh = h * 0.38;
+    ctx.beginPath(); ctx.ellipse(cx, cy, rw, rh, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cx + rw * 0.75, cy); ctx.lineTo(x + w, y + h * 0.12); ctx.lineTo(x + w, y + h * 0.88); ctx.closePath(); ctx.fill();
+  }
+  function _drawSun(ctx, x, y, w, h) {
+    const cx = x + w / 2, cy = y + h / 2, r = Math.min(w, h) * 0.28;
+    for (let i = 0; i < 8; i++) {
+      const ang = i * Math.PI / 4;
+      const bx1 = cx + Math.cos(ang - 0.12) * r * 1.05, by1 = cy + Math.sin(ang - 0.12) * r * 1.05;
+      const bx2 = cx + Math.cos(ang + 0.12) * r * 1.05, by2 = cy + Math.sin(ang + 0.12) * r * 1.05;
+      const tx = cx + Math.cos(ang) * Math.min(w, h) * 0.5, ty = cy + Math.sin(ang) * Math.min(w, h) * 0.5;
+      ctx.beginPath(); ctx.moveTo(bx1, by1); ctx.lineTo(tx, ty); ctx.lineTo(bx2, by2); ctx.closePath(); ctx.fill();
+    }
+    ctx.beginPath(); ctx.ellipse(cx, cy, r, r, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  function _drawCloud(ctx, x, y, w, h) {
+    const cy = y + h * 0.6;
+    ctx.beginPath(); ctx.ellipse(x + w * 0.5, cy, w * 0.5, h * 0.32, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x + w * 0.32, cy - h * 0.18, w * 0.24, h * 0.26, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x + w * 0.62, cy - h * 0.22, w * 0.28, h * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  const SHAPE_DEFS = {
+    circle:    { group: 'basic', emoji: '⬤',  label: '원',       fillable: true, defaultFill: false, defaultColor: '#e11d48', draw: (ctx,x,y,w,h,a) => { ctx.beginPath(); ctx.ellipse(x+w/2,y+h/2,w/2,h/2,0,0,Math.PI*2); _fillOrStroke(ctx,a); } },
+    triangle:  { group: 'basic', emoji: '▲',  label: '삼각형',   fillable: true, defaultFill: false, defaultColor: '#e11d48', draw: (ctx,x,y,w,h,a) => { ctx.beginPath(); ctx.moveTo(x+w/2,y); ctx.lineTo(x+w,y+h); ctx.lineTo(x,y+h); ctx.closePath(); _fillOrStroke(ctx,a); } },
+    diamond:   { group: 'basic', emoji: '◆',  label: '마름모',   fillable: true, defaultFill: false, defaultColor: '#e11d48', draw: (ctx,x,y,w,h,a) => { ctx.beginPath(); ctx.moveTo(x+w/2,y); ctx.lineTo(x+w,y+h/2); ctx.lineTo(x+w/2,y+h); ctx.lineTo(x,y+h/2); ctx.closePath(); _fillOrStroke(ctx,a); } },
+    pentagon:  { group: 'basic', emoji: '⬠',  label: '오각형',   fillable: true, defaultFill: false, defaultColor: '#e11d48', draw: (ctx,x,y,w,h,a) => { _regularPolyPath(ctx,x+w/2,y+h/2,Math.min(w,h)/2,5,-Math.PI/2); _fillOrStroke(ctx,a); } },
+    hexagon:   { group: 'basic', emoji: '⬡',  label: '육각형',   fillable: true, defaultFill: false, defaultColor: '#e11d48', draw: (ctx,x,y,w,h,a) => { _regularPolyPath(ctx,x+w/2,y+h/2,Math.min(w,h)/2,6,0); _fillOrStroke(ctx,a); } },
+    star:      { group: 'basic', emoji: '★',  label: '별',       fillable: true, defaultFill: true,  defaultColor: '#f59e0b', draw: (ctx,x,y,w,h,a) => { _starPath(ctx,x+w/2,y+h/2,Math.min(w,h)/2,Math.min(w,h)/2*0.42,5,-Math.PI/2); _fillOrStroke(ctx,a); } },
+    heart:     { group: 'basic', emoji: '♥',  label: '하트',     fillable: true, defaultFill: true,  defaultColor: '#ef4444', draw: (ctx,x,y,w,h,a) => { _heartPath(ctx,x,y,w,h); _fillOrStroke(ctx,a); } },
+    speech:    { group: 'mark',  emoji: '💬', label: '말풍선',   fillable: true, defaultFill: false, defaultColor: '#3b82f6', draw: (ctx,x,y,w,h,a) => {
+      const r = Math.min(w,h) * 0.14, bh = h * 0.78;
+      ctx.beginPath(); _roundRectPath(ctx,x,y,w,bh,r);
+      ctx.moveTo(x+w*0.22,y+bh); ctx.lineTo(x+w*0.1,y+h); ctx.lineTo(x+w*0.38,y+bh); ctx.closePath();
+      _fillOrStroke(ctx,a);
+    } },
+    'arrow-right': { group: 'arrow', emoji: '➡️', label: '오른쪽 화살표', fillable: false, defaultColor: '#2563eb', draw: (ctx,x,y,w,h) => { _arrowPoly(ctx,x,y,w,h,'right'); ctx.fill(); } },
+    'arrow-left':  { group: 'arrow', emoji: '⬅️', label: '왼쪽 화살표',  fillable: false, defaultColor: '#2563eb', draw: (ctx,x,y,w,h) => { _arrowPoly(ctx,x,y,w,h,'left'); ctx.fill(); } },
+    'arrow-up':    { group: 'arrow', emoji: '⬆️', label: '위쪽 화살표',  fillable: false, defaultColor: '#2563eb', draw: (ctx,x,y,w,h) => { _arrowPoly(ctx,x,y,w,h,'up'); ctx.fill(); } },
+    'arrow-down':  { group: 'arrow', emoji: '⬇️', label: '아래쪽 화살표', fillable: false, defaultColor: '#2563eb', draw: (ctx,x,y,w,h) => { _arrowPoly(ctx,x,y,w,h,'down'); ctx.fill(); } },
+    check:     { group: 'mark', emoji: '✔️', label: '체크',   fillable: false, defaultColor: '#16a34a', draw: (ctx,x,y,w,h,a) => { ctx.lineWidth = Math.max(3,(a.strokeWidth||6)); ctx.beginPath(); ctx.moveTo(x+w*0.12,y+h*0.55); ctx.lineTo(x+w*0.42,y+h*0.85); ctx.lineTo(x+w*0.9,y+h*0.18); ctx.stroke(); } },
+    cross:     { group: 'mark', emoji: '✖️', label: '가위표', fillable: false, defaultColor: '#dc2626', draw: (ctx,x,y,w,h,a) => { ctx.lineWidth = Math.max(3,(a.strokeWidth||6)); ctx.beginPath(); ctx.moveTo(x+w*0.15,y+h*0.15); ctx.lineTo(x+w*0.85,y+h*0.85); ctx.moveTo(x+w*0.85,y+h*0.15); ctx.lineTo(x+w*0.15,y+h*0.85); ctx.stroke(); } },
+    cat:    { group: 'char', emoji: '🐱', label: '고양이',   fillable: false, defaultColor: '#f59e0b', draw: _drawCat },
+    dog:    { group: 'char', emoji: '🐶', label: '강아지',   fillable: false, defaultColor: '#92613a', draw: _drawDog },
+    rabbit: { group: 'char', emoji: '🐰', label: '토끼',     fillable: false, defaultColor: '#f3a6c1', draw: _drawRabbit },
+    bird:   { group: 'char', emoji: '🐦', label: '새',       fillable: false, defaultColor: '#3b82f6', draw: _drawBird },
+    fish:   { group: 'char', emoji: '🐟', label: '물고기',   fillable: false, defaultColor: '#06b6d4', draw: _drawFish },
+    sun:    { group: 'char', emoji: '☀️', label: '해',       fillable: false, defaultColor: '#f59e0b', draw: _drawSun },
+    cloud:  { group: 'char', emoji: '☁️', label: '구름',     fillable: false, defaultColor: '#94a3b8', draw: _drawCloud },
+  };
+  const SHAPE_GROUP_LABELS = { basic: '📐 기본 도형', arrow: '➜ 화살표', mark: '✅ 표시', char: '🐾 캐릭터 스탬프' };
+  const SHAPE_GROUP_ORDER = ['basic', 'arrow', 'mark', 'char'];
+  function _paintShape(ctx, a, x, y, w, h) {
+    const def = SHAPE_DEFS[a.shapeKind]; if (!def) return;
+    ctx.save();
+    ctx.fillStyle = a.color || def.defaultColor;
+    ctx.strokeStyle = a.color || def.defaultColor;
+    ctx.lineWidth = Math.max(1, a.strokeWidth || 3);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    try { def.draw(ctx, x, y, w, h, a); } catch (e) { console.warn('[PdfEditorApp] 도형 렌더 실패', e); }
+    ctx.restore();
+  }
+
   /* ══════════════════ 상태 ══════════════════ */
   let _sources = [];     // {id, name, kind:'pdf'|'image', pdfDoc(pdf-lib), pdfjsDoc, img(Image, kind='image')}
   let _pages = [];       // 작업 중인 페이지 배열(순서 = 최종 출력 순서)
@@ -56,6 +207,9 @@ const PdfEditorApp = (() => {
   let _editingTextId = null; // 지금 실제로 캐럿을 놓고 타이핑 중인 텍스트 상자(더블클릭으로 진입)
   let _drag = null;       // 편집기 내 드래그/리사이즈 상태
   let _busy = false;
+  let _shapePickerOpen = false; // 도형·스탬프 고르기 팝업
+  let _textSelectMode = false;  // 본문 텍스트 블록 선택 모드
+  let _pendingSelectedText = ''; // 방금 블록 선택한 텍스트(복사/텍스트상자 추가 대기중)
 
   /* ══════════════════ CSS ══════════════════ */
   function _css() {
@@ -70,6 +224,7 @@ const PdfEditorApp = (() => {
 .pe-btn.primary:hover{filter:brightness(1.08)}
 .pe-btn.danger{color:var(--red);border-color:var(--red)}
 .pe-btn:disabled{opacity:.45;cursor:not-allowed}
+.pe-btn.disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
 .pe-btn input[type=file]{display:none}
 .pe-spacer{flex:1}
 .pe-count{font-size:11.5px;color:var(--tx3);font-weight:700}
@@ -136,6 +291,20 @@ const PdfEditorApp = (() => {
 .pe-modal-hd button{border:none;background:none;font-size:18px;cursor:pointer;color:var(--tx3)}
 .pe-modal-body{overflow-y:auto;padding:10px 18px;flex:1}
 .pe-modal-ft{padding:14px 18px;border-top:1px solid var(--bdr);display:flex;justify-content:flex-end;gap:8px}
+.pe-shape-grp{margin-bottom:16px}
+.pe-shape-grp:last-child{margin-bottom:0}
+.pe-shape-grp-title{font-size:12px;font-weight:800;color:var(--tx2);margin-bottom:8px}
+.pe-shape-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px}
+.pe-shape-cell{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 6px;border:1px solid var(--bdr);border-radius:var(--rs);background:var(--card2);cursor:pointer;font-size:11px;color:var(--tx2)}
+.pe-shape-cell:hover{background:var(--card3);border-color:var(--a)}
+.pe-shape-emoji{font-size:22px;line-height:1}
+.pe-textlayer{position:absolute;left:0;top:0;overflow:hidden;line-height:1;z-index:5;user-select:text}
+.pe-textlayer span,.pe-textlayer br{color:transparent;position:absolute;white-space:pre;cursor:text;transform-origin:0% 0%}
+.pe-textlayer ::selection{background:rgba(37,99,235,.35)}
+.pe-text-select-mode .pe-annot{pointer-events:none}
+.pe-textsel-bar{display:flex;align-items:center;gap:8px;padding:9px 16px;background:var(--card2);border-bottom:1px solid var(--bdr);flex-shrink:0;flex-wrap:wrap}
+.pe-textsel-hint,.pe-textsel-preview{font-size:12px;color:var(--tx2)}
+.pe-textsel-preview{font-weight:700;color:var(--tx)}
 .pe-pick-item{display:flex;align-items:center;gap:10px;padding:9px 6px;border-bottom:1px solid var(--bdr)}
 .pe-pick-item:last-child{border-bottom:none}
 .pe-pick-item input{width:16px;height:16px;flex-shrink:0}
@@ -383,6 +552,8 @@ const PdfEditorApp = (() => {
         ctx.lineTo(x2 - headLen * Math.cos(ang + Math.PI / 6), y2 - headLen * Math.sin(ang + Math.PI / 6));
         ctx.closePath(); ctx.fill();
         ctx.restore();
+      } else if (a.type === 'shape') {
+        _paintShape(ctx, a, a.x * scale, a.y * scale, a.w * scale, a.h * scale);
       }
     }
     return cv;
@@ -407,6 +578,78 @@ const PdfEditorApp = (() => {
       const composite = await _renderPageComposite(page, w, { skipText: true });
       const ctx = cvEl.getContext('2d'); ctx.clearRect(0, 0, w, h); ctx.drawImage(composite, 0, 0);
     } catch (e) { console.warn('[PdfEditorApp] 캔버스 렌더 실패', e); }
+  }
+
+  /* ══════════════════ 본문 텍스트 블록 선택(마우스 드래그) → 복사·추출 ══════════════════ */
+  // ★ pdf.js의 텍스트 레이어(글자 위치만 있는 투명한 <span>들)를 캔버스 위에 겹쳐서,
+  //   원본 PDF 문자 그대로를 마우스로 드래그해 선택·복사하거나 새 텍스트 상자로 바로 옮길 수 있게 한다.
+  function _toggleTextSelect() {
+    if (!_editingId) return;
+    _textSelectMode = !_textSelectMode;
+    _pendingSelectedText = '';
+    _selAnnotId = null;
+    try { window.getSelection()?.removeAllRanges(); } catch (e) {}
+    _rerender();
+  }
+  async function _renderTextLayer() {
+    const page = _pages.find(p => p.id === _editingId); if (!page || page.kind !== 'pdf') return;
+    const container = _q('pe-textlayer'); if (!container) return;
+    const src = _sources.find(s => s.id === page.srcId); if (!src) return;
+    try {
+      const pjPage = await src.pdfjsDoc.getPage(page.srcPageIndex + 1);
+      const scale = _editorScaleFor(page);
+      const viewport = pjPage.getViewport({ scale, rotation: page.rotation || 0 });
+      const el = _q('pe-textlayer'); if (!el) return; // 그사이 화면이 바뀌었으면(다른 쪽 이동 등) 중단
+      el.innerHTML = '';
+      el.style.width = Math.round(viewport.width) + 'px';
+      el.style.height = Math.round(viewport.height) + 'px';
+      const textContent = await pjPage.getTextContent();
+      if (typeof pdfjsLib?.renderTextLayer === 'function') {
+        await pdfjsLib.renderTextLayer({ textContentSource: textContent, container: el, viewport, textDivs: [] }).promise;
+      }
+    } catch (e) { console.warn('[PdfEditorApp] 텍스트 레이어 생성 실패', e); }
+  }
+  function _onTextLayerMouseUp() {
+    const sel = window.getSelection();
+    const text = (sel && !sel.isCollapsed) ? sel.toString() : '';
+    _pendingSelectedText = text.trim();
+    const bar = _q('pe-textsel-bar');
+    if (bar) bar.innerHTML = _textSelectBarInnerHtml();
+  }
+  function _textSelectBarInnerHtml() {
+    if (_pendingSelectedText) {
+      const preview = _esc(_pendingSelectedText.slice(0, 80)).replace(/\n/g, ' ') + (_pendingSelectedText.length > 80 ? '…' : '');
+      return `<span class="pe-textsel-preview">🔤 "${preview}"</span>
+        <button class="pe-btn" onclick="PdfEditorApp._copySelectedText()">📋 복사</button>
+        <button class="pe-btn primary" onclick="PdfEditorApp._addSelectedTextAsBox()">📝 텍스트 상자로 추가</button>
+        <div class="pe-spacer"></div>
+        <button class="pe-btn" onclick="PdfEditorApp._toggleTextSelect()">✕ 선택 모드 끄기</button>`;
+    }
+    return `<span class="pe-textsel-hint">💡 아래 본문을 마우스로 드래그해서 텍스트를 블록 선택하세요</span>
+      <div class="pe-spacer"></div>
+      <button class="pe-btn" onclick="PdfEditorApp._toggleTextSelect()">✕ 선택 모드 끄기</button>`;
+  }
+  function _textSelectBarHtml() { return `<div class="pe-textsel-bar" id="pe-textsel-bar">${_textSelectBarInnerHtml()}</div>`; }
+  async function _copySelectedText() {
+    if (!_pendingSelectedText) return;
+    try {
+      await navigator.clipboard.writeText(_pendingSelectedText);
+      _toast('✅ 텍스트를 클립보드에 복사했어요');
+    } catch (e) {
+      _toast('⚠️ 클립보드 복사에 실패했습니다 — 브라우저 권한을 확인해주세요');
+    }
+  }
+  function _addSelectedTextAsBox() {
+    if (!_pendingSelectedText) return;
+    const page = _pages.find(p => p.id === _editingId); if (!page) return;
+    _pushUndo();
+    const w = Math.min(260, page.width * 0.6), h = 60;
+    const a = { id: _nid(), type: 'text', x: (page.width - w) / 2, y: (page.height - h) / 2, w, h, text: _pendingSelectedText.trim(), fontSize: 14, color: '#111111', bold: false, align: 'left', fontFamily: DEFAULT_TEXT_FONT };
+    page.annots.push(a); _selAnnotId = a.id; _editingTextId = null; page._thumbUrl = null;
+    _textSelectMode = false; _pendingSelectedText = '';
+    try { window.getSelection()?.removeAllRanges(); } catch (e) {}
+    _rerender();
+    _toast('✅ 선택한 텍스트로 텍스트 상자를 만들었어요');
   }
 
   /* ══════════════════ 자동저장(새로고침·실수로 나가기 대비) — IndexedDB ══════════════════ */
@@ -573,6 +816,7 @@ const PdfEditorApp = (() => {
     el.innerHTML = _shellHtml();
     _renderGridThumbs();
     if (_editingId) _renderEditorCanvas();
+    if (_editingId && _textSelectMode) _renderTextLayer();
   }
   function _rerender() { if (_cid) render(_cid); _scheduleAutosave(); }
 
@@ -582,8 +826,9 @@ const PdfEditorApp = (() => {
     const insertMenu = _insertMenuOpen ? _insertMenuHtml() : '';
     const picker = _pickerOpen ? _pickerModalHtml() : '';
     const save = _saveOpen ? _saveModalHtml() : '';
+    const shapePicker = _shapePickerOpen ? _shapePickerModalHtml() : '';
     const busy = _busy ? _busyHtml() : '';
-    return body + editor + insertMenu + picker + save + busy;
+    return body + editor + insertMenu + picker + save + shapePicker + busy;
   }
   function _toolbarHtml() {
     return `<div class="pe-toolbar">
@@ -877,8 +1122,8 @@ const PdfEditorApp = (() => {
   function _editorW() { return EDITOR_MAX_W; }
   function _editorH(page) { return Math.round(EDITOR_MAX_W * page.height / page.width); }
 
-  function _openEditor(id) { _editingId = id; _selAnnotId = null; _rerender(); }
-  function _closeEditor() { _editingId = null; _selAnnotId = null; _drag = null; _rerender(); }
+  function _openEditor(id) { _editingId = id; _selAnnotId = null; _shapePickerOpen = false; _textSelectMode = false; _pendingSelectedText = ''; _rerender(); }
+  function _closeEditor() { _editingId = null; _selAnnotId = null; _drag = null; _shapePickerOpen = false; _textSelectMode = false; _pendingSelectedText = ''; _rerender(); }
 
   function _editorOverlayHtml() {
     const page = _pages.find(p => p.id === _editingId);
@@ -889,21 +1134,23 @@ const PdfEditorApp = (() => {
       <div class="pe-editor-top">
         <button class="pe-btn pe-back-btn" onclick="PdfEditorApp._closeEditor()" title="목록으로 돌아가기">← 목록</button>
         <div class="pe-editor-title">✏️ ${idx + 1}쪽 편집</div>
-        <button class="pe-btn" onclick="PdfEditorApp._editorAddText()">＋ 텍스트</button>
-        <label class="pe-btn">＋ 이미지<input type="file" accept="image/*" style="display:none" onchange="PdfEditorApp._editorAddImage(this.files);this.value=''"></label>
-        <button class="pe-btn" onclick="PdfEditorApp._editorAddErase()" title="원본 내용을 흰 박스로 덮어 지웁니다">🧽 지우개</button>
-        <button class="pe-btn" onclick="PdfEditorApp._editorAddShape('rect')" title="테두리만 있는 사각형">▭ 사각형</button>
-        <button class="pe-btn" onclick="PdfEditorApp._editorAddShape('highlight')" title="반투명 색으로 강조">🖍 형광펜</button>
-        <button class="pe-btn" onclick="PdfEditorApp._editorAddShape('arrow')" title="왼쪽 위→오른쪽 아래 방향 화살표">➚ 화살표</button>
+        <button class="pe-btn" ${_textSelectMode ? 'disabled' : ''} onclick="PdfEditorApp._editorAddText()">＋ 텍스트</button>
+        <label class="pe-btn${_textSelectMode ? ' disabled' : ''}">＋ 이미지<input type="file" accept="image/*" style="display:none" ${_textSelectMode ? 'disabled' : ''} onchange="PdfEditorApp._editorAddImage(this.files);this.value=''"></label>
+        <button class="pe-btn" ${_textSelectMode ? 'disabled' : ''} onclick="PdfEditorApp._editorAddErase()" title="원본 내용을 흰 박스로 덮어 지웁니다">🧽 지우개</button>
+        <button class="pe-btn" ${_textSelectMode ? 'disabled' : ''} onclick="PdfEditorApp._editorAddShape('highlight')" title="반투명 색으로 강조">🖍 형광펜</button>
+        <button class="pe-btn" ${_textSelectMode ? 'disabled' : ''} onclick="PdfEditorApp._openShapePicker()" title="사각형·원·별·화살표·캐릭터 스탬프 등 다양한 도형 고르기">🔷 도형</button>
+        ${page.kind === 'pdf' ? `<button class="pe-btn${_textSelectMode ? ' primary' : ''}" onclick="PdfEditorApp._toggleTextSelect()" title="본문 텍스트를 마우스로 블록 선택해 복사하거나 텍스트 상자로 추출">🔤 텍스트 선택</button>` : ''}
         <button class="pe-btn danger" ${sel ? '' : 'disabled'} onclick="PdfEditorApp._editorDeleteAnnot()">🗑 선택 삭제</button>
         <div class="pe-spacer"></div>
         <span class="pe-editor-hint">바깥을 클릭하거나 Esc를 누르면 닫혀요</span>
         <button class="pe-btn primary" onclick="PdfEditorApp._closeEditor()">✓ 완료</button>
       </div>
+      ${_textSelectMode ? _textSelectBarHtml() : ''}
       <div class="pe-editor-main">
         <div class="pe-editor-canvas-wrap" onmousedown="PdfEditorApp._backdropMouseDown(event)">
-          <div class="pe-page-stage" id="pe-stage" style="width:${_editorW()}px;height:${_editorH(page)}px" onmousedown="PdfEditorApp._stageMouseDown(event)" ondragover="PdfEditorApp._stageDragOver(event)" ondrop="PdfEditorApp._stageDrop(event)">
+          <div class="pe-page-stage${_textSelectMode ? ' pe-text-select-mode' : ''}" id="pe-stage" style="width:${_editorW()}px;height:${_editorH(page)}px" onmousedown="PdfEditorApp._stageMouseDown(event)" ondragover="PdfEditorApp._stageDragOver(event)" ondrop="PdfEditorApp._stageDrop(event)">
             <canvas id="pe-stage-cv"></canvas>
+            ${_textSelectMode && page.kind === 'pdf' ? `<div class="pe-textlayer" id="pe-textlayer"></div>` : ''}
             ${page.annots.map(a => _annotOverlayHtml(a, page)).join('')}
           </div>
         </div>
@@ -978,6 +1225,14 @@ const PdfEditorApp = (() => {
         <div class="pe-field"><label>색상</label><input type="color" value="${a.color || '#2563eb'}" oninput="PdfEditorApp._annotUpdate('${a.id}',{color:this.value})"></div>
         <div class="pe-field"><label>굵기</label><input type="number" min="1" max="20" value="${a.strokeWidth || 4}" oninput="PdfEditorApp._annotUpdate('${a.id}',{strokeWidth:(+this.value||4)})"></div>
         <div class="pe-side-empty">박스의 왼쪽 위→오른쪽 아래<br>방향으로 화살표가 그려져요.<br>박스를 드래그해 위치를,<br>모서리 점으로 방향·길이를<br>바꿀 수 있어요.</div>`;
+    }
+    if (a.type === 'shape') {
+      const def = SHAPE_DEFS[a.shapeKind] || {};
+      return `<h4>${def.emoji || '🔷'} ${_esc(def.label || '도형')}</h4>
+        <div class="pe-field"><label>색상</label><input type="color" value="${a.color || def.defaultColor || '#e11d48'}" oninput="PdfEditorApp._annotUpdate('${a.id}',{color:this.value})"></div>
+        ${def.fillable ? `<div class="pe-chk-row"><input type="checkbox" id="pe-shfill-${a.id}" ${a.fill ? 'checked' : ''} onchange="PdfEditorApp._annotUpdate('${a.id}',{fill:this.checked})"><label for="pe-shfill-${a.id}">채우기</label></div>` : ''}
+        ${(!def.fillable || !a.fill) ? `<div class="pe-field"><label>선 굵기</label><input type="number" min="1" max="30" value="${a.strokeWidth || 3}" oninput="PdfEditorApp._annotUpdate('${a.id}',{strokeWidth:(+this.value||3)})"></div>` : ''}
+        <div class="pe-side-empty">박스를 드래그해서 위치를,<br>모서리 점을 드래그해서<br>크기를 바꿀 수 있어요.</div>`;
     }
     return `<h4>이미지</h4><div class="pe-side-empty">박스를 드래그해서 위치를,<br>모서리 점을 드래그해서<br>크기를 바꿀 수 있어요.</div>`;
   }
@@ -1098,7 +1353,48 @@ const PdfEditorApp = (() => {
     else if (type === 'arrow') a = { id: _nid(), type: 'arrow', x: (page.width - w) / 2, y: (page.height - h) / 2, w, h, color: '#2563eb', strokeWidth: 4 };
     else return;
     page.annots.push(a); _selAnnotId = a.id; page._thumbUrl = null;
+    _shapePickerOpen = false;
     _rerender();
+  }
+  // ★ 확장된 도형/스탬프 팔레트 — SHAPE_DEFS에 등록된 종류를 팝업에서 골라 추가한다.
+  function _openShapePicker() { _shapePickerOpen = true; _rerender(); }
+  function _closeShapePicker() { _shapePickerOpen = false; _rerender(); }
+  function _editorAddShapeKind(kind) {
+    const def = SHAPE_DEFS[kind]; if (!def) return;
+    const page = _pages.find(p => p.id === _editingId); if (!page) return;
+    _pushUndo();
+    const w = Math.min(140, page.width * 0.3), h = w;
+    const a = { id: _nid(), type: 'shape', shapeKind: kind, x: (page.width - w) / 2, y: (page.height - h) / 2, w, h,
+      color: def.defaultColor, strokeWidth: 3, fill: def.fillable ? !!def.defaultFill : true };
+    page.annots.push(a); _selAnnotId = a.id; page._thumbUrl = null;
+    _shapePickerOpen = false;
+    _rerender();
+  }
+  function _shapePickerModalHtml() {
+    return `<div class="pe-modal-ov" style="z-index:9600" onmousedown="if(event.target===this)PdfEditorApp._closeShapePicker()">
+      <div class="pe-modal" style="max-width:460px">
+        <div class="pe-modal-hd"><span>🔷 도형 · 스탬프 고르기</span><button onclick="PdfEditorApp._closeShapePicker()">✕</button></div>
+        <div class="pe-modal-body">
+          <div class="pe-shape-grp">
+            <div class="pe-shape-grp-title">✏️ 기본</div>
+            <div class="pe-shape-grid">
+              <button class="pe-shape-cell" onclick="PdfEditorApp._editorAddShape('rect')" title="사각형"><span class="pe-shape-emoji">▭</span><span>사각형</span></button>
+              <button class="pe-shape-cell" onclick="PdfEditorApp._editorAddShape('arrow')" title="대각선 화살표"><span class="pe-shape-emoji">➚</span><span>대각선 화살표</span></button>
+            </div>
+          </div>
+          ${SHAPE_GROUP_ORDER.map(g => `
+          <div class="pe-shape-grp">
+            <div class="pe-shape-grp-title">${SHAPE_GROUP_LABELS[g]}</div>
+            <div class="pe-shape-grid">
+              ${Object.entries(SHAPE_DEFS).filter(([, d]) => d.group === g).map(([k, d]) => `
+                <button class="pe-shape-cell" onclick="PdfEditorApp._editorAddShapeKind('${k}')" title="${_esc(d.label)}">
+                  <span class="pe-shape-emoji">${d.emoji}</span><span>${_esc(d.label)}</span>
+                </button>`).join('')}
+            </div>
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>`;
   }
   function _annotUpdate(id, patch) {
     const page = _pages.find(p => p.id === _editingId); if (!page) return;
@@ -1145,6 +1441,7 @@ const PdfEditorApp = (() => {
     }
   }
   function _onDocMouseUp() {
+    if (_textSelectMode) _onTextLayerMouseUp();
     if (!_drag) return;
     const { page, annotId, type } = _drag;
     const scale = _editorScaleFor(page);
@@ -1277,6 +1574,16 @@ const PdfEditorApp = (() => {
     await _paintText(cv.getContext('2d'), a, 0, 0, density);
     return _canvasToPngBytes(cv);
   }
+  // ★ 새 도형/스탬프(shape)는 종류가 많아 pdf-lib 벡터 명령으로 일일이 옮기는 대신,
+  //   화면과 똑같은 _paintShape 함수로 고해상도 PNG를 구워 이미지처럼 심는다
+  //   (기존 rect/highlight/arrow는 그대로 벡터로 내보내던 방식을 건드리지 않음).
+  async function _renderShapeAnnotPng(a) {
+    const density = 4;
+    const w = Math.max(1, Math.round(a.w * density)), h = Math.max(1, Math.round(a.h * density));
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    _paintShape(cv.getContext('2d'), a, 0, 0, w, h);
+    return _canvasToPngBytes(cv);
+  }
   async function _buildPdfBytes(pageList) {
     const outDoc = await PDFLib.PDFDocument.create();
     for (const p of pageList) {
@@ -1331,6 +1638,10 @@ const PdfEditorApp = (() => {
           const hx2 = x2 - headLen * Math.cos(ang + Math.PI / 6), hy2 = y2 - headLen * Math.sin(ang + Math.PI / 6);
           outPage.drawLine({ start: { x: x2, y: y2 }, end: { x: hx1, y: hy1 }, thickness: lw, color: PDFLib.rgb(r, g, b) });
           outPage.drawLine({ start: { x: x2, y: y2 }, end: { x: hx2, y: hy2 }, thickness: lw, color: PDFLib.rgb(r, g, b) });
+        } else if (a.type === 'shape') {
+          const pngBytes = await _renderShapeAnnotPng(a);
+          const embedded = await outDoc.embedPng(pngBytes);
+          outPage.drawImage(embedded, { x: a.x, y: p.height - a.y - a.h, width: a.w, height: a.h });
         }
       }
     }
@@ -1471,7 +1782,9 @@ const PdfEditorApp = (() => {
       if (typing) { ae.blur(); return; }
       if (_saveOpen) { _cancelSave(); return; }
       if (_pickerOpen) { _closeArchivePicker(); return; }
+      if (_shapePickerOpen) { _closeShapePicker(); return; }
       if (_editingId) {
+        if (_textSelectMode) { _toggleTextSelect(); return; }
         if (_selAnnotId) { _selAnnotId = null; _updateSelectionUI(); return; }
         _closeEditor(); return;
       }
@@ -1507,6 +1820,8 @@ const PdfEditorApp = (() => {
     _onBodyDragEnter, _onBodyDragOver, _onBodyDragLeave, _onBodyDrop,
     _stageDragOver, _stageDrop,
     _openEditor, _closeEditor, _editorAddText, _editorAddImage, _editorAddErase, _editorAddShape, _editorDeleteAnnot,
+    _openShapePicker, _closeShapePicker, _editorAddShapeKind,
+    _toggleTextSelect, _copySelectedText, _addSelectedTextAsBox,
     _annotMouseDown, _annotResizeStart, _annotUpdate, _stageMouseDown, _backdropMouseDown,
     _annotEnterEditMode, _annotExitEditMode, _annotTextInput,
     _saveTitleInput, _saveCatInput, _saveVisInput, _cancelSave, _confirmSave,
