@@ -67,6 +67,7 @@ const ContentSearchApp = (() => {
 .cs-match-snippet{font-size:12px;color:var(--tx2);line-height:1.4}
 .cs-match-snippet b{color:var(--tx);background:rgba(99,102,241,.18);border-radius:3px;padding:0 2px}
 .cs-ocr-badge{font-size:9.5px;color:#a855f7;font-weight:700}
+.cs-raw-badge{font-size:9.5px;color:var(--amber, #f59e0b);font-weight:700}
 .cs-admin-box{margin-top:18px;padding-top:16px;border-top:1px dashed var(--bdr)}
 .cs-admin-toggle{font-family:var(--mono);font-size:11px;color:var(--tx3);background:none;border:none;cursor:pointer;padding:0}
 .cs-admin-toggle:hover{color:var(--tx2)}
@@ -86,8 +87,9 @@ const ContentSearchApp = (() => {
         <button class="cs-admin-toggle" onclick="ContentSearchApp._toggleAdmin()">${_adminOpen ? '▲' : '▼'} 관리자 도구 — 기존 자료 일괄 인덱싱</button>
         ${_adminOpen ? `
           <div class="cs-admin-panel" id="cs-admin-panel">
-            <div class="cs-admin-desc">이 검색 기능이 생기기 전에 이미 올라와 있던 PDF들은 아직 검색 대상이 아닙니다.
-              아래 버튼을 누르면 자료실 전체를 훑어서 <b style="color:var(--tx)">아직 인덱싱 안 된 PDF만</b> 찾아 처리합니다.
+            <div class="cs-admin-desc">이 검색 기능이 생기기 전에 이미 올라와 있던 파일들은 아직 검색 대상이 아닙니다.
+              아래 버튼을 누르면 자료실 전체를 훑어서 <b style="color:var(--tx)">아직 인덱싱 안 된 PDF·엑셀·한글(hwpx)·워드(docx)·PPT(pptx)·이미지</b>는 정확히,
+              <b style="color:var(--tx)">구버전 한글(hwp)·워드(doc)·PPT(ppt)</b>는 원시 바이트 스캔으로 "있을 가능성"만 찾아 처리합니다.
               이미 처리된 파일은 건너뛰므로 여러 번 눌러도 안전합니다. (파일 수·OCR 필요 여부에 따라 시간이 걸릴 수 있어요)</div>
             <button class="cs-admin-btn" id="cs-backfill-btn" ${_backfillRunning ? 'disabled' : ''} onclick="ContentSearchApp._runBackfill()">${_backfillRunning ? '처리 중...' : '▶ 기존 자료 인덱싱 시작'}</button>
             <div id="cs-backfill-progress"></div>
@@ -112,7 +114,7 @@ const ContentSearchApp = (() => {
     const myToken = ++_backfillToken;
     _backfillRunning = true;
     _backfillProgress = { done: 0, total: 0, indexed: 0, skipped: 0, failed: 0 };
-    const targets = ArchiveDB.getAll().filter(p => (p.files || []).some(f => (f.ext || '').toLowerCase() === 'pdf'));
+    const targets = ArchiveDB.getAll().filter(p => (p.files || []).some(f => ArchiveApp.isIndexableForSearch(f.ext)));
     _backfillProgress.total = targets.length;
     _render();
     for (const post of targets) {
@@ -207,6 +209,11 @@ const ContentSearchApp = (() => {
     const end = Math.min(text.length, idx + word.length + 60);
     return (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : '');
   }
+  // ★ page 값이 PDF는 숫자(페이지), 엑셀은 시트명, 파워포인트는 "슬라이드 N" 같은 문자열 —
+  //   숫자일 때만 "N페이지"로 보여주고, 문자열이면 그대로 표시
+  function _pageLabel(page) {
+    return (typeof page === 'number') ? `${page}페이지` : _esc(page);
+  }
 
   function _resultsHtml() {
     if (_running && !_results.length) return '';
@@ -221,7 +228,7 @@ const ContentSearchApp = (() => {
         <div class="cs-result-name">📄 ${_esc(r.name)} <span class="cs-result-cat">${_esc(r.category)}</span></div>
         ${r.matches.map(m => `
           <div class="cs-match-row" onclick="ArchiveApp.openPreviewAtPage('${r.postId}', ${m.fileIdx}, ${m.page}); ContentSearchApp.close()">
-            <span class="cs-match-page">${r.fileCount > 1 ? _esc(m.fileName) + ' · ' : ''}${m.page}p${m.ocr ? ' <span class="cs-ocr-badge">OCR</span>' : ''}</span>
+            <span class="cs-match-page">${r.fileCount > 1 ? _esc(m.fileName) + ' · ' : ''}${_pageLabel(m.page)}${m.ocr ? ' <span class="cs-ocr-badge">OCR</span>' : ''}${m.raw ? ' <span class="cs-raw-badge">⚠️ 비정형 스캔</span>' : ''}</span>
             <span class="cs-match-snippet">${_highlight(_snippetAround(m.text, words[0] || ''), words)}</span>
           </div>`).join('')}
       </div>`).join('');
@@ -237,7 +244,7 @@ const ContentSearchApp = (() => {
     const words = _query.toLowerCase().split(/\s+/).filter(Boolean);
 
     // ★ 검색 범위 안의 게시물만 골라냄 — 비공개 게시물은 기존 접근 권한 규칙 그대로 존중(ArchiveDB.getVisiblePosts)
-    let candidates = ArchiveDB.getVisiblePosts().filter(p => (p.files || []).some(f => (f.ext || '').toLowerCase() === 'pdf'));
+    let candidates = ArchiveDB.getVisiblePosts().filter(p => (p.files || []).some(f => ArchiveApp.isIndexableForSearch(f.ext)));
     if (_scope !== '전체') candidates = candidates.filter(p => p.category === _scope);
 
     _progress = { done: 0, total: candidates.length };
@@ -250,7 +257,6 @@ const ContentSearchApp = (() => {
         const idxByFile = await ArchiveDB.getSearchIndex(post.id);
         const matches = [];
         if (idxByFile) {
-          const pdfFiles = (post.files || []).filter(f => (f.ext || '').toLowerCase() === 'pdf');
           Object.keys(idxByFile).forEach(fileIdxStr => {
             const fileIdx = Number(fileIdxStr);
             const fileMeta = post.files?.[fileIdx];
@@ -258,7 +264,7 @@ const ContentSearchApp = (() => {
             pages.forEach(p => {
               const hay = (p.text || '').toLowerCase();
               if (words.every(w => hay.includes(w))) {
-                matches.push({ fileIdx, fileName: fileMeta?.originalName || '', page: p.page, text: p.text, ocr: !!p.ocr });
+                matches.push({ fileIdx, fileName: fileMeta?.originalName || '', page: p.page, text: p.text, ocr: !!p.ocr, raw: !!p.raw });
               }
             });
           });

@@ -165,6 +165,7 @@ const ArchiveApp = (() => {
 .ar-xlsx-edit-hint{font-size:11px;color:var(--a);font-weight:700;padding:6px 14px;background:var(--a10)}
 .ar-prev-icobtn.accent{background:var(--a);border-color:var(--a);color:#fff}
 .ar-prev-none{padding:40px;text-align:center;color:var(--tx3);font-size:13px}
+.ar-txt-prev{white-space:pre-wrap;word-break:break-word;padding:18px 20px;font-family:var(--mono,monospace);font-size:12.5px;line-height:1.6;color:var(--tx2);width:100%;max-height:70vh;overflow-y:auto;text-align:left}
 .ar-prev-none-file{font-size:14px;font-weight:800;color:var(--tx);margin-bottom:10px;word-break:break-all}
 .ar-link-note{font-size:11px;color:var(--tx3);background:var(--surf2);border-radius:8px;padding:8px 12px;margin-top:8px;line-height:1.5}
 .ar-link-note a{color:var(--a);font-weight:700}
@@ -263,7 +264,7 @@ const ArchiveApp = (() => {
             value="${_esc(_searchQuery)}" oninput="ArchiveApp._onSearchInput(this.value)">
           ${_searchQuery ? `<button class="ar-search-clear" onclick="ArchiveApp._onSearchInput('')">✕</button>` : ''}
         </div>
-        <button class="ar-deep-search-btn" onclick="ContentSearchApp.open()" title="PDF 문서 내용까지 전체(또는 분류별)로 훑어서 몇 페이지에 있는지 찾아줍니다">🔎 전체 검색</button>
+        <button class="ar-deep-search-btn" onclick="ContentSearchApp.open()" title="PDF·엑셀·한글·워드·PPT·이미지 안의 문서 내용까지 전체(또는 분류별)로 훑어서 찾아줍니다">🔎 전체 검색</button>
       </div>
       <div class="ar-cats">${cats.map(c => `<button class="ar-cat-tab${c===_curCategory?' on':''}" onclick="ArchiveApp._selectCategory('${_esc(c)}')">${_esc(c)}</button>`).join('')}
         <button class="ar-cat-tab add" onclick="ArchiveApp._promptNewCategory()">＋ 분류</button>
@@ -697,12 +698,32 @@ const ArchiveApp = (() => {
   }
 
   // ═══════════════ 전체 검색(콘텐츠 검색) 인덱스 — 업로드 후 "백그라운드"에서만 동작 ═══════════════
-  // ★ 위의 _extractPdf()는 카드 미리보기·빠른 필터링용으로 10페이지/5,000자까지만 뽑지만,
-  //   이건 검색 전용으로 PDF 전체 페이지(최대 SEARCH_INDEX_MAX_PAGES)를 페이지 번호와 함께 뽑는다.
+  // ★ 위의 _extractPreview()는 카드 미리보기·빠른 필터링용으로 일부만 뽑지만,
+  //   이건 검색 전용으로 문서 형식별 전체 내용을 "위치 정보(페이지/시트/슬라이드)"와 함께 뽑는다.
   //   업로드가 다 끝나고 화면이 닫힌 "뒤에" 조용히 실행되므로 업로드 속도·UI에는 영향이 없고,
-  //   실패해도(네트워크 문제, OCR 라이브러리 로드 실패 등) 그냥 검색 인덱스만 없는 상태로 남을 뿐
+  //   실패해도(네트워크 문제, 라이브러리 로드 실패 등) 그냥 검색 인덱스만 없는 상태로 남을 뿐
   //   업로드 자체나 나머지 기능에는 전혀 지장이 없다.
+  //
+  // ★ 지원 형식: PDF(전체 페이지+스캔이미지 OCR) · XLSX/XLS(시트별) · CSV · TXT ·
+  //   HWPX(구역별, best-effort) · DOCX(전체) · PPTX(슬라이드별) · 이미지 파일(OCR)
+  // ★ 구버전 바이너리(HWP·DOC·PPT)는 구조 해석이 아니라 "원시 바이트 문자열 스캔"이라는
+  //   최후의 수단으로 처리한다 — 정확한 위치는 못 짚어주지만, 찾는 문구가 파일 안에
+  //   있을 가능성을 신호로 보여주고 사용자가 직접 열어 확인하도록 안내한다.
   const SEARCH_INDEX_MAX_PAGES = 60; // ★ 너무 긴 문서는 앞부분까지만(추후 필요하면 상향 가능)
+  const _isIndexableForSearch = ext => {
+    const e = (ext || '').toLowerCase();
+    return ['pdf', 'xlsx', 'xls', 'csv', 'txt', 'hwpx', 'docx', 'pptx', 'hwp', 'doc', 'ppt'].includes(e) || (_isImg(e) && e !== 'svg');
+  };
+
+  let _ocrEngineCache = null; // ★ OCR 라이브러리는 실제로 필요할 때 딱 한 번만 로드(PDF 스캔페이지·이미지파일 공용)
+  async function _getOcrEngine() {
+    if (!_ocrEngineCache) {
+      const T = await import('https://esm.sh/tesseract.js@5');
+      _ocrEngineCache = T.default || T;
+    }
+    return _ocrEngineCache;
+  }
+
   async function _extractPdfPagesForSearch(file) {
     if (typeof pdfjsLib === 'undefined') return [];
     if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
@@ -712,7 +733,6 @@ const ArchiveApp = (() => {
     const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
     const maxPages = Math.min(pdf.numPages, SEARCH_INDEX_MAX_PAGES);
     const pages = [];
-    let ocrReady = null; // ★ 스캔 이미지 페이지가 실제로 나올 때만 딱 한 번 불러옴 — 텍스트 PDF만 있으면 아예 로드 안 함
     for (let i = 1; i <= maxPages; i++) {
       const p = await pdf.getPage(i);
       const content = await p.getTextContent();
@@ -721,15 +741,12 @@ const ArchiveApp = (() => {
       if (text.length < 10) {
         // ★ 페이지에 뽑힌 글자가 거의 없음 = 십중팔구 스캔한 이미지 페이지 → OCR로 인식 시도
         try {
-          if (!ocrReady) {
-            const T = await import('https://esm.sh/tesseract.js@5');
-            ocrReady = T.default || T;
-          }
+          const ocrEngine = await _getOcrEngine();
           const viewport = p.getViewport({ scale: 1.5 });
           const canvas = document.createElement('canvas');
           canvas.width = viewport.width; canvas.height = viewport.height;
           await p.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-          const { data } = await ocrReady.recognize(canvas, 'kor+eng');
+          const { data } = await ocrEngine.recognize(canvas, 'kor+eng');
           text = (data?.text || '').trim();
           ocr = true;
         } catch (e) { console.warn(`[ArchiveApp] OCR 실패 (페이지 ${i})`, e.message); }
@@ -738,40 +755,166 @@ const ArchiveApp = (() => {
     }
     return pages;
   }
+  async function _extractXlsxPagesForSearch(file) {
+    if (typeof XLSX === 'undefined') return [];
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const pages = [];
+    wb.SheetNames.slice(0, 40).forEach(name => {
+      const ws = wb.Sheets[name];
+      const text = (XLSX.utils.sheet_to_txt ? XLSX.utils.sheet_to_txt(ws) : XLSX.utils.sheet_to_csv(ws)).trim();
+      if (text) pages.push({ page: name, text: text.slice(0, 8000), ocr: false }); // ★ 페이지 대신 시트명
+    });
+    return pages;
+  }
+  async function _extractCsvPagesForSearch(file) {
+    const text = (await file.text()).trim();
+    return text ? [{ page: '전체', text: text.slice(0, 15000), ocr: false }] : [];
+  }
+  async function _extractTxtPagesForSearch(file) {
+    const text = (await file.text()).trim();
+    return text ? [{ page: '전체', text: text.slice(0, 20000), ocr: false }] : [];
+  }
+  async function _extractHwpxPagesForSearch(file) {
+    // ★ HWPX는 ZIP+XML 구조라 JSZip으로 뜯을 수 있음(이미 로드되어 있는 라이브러리 재사용).
+    //   다만 내부 구조가 한글 버전에 따라 조금씩 다를 수 있어 best-effort로 처리 —
+    //   실패하면 조용히 빈 배열(검색 안 됨)로 남기고 넘어간다.
+    if (typeof JSZip === 'undefined') return [];
+    try {
+      const zip = await JSZip.loadAsync(file);
+      const sections = Object.keys(zip.files).filter(n => /^Contents\/section\d+\.xml$/i.test(n)).sort();
+      const pages = [];
+      for (let i = 0; i < sections.length; i++) {
+        const xml = await zip.files[sections[i]].async('string');
+        const text = xml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        if (text) pages.push({ page: `${i + 1}구역`, text: text.slice(0, 8000), ocr: false });
+      }
+      return pages;
+    } catch (e) { console.warn('[ArchiveApp] HWPX 텍스트 추출 실패(문서 구조가 다를 수 있음):', e.message); return []; }
+  }
+  async function _extractDocxPagesForSearch(file) {
+    try {
+      const M = await import('https://esm.sh/mammoth@1.8.0');
+      const mammoth = M.default || M;
+      const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+      const text = (result?.value || '').trim();
+      return text ? [{ page: '전체', text: text.slice(0, 20000), ocr: false }] : [];
+    } catch (e) { console.warn('[ArchiveApp] DOCX 텍스트 추출 실패:', e.message); return []; }
+  }
+  async function _extractPptxPagesForSearch(file) {
+    if (typeof JSZip === 'undefined') return [];
+    try {
+      const zip = await JSZip.loadAsync(file);
+      const slides = Object.keys(zip.files)
+        .filter(n => /^ppt\/slides\/slide\d+\.xml$/i.test(n))
+        .sort((a, b) => (+a.match(/\d+/)[0]) - (+b.match(/\d+/)[0]));
+      const pages = [];
+      for (let i = 0; i < slides.length; i++) {
+        const xml = await zip.files[slides[i]].async('string');
+        const text = [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map(m => m[1]).join(' ').trim();
+        if (text) pages.push({ page: `슬라이드 ${i + 1}`, text: text.slice(0, 4000), ocr: false });
+      }
+      return pages;
+    } catch (e) { console.warn('[ArchiveApp] PPTX 텍스트 추출 실패:', e.message); return []; }
+  }
+  async function _extractImagePagesForSearch(file) {
+    // ★ 스캔·촬영 이미지 안의 글자를 OCR로 인식 — PDF 스캔페이지와 동일한 엔진 재사용
+    try {
+      const ocrEngine = await _getOcrEngine();
+      const bitmap = await createImageBitmap(file);
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width; canvas.height = bitmap.height;
+      canvas.getContext('2d').drawImage(bitmap, 0, 0);
+      const { data } = await ocrEngine.recognize(canvas, 'kor+eng');
+      const text = (data?.text || '').trim();
+      return text ? [{ page: '이미지', text: text.slice(0, 4000), ocr: true }] : [];
+    } catch (e) { console.warn('[ArchiveApp] 이미지 OCR 실패:', e.message); return []; }
+  }
+  // ═══ 구버전 바이너리(hwp/doc/ppt) — "최후의 수단" 원시 바이트 문자열 스캔 ═══
+  // ★ 이 세 형식은 구조를 정확히 해석할 표준 라이브러리가 없다. 대신 유닉스 strings
+  //   명령어처럼, 파일을 원시 바이트로 읽어서 "사람이 읽을 수 있는 문자열 구간"만
+  //   뽑아낸다. 문단 구조·정확한 위치는 알 수 없지만, 찾는 단어가 파일 안에 있는지
+  //   여부 정도는 잡아낼 수 있다 — 위치를 못 짚어주는 대신, 결과에 "비정형 스캔"이라고
+  //   표시해서 사용자가 파일을 직접 열어 눈으로 확인하도록 안내한다.
+  //   ★ 주의: 이 방식은 오탐(관련없는 메타데이터·서식 정보가 같이 잡힘) 가능성이 있는
+  //     최후의 수단이라, 정확도가 다른 형식만큼 높지 않다.
+  function _extractPrintableRuns(buf, step, decodeCh, minLen) {
+    let out = '', run = '';
+    for (let i = 0; i + step - 1 < buf.length; i += step) {
+      const ch = decodeCh(buf, i);
+      if (ch !== null) { run += ch; }
+      else { if (run.length >= minLen) out += run + ' '; run = ''; }
+    }
+    if (run.length >= minLen) out += run + ' ';
+    return out;
+  }
+  function _isPrintableCode(code) {
+    // ASCII 프린터블 + 한글 완성형/자모(가-힣, ㄱ-ㅣ)
+    return (code >= 0x20 && code < 0x7f) || (code >= 0xAC00 && code <= 0xD7A3) || (code >= 0x3131 && code <= 0x318E);
+  }
+  async function _extractRawStringsForSearch(file) {
+    try {
+      const buf = new Uint8Array(await file.arrayBuffer());
+      // 1) UTF-16LE 런 — 옛 MS 바이너리(doc/ppt)·HWP 모두 유니코드 텍스트를 이 형태로 담는 경우가 많음
+      const utf16 = _extractPrintableRuns(buf, 2, (b, i) => {
+        const code = b[i] | (b[i + 1] << 8);
+        return _isPrintableCode(code) ? String.fromCharCode(code) : null;
+      }, 3);
+      // 2) ASCII 런 — 보조적으로
+      const ascii = _extractPrintableRuns(buf, 1, (b, i) => (b[i] >= 0x20 && b[i] < 0x7f) ? String.fromCharCode(b[i]) : null, 4);
+      const text = `${utf16} ${ascii}`.replace(/\s+/g, ' ').trim();
+      return text ? [{ page: '전체(비정형 스캔)', text: text.slice(0, 20000), ocr: false, raw: true }] : [];
+    } catch (e) { console.warn('[ArchiveApp] 바이너리 스캔 실패:', e.message); return []; }
+  }
+  // ★ 형식별 추출기로 분기하는 단일 진입점 — 여기 하나만 보면 어떤 형식이 지원되는지 알 수 있다.
+  async function _extractPagesForSearch(file, ext) {
+    const e = (ext || '').toLowerCase();
+    if (e === 'pdf') return _extractPdfPagesForSearch(file);
+    if (e === 'xlsx' || e === 'xls') return _extractXlsxPagesForSearch(file);
+    if (e === 'csv') return _extractCsvPagesForSearch(file);
+    if (e === 'txt') return _extractTxtPagesForSearch(file);
+    if (e === 'hwpx') return _extractHwpxPagesForSearch(file);
+    if (e === 'docx') return _extractDocxPagesForSearch(file);
+    if (e === 'pptx') return _extractPptxPagesForSearch(file);
+    if (_isImg(e) && e !== 'svg') return _extractImagePagesForSearch(file);
+    if (['hwp', 'doc', 'ppt'].includes(e)) return _extractRawStringsForSearch(file); // ★ 구버전 — 최후의 수단(비정형 스캔)
+    return []; // svg 등 텍스트 개념 자체가 없는 형식
+  }
+
   // ★ 관리자용 "기존 자료 일괄 인덱싱" — ContentSearchApp에서 호출.
-  //   이미 업로드되어 있던(=이 검색 기능이 생기기 전) PDF들은 인덱스가 없으므로,
+  //   이미 업로드되어 있던(=이 검색 기능이 생기기 전) 파일들은 인덱스가 없으므로,
   //   원본 파일을 다시 받아와서 추출한다. 이미 인덱스가 있는 파일은 건너뛰어서
   //   여러 번 돌려도 안전(resume 가능) — 중간에 실패해도 다시 실행하면 이어서 처리됨.
   async function indexExistingPost(post) {
-    const pdfFiles = (post.files || []).map((f, i) => ({ f, fileIdx: i })).filter(t => _isPdf(t.f.ext));
-    if (!pdfFiles.length) return { done: 0, skipped: 0, failed: 0 };
+    const targets = (post.files || []).map((f, i) => ({ f, fileIdx: i })).filter(t => _isIndexableForSearch(t.f.ext));
+    if (!targets.length) return { done: 0, skipped: 0, failed: 0 };
     const existing = (await ArchiveDB.getSearchIndex(post.id)) || {};
     let done = 0, skipped = 0, failed = 0;
-    for (const { f, fileIdx } of pdfFiles) {
+    for (const { f, fileIdx } of targets) {
       if (existing[fileIdx]) { skipped++; continue; } // ★ 이미 인덱싱된 파일은 다시 안 함
       try {
         const url = ArchiveDB.getFileUrl(f.r2Key);
         const res = await fetch(url);
         if (!res.ok) throw new Error('파일 다운로드 실패: HTTP ' + res.status);
         const blob = await res.blob();
-        const rawFile = new File([blob], f.originalName || 'file.pdf', { type: f.mimeType || 'application/pdf' });
-        const pages = await _extractPdfPagesForSearch(rawFile);
+        const rawFile = new File([blob], f.originalName || 'file', { type: f.mimeType || '' });
+        const pages = await _extractPagesForSearch(rawFile, f.ext);
         if (pages.length) { await ArchiveDB.saveSearchIndex(post.id, fileIdx, pages); done++; }
         else skipped++;
       } catch (e) { console.warn('[ArchiveApp] 기존 자료 인덱싱 실패:', f.originalName, e.message); failed++; }
     }
     return { done, skipped, failed };
   }
+  // ★ 업로드 직후 호출 — 원본 File 객체(rawFiles)를 재사용해 그대로 뽑아내고,
   //   완성되면 ArchiveDB의 별도 검색 인덱스 경로에만 저장한다(메인 게시물 데이터는 안 건드림).
-  //   ★ fileIdx = post.files 배열 안에서의 위치 — 한 게시물에 PDF가 여러 개 첨부돼도
+  //   ★ fileIdx = post.files 배열 안에서의 위치 — 한 게시물에 검색 대상 파일이 여러 개 첨부돼도
   //     서로 덮어쓰지 않고 파일별로 따로 저장되게 하기 위해 반드시 함께 넘긴다.
-  function _indexPdfInBackground(postId, uploadedFiles, rawFiles) {
-    const tasks = (uploadedFiles || []).map((f, i) => ({ f, fileIdx: i, raw: rawFiles[i] })).filter(t => t.raw && _isPdf(t.f.ext));
+  function _indexFilesInBackground(postId, uploadedFiles, rawFiles) {
+    const tasks = (uploadedFiles || []).map((f, i) => ({ f, fileIdx: i, raw: rawFiles[i] })).filter(t => t.raw && _isIndexableForSearch(t.f.ext));
     if (!tasks.length) return;
     (async () => {
       for (const t of tasks) {
         try {
-          const pages = await _extractPdfPagesForSearch(t.raw);
+          const pages = await _extractPagesForSearch(t.raw, t.f.ext);
           if (pages.length) await ArchiveDB.saveSearchIndex(postId, t.fileIdx, pages);
         } catch (e) { console.warn('[ArchiveApp] 검색 인덱스 생성 실패:', t.f.originalName, e.message); }
       }
@@ -811,7 +954,7 @@ const ArchiveApp = (() => {
       }, extraPerFile, renderUploadProgress);
       _closeUpload();
       _refreshGrid();
-      _indexPdfInBackground(result.id, result.files, _pickedFiles); // ★ 검색 인덱스는 화면 닫힌 뒤 조용히 백그라운드에서
+      _indexFilesInBackground(result.id, result.files, _pickedFiles); // ★ 검색 인덱스는 화면 닫힌 뒤 조용히 백그라운드에서
       const msg = result.partialFailure ? '⚠️ 일부 파일 업로드 실패 — 나머지는 완료됨'
         : result.savedToServer ? '✅ 업로드 완료' : '⏳ 업로드됨 · 서버 반영 대기 중';
       if (typeof App !== 'undefined' && App._toast) App._toast(msg);
@@ -1314,6 +1457,7 @@ const ArchiveApp = (() => {
   async function _renderPreviewBody(f) {
     const body = _q('ar-prev-body');
     if (!body) return;
+    const jumpPage = _pendingJumpPage; _pendingJumpPage = null; // ★ 파일 형식과 무관하게 여기서 한 번만 소비 — PDF가 아니면 그냥 버려짐(다른 파일로 안 새게)
     body.style.display = ''; // ★ 이전 파일이 미리보기 불가였다면 숨겨져 있었을 수 있으니 매번 원상복구
     if (f.linkUrl) {
       body.innerHTML = `<iframe src="${_esc(f.linkUrl)}" allowfullscreen></iframe>
@@ -1369,9 +1513,8 @@ const ArchiveApp = (() => {
       return;
     }
     if (_isPdf(f.ext)) {
-      const pageFrag = _pendingJumpPage ? `#page=${_pendingJumpPage}` : '';
+      const pageFrag = jumpPage ? `#page=${jumpPage}` : '';
       body.innerHTML = `<iframe src="${url}${pageFrag}"></iframe>`;
-      _pendingJumpPage = null; // ★ 한 번 쓰고 나면 초기화(다른 파일 탭으로 전환 시 엉뚱한 페이지로 안 튀도록)
       return;
     }
     // ★ 파워포인트/워드 — 마이크로소프트 무료 온라인 뷰어로 미리보기.
@@ -1380,6 +1523,32 @@ const ArchiveApp = (() => {
     if (_isOffice(f.ext)) {
       const viewerUrl = `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(url)}`;
       body.innerHTML = `<iframe src="${viewerUrl}"></iframe>`;
+      return;
+    }
+    if (_isXlsx(f.ext)) {
+      if (typeof XLSX === 'undefined') { body.innerHTML = `<div class="ar-prev-none">표 미리보기 라이브러리를 불러오지 못했습니다</div>`; return; }
+      try {
+        const res = await fetch(url);
+        const wb = XLSX.read(await res.arrayBuffer(), { type: 'array' });
+        _xlsxImages = [];
+        _xlsxWb = wb;
+        // ★ 검색 결과로 들어온 경우, jumpPage에 담긴 시트명과 일치하는 시트를 찾아 그 시트부터 보여줌
+        const matchIdx = (typeof jumpPage === 'string') ? wb.SheetNames.indexOf(jumpPage) : -1;
+        _xlsxSheetIdx = matchIdx >= 0 ? matchIdx : 0;
+        _renderXlsxSheet();
+      } catch (e) {
+        body.innerHTML = `<div class="ar-prev-none">⚠️ 미리보기를 불러오지 못했습니다<br><span style="font-size:11px">${_esc(e.message)}</span></div>`;
+      }
+      return;
+    }
+    if (f.ext === 'txt') {
+      try {
+        const res = await fetch(url);
+        const text = await res.text();
+        body.innerHTML = `<pre class="ar-txt-prev">${_esc(text)}</pre>`;
+      } catch (e) {
+        body.innerHTML = `<div class="ar-prev-none">⚠️ 미리보기를 불러오지 못했습니다</div>`;
+      }
       return;
     }
     if (_isCsv(f.ext)) {
@@ -1643,7 +1812,7 @@ const ArchiveApp = (() => {
   return {
     init, render, _selectCategory, _promptNewCategory, _onCatSelectChange, openManageCategories, _removeCategory, _onSearchInput, _togglePin, _setViewMode, _selectTool,
     openUpload, _closeUpload, _setUploadMode, _onPickFiles, _removePickedFile, _submitUpload,
-    openPreview, openPreviewAtPage, indexExistingPost, _switchPreviewFile, _addMoreFiles, _toggleFileSelect, _selectAllFilesInPreview, _downloadSelectedFilesInPost, _submitPasswordGate,
+    openPreview, openPreviewAtPage, indexExistingPost, isIndexableForSearch: _isIndexableForSearch, _switchPreviewFile, _addMoreFiles, _toggleFileSelect, _selectAllFilesInPreview, _downloadSelectedFilesInPost, _submitPasswordGate,
     openEdit, _closeEdit, _submitEdit,
     _removeFileInEdit, _addMoreFilesInEdit,
     _confirmDelete, _toggleFullscreen, _printPreview, _sharePost,
