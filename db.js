@@ -446,6 +446,7 @@ const DB = (() => {
     const idx=C.classes.findIndex(c=>c.id===id); if(idx===-1)return null;
     C.classes[idx]={...C.classes[idx],...data}; ls(LS.classes,C.classes);
     await FireDB.update(`${FireDB.P.classes}/${id}`,data);
+    _fire('classes'); // ★ 버그 수정: 이 이벤트가 없어서 반을 수정해도 다른 화면(대시보드 등)이 자동으로 안 바뀌었음
     return C.classes[idx];
   }
 
@@ -458,6 +459,7 @@ const DB = (() => {
       const u={}; keys.forEach(k=>u[k]=null);
       await FireDB.update(FireDB.P.progress,u);
     }
+    _fire('classes'); // ★ 버그 수정: 반을 삭제해도 이 이벤트가 안 나가서 "오늘의 수업" 등 다른 화면에 삭제된 반이 계속 남아있던 문제
   }
 
   /* ═══ MONTH BOOKS ═══ */

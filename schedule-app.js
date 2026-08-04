@@ -293,6 +293,8 @@ const ScheduleApp = (() => {
     ScheduleDB.on('schedules', () => refresh());
     if (typeof StaffDB !== 'undefined') { StaffDB.on('staff', () => refresh()); StaffDB.on('pay', () => refresh()); }
     if (typeof NoticeDB !== 'undefined') NoticeDB.on('notices', () => refresh());
+    // ★ 버그 수정: 반을 추가/수정/삭제해도 "오늘의 수업" 패널이 안 바뀌던 문제 — 반 데이터 변경 이벤트를 안 듣고 있었음
+    if (typeof DB !== 'undefined') DB.on('classes', () => refresh());
     _checkPopup();
     clearInterval(_timer);
     _timer = setInterval(_checkPopup, 30000);
