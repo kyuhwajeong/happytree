@@ -458,6 +458,9 @@ const App = (() => {
       go(dest);
       S._loginRedirect='';
       _toast(`✅ ${acc.username} (${acc.role==='admin'?'관리자':acc.role==='teacher'?'강사':'운용자'}) 로그인`,'success');
+      // ★ 12시간 자동 로그아웃 후 재로그인 등, 세션이 새로 시작되는 시점엔 날씨 캐시가 신선해도
+      //   무조건 최신으로 다시 받아온다(달력 자체는 페이지 새로고침 없이는 재초기화되지 않으므로).
+      if (typeof ScheduleApp !== 'undefined' && ScheduleApp.refreshWeather) ScheduleApp.refreshWeather();
     } else {_q('li-err').textContent='⚠️ 아이디 또는 비밀번호가 올바르지 않습니다';_q('li-pw').value='';}
   }
   async function logout(){

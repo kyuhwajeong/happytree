@@ -75,7 +75,10 @@ const ArchiveApp = (() => {
 .ar-tool-tab.on{color:var(--a);border-bottom-color:var(--a)}
 .ar-tool-tabs-actions{display:flex;align-items:center;gap:8px;flex-shrink:0;padding-bottom:8px}
 .ar-tool-body{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;padding-top:10px}
-.ar-search-wrap{position:relative;margin:0 14px 10px}
+.ar-search-row{display:flex;gap:8px;align-items:center;margin:0 14px 10px}
+.ar-search-wrap{position:relative;flex:1;min-width:0;margin:0}
+.ar-deep-search-btn{flex:0 0 auto;padding:9px 12px;border-radius:12px;border:1px solid var(--bdr);background:var(--card2);color:var(--tx2);font-size:12px;font-family:inherit;white-space:nowrap;cursor:pointer}
+.ar-deep-search-btn:hover{background:var(--card3);color:var(--tx)}
 .ar-search-inp{width:100%;box-sizing:border-box;padding:9px 34px 9px 12px;border-radius:12px;border:1px solid var(--bdr);background:var(--card2);color:var(--tx);font-size:12.5px;font-family:inherit}
 .ar-search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:transparent;color:var(--tx3);font-size:13px;cursor:pointer;padding:4px}
 .ar-cats{display:flex;gap:6px;overflow-x:auto;padding:0 14px 10px;scrollbar-width:none;flex-shrink:0}
@@ -197,6 +200,8 @@ const ArchiveApp = (() => {
   }
 
   let _searchQuery = '';
+  let _pendingJumpPage = null; // ★ 전체 검색 결과에서 "몇 페이지"를 눌러 들어왔을 때, PDF 미리보기가 그 페이지로 바로 열리게 하기 위한 값
+  let _pendingJumpFileIdx = null; // ★ 게시물 안에 파일이 여러 개일 때, "그 중 몇 번째 파일"이 매칭됐는지(그 파일이 바로 보이게)
   let _selectMode = false;
   let _selectedIds = new Set();
   const STORAGE_LIMIT_BYTES = 10 * 1024 * 1024 * 1024; // ★ Backblaze B2 무료 한도 10GB 기준
@@ -252,10 +257,13 @@ const ArchiveApp = (() => {
   function _filesTabHtml() {
     const cats = ['전체', ...ArchiveDB.getCategories()];
     return `
-      <div class="ar-search-wrap">
-        <input type="text" id="ar-search-inp" class="ar-search-inp" placeholder="🔍 파일명, 설명, 문서 내용으로 검색..."
-          value="${_esc(_searchQuery)}" oninput="ArchiveApp._onSearchInput(this.value)">
-        ${_searchQuery ? `<button class="ar-search-clear" onclick="ArchiveApp._onSearchInput('')">✕</button>` : ''}
+      <div class="ar-search-row">
+        <div class="ar-search-wrap">
+          <input type="text" id="ar-search-inp" class="ar-search-inp" placeholder="🔍 파일명, 설명, 문서 내용으로 검색..."
+            value="${_esc(_searchQuery)}" oninput="ArchiveApp._onSearchInput(this.value)">
+          ${_searchQuery ? `<button class="ar-search-clear" onclick="ArchiveApp._onSearchInput('')">✕</button>` : ''}
+        </div>
+        <button class="ar-deep-search-btn" onclick="ContentSearchApp.open()" title="PDF 문서 내용까지 전체(또는 분류별)로 훑어서 몇 페이지에 있는지 찾아줍니다">🔎 전체 검색</button>
       </div>
       <div class="ar-cats">${cats.map(c => `<button class="ar-cat-tab${c===_curCategory?' on':''}" onclick="ArchiveApp._selectCategory('${_esc(c)}')">${_esc(c)}</button>`).join('')}
         <button class="ar-cat-tab add" onclick="ArchiveApp._promptNewCategory()">＋ 분류</button>
@@ -688,6 +696,65 @@ const ArchiveApp = (() => {
     return {};
   }
 
+  // ═══════════════ 전체 검색(콘텐츠 검색) 인덱스 — 업로드 후 "백그라운드"에서만 동작 ═══════════════
+  // ★ 위의 _extractPdf()는 카드 미리보기·빠른 필터링용으로 10페이지/5,000자까지만 뽑지만,
+  //   이건 검색 전용으로 PDF 전체 페이지(최대 SEARCH_INDEX_MAX_PAGES)를 페이지 번호와 함께 뽑는다.
+  //   업로드가 다 끝나고 화면이 닫힌 "뒤에" 조용히 실행되므로 업로드 속도·UI에는 영향이 없고,
+  //   실패해도(네트워크 문제, OCR 라이브러리 로드 실패 등) 그냥 검색 인덱스만 없는 상태로 남을 뿐
+  //   업로드 자체나 나머지 기능에는 전혀 지장이 없다.
+  const SEARCH_INDEX_MAX_PAGES = 60; // ★ 너무 긴 문서는 앞부분까지만(추후 필요하면 상향 가능)
+  async function _extractPdfPagesForSearch(file) {
+    if (typeof pdfjsLib === 'undefined') return [];
+    if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const maxPages = Math.min(pdf.numPages, SEARCH_INDEX_MAX_PAGES);
+    const pages = [];
+    let ocrReady = null; // ★ 스캔 이미지 페이지가 실제로 나올 때만 딱 한 번 불러옴 — 텍스트 PDF만 있으면 아예 로드 안 함
+    for (let i = 1; i <= maxPages; i++) {
+      const p = await pdf.getPage(i);
+      const content = await p.getTextContent();
+      let text = content.items.map(it => it.str).join(' ').trim();
+      let ocr = false;
+      if (text.length < 10) {
+        // ★ 페이지에 뽑힌 글자가 거의 없음 = 십중팔구 스캔한 이미지 페이지 → OCR로 인식 시도
+        try {
+          if (!ocrReady) {
+            const T = await import('https://esm.sh/tesseract.js@5');
+            ocrReady = T.default || T;
+          }
+          const viewport = p.getViewport({ scale: 1.5 });
+          const canvas = document.createElement('canvas');
+          canvas.width = viewport.width; canvas.height = viewport.height;
+          await p.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+          const { data } = await ocrReady.recognize(canvas, 'kor+eng');
+          text = (data?.text || '').trim();
+          ocr = true;
+        } catch (e) { console.warn(`[ArchiveApp] OCR 실패 (페이지 ${i})`, e.message); }
+      }
+      if (text) pages.push({ page: i, text: text.slice(0, 4000), ocr });
+    }
+    return pages;
+  }
+  // ★ 업로드 직후 호출 — 원본 File 객체(rawFiles)를 재사용해 그대로 뽑아내고,
+  //   완성되면 ArchiveDB의 별도 검색 인덱스 경로에만 저장한다(메인 게시물 데이터는 안 건드림).
+  //   ★ fileIdx = post.files 배열 안에서의 위치 — 한 게시물에 PDF가 여러 개 첨부돼도
+  //     서로 덮어쓰지 않고 파일별로 따로 저장되게 하기 위해 반드시 함께 넘긴다.
+  function _indexPdfInBackground(postId, uploadedFiles, rawFiles) {
+    const tasks = (uploadedFiles || []).map((f, i) => ({ f, fileIdx: i, raw: rawFiles[i] })).filter(t => t.raw && _isPdf(t.f.ext));
+    if (!tasks.length) return;
+    (async () => {
+      for (const t of tasks) {
+        try {
+          const pages = await _extractPdfPagesForSearch(t.raw);
+          if (pages.length) await ArchiveDB.saveSearchIndex(postId, t.fileIdx, pages);
+        } catch (e) { console.warn('[ArchiveApp] 검색 인덱스 생성 실패:', t.f.originalName, e.message); }
+      }
+    })();
+  }
+
   async function _submitUpload() {
     if (_uploadMode === 'link') { return _submitLinkUpload(); }
     if (!_pickedFiles.length) { alert('파일을 선택해 주세요'); return; }
@@ -721,6 +788,7 @@ const ArchiveApp = (() => {
       }, extraPerFile, renderUploadProgress);
       _closeUpload();
       _refreshGrid();
+      _indexPdfInBackground(result.id, result.files, _pickedFiles); // ★ 검색 인덱스는 화면 닫힌 뒤 조용히 백그라운드에서
       const msg = result.partialFailure ? '⚠️ 일부 파일 업로드 실패 — 나머지는 완료됨'
         : result.savedToServer ? '✅ 업로드 완료' : '⏳ 업로드됨 · 서버 반영 대기 중';
       if (typeof App !== 'undefined' && App._toast) App._toast(msg);
@@ -737,10 +805,18 @@ const ArchiveApp = (() => {
   let _xlsxImages = []; // ★ 엑셀에 삽입된 이미지(있으면) — {sheetIdx, src}
   function _currentPreviewFile() { return _previewPost?.files?.[_previewFileIdx] || null; }
 
+  // ★ 콘텐츠 전체 검색(ContentSearchApp)에서 "N페이지" 결과를 눌렀을 때 쓰는 진입점 —
+  //   기존 openPreview()는 그대로 두고, 페이지 번호·파일 인덱스만 미리 세팅해둔 뒤 그대로 위임한다.
+  //   fileIdx: 게시물에 파일이 여러 개 첨부된 경우, 실제로 매칭된 파일이 몇 번째인지(없으면 0번째)
+  function openPreviewAtPage(id, fileIdx, page) {
+    _pendingJumpFileIdx = (typeof fileIdx === 'number') ? fileIdx : null;
+    _pendingJumpPage = page || null;
+    return openPreview(id);
+  }
+
   async function openPreview(id) {
     let post = ArchiveDB.getById(id);
-    if (!post) return;
-    // ★ 다른 기기에서 방금 바뀐 내용을 실시간 리스너가 놓쳤을 수 있으니,
+    if (!post) return;    // ★ 다른 기기에서 방금 바뀐 내용을 실시간 리스너가 놓쳤을 수 있으니,
     //   열 때마다 이 게시물만 서버에서 한 번 더 확실하게 확인한다.
     //   (단, 오프라인이면 ArchiveDB.refreshPost가 즉시 로컬 캐시로 돌아옴 — 안 멈춤)
     const wasOnline = typeof FireDB === 'undefined' || typeof FireDB.isConnected !== 'function' || FireDB.isConnected();
@@ -792,6 +868,9 @@ const ArchiveApp = (() => {
     const post = ArchiveDB.getById(id);
     if (!post) return;
     _previewPost = post; _previewFileIdx = 0; _previewSelectedKeys = new Set();
+    // ★ 검색 결과로 진입한 경우, 게시물 안의 여러 파일 중 실제로 매칭된 파일이 바로 보이게
+    if (_pendingJumpFileIdx != null && post.files?.[_pendingJumpFileIdx]) { _previewFileIdx = _pendingJumpFileIdx; }
+    _pendingJumpFileIdx = null;
     _xlsxWb = null; _xlsxSheetIdx = 0; _xlsxEditMode = false; _xlsxImages = [];
     const ov = document.createElement('div');
     ov.className = 'ar-ov'; ov.id = 'ar-preview-ov';
@@ -1267,7 +1346,9 @@ const ArchiveApp = (() => {
       return;
     }
     if (_isPdf(f.ext)) {
-      body.innerHTML = `<iframe src="${url}"></iframe>`;
+      const pageFrag = _pendingJumpPage ? `#page=${_pendingJumpPage}` : '';
+      body.innerHTML = `<iframe src="${url}${pageFrag}"></iframe>`;
+      _pendingJumpPage = null; // ★ 한 번 쓰고 나면 초기화(다른 파일 탭으로 전환 시 엉뚱한 페이지로 안 튀도록)
       return;
     }
     // ★ 파워포인트/워드 — 마이크로소프트 무료 온라인 뷰어로 미리보기.
@@ -1539,7 +1620,7 @@ const ArchiveApp = (() => {
   return {
     init, render, _selectCategory, _promptNewCategory, _onCatSelectChange, openManageCategories, _removeCategory, _onSearchInput, _togglePin, _setViewMode, _selectTool,
     openUpload, _closeUpload, _setUploadMode, _onPickFiles, _removePickedFile, _submitUpload,
-    openPreview, _switchPreviewFile, _addMoreFiles, _toggleFileSelect, _selectAllFilesInPreview, _downloadSelectedFilesInPost, _submitPasswordGate,
+    openPreview, openPreviewAtPage, _switchPreviewFile, _addMoreFiles, _toggleFileSelect, _selectAllFilesInPreview, _downloadSelectedFilesInPost, _submitPasswordGate,
     openEdit, _closeEdit, _submitEdit,
     _removeFileInEdit, _addMoreFilesInEdit,
     _confirmDelete, _toggleFullscreen, _printPreview, _sharePost,

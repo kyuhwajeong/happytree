@@ -17,6 +17,13 @@ const ArchiveDB = (() => {
 
   const LS_KEY = 'hk10b_archive';
   const FB_PATH = 'hakwon10/archive';
+  // ★ 신규: PDF 전체 페이지 텍스트(+OCR 결과)는 여기 별도 경로에 저장한다.
+  //   메인 목록(FB_PATH)과 완전히 분리 — 실시간 리스너도 안 걸고 앱 로딩 시
+  //   미리 받아오지도 않는다. 검색을 실제로 실행할 때, 검색 범위 안의
+  //   게시물 것만 그때그때 하나씩 서버에서 가져온다(지연 로딩).
+  //   → 자료가 아무리 많아지고 텍스트가 길어져도 평소 자료실 탐색·앱 로딩
+  //     속도에는 전혀 영향을 주지 않는다.
+  const FB_SEARCH_PATH = 'hakwon10/archiveSearchIndex';
 
   const _lg = k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
   const _ls = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
@@ -434,10 +441,34 @@ const ArchiveDB = (() => {
     _saveLS(); _fire('archive');
     if (typeof FireDB !== 'undefined') {
       await FireDB.remove(`${FB_PATH}/${id}`).catch(e => console.warn('[ArchiveDB] 메타데이터 삭제 실패', e));
+      await FireDB.remove(`${FB_SEARCH_PATH}/${id}`).catch(() => {}); // ★ 검색 인덱스도 같이 정리(실패해도 무시)
     }
     return { ok: true };
   }
   const deleteFile = deletePost; // ★ 이전 이름 유지(하위 호환) — 기존 코드가 이 이름으로 호출해도 동작
+
+  // ═══════════════ 검색 인덱스 (전체 페이지 텍스트 + OCR) — 지연 로딩 전용 ═══════════════
+  // ★ 게시물 하나에 PDF가 여러 개 첨부될 수 있어, postId 하나에만 저장하면 나중 파일이
+  //   앞선 파일의 인덱스를 덮어써버린다 — 반드시 fileIdx로 더 나눠서 저장해야 함.
+  //   { pages: [{page, text, ocr:true|false}], updatedAt }
+  async function saveSearchIndex(postId, fileIdx, pages) {
+    if (typeof FireDB === 'undefined') return { ok: false };
+    try {
+      await FireDB.set(`${FB_SEARCH_PATH}/${postId}/${fileIdx}`, { pages, updatedAt: _now() });
+      return { ok: true };
+    } catch (e) { console.warn('[ArchiveDB] saveSearchIndex 실패', e); return { ok: false, error: e.message }; }
+  }
+  // ★ 검색을 "실행할 때"만 호출됨 — 앱 초기화·자료실 렌더링 경로에서는 절대 호출되지 않는다.
+  //   반환값: { [fileIdx]: { pages, updatedAt } } — 게시물 안의 파일별로 나뉘어 있음
+  async function getSearchIndex(postId) {
+    if (typeof FireDB === 'undefined') return null;
+    try { return await FireDB.get(`${FB_SEARCH_PATH}/${postId}`); }
+    catch (e) { return null; }
+  }
+  async function deleteSearchIndex(postId) {
+    if (typeof FireDB === 'undefined') return;
+    try { await FireDB.remove(`${FB_SEARCH_PATH}/${postId}`); } catch (e) {}
+  }
 
   return {
     init, on, pauseUpdates,
@@ -446,6 +477,7 @@ const ArchiveDB = (() => {
     createPost, addFilesToPost, removeFileFromPost, replaceFileContent, createLinkPost, addLinkToPost,
     updateFile, deletePost, deleteFile,
     getCategories, addCategory, removeCategory,
+    saveSearchIndex, getSearchIndex, deleteSearchIndex,
     MAX_UPLOAD_MB,
   };
 })();
