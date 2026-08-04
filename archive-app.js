@@ -738,7 +738,30 @@ const ArchiveApp = (() => {
     }
     return pages;
   }
-  // ★ 업로드 직후 호출 — 원본 File 객체(rawFiles)를 재사용해 그대로 뽑아내고,
+  // ★ 관리자용 "기존 자료 일괄 인덱싱" — ContentSearchApp에서 호출.
+  //   이미 업로드되어 있던(=이 검색 기능이 생기기 전) PDF들은 인덱스가 없으므로,
+  //   원본 파일을 다시 받아와서 추출한다. 이미 인덱스가 있는 파일은 건너뛰어서
+  //   여러 번 돌려도 안전(resume 가능) — 중간에 실패해도 다시 실행하면 이어서 처리됨.
+  async function indexExistingPost(post) {
+    const pdfFiles = (post.files || []).map((f, i) => ({ f, fileIdx: i })).filter(t => _isPdf(t.f.ext));
+    if (!pdfFiles.length) return { done: 0, skipped: 0, failed: 0 };
+    const existing = (await ArchiveDB.getSearchIndex(post.id)) || {};
+    let done = 0, skipped = 0, failed = 0;
+    for (const { f, fileIdx } of pdfFiles) {
+      if (existing[fileIdx]) { skipped++; continue; } // ★ 이미 인덱싱된 파일은 다시 안 함
+      try {
+        const url = ArchiveDB.getFileUrl(f.r2Key);
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('파일 다운로드 실패: HTTP ' + res.status);
+        const blob = await res.blob();
+        const rawFile = new File([blob], f.originalName || 'file.pdf', { type: f.mimeType || 'application/pdf' });
+        const pages = await _extractPdfPagesForSearch(rawFile);
+        if (pages.length) { await ArchiveDB.saveSearchIndex(post.id, fileIdx, pages); done++; }
+        else skipped++;
+      } catch (e) { console.warn('[ArchiveApp] 기존 자료 인덱싱 실패:', f.originalName, e.message); failed++; }
+    }
+    return { done, skipped, failed };
+  }
   //   완성되면 ArchiveDB의 별도 검색 인덱스 경로에만 저장한다(메인 게시물 데이터는 안 건드림).
   //   ★ fileIdx = post.files 배열 안에서의 위치 — 한 게시물에 PDF가 여러 개 첨부돼도
   //     서로 덮어쓰지 않고 파일별로 따로 저장되게 하기 위해 반드시 함께 넘긴다.
@@ -1620,7 +1643,7 @@ const ArchiveApp = (() => {
   return {
     init, render, _selectCategory, _promptNewCategory, _onCatSelectChange, openManageCategories, _removeCategory, _onSearchInput, _togglePin, _setViewMode, _selectTool,
     openUpload, _closeUpload, _setUploadMode, _onPickFiles, _removePickedFile, _submitUpload,
-    openPreview, openPreviewAtPage, _switchPreviewFile, _addMoreFiles, _toggleFileSelect, _selectAllFilesInPreview, _downloadSelectedFilesInPost, _submitPasswordGate,
+    openPreview, openPreviewAtPage, indexExistingPost, _switchPreviewFile, _addMoreFiles, _toggleFileSelect, _selectAllFilesInPreview, _downloadSelectedFilesInPost, _submitPasswordGate,
     openEdit, _closeEdit, _submitEdit,
     _removeFileInEdit, _addMoreFilesInEdit,
     _confirmDelete, _toggleFullscreen, _printPreview, _sharePost,
