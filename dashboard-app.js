@@ -20,22 +20,50 @@
  */
 const DashboardApp = (() => {
   // ★ 대시보드 섹션 구성 — 순서는 사용자가 자유롭게 변경 가능 (기기별 localStorage 저장)
+  // ★ v3.1: "오늘의 할 일" 위젯 추가 — 오늘 수업 반의 미수행 학습 현황만 뽑아
+  //        체크리스트 형태로 보여주는 요약 카드. optional:true 이며 기본 표시,
+  //        위젯 자체의 ✕ 숨기기 버튼 또는 ≡ 화면구성 화면에서 언제든 껐다 켤 수 있고,
+  //        "초기화" 버튼을 누르면 순서·표시여부 모두 기존 상태(기본값)로 완전히 되돌아간다.
   const SECTION_DEFS = [
+    { key: 'todo',      ico: '✅', lbl: '오늘의 할 일', optional: true },
     { key: 'schedule',  ico: '🗓️', lbl: '일정표' },
     { key: 'books',     ico: '📊', lbl: '교재 학습 현황' },
     { key: 'favorites', ico: '⭐', lbl: '즐겨찾기 콘텐츠' },
   ];
   const LS_ORDER = 'hk10b_dashboardOrder';
+  const LS_TODO_ON = 'hk10b_dashboardTodoOn'; // ★ null/미설정 = 기본값(표시)
+  function _isTodoOn() {
+    try {
+      const v = localStorage.getItem(LS_TODO_ON);
+      if (v === null) return true; // 기본값: 표시
+      return JSON.parse(v) === true;
+    } catch (e) { return true; }
+  }
+  function _setTodoOn(v) {
+    try { localStorage.setItem(LS_TODO_ON, JSON.stringify(!!v)); } catch (e) {}
+    render();
+    if (typeof App !== 'undefined' && App._toast) {
+      App._toast(v ? '✅ "오늘의 할 일" 위젯을 표시합니다' : '🙈 위젯을 숨겼어요 · ≡ 화면구성에서 다시 켤 수 있어요', 'success', 2500);
+    }
+  }
   function _getSectionOrder() {
+    const validKeys = SECTION_DEFS.map(d => d.key);
     try {
       const saved = JSON.parse(localStorage.getItem(LS_ORDER));
-      if (Array.isArray(saved) && saved.length === SECTION_DEFS.length && saved.every(k => SECTION_DEFS.find(d => d.key === k))) return saved;
+      if (Array.isArray(saved) && saved.length) {
+        const kept = saved.filter(k => validKeys.includes(k));
+        // ★ 저장된 순서 이후 새로 추가된 섹션(예: todo)은 맨 앞에 자동으로 끼워 넣는다 —
+        //   기존에 저장해둔 사용자 커스텀 순서를 통째로 버리지 않기 위함.
+        const missing = validKeys.filter(k => !kept.includes(k));
+        if (kept.length) return [...missing, ...kept];
+      }
     } catch (e) {}
-    return SECTION_DEFS.map(d => d.key);
+    return validKeys;
   }
   function _saveSectionOrder(order) { try { localStorage.setItem(LS_ORDER, JSON.stringify(order)); } catch (e) {} }
   // ★ 함수 선언은 호이스팅되므로 아래에서 정의될 함수들을 미리 참조해도 안전함
   const _SECTION_HTML = {
+    todo:      () => (_isTodoOn() ? _todoSectionHtml() : ''),
     schedule:  () => _scheduleSectionHtml(),
     books:     () => _bookStatusSectionHtml(),
     favorites: () => _favoritesSectionHtml(),
@@ -298,6 +326,19 @@ const DashboardApp = (() => {
 .db-reorder-btns{display:flex;gap:4px}
 .db-reorder-arrow{width:28px;height:28px;border-radius:7px;border:1px solid var(--bdr2);background:var(--surf2);color:var(--tx2);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center}
 .db-reorder-arrow:disabled{opacity:.35;pointer-events:none}
+.db-reorder-toggle{padding:5px 10px;border-radius:999px;border:1px solid var(--bdr2);background:var(--surf2);color:var(--tx3);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.db-reorder-toggle.on{background:var(--a10);border-color:var(--a40);color:var(--a)}
+
+/* 오늘의 할 일 */
+.db-todo-count{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--a);color:#fff;font-size:10.5px;font-weight:800;vertical-align:middle;margin-left:4px}
+.db-todo-list{display:flex;flex-direction:column;gap:6px}
+.db-todo-item{display:flex;align-items:center;gap:8px;padding:9px 10px;background:var(--card2);border:1px solid var(--bdr);border-radius:10px;cursor:pointer;transition:all .15s}
+.db-todo-item:active{transform:scale(.98)}
+.db-todo-item.done{opacity:.6}
+.db-todo-check{font-size:14px;flex-shrink:0}
+.db-todo-lbl{flex:1;min-width:0;font-size:12.5px;font-weight:700;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.db-todo-item.done .db-todo-lbl{text-decoration:line-through;color:var(--tx3);font-weight:600}
+.db-todo-badge{font-size:10.5px;font-weight:800;color:#ef4444;background:rgba(239,68,68,.1);border-radius:999px;padding:2px 8px;flex-shrink:0;white-space:nowrap}
 
 /* 교재 학습 현황 */
 .db-day-tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:11px;scrollbar-width:none}
@@ -441,7 +482,7 @@ const DashboardApp = (() => {
       </div>
       <div id="db-reorder-list"></div>
       <div class="sh-acts">
-        <button class="btn-x" onclick="(()=>{localStorage.removeItem('${LS_ORDER}');DashboardApp.render();document.getElementById('db-reorder-ov')?.remove();App._toast&&App._toast('🔄 기본 순서로 초기화됨','success',2000);})()">초기화</button>
+        <button class="btn-x" onclick="(()=>{localStorage.removeItem('${LS_ORDER}');localStorage.removeItem('${LS_TODO_ON}');DashboardApp.render();document.getElementById('db-reorder-ov')?.remove();App._toast&&App._toast('🔄 기본 상태로 초기화됨(순서·위젯 표시 모두)','success',2200);})()">초기화</button>
         <button class="btn-ok" onclick="DashboardApp._saveReorder()">💾 순서 저장</button>
       </div>
     </div>`;
@@ -454,9 +495,11 @@ const DashboardApp = (() => {
         const def = SECTION_DEFS.find(d => d.key === key); if (!def) return;
         const row = document.createElement('div');
         row.className = 'db-reorder-row';
+        const showToggle = def.key === 'todo'; // ★ 현재는 "오늘의 할 일"만 켬/끔 가능한 선택적 위젯
         row.innerHTML = `
           <span class="db-reorder-ico">${def.ico}</span>
           <span class="db-reorder-lbl">${def.lbl}</span>
+          ${showToggle ? `<button class="db-reorder-toggle${_isTodoOn() ? ' on' : ''}" data-toggle="1">${_isTodoOn() ? '👁 표시' : '🚫 숨김'}</button>` : ''}
           <div class="db-reorder-btns">
             <button class="db-reorder-arrow" data-dir="up" ${idx === 0 ? 'disabled' : ''}>↑</button>
             <button class="db-reorder-arrow" data-dir="dn" ${idx === _reorderTmp.length - 1 ? 'disabled' : ''}>↓</button>
@@ -469,6 +512,10 @@ const DashboardApp = (() => {
             renderList();
           };
         });
+        if (showToggle) {
+          const tg = row.querySelector('[data-toggle]');
+          if (tg) tg.onclick = () => { _setTodoOn(!_isTodoOn()); renderList(); };
+        }
         list.appendChild(row);
       });
     }
@@ -606,6 +653,45 @@ const DashboardApp = (() => {
     } catch (e) {}
     if (typeof App !== 'undefined' && App._toast) App._toast(`📤 ${targets.length}건 업데이트 요청을 보냈습니다`, 'success');
   }
+  /* ═══════════════════════════════════════════════════════════
+   * 5-1. 오늘의 할 일 — 일정표·교재현황을 각각 보는 대신, 오늘 챙겨야 할
+   *      항목만 뽑아 체크리스트 형태로 보여주는 요약 위젯 (선택적 표시).
+   *      데이터는 기존 _classesForDayOffset·_computeBookStatusForClasses를
+   *      그대로 재사용 — 새 데이터 소스나 쓰기 동작을 추가하지 않는다.
+   * ═══════════════════════════════════════════════════════════ */
+  function _todoSectionHtml() {
+    if (!_canSee('booklib')) return ''; // ★ 교재 메뉴 권한이 없으면 표시하지 않음(교재 현황과 동일 기준)
+    const hideBtn = `<button class="db-mini-btn ghost" onclick="DashboardApp._setTodoOn(false)" title="이 위젯을 숨깁니다. ≡ 화면구성에서 다시 켤 수 있어요">✕ 숨기기</button>`;
+    const classes = _classesForDayOffset(0);
+    if (!classes.length) {
+      return `<div class="db-sec" id="db-todo-sec">
+        <div class="db-sec-hdr"><div class="db-sec-title">✅ 오늘의 할 일</div>${hideBtn}</div>
+        <div class="db-empty-mini">🎉 오늘은 예정된 수업이 없어요</div>
+      </div>`;
+    }
+    const rows = _computeBookStatusForClasses(classes);
+    if (!rows.length) {
+      return `<div class="db-sec" id="db-todo-sec">
+        <div class="db-sec-hdr"><div class="db-sec-title">✅ 오늘의 할 일</div>${hideBtn}</div>
+        <div class="db-empty-mini">오늘 수업 반에 등록된 교재 챕터가 없어요</div>
+      </div>`;
+    }
+    const pending = rows.filter(r => r.total > 0);
+    const done = rows.filter(r => r.total === 0);
+    const itemHtml = r => `<div class="db-todo-item${r.total === 0 ? ' done' : ''}" onclick="DashboardApp.goMatrix('${r.cls.id}','${r.book.id}')">
+      <span class="db-todo-check">${r.total === 0 ? '✅' : '⬜'}</span>
+      <span class="db-todo-lbl">${_esc(r.cls.name)}반 · ${_esc(r.book.name)}</span>
+      ${r.total > 0 ? `<span class="db-todo-badge">미수행 ${r.total}</span>` : ''}
+    </div>`;
+    return `<div class="db-sec" id="db-todo-sec">
+      <div class="db-sec-hdr">
+        <div class="db-sec-title">✅ 오늘의 할 일${pending.length ? ` <span class="db-todo-count">${pending.length}</span>` : ''}</div>
+        ${hideBtn}
+      </div>
+      <div class="db-todo-list">${pending.map(itemHtml).join('')}${done.map(itemHtml).join('')}</div>
+    </div>`;
+  }
+
   function _bookStatusSectionHtml() {
     if (!_canSee('booklib')) return '';
     if (typeof BookLibDB === 'undefined' || typeof StudentDB === 'undefined') return '';
@@ -778,5 +864,5 @@ const DashboardApp = (() => {
     if (typeof BooklibApp !== 'undefined' && BooklibApp.goToMatrix) BooklibApp.goToMatrix(clsId, bkId);
   }
 
-  return { init, render, goMatrix, goArchivePreview, goEduVideo, _filterFavorites, _refreshBadges, openReorder, _saveReorder, _selectBookDay, _requestBulkUpdate, _todayUpdateTargets, _refreshQuote, _dashStyle };
+  return { init, render, goMatrix, goArchivePreview, goEduVideo, _filterFavorites, _refreshBadges, openReorder, _saveReorder, _selectBookDay, _requestBulkUpdate, _todayUpdateTargets, _refreshQuote, _dashStyle, _setTodoOn };
 })();
