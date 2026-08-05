@@ -250,6 +250,10 @@ htdev/
 │                           · 게시물당 다중 파일 첨부, zip 일괄 다운로드
 │                           · 하위 탭으로 EduVideoApp(영상)·PdfEditorApp(PDF)·GameApp(게임) 포함
 ├── archive-db.js             자료실 DB 모듈
+├── content-search-app.js v1  🔎 전체 검색 (자료실과 독립 모듈, 신규)
+│                           · PDF·엑셀·한글·워드·PPT·이미지(OCR) 전체 내용 검색
+│                           · 검색 인덱스는 별도 Firebase 경로에 지연 로딩(초기 로딩 속도 무영향)
+│                           · 관리자 전용 "기존 자료 일괄 인덱싱" 도구 포함
 │                           · 파일 본체는 Cloudflare Worker → R2/B2 저장
 │                           · 게시물 메타데이터만 Firebase 저장
 │
@@ -639,9 +643,10 @@ terminateClass(id)  → termEnd를 이전달로 설정
 
 ---
 
-### 🗂 콘텐츠 (archive-app.js + edu-video-app.js + pdf-editor-app.js + game-app.js)
+### 🗂 콘텐츠 (archive-app.js + edu-video-app.js + pdf-editor-app.js + game-app.js + content-search-app.js)
 
 > 하단 탭 "🗂 콘텐츠" 하나에 자료실·영상·PDF·게임 4개 도구가 탭으로 통합.
+> "🔎 전체 검색" 버튼은 자료실과 독립된 모듈(content-search-app.js)로 별도 동작.
 
 #### 🗂 자료실 (기본 탭)
 
@@ -654,6 +659,7 @@ terminateClass(id)  → termEnd를 이전달로 설정
 | HWP 변환 | `@rhwp/core`(esm.sh 동적 import)로 한글 문서 변환 |
 | 엑셀 인라인 편집 | 미리보기 화면에서 셀 직접 수정 후 저장 |
 | 일괄 다운로드 | 선택 자료/게시물 전체를 zip으로 다운로드 (JSZip) |
+| **🔎 전체 검색** | PDF·엑셀·한글·워드·PPT·이미지(OCR) 내용까지 전체/분류별로 검색, 결과 클릭 시 해당 위치로 이동 |
 | 파일 스토리지 | Cloudflare Worker → R2/B2 (Firebase에는 메타데이터만 저장) |
 
 #### 🎬 영상 워크시트 (edu-video-app.js)
@@ -1060,7 +1066,8 @@ ip-api.com HTTP 혼합 콘텐츠 우회 프록시.
 
 ```
 script-src:
-  www.gstatic.com, cdnjs.cloudflare.com, apis.google.com, esm.sh
+  www.gstatic.com, cdnjs.cloudflare.com, apis.google.com, esm.sh,
+  unpkg.com, cdn.jsdelivr.net (Tesseract.js OCR 엔진 리소스)
   (+ 'unsafe-inline' 'unsafe-eval' — 기존 코드 구조상 필요)
 
 connect-src:
@@ -1073,7 +1080,9 @@ connect-src:
   fcm.googleapis.com                  FCM 푸시
   generativelanguage.googleapis.com   Gemini AI
   identitytoolkit.googleapis.com      Firebase Auth
-  esm.sh                              동적 import (@rhwp/core, HWP 변환)
+  esm.sh                              동적 import (@rhwp/core, HWP 변환 / mammoth.js, DOCX 검색용 추출)
+  unpkg.com, cdn.jsdelivr.net         Tesseract.js OCR 엔진 코어·워커
+  tessdata.projectnaptha.com          Tesseract.js OCR 언어 데이터(traineddata)
   cdnjs.cloudflare.com                라이브러리 CDN
   api.unsplash.com / images.unsplash.com   배경·워크시트 이미지
   api.open-meteo.com                  일정표 날씨 예보
@@ -1090,6 +1099,41 @@ frame-src:
 ---
 
 ## 13. 최근 주요 변경 이력
+
+### 🆕 콘텐츠 전체 검색 (content-search-app.js 신규) + OCR + CSP 보강 (2026-08)
+
+자료실 내용 검색이 PDF 10페이지/5,000자로만 제한되던 걸 대폭 확장. 기존
+목록 로딩(FB_PATH)과 완전히 분리된 별도 Firebase 경로(`archiveSearchIndex`)에
+지연 로딩 방식으로 저장해, 평소 자료실 탐색·앱 로딩 속도에는 전혀 영향이
+없도록 설계함.
+
+- **지원 형식**: PDF(전체 페이지+스캔 페이지 OCR) · XLSX/XLS(시트별) · CSV ·
+  TXT · HWPX(구역별) · DOCX · PPTX(슬라이드별) · 이미지 파일(OCR) — 여기에
+  더해 **HWP/DOC/PPT(구버전 바이너리)** 는 정식 파싱 대신 `strings` 방식의
+  원시 바이트 스캔으로 "이 파일 안에 있을 가능성"만 신호로 보여줌
+  (`⚠️ 비정형 스캔` 배지, 오탐 가능성 있음을 명시).
+- **검색 UX**: 범위를 "전체" 또는 분류별로 선택 가능, 시간이 걸리면
+  진행률(N/전체, %)을 실시간 표시. 결과를 탭하면 PDF는 해당 페이지로
+  (`#page=N`), 엑셀은 해당 시트로 자동 전환해서 바로 확인 가능.
+  DOCX/PPTX는 미리보기가 MS 온라인 뷰어(제3자 iframe)라 위치까지는
+  자동 이동이 안 되는 게 알려진 한계.
+- **관리자 도구 — 기존 자료 일괄 인덱싱**: 이 기능이 생기기 전에 이미
+  올라와 있던 파일들을 소급 처리하는 버튼. 이미 인덱싱된 파일은 건너뛰어
+  여러 번 실행해도 안전(resume 가능).
+- **CSP 보강**: OCR 엔진(Tesseract.js)이 실제 인식 작업 때 자체 CDN에서
+  받아오는 리소스가 CSP에 막혀 조용히 실패하던 문제 발견 →
+  `unpkg.com`, `cdn.jsdelivr.net`, `tessdata.projectnaptha.com`을
+  `script-src`/`connect-src`/`worker-src`에 추가.
+- **버그 수정(자체 QA)**: 게시물 하나에 검색 대상 파일이 여러 개면 인덱스가
+  서로 덮어써지던 문제(→ `게시물ID/파일순번`으로 키 분리), 검색 결과 클릭 시
+  페이지 값이 문자열(엑셀 시트명 등)이면 onclick 문법 오류로 클릭이 씹히던
+  문제(→ `_jsLiteral()` 안전 직렬화) 등을 배포 전/후 자체 발견해 수정.
+- **모니터링·게스트모드 반영**: `monitor-patch.js`에 `ContentSearchApp`
+  추적 추가(검색 실행 시 범위만 기록, 검색어 자체는 민감정보 소지가 있어
+  로그에 남기지 않음 / 관리자 일괄 인덱싱 실행은 감사 기록 차원에서 기록).
+  `guest-mode.js` 콘텐츠 나레이션에 "🔎 전체 검색" 소개 스텝 추가.
+- 아직 없는 것: XLSX 미리보기·TXT 미리보기 자체가 이번에 처음 추가됨(이전엔
+  다운로드만 가능했음 — 검색 위치 식별 기능을 만들다가 발견한 기존 공백).
 
 ### 🛠 vercel.json — 콘텐츠(자료실) 영상 재생 안 되는 버그 수정 (2026-08)
 

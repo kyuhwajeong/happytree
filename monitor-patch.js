@@ -825,6 +825,23 @@
     }
 
     /* ╔══════════════════════════════════════════════════╗
+     * ║  ContentSearchApp — 콘텐츠 전체 검색 (v5.3 신규)  ║
+     * ║  검색어 자체는 학생 이름 등 민감정보가 섞일 수    ║
+     * ║  있어 로그에 남기지 않고, "검색을 실행했다는      ║
+     * ║  사실 + 범위"까지만 기록한다. 일괄 인덱싱은       ║
+     * ║  관리자만 쓰는 무거운 작업이라 감사 기록 차원에서 ║
+     * ║  명확히 남긴다.                                   ║
+     * ╚══════════════════════════════════════════════════╝ */
+    if (typeof ContentSearchApp !== 'undefined') {
+      _wrap(ContentSearchApp, '_run', async () => {
+        _log('archive', `🔎 콘텐츠 전체 검색 실행 (범위: ${ContentSearchApp._getScope ? ContentSearchApp._getScope() : '알수없음'})`);
+      });
+      _wrap(ContentSearchApp, '_runBackfill', async () => {
+        _log('archive', '⚙️ 관리자: 기존 자료 일괄 인덱싱 시작');
+      });
+    }
+
+    /* ╔══════════════════════════════════════════════════╗
      * ║  PdfEditorApp — PDF 워크시트 제작 (콘텐츠 탭 내   ║
      * ║  4번째 도구, v5.2 신규)                          ║
      * ║  archive-app.js TOOL_TABS에 'pdf-editor'로 이미  ║

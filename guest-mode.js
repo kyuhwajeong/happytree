@@ -1070,6 +1070,12 @@ const GuestMode = (() => {
           action: () => { if (typeof ArchiveApp !== 'undefined') ArchiveApp._selectTool('files'); },
         },
         {
+          text: '🔎 <b>전체 검색</b> — 자료실을 진짜 강력하게 만드는 기능이에요.\n\nPDF·엑셀·한글·워드·PPT는 물론, 스캔한 이미지 속 글자까지 <b>OCR</b>로 읽어서 찾아줍니다.\n\n"전체" 또는 특정 분류로 범위를 좁혀 검색할 수 있고, 자료가 많아 시간이 걸리면 진행률이 실시간으로 표시돼요. 결과를 탭하면 몇 페이지·몇 번째 시트에 있는지까지 바로 열어서 확인할 수 있습니다.',
+          highlight: '#page-archive .ar-deep-search-btn',
+          highlightLabel: '🔎 전체 검색',
+          action: () => { if (typeof ArchiveApp !== 'undefined') ArchiveApp._selectTool('files'); },
+        },
+        {
           text: '📁 자료 카드를 탭하면 이미지는 바로, PDF·엑셀은 미리보기 화면에서 바로 확인할 수 있어요.\n\n오른쪽 아래 <b>＋ 버튼</b>으로 파일을 올리고, 여러 개를 선택해서 zip으로 한 번에 내려받을 수도 있습니다.\n\n비밀번호를 걸어 특정 자료만 보호하는 것도 가능해요.',
           highlight: '#page-archive .ar-fab',
           highlightLabel: '자료 올리기',
