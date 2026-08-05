@@ -20,32 +20,47 @@
  */
 const DashboardApp = (() => {
   // ★ 대시보드 섹션 구성 — 순서는 사용자가 자유롭게 변경 가능 (기기별 localStorage 저장)
-  // ★ v3.1: "오늘의 할 일" 위젯 추가 — 오늘 수업 반의 미수행 학습 현황만 뽑아
-  //        체크리스트 형태로 보여주는 요약 카드. optional:true 이며 기본 표시,
-  //        위젯 자체의 ✕ 숨기기 버튼 또는 ≡ 화면구성 화면에서 언제든 껐다 켤 수 있고,
-  //        "초기화" 버튼을 누르면 순서·표시여부 모두 기존 상태(기본값)로 완전히 되돌아간다.
+  // ★ v3.2: 일정표를 제외한 모든 위젯(오늘의 할 일 · 교재 학습 현황 · 즐겨찾기 콘텐츠)에
+  //        표시/숨김을 적용. 위젯 자체의 ✕ 숨기기 버튼 또는 ≡ 화면구성 화면에서 언제든
+  //        껐다 켤 수 있고, "초기화" 버튼을 누르면 순서·표시여부 모두 기본값으로 되돌아간다.
   const SECTION_DEFS = [
     { key: 'todo',      ico: '✅', lbl: '오늘의 할 일', optional: true },
-    { key: 'schedule',  ico: '🗓️', lbl: '일정표' },
-    { key: 'books',     ico: '📊', lbl: '교재 학습 현황' },
-    { key: 'favorites', ico: '⭐', lbl: '즐겨찾기 콘텐츠' },
+    { key: 'schedule',  ico: '🗓️', lbl: '일정표' },                        // ★ 항상 표시(숨김 불가)
+    { key: 'books',     ico: '📊', lbl: '교재 학습 현황', optional: true },
+    { key: 'favorites', ico: '⭐', lbl: '즐겨찾기 콘텐츠', optional: true },
   ];
-  const LS_ORDER = 'hk10b_dashboardOrder';
-  const LS_TODO_ON = 'hk10b_dashboardTodoOn'; // ★ null/미설정 = 기본값(표시)
-  function _isTodoOn() {
+  const LS_ORDER  = 'hk10b_dashboardOrder';
+  const LS_HIDDEN = 'hk10b_dashboardHidden';   // ★ 숨긴 위젯 key 배열. 없는 key = 표시(기본값)
+  const LS_TODO_ON_LEGACY = 'hk10b_dashboardTodoOn'; // ★ v3.1 구버전 설정 — 있으면 1회 마이그레이션
+  function _loadHidden() {
     try {
-      const v = localStorage.getItem(LS_TODO_ON);
-      if (v === null) return true; // 기본값: 표시
-      return JSON.parse(v) === true;
-    } catch (e) { return true; }
+      const v = JSON.parse(localStorage.getItem(LS_HIDDEN));
+      if (Array.isArray(v)) return v;
+    } catch (e) {}
+    // ★ 마이그레이션: v3.1에서 "오늘의 할 일"만 따로 저장하던 값을 새 저장소로 옮겨온다
+    try {
+      const legacy = localStorage.getItem(LS_TODO_ON_LEGACY);
+      if (legacy !== null && JSON.parse(legacy) === false) return ['todo'];
+    } catch (e) {}
+    return [];
   }
-  function _setTodoOn(v) {
-    try { localStorage.setItem(LS_TODO_ON, JSON.stringify(!!v)); } catch (e) {}
+  function _saveHidden(arr) { try { localStorage.setItem(LS_HIDDEN, JSON.stringify(arr)); } catch (e) {} }
+  function _isSectionOn(key) { return !_loadHidden().includes(key); }
+  function _setSectionOn(key, on) {
+    const arr = _loadHidden();
+    const idx = arr.indexOf(key);
+    if (on && idx >= 0) arr.splice(idx, 1);
+    if (!on && idx < 0) arr.push(key);
+    _saveHidden(arr);
     render();
     if (typeof App !== 'undefined' && App._toast) {
-      App._toast(v ? '✅ "오늘의 할 일" 위젯을 표시합니다' : '🙈 위젯을 숨겼어요 · ≡ 화면구성에서 다시 켤 수 있어요', 'success', 2500);
+      const def = SECTION_DEFS.find(d => d.key === key);
+      App._toast(on ? `✅ "${def ? def.lbl : key}" 위젯을 표시합니다` : `🙈 "${def ? def.lbl : key}" 위젯을 숨겼어요 · ≡ 화면구성에서 다시 켤 수 있어요`, 'success', 2500);
     }
   }
+  // ★ 하위호환용 별칭 — 기존에 이 이름으로 직접 참조하던 곳이 있어도 계속 동작함
+  function _isTodoOn() { return _isSectionOn('todo'); }
+  function _setTodoOn(v) { _setSectionOn('todo', v); }
   function _getSectionOrder() {
     const validKeys = SECTION_DEFS.map(d => d.key);
     try {
@@ -63,10 +78,10 @@ const DashboardApp = (() => {
   function _saveSectionOrder(order) { try { localStorage.setItem(LS_ORDER, JSON.stringify(order)); } catch (e) {} }
   // ★ 함수 선언은 호이스팅되므로 아래에서 정의될 함수들을 미리 참조해도 안전함
   const _SECTION_HTML = {
-    todo:      () => (_isTodoOn() ? _todoSectionHtml() : ''),
+    todo:      () => (_isSectionOn('todo')      ? _todoSectionHtml()      : ''),
     schedule:  () => _scheduleSectionHtml(),
-    books:     () => _bookStatusSectionHtml(),
-    favorites: () => _favoritesSectionHtml(),
+    books:     () => (_isSectionOn('books')     ? _bookStatusSectionHtml() : ''),
+    favorites: () => (_isSectionOn('favorites') ? _favoritesSectionHtml()  : ''),
   };
   const DAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -243,8 +258,12 @@ const DashboardApp = (() => {
 .db-quote-inline .db-quote-author{font-size:10.5px;font-style:italic;color:var(--tx3);opacity:.75}
 .db-quote-en{white-space:normal;line-height:1.4;
   font-family:var(--font);font-size:11px;font-style:italic;font-weight:500;letter-spacing:.1px;color:var(--a);opacity:.75;margin-top:2px;padding-left:2px}
-.db-body{flex:1;overflow-y:auto;padding:12px 14px 90px;display:flex;flex-direction:column;gap:14px}
-.db-sec{background:var(--surf);border:1px solid var(--bdr);border-radius:16px;padding:14px}
+.db-body{flex:1;overflow-y:auto;padding:12px 14px 90px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));grid-auto-flow:row dense;align-items:start;gap:14px}
+.db-sec{background:var(--surf);border:1px solid var(--bdr);border-radius:16px;padding:14px;grid-column:1/-1}
+/* ★ "오늘의 할 일" · "즐겨찾기 콘텐츠"처럼 내용이 짧은 위젯은 억지로 가로 전체를 채우지 않고,
+ *   자기 내용만큼만 자리 잡은 뒤 옆에 다른 위젯이 있으면 나란히, 없으면 왼쪽에 붙어 표시된다.
+ *   grid-auto-flow:dense 덕분에 뒤에 나오는 위젯이라도 앞쪽 빈 칸을 자동으로 채워 들어간다. */
+.db-sec-compact{grid-column:auto;max-width:440px;justify-self:start;width:100%}
 .db-sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
 .db-sec-title{font-size:15px;font-weight:800;color:var(--tx)}
 .db-sec-acts{display:flex;gap:6px}
@@ -274,7 +293,8 @@ const DashboardApp = (() => {
    좁은 화면(휴대폰 등)은 별도 규칙으로 항상 1열이라 여기 영향을 받지 않는다. */
 @media (min-width:860px){
   .db-style-compact .db-body{display:grid;grid-template-columns:1fr 1fr;align-items:start;gap:12px}
-  .db-style-compact .db-sec{margin:0}
+  .db-style-compact .db-sec{margin:0;grid-column:auto}
+  .db-style-compact .db-sec-compact{max-width:none;justify-self:stretch;width:auto}
 }
 
 /* --- 히어로: 상단을 그라디언트 배너로 강조하고, 섹션 제목엔 포인트 색 왼쪽 바를 둠 --- */
@@ -482,7 +502,7 @@ const DashboardApp = (() => {
       </div>
       <div id="db-reorder-list"></div>
       <div class="sh-acts">
-        <button class="btn-x" onclick="(()=>{localStorage.removeItem('${LS_ORDER}');localStorage.removeItem('${LS_TODO_ON}');DashboardApp.render();document.getElementById('db-reorder-ov')?.remove();App._toast&&App._toast('🔄 기본 상태로 초기화됨(순서·위젯 표시 모두)','success',2200);})()">초기화</button>
+        <button class="btn-x" onclick="(()=>{localStorage.removeItem('${LS_ORDER}');localStorage.removeItem('${LS_HIDDEN}');localStorage.removeItem('${LS_TODO_ON_LEGACY}');DashboardApp.render();document.getElementById('db-reorder-ov')?.remove();App._toast&&App._toast('🔄 기본 상태로 초기화됨(순서·위젯 표시 모두)','success',2200);})()">초기화</button>
         <button class="btn-ok" onclick="DashboardApp._saveReorder()">💾 순서 저장</button>
       </div>
     </div>`;
@@ -495,11 +515,12 @@ const DashboardApp = (() => {
         const def = SECTION_DEFS.find(d => d.key === key); if (!def) return;
         const row = document.createElement('div');
         row.className = 'db-reorder-row';
-        const showToggle = def.key === 'todo'; // ★ 현재는 "오늘의 할 일"만 켬/끔 가능한 선택적 위젯
+        const showToggle = !!def.optional; // ★ 일정표를 제외한 모든 위젯은 켬/끔 가능
+        const on = showToggle && _isSectionOn(def.key);
         row.innerHTML = `
           <span class="db-reorder-ico">${def.ico}</span>
           <span class="db-reorder-lbl">${def.lbl}</span>
-          ${showToggle ? `<button class="db-reorder-toggle${_isTodoOn() ? ' on' : ''}" data-toggle="1">${_isTodoOn() ? '👁 표시' : '🚫 숨김'}</button>` : ''}
+          ${showToggle ? `<button class="db-reorder-toggle${on ? ' on' : ''}" data-toggle="1">${on ? '👁 표시' : '🚫 숨김'}</button>` : ''}
           <div class="db-reorder-btns">
             <button class="db-reorder-arrow" data-dir="up" ${idx === 0 ? 'disabled' : ''}>↑</button>
             <button class="db-reorder-arrow" data-dir="dn" ${idx === _reorderTmp.length - 1 ? 'disabled' : ''}>↓</button>
@@ -514,7 +535,7 @@ const DashboardApp = (() => {
         });
         if (showToggle) {
           const tg = row.querySelector('[data-toggle]');
-          if (tg) tg.onclick = () => { _setTodoOn(!_isTodoOn()); renderList(); };
+          if (tg) tg.onclick = () => { _setSectionOn(def.key, !_isSectionOn(def.key)); renderList(); };
         }
         list.appendChild(row);
       });
@@ -661,17 +682,17 @@ const DashboardApp = (() => {
    * ═══════════════════════════════════════════════════════════ */
   function _todoSectionHtml() {
     if (!_canSee('booklib')) return ''; // ★ 교재 메뉴 권한이 없으면 표시하지 않음(교재 현황과 동일 기준)
-    const hideBtn = `<button class="db-mini-btn ghost" onclick="DashboardApp._setTodoOn(false)" title="이 위젯을 숨깁니다. ≡ 화면구성에서 다시 켤 수 있어요">✕ 숨기기</button>`;
+    const hideBtn = `<button class="db-mini-btn ghost" onclick="DashboardApp._setSectionOn('todo',false)" title="이 위젯을 숨깁니다. ≡ 화면구성에서 다시 켤 수 있어요">✕ 숨기기</button>`;
     const classes = _classesForDayOffset(0);
     if (!classes.length) {
-      return `<div class="db-sec" id="db-todo-sec">
+      return `<div class="db-sec db-sec-compact" id="db-todo-sec">
         <div class="db-sec-hdr"><div class="db-sec-title">✅ 오늘의 할 일</div>${hideBtn}</div>
         <div class="db-empty-mini">🎉 오늘은 예정된 수업이 없어요</div>
       </div>`;
     }
     const rows = _computeBookStatusForClasses(classes);
     if (!rows.length) {
-      return `<div class="db-sec" id="db-todo-sec">
+      return `<div class="db-sec db-sec-compact" id="db-todo-sec">
         <div class="db-sec-hdr"><div class="db-sec-title">✅ 오늘의 할 일</div>${hideBtn}</div>
         <div class="db-empty-mini">오늘 수업 반에 등록된 교재 챕터가 없어요</div>
       </div>`;
@@ -683,7 +704,7 @@ const DashboardApp = (() => {
       <span class="db-todo-lbl">${_esc(r.cls.name)}반 · ${_esc(r.book.name)}</span>
       ${r.total > 0 ? `<span class="db-todo-badge">미수행 ${r.total}</span>` : ''}
     </div>`;
-    return `<div class="db-sec" id="db-todo-sec">
+    return `<div class="db-sec db-sec-compact" id="db-todo-sec">
       <div class="db-sec-hdr">
         <div class="db-sec-title">✅ 오늘의 할 일${pending.length ? ` <span class="db-todo-count">${pending.length}</span>` : ''}</div>
         ${hideBtn}
@@ -724,6 +745,7 @@ const DashboardApp = (() => {
         <div style="display:flex;gap:6px">
           <button class="db-mini-btn" onclick="DashboardApp._requestBulkUpdate()" title="이 날짜의 모든 반을 한 번에 업데이트 요청">🔄 일괄 업데이트</button>
           <button class="db-mini-btn ghost" onclick="App.go('booklib')">전체보기</button>
+          <button class="db-mini-btn ghost" onclick="DashboardApp._setSectionOn('books',false)" title="이 위젯을 숨깁니다. ≡ 화면구성에서 다시 켤 수 있어요">✕</button>
         </div></div>
       <div class="db-day-tabs">${tabs.map(t => `<button class="db-day-tab${t.off === _bookDayOffset ? ' on' : ''}" onclick="DashboardApp._selectBookDay(${t.off})">${t.label}</button>`).join('')}</div>
       ${groups.length
@@ -814,9 +836,12 @@ const DashboardApp = (() => {
         <button class="db-fav-filter-btn" data-filter="archive" onclick="DashboardApp._filterFavorites('archive')">📄 자료 ${arItems.length}</button>
         <button class="db-fav-filter-btn" data-filter="video" onclick="DashboardApp._filterFavorites('video')">🎬 영상 ${evItems.length}</button>
       </div>` : '';
-    return `<div class="db-sec">
+    return `<div class="db-sec db-sec-compact">
       <div class="db-sec-hdr"><div class="db-sec-title">⭐ 즐겨찾기 콘텐츠</div>
-        <button class="db-mini-btn ghost" onclick="App.go('archive')">전체보기</button></div>
+        <div style="display:flex;gap:6px">
+          <button class="db-mini-btn ghost" onclick="App.go('archive')">전체보기</button>
+          <button class="db-mini-btn ghost" onclick="DashboardApp._setSectionOn('favorites',false)" title="이 위젯을 숨깁니다. ≡ 화면구성에서 다시 켤 수 있어요">✕</button>
+        </div></div>
       ${filterBar}
       <div class="db-ar-thumbs">${items.map(it => {
         if (it._type === 'archive') {
@@ -864,5 +889,5 @@ const DashboardApp = (() => {
     if (typeof BooklibApp !== 'undefined' && BooklibApp.goToMatrix) BooklibApp.goToMatrix(clsId, bkId);
   }
 
-  return { init, render, goMatrix, goArchivePreview, goEduVideo, _filterFavorites, _refreshBadges, openReorder, _saveReorder, _selectBookDay, _requestBulkUpdate, _todayUpdateTargets, _refreshQuote, _dashStyle, _setTodoOn };
+  return { init, render, goMatrix, goArchivePreview, goEduVideo, _filterFavorites, _refreshBadges, openReorder, _saveReorder, _selectBookDay, _requestBulkUpdate, _todayUpdateTargets, _refreshQuote, _dashStyle, _setTodoOn, _setSectionOn };
 })();
