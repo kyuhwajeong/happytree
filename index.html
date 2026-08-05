@@ -3,6 +3,28 @@
 <head>
 <script>
 /* ══════════════════════════════════════════════════════
+ * 개발자 모드 사전 캡처 — 반드시 다른 모든 스크립트 태그보다 먼저 실행되어야
+ * 페이지 로딩 초반(다른 모듈들이 아직 로드되기 전)에 나는 에러까지
+ * 놓치지 않고 잡을 수 있다. dev-diagnostics.js가 나중에 로드되면서
+ * 이 배열의 내용을 흡수해 영구 로그(localStorage)로 옮겨 담는다.
+ * 서버로는 아무것도 전송하지 않는다 — 이 브라우저 안에서만 쓰인다.
+ * ══════════════════════════════════════════════════════ */
+(function() {
+  window.__hk10bEarlyLog = [];
+  function _push(e) { window.__hk10bEarlyLog.push(e); if (window.__hk10bEarlyLog.length > 300) window.__hk10bEarlyLog.shift(); }
+  window.addEventListener('error', function(e) {
+    _push({ t: Date.now(), type: 'error', msg: String(e.message || ''), src: e.filename || '', line: e.lineno || 0,
+      stack: (e.error && e.error.stack) ? String(e.error.stack).slice(0, 2000) : '' });
+  });
+  window.addEventListener('unhandledrejection', function(e) {
+    var r = e.reason;
+    _push({ t: Date.now(), type: 'promise', msg: String((r && r.message) || r || ''),
+      stack: (r && r.stack) ? String(r.stack).slice(0, 2000) : '' });
+  });
+})();
+</script>
+<script>
+/* ══════════════════════════════════════════════════════
  * 완전 자동 버전 감지 — 사람이 손댈 파일도, 목록도 없음
  * ────────────────────────────────────────────────────────
  * "이 파일들만 감시" 식의 하드코딩된 목록을 아예 없앴다.
@@ -643,5 +665,6 @@
 <script src="monitor-app.js"></script>
 <script src="monitor-patch.js"></script>
 <script src="guest-mode.js"></script>
+<script src="dev-diagnostics.js"></script>
 </body>
 </html>
