@@ -16,6 +16,80 @@ const GeminiAI = (() => {
     `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${k}`;
   const _delay = ms => new Promise(r => setTimeout(r, ms));
 
+  /* ══════════════════════════════════════════════════════════════
+   * 자체 사용량 관리 — Google이 "잔여 할당량"을 클라이언트에 공개하지
+   * 않기 때문에, 우리가 직접 호출 횟수를 세어서 하루 한도를 자체적으로
+   * 정해둔다. 특히 영상 분석(extractVocabularyFromYoutubeVideo)은
+   * 한 번에 토큰을 훨씬 많이 쓰므로 별도로 훨씬 낮은 한도를 둔다 —
+   * 그래야 번역·코멘트 생성처럼 자주 쓰는 가벼운 기능이 영상 분석
+   * 한 번에 그날 할당량을 다 뺏기는 일을 막을 수 있다.
+   *
+   * 참고: Google 공식 문서 — "요청 한도는 API 키가 아니라 프로젝트
+   * 단위로 적용되고, 일일 한도(RPD)는 태평양시(UTC-8) 자정에 초기화"
+   * (https://ai.google.dev/gemini-api/docs/rate-limits) — 그래서
+   * 날짜 구분도 로컬 날짜가 아니라 태평양시 기준으로 맞춘다.
+   * ══════════════════════════════════════════════════════════════ */
+  const DAILY_BUDGET = { video: 5, text: 120 }; // ★ 정확한 구글 한도를 모르니 보수적인 자체 안전장치일 뿐
+  const COOLDOWN_MIN = 15; // ★ 모든 키/모델이 다 실패했을 때, 이 시간 동안은 재시도 없이 바로 안내만
+  const _usagePath = day => `hakwon10/aiUsage/${day}`;
+  function _ptDateKey(d) {
+    // ★ UTC-8 고정(서머타임 미반영) — 대략적인 날짜 구분용이라 정밀한 리셋 시각까지는 보장 못 함
+    const t = (d || new Date()).getTime() - 8 * 3600 * 1000;
+    return new Date(t).toISOString().slice(0, 10);
+  }
+  async function _loadUsage(day) {
+    try {
+      if (typeof FireDB !== 'undefined' && FireDB.ready && FireDB.ready()) {
+        const v = await FireDB.get(_usagePath(day));
+        if (v && typeof v === 'object') return v;
+      }
+    } catch (e) { console.warn('[GeminiAI] 사용량 조회 실패(허용 처리)', e); }
+    // ★ Firebase를 못 쓰면 이 기기에서만이라도 세어서 최소한의 보호는 하도록 폴백
+    try { return JSON.parse(localStorage.getItem('ht_ai_usage_' + day) || 'null') || {}; } catch (e) { return {}; }
+  }
+  async function _saveUsage(day, usage) {
+    try {
+      if (typeof FireDB !== 'undefined' && FireDB.ready && FireDB.ready()) { await FireDB.set(_usagePath(day), usage); return; }
+    } catch (e) { console.warn('[GeminiAI] 사용량 저장 실패(허용 처리)', e); }
+    try { localStorage.setItem('ht_ai_usage_' + day, JSON.stringify(usage)); } catch (e) {}
+  }
+  /* 호출 전 체크 + 선반영(비관적으로 먼저 카운트) — 초과 시 네트워크 요청 자체를 안 보내서 할당량을 아낀다 */
+  async function _checkAndReserveBudget(feature) {
+    const day = _ptDateKey();
+    const usage = await _loadUsage(day);
+    if (usage.cooldownUntil && Date.now() < usage.cooldownUntil) {
+      const mins = Math.ceil((usage.cooldownUntil - Date.now()) / 60000);
+      throw new Error(`AI 사용량이 많아 잠시 제한 중입니다. 약 ${mins}분 후 다시 시도해주세요.`);
+    }
+    const cap = DAILY_BUDGET[feature] != null ? DAILY_BUDGET[feature] : DAILY_BUDGET.text;
+    const used = usage[feature] || 0;
+    if (used >= cap) {
+      throw new Error(`오늘 이 기능(${feature === 'video' ? '영상 분석' : 'AI 텍스트 생성'})의 자체 사용 한도(${cap}회)에 도달했습니다.\n태평양시 자정(한국시간 오후 4~5시경) 이후 다시 시도해주세요.`);
+    }
+    usage[feature] = used + 1;
+    await _saveUsage(day, usage);
+    return { day, usage };
+  }
+  async function _recordFullExhaustion() {
+    try {
+      const day = _ptDateKey();
+      const usage = await _loadUsage(day);
+      usage.cooldownUntil = Date.now() + COOLDOWN_MIN * 60000;
+      await _saveUsage(day, usage);
+    } catch (e) {}
+  }
+  /* 관리자 화면 등에서 오늘 사용량을 보여주고 싶을 때 쓸 수 있도록 공개 */
+  async function getUsageToday() {
+    const day = _ptDateKey();
+    const usage = await _loadUsage(day);
+    return {
+      day,
+      video: { used: usage.video || 0, cap: DAILY_BUDGET.video },
+      text: { used: usage.text || 0, cap: DAILY_BUDGET.text },
+      cooldownUntil: usage.cooldownUntil || null,
+    };
+  }
+
   /* ══ localStorage ════════════════════════════════════════== */
   const LS_STYLE    = 'ht_style_samples';
   const LS_PINS     = 'ht_style_pins';
@@ -106,10 +180,12 @@ const GeminiAI = (() => {
   }
 
   /* ══ 핵심 API 호출 ════════════════════════════════════════ */
-  async function _call(prompt, system, maxTokens) {
+  async function _call(prompt, system, maxTokens, feature) {
     system = system || '';
     maxTokens = maxTokens || 1024;
+    feature = feature || 'text';
     if (!KEYS.length) throw new Error('API 키 미설정 — gemini-ai.js의 KEYS 배열을 확인하세요.');
+    await _checkAndReserveBudget(feature); // ★ 한도 초과/쿨다운 중이면 네트워크 호출 없이 바로 중단
     var errors = [];
     for (var ki = 0; ki < KEYS.length; ki++) {
       var key = KEYS[ki];
@@ -129,6 +205,7 @@ const GeminiAI = (() => {
           });
 
           if (res.status === 401) { errors.push(key.slice(0,8)+'...: 키무효(401)'); break; }
+          if (res.status === 403) { errors.push(key.slice(0,8)+'...: 권한/할당량 문제로 추정(403)'); break; }
           if (res.status === 429) { errors.push(key.slice(0,8)+'...: 한도소진(429)'); break; }
           if (res.status === 404) { errors.push(model+': 모델없음(404)'); continue; }
           if (res.status === 503) { await _delay(500); errors.push(model+': 503'); continue; }
@@ -159,6 +236,7 @@ const GeminiAI = (() => {
         }
       }
     }
+    await _recordFullExhaustion(); // ★ 키/모델 전부 실패 — 잠시 동안은 재시도해도 어차피 안 되니 쿨다운으로 막아둠
     throw new Error(
       '모든 키/모델 실패\n' + errors.map(function(e){ return '  · ' + e; }).join('\n') + '\n\n' +
       '해결: 자정 이후 재시도 또는 KEY_2/KEY_3에 다른 계정 키를 추가하세요.\n' +
@@ -173,6 +251,7 @@ const GeminiAI = (() => {
   async function _callWithYoutube(youtubeUrl, prompt, maxTokens) {
     maxTokens = maxTokens || 2048;
     if (!KEYS.length) throw new Error('API 키 미설정');
+    await _checkAndReserveBudget('video'); // ★ 영상 분석 전용의 낮은 자체 한도부터 확인
     var errors = [];
     for (var ki = 0; ki < KEYS.length; ki++) {
       var key = KEYS[ki];
@@ -192,6 +271,7 @@ const GeminiAI = (() => {
             body: JSON.stringify(body)
           });
           if (res.status === 401) { errors.push(key.slice(0,8)+'...: 키무효(401)'); break; }
+          if (res.status === 403) { errors.push(key.slice(0,8)+'...: 권한/할당량 문제로 추정(403)'); break; }
           if (res.status === 429) { errors.push(key.slice(0,8)+'...: 한도소진(429)'); break; }
           if (res.status === 404) { errors.push(model+': 모델없음(404, 영상 지원 안 되는 모델일 수 있음)'); continue; }
           if (res.status === 503) { await _delay(500); errors.push(model+': 503'); continue; }
@@ -216,6 +296,7 @@ const GeminiAI = (() => {
         }
       }
     }
+    await _recordFullExhaustion();
     throw new Error('영상 분석 실패\n' + errors.map(function(e){ return '  · ' + e; }).join('\n'));
   }
 
@@ -509,6 +590,6 @@ ${list}`;
     getBookPins, addBookPin, removeBookPin, clearBookPins, getMergedPins,
     getAnalysisCache, setAnalysisCache, clearStyleCache,
     testConnection, status, translateToEnglish, extractVocabulary, generateWordMeanings, extractVocabularyFromYoutubeVideo,
-    generateSearchQueries, curateVideos,
+    generateSearchQueries, curateVideos, getUsageToday,
   };
 })();
