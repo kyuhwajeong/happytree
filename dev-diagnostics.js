@@ -123,7 +123,10 @@ const DevDiag = (() => {
         const safeUrl = (url || '').split('?')[0]; // ★ 쿼리스트링(API 키 등) 제거 후 기록
         return orig(...args).then(res => {
           const dt = Math.round(((typeof performance !== 'undefined') ? performance.now() : Date.now()) - t0);
-          if (!res.ok || dt > SLOW_MS) {
+          // ★ 버그 수정: no-cors 요청의 응답은 브라우저가 항상 "불투명(opaque)"하게 감춰서
+          //   실제로는 성공했어도 res.ok가 항상 false, res.status가 항상 0으로 나온다.
+          //   이런 응답은 성공/실패를 판단할 수 없으므로 오류로 기록하지 않는다.
+          if (res.type !== 'opaque' && (!res.ok || dt > SLOW_MS)) {
             _pushLog({ ts: new Date().toISOString(), type: 'network', msg: `${res.status} ${safeUrl}`, ms: dt, ok: res.ok, page: _currentPage() });
           }
           return res;
@@ -345,9 +348,11 @@ const DevDiag = (() => {
     const body = document.getElementById('dd-body'); if (!body) return;
     body.innerHTML = `
       <div class="dd-note">각 외부 서비스에 실제로 도달 가능한지 점검합니다. 비용이 발생하거나(Gemini 생성, Unsplash 검색) 사용자에게 영향을 주는(FCM 실제 발송) 호출은 하지 않습니다.</div>
+      <div id="dd-ai-usage"></div>
       <div class="dd-actbar"><button class="dd-btn" id="dd-run-net">🔄 지금 점검 시작</button></div>
       <div id="dd-net-results"></div>
     `;
+    _renderAiUsage();
     document.getElementById('dd-run-net').onclick = async () => {
       const resultsEl = document.getElementById('dd-net-results');
       resultsEl.innerHTML = `<div class="dd-empty">점검 중… 몇 초 정도 걸릴 수 있어요</div>`;
@@ -357,6 +362,32 @@ const DevDiag = (() => {
         resultsEl.innerHTML = rendered.map(_netRowHtml).join('');
       });
     };
+  }
+  async function _renderAiUsage() {
+    const el = document.getElementById('dd-ai-usage'); if (!el) return;
+    if (typeof GeminiAI === 'undefined' || !GeminiAI.getUsageToday) return; // 구버전 gemini-ai.js면 조용히 생략
+    try {
+      const u = await GeminiAI.getUsageToday();
+      const bar = (used, cap) => {
+        const pct = cap ? Math.min(100, Math.round(used / cap * 100)) : 0;
+        const color = pct >= 100 ? '#ef4444' : pct >= 70 ? '#f59e0b' : '#16a34a';
+        return `<div style="height:6px;border-radius:999px;background:var(--card2);overflow:hidden;margin-top:4px">
+          <div style="height:100%;width:${pct}%;background:${color}"></div></div>`;
+      };
+      const cooling = u.cooldownUntil && Date.now() < u.cooldownUntil;
+      el.innerHTML = `
+        <div class="dd-row-lbl" style="margin-bottom:6px">🤖 오늘의 AI 사용량 (자체 집계 · 태평양시 기준 ${_esc(u.day)})</div>
+        <div class="dd-row" style="flex-direction:column;align-items:stretch">
+          <div style="display:flex;justify-content:space-between"><span class="dd-row-lbl">🎬 영상 분석</span><span class="dd-row-detail">${u.video.used} / ${u.video.cap}회</span></div>
+          ${bar(u.video.used, u.video.cap)}
+        </div>
+        <div class="dd-row" style="flex-direction:column;align-items:stretch">
+          <div style="display:flex;justify-content:space-between"><span class="dd-row-lbl">✍️ 텍스트 생성(번역·코멘트 등)</span><span class="dd-row-detail">${u.text.used} / ${u.text.cap}회</span></div>
+          ${bar(u.text.used, u.text.cap)}
+        </div>
+        ${cooling ? `<div class="dd-row"><span class="dd-dot bad"></span><div class="dd-row-main"><div class="dd-row-lbl">쿨다운 중</div><div class="dd-row-detail">${_esc(new Date(u.cooldownUntil).toLocaleTimeString('ko-KR'))}까지 재시도 보류</div></div></div>` : ''}
+      `;
+    } catch (e) { /* 표시 실패해도 나머지 패널엔 영향 없게 조용히 무시 */ }
   }
   function _netRowHtml(r) {
     const dot = r.ok === null ? 'na' : r.ok ? 'ok' : 'bad';
