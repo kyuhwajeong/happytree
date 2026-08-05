@@ -1533,19 +1533,47 @@ to{opacity:1;transform:none}}
     }
   }
 
-  /* ── AI 분석 로드 ── */
-  async function _loadTrendAi(studentId, pts) {
+  /* ── AI 분석 로드 ──
+   * ★ 캐시를 2단계로 둔다:
+   *   1) 메모리 캐시(_trendAiCache) — 같은 세션 안에서 같은 학생을 다시 볼 때 즉시 재사용
+   *   2) Firebase 캐시(FB_TREND_AI_CACHE) — 새로고침하거나 다른 기기에서 봐도 재사용.
+   *      진도 데이터가 바뀌면(pts 지문이 달라지면) 자동으로 무효화되어 다시 분석한다.
+   *   이렇게 하면 같은 학생을 반복해서 볼 때마다 Gemini를 새로 호출하지 않아
+   *   할당량 소모를 크게 줄일 수 있다. */
+  const FB_TREND_AI_CACHE = 'hakwon10/aiTrendCache';
+  const TREND_AI_TTL_MS = 14 * 24 * 3600 * 1000; // 14일 지나면 최신화 차원에서 자동 재분석
+  function _trendFingerprint(pts) {
+    // ★ 정확한 해시가 아니라, 데이터가 바뀌었는지 대략 감지하는 용도의 가벼운 지문
+    if (!pts || !pts.length) return '0';
+    const last = pts[pts.length - 1];
+    return `${pts.length}_${last.date || ''}_${last.wordAch || ''}_${last.rdAch || ''}`;
+  }
+  async function _loadTrendAi(studentId, pts, force) {
     const el = document.getElementById('gr-trend-ai');
     if (!el) return;
 
-    // 캐시 확인
-    if (_trendAiCache[studentId]) {
+    // 캐시 확인 (메모리 → 이 세션에서 이미 본 학생)
+    if (!force && _trendAiCache[studentId]) {
       _renderAiPanel(el, _trendAiCache[studentId], studentId); return;
     }
     if (typeof GeminiAI === 'undefined' || !pts.length) {
       el.innerHTML = `<div class="gr-trend-ai-hdr">✨ AI 성장 분석</div>
         <div class="gr-trend-ai-error">AI 연결 안 됨</div>`;
       return;
+    }
+    // 캐시 확인 (Firebase → 예전에 분석해둔 게 있고, 그 이후 진도 데이터가 안 바뀌었으면 재사용)
+    const fp = _trendFingerprint(pts);
+    if (!force) {
+      try {
+        if (typeof FireDB !== 'undefined' && FireDB.ready && FireDB.ready()) {
+          const cached = await FireDB.get(`${FB_TREND_AI_CACHE}/${studentId}`);
+          if (cached && cached.fp === fp && cached.result && (Date.now() - (cached.at || 0)) < TREND_AI_TTL_MS) {
+            _trendAiCache[studentId] = cached.result;
+            _renderAiPanel(el, cached.result, studentId);
+            return; // ★ Gemini 호출 자체를 건너뜀
+          }
+        }
+      } catch (e) { console.warn('[GradeApp] AI 트렌드 캐시 조회 실패(그냥 새로 분석)', e); }
     }
     try {
       const stu  = StudentDB.getAll().find(s => s.id === studentId);
@@ -1561,6 +1589,11 @@ to{opacity:1;transform:none}}
       const result = await GeminiAI.analyzeStudentTrend(data);
       _trendAiCache[studentId] = result;
       _renderAiPanel(el, result, studentId);
+      try {
+        if (typeof FireDB !== 'undefined' && FireDB.ready && FireDB.ready()) {
+          await FireDB.set(`${FB_TREND_AI_CACHE}/${studentId}`, { result, fp, at: Date.now() });
+        }
+      } catch (e) { console.warn('[GradeApp] AI 트렌드 캐시 저장 실패(허용 처리)', e); }
     } catch(e) {
       if (el.isConnected) {
         el.innerHTML = `<div class="gr-trend-ai-hdr">✨ AI 성장 분석
@@ -1573,7 +1606,7 @@ to{opacity:1;transform:none}}
 
   function _refreshTrendAi(studentId) {
     delete _trendAiCache[studentId];
-    _loadTrendAi(studentId, _lastTrendPts);
+    _loadTrendAi(studentId, _lastTrendPts, true);
     const el = document.getElementById('gr-trend-ai');
     if (el) el.innerHTML = `<div class="gr-trend-ai-hdr">✨ AI 성장 분석
         <button class="gr-trend-ai-refresh" onclick="GradeApp._refreshTrendAi('${studentId}')" title="재분석">↻</button>
