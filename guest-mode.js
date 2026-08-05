@@ -1821,6 +1821,29 @@ input[data-gm-ro], textarea[data-gm-ro] {
   }
 
   /* ══════════════════════════════════════════════
+   * 비활성화 — 로그아웃하거나 게스트가 아닌 실제 계정으로 로그인하면 호출됨.
+   * ★ 버그 수정: 기존엔 이 함수가 아예 없어서, 게스트로 접속했다가 로그아웃 후
+   *   실제 admin 계정으로 로그인해도 _active 플래그가 계속 true로 남아 있었다.
+   *   그 결과 다른 탭으로 이동할 때마다 게스트 나레이션 화면이 계속 떴고,
+   *   입력칸도 계속 읽기전용으로 잠긴 상태였다.
+   * ══════════════════════════════════════════════ */
+  function _deactivate() {
+    if (!_active) return;
+    _active = false;
+    document.getElementById(BADGE_ID)?.remove();
+    document.getElementById(OVERLAY_ID)?.remove();
+    document.body.classList.remove('gm-on');
+    _clearSpotlight();
+    // ★ 게스트 모드 동안 읽기전용으로 잠갔던 입력칸/셀렉트를 원상 복구
+    document.querySelectorAll('[data-gm-ro]').forEach(el => {
+      el.removeAttribute('data-gm-ro');
+      el.removeAttribute('readonly');
+    });
+    // ★ 다음에 다시 게스트로 접속하면 나레이션을 처음부터 새로 볼 수 있도록 초기화
+    _seen.clear();
+  }
+
+  /* ══════════════════════════════════════════════
    * doLogin 훅
    * ══════════════════════════════════════════════ */
   function _hookLogin() {
@@ -1838,7 +1861,27 @@ input[data-gm-ro], textarea[data-gm-ro] {
         if(typeof App._refreshAuthUI==='function')App._refreshAuthUI();
         _seen.add('operate');
         setTimeout(()=>{App.go('operate');_show('operate');},500);
-      } else { orig(); }
+      } else {
+        orig();
+        // ★ 실제 계정으로 로그인에 성공한 경우, 이전에 남아있을 수 있는 게스트 모드를 완전히 해제한다.
+        const realSess=(typeof DB!=='undefined'&&DB.getSession)?DB.getSession():null;
+        if(realSess&&!realSess._isGuest)_deactivate();
+      }
+    };
+  }
+
+  /* ══════════════════════════════════════════════
+   * logout 훅 — 로그아웃 시 게스트 모드 완전 해제
+   * ══════════════════════════════════════════════ */
+  function _hookLogout() {
+    if(typeof App==='undefined'||typeof App.logout!=='function')return;
+    const orig=App.logout.bind(App);
+    App.logout=function(...args){
+      const ret=orig(...args);
+      _deactivate();
+      // logout()은 비동기 함수라 flush 완료 후 한 번 더 안전하게 정리(이미 꺼져 있으면 아무 동작 안 함)
+      if(ret&&typeof ret.then==='function')ret.then(()=>_deactivate());
+      return ret;
     };
   }
 
@@ -1848,7 +1891,7 @@ input[data-gm-ro], textarea[data-gm-ro] {
   function init() {
     const tryHook=()=>{
       if(typeof App!=='undefined'&&typeof DB!=='undefined'){
-        _hookLogin(); _hookNav();
+        _hookLogin(); _hookNav(); _hookLogout();
         const sess=DB.getSession?DB.getSession():null;
         if(sess&&sess._isGuest){
           _activate();
