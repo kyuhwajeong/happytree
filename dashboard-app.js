@@ -258,12 +258,13 @@ const DashboardApp = (() => {
 .db-quote-inline .db-quote-author{font-size:10.5px;font-style:italic;color:var(--tx3);opacity:.75}
 .db-quote-en{white-space:normal;line-height:1.4;
   font-family:var(--font);font-size:11px;font-style:italic;font-weight:500;letter-spacing:.1px;color:var(--a);opacity:.75;margin-top:2px;padding-left:2px}
-.db-body{flex:1;overflow-y:auto;padding:12px 14px 90px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));grid-auto-flow:row dense;align-items:start;gap:14px}
-.db-sec{background:var(--surf);border:1px solid var(--bdr);border-radius:16px;padding:14px;grid-column:1/-1}
-/* ★ "오늘의 할 일" · "즐겨찾기 콘텐츠"처럼 내용이 짧은 위젯은 억지로 가로 전체를 채우지 않고,
- *   자기 내용만큼만 자리 잡은 뒤 옆에 다른 위젯이 있으면 나란히, 없으면 왼쪽에 붙어 표시된다.
- *   grid-auto-flow:dense 덕분에 뒤에 나오는 위젯이라도 앞쪽 빈 칸을 자동으로 채워 들어간다. */
-.db-sec-compact{grid-column:auto;max-width:440px;justify-self:start;width:100%}
+.db-body{flex:1;overflow-y:auto;padding:12px 14px 90px;display:flex;flex-direction:column;gap:14px}
+.db-sec{background:var(--surf);border:1px solid var(--bdr);border-radius:16px;padding:14px;width:100%}
+/* ★ "오늘의 할 일" · "즐겨찾기 콘텐츠"처럼 내용이 짧은 위젯들은 .db-compact-row로 함께 묶여서
+ *   flex로 가로 폭을 나눠 가진다 — 옆에 다른 압축형 위젯이 있으면 나란히 꽉 채우고,
+ *   혼자 있어도 578px까지는 채워서 불필요한 여백이 생기지 않는다(완전한 빈 공간 없음). */
+.db-compact-row{display:flex;flex-wrap:wrap;gap:14px;align-items:stretch}
+.db-compact-row .db-widget{flex:1 1 300px;max-width:578px;width:auto}
 .db-sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
 .db-sec-title{font-size:15px;font-weight:800;color:var(--tx)}
 .db-sec-acts{display:flex;gap:6px}
@@ -279,7 +280,9 @@ const DashboardApp = (() => {
  * 참고: 미니멀=Notion/Linear의 여백 중심, 컴팩트=Linear/Vercel의 절제된
  *      데이터 밀집형, 히어로=Stripe/Attio의 단일 포커스형 히어로 배너
  * ══════════════════════════════════════════════════════════════ */
-/* --- 컴팩트: 여백을 줄이고 테두리를 얇게, 장식 요소(명언 배너)는 숨겨 정보 밀도를 높임 --- */
+/* --- 컴팩트: 여백을 줄이고 테두리를 얇게, 장식 요소(명언 배너)는 숨겨 정보 밀도를 높임.
+   이미 자체적으로 2열 그리드로 화면을 꽉 채우므로 .db-compact-row 묶음은 쓰지 않는다
+   (렌더 단계에서 컴팩트 스타일일 땐 애초에 묶지 않고 펼쳐서 그린다). --- */
 .db-style-compact .db-body{gap:8px;padding:10px 12px 90px}
 .db-style-compact .db-sec{border-radius:8px;padding:10px;box-shadow:none;border-color:var(--bdr2)}
 .db-style-compact .db-sec-hdr{margin-bottom:7px}
@@ -293,8 +296,7 @@ const DashboardApp = (() => {
    좁은 화면(휴대폰 등)은 별도 규칙으로 항상 1열이라 여기 영향을 받지 않는다. */
 @media (min-width:860px){
   .db-style-compact .db-body{display:grid;grid-template-columns:1fr 1fr;align-items:start;gap:12px}
-  .db-style-compact .db-sec{margin:0;grid-column:auto}
-  .db-style-compact .db-sec-compact{max-width:none;justify-self:stretch;width:auto}
+  .db-style-compact .db-sec{margin:0}
 }
 
 /* --- 히어로: 상단을 그라디언트 배너로 강조하고, 섹션 제목엔 포인트 색 왼쪽 바를 둠 --- */
@@ -338,16 +340,33 @@ const DashboardApp = (() => {
   .ph-title{max-width:170px}
 }
 
-/* 순서 변경 버튼/편집 시트 */
+/* 화면 구성 편집 버튼 + 다이렉트 드래그 */
 .db-reorder-btn{width:34px;height:34px;border-radius:9px;background:var(--a10);border:1px solid var(--a40);display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer;color:var(--a);flex-shrink:0}
-.db-reorder-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--card2);border:1px solid var(--bdr);border-radius:10px;margin-bottom:6px}
-.db-reorder-ico{font-size:17px;flex-shrink:0}
-.db-reorder-lbl{flex:1;font-size:13px;font-weight:700;color:var(--tx)}
-.db-reorder-btns{display:flex;gap:4px}
-.db-reorder-arrow{width:28px;height:28px;border-radius:7px;border:1px solid var(--bdr2);background:var(--surf2);color:var(--tx2);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center}
-.db-reorder-arrow:disabled{opacity:.35;pointer-events:none}
-.db-reorder-toggle{padding:5px 10px;border-radius:999px;border:1px solid var(--bdr2);background:var(--surf2);color:var(--tx3);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0}
-.db-reorder-toggle.on{background:var(--a10);border-color:var(--a40);color:var(--a)}
+.db-reorder-btn.on{background:var(--a);border-color:var(--a);color:#fff}
+
+/* ★ 편집모드 안내 바 + 숨긴 위젯 되돌리기 칩 */
+.db-edit-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;
+  padding:10px 12px;background:var(--a10);border:1px dashed var(--a40);border-radius:12px;margin-bottom:2px}
+.db-edit-bar-msg{font-size:11.5px;font-weight:700;color:var(--a)}
+.db-edit-bar-acts{display:flex;flex-wrap:wrap;gap:6px}
+.db-edit-chip{padding:6px 11px;border-radius:999px;border:1px solid var(--a40);background:var(--surf);color:var(--a);
+  font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
+.db-edit-chip.ghost{border-color:var(--bdr2);background:var(--card2);color:var(--tx2)}
+
+/* ★ 위젯 드래그 래퍼 — 편집모드일 때만 점선 테두리 + 살짝 흔들리는 애니메이션(iOS 홈화면 편집 느낌)
+   으로 "옮길 수 있음"을 알려준다. 평소엔 완전히 투명한 래퍼라 기존 레이아웃에 영향 없음. */
+.db-widget{position:relative;width:100%}
+.db-drag-handle{display:none;position:absolute;top:8px;right:8px;z-index:5;width:30px;height:30px;border-radius:9px;
+  background:var(--a);color:#fff;border:none;font-size:15px;cursor:grab;align-items:center;justify-content:center;
+  box-shadow:0 3px 10px -2px rgba(0,0,0,.35)}
+.db-edit-on .db-drag-handle{display:flex}
+.db-edit-on .db-widget{outline:2px dashed var(--a40);outline-offset:3px;border-radius:18px;
+  animation:db-jiggle .32s ease-in-out infinite alternate}
+.db-widget.db-drag-source{opacity:.32}
+.db-drag-ghost{position:fixed;z-index:9999;pointer-events:none;opacity:.94;transform:scale(1.02);
+  box-shadow:0 16px 36px -10px rgba(0,0,0,.5);border-radius:16px;outline:none!important;animation:none!important}
+@keyframes db-jiggle{from{transform:rotate(-.35deg)}to{transform:rotate(.35deg)}}
+
 
 /* 오늘의 할 일 */
 .db-todo-count{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--a);color:#fff;font-size:10.5px;font-weight:800;vertical-align:middle;margin-left:4px}
@@ -461,11 +480,47 @@ const DashboardApp = (() => {
     _q('db-admin-badge')?.classList.toggle('hidden', !isAdmin);
   }
 
+  // ★ "오늘의 할 일" · "즐겨찾기 콘텐츠"처럼 내용이 짧은 위젯들을 화면에 그릴 때
+  //   연속으로 붙어있으면 .db-compact-row로 묶어서 가로 폭을 나눠 갖게 한다.
+  //   위젯이 새로 추가되면 여기 배열에만 추가하면 자동으로 같은 방식이 적용된다.
+  const COMPACT_KEYS = ['todo', 'favorites'];
+  // ★ 위젯 하나를 드래그 가능한 래퍼로 감싼다 — 편집모드일 때만 핸들(⠿)이 보이고,
+  //   지금 드래그 중인 위젯은 자리(placeholder)만 흐리게 남겨 레이아웃이 튀지 않게 한다.
+  function _widgetWrap(key, innerHtml, opts) {
+    if (!innerHtml) return '';
+    const dragging = opts && opts.draggingKey === key;
+    const handle = `<button type="button" class="db-drag-handle" onpointerdown="DashboardApp._dragStart(event,'${key}')" title="눌러서 끌면 자리를 옮길 수 있어요">⠿</button>`;
+    return `<div class="db-widget${dragging ? ' db-drag-source' : ''}" data-key="${key}">${handle}${innerHtml}</div>`;
+  }
+  function _buildBodyHtml(order, opts) {
+    opts = opts || {};
+    // ★ 컴팩트 스타일은 이미 자체 2열 그리드로 화면을 꽉 채우므로 묶지 않고 그대로 나열
+    if (_dashStyle() === 'compact') {
+      return order.map(key => _widgetWrap(key, _SECTION_HTML[key] ? _SECTION_HTML[key]() : '', opts)).join('');
+    }
+    const parts = [];
+    let buf = [];
+    const flush = () => {
+      if (!buf.length) return;
+      // ★ 압축형 위젯이 하나뿐이어도 같은 래퍼로 감싸서 578px까지 채우는 동일한 규칙을 적용한다
+      parts.push(`<div class="db-compact-row">${buf.join('')}</div>`);
+      buf = [];
+    };
+    order.forEach(key => {
+      const raw = _SECTION_HTML[key] ? _SECTION_HTML[key]() : '';
+      if (!raw) return; // 숨겨졌거나 표시할 내용이 없는 위젯은 건너뜀
+      const wrapped = _widgetWrap(key, raw, opts);
+      if (COMPACT_KEYS.includes(key)) buf.push(wrapped);
+      else { flush(); parts.push(wrapped); }
+    });
+    flush();
+    return parts.join('');
+  }
   function _shell() {
     const today = new Date();
     const dateStr = `${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일 (${DAYS_KO[today.getDay()]})`;
     const order = _getSectionOrder();
-    const html = order.map(key => _SECTION_HTML[key] ? _SECTION_HTML[key]() : '').join('');
+    const html = _buildBodyHtml(order, {});
     return `
       <div class="ph">
         <div class="phl">
@@ -477,76 +532,111 @@ const DashboardApp = (() => {
         </div>
         ${_quoteBannerHtml()}
         <div class="phr">
-          <button class="db-reorder-btn" onclick="DashboardApp.openReorder()" title="화면 구성 순서 변경">≡</button>
+          <button class="db-reorder-btn${_editMode ? ' on' : ''}" onclick="DashboardApp._toggleEditMode()" title="${_editMode ? '편집 완료' : '화면 구성 편집 — 위젯을 끌어서 옮기기'}">${_editMode ? '✓' : '≡'}</button>
           <button id="db-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>
         </div>
       </div>
-      <div class="db-body">${html}</div>`;
+      <div class="db-body${_editMode ? ' db-edit-on' : ''}" id="db-body">${_editMode ? _editToolbarHtml() : ''}${html}</div>`;
   }
 
   /* ═══════════════════════════════════════════════════════════
-   * 섹션 순서 변경 (기기별 저장)
+   * 화면 구성 편집 — 위젯을 직접 끌어다 놓아 순서를 바꾸는 다이렉트 드래그.
+   * ★ 기존엔 별도 팝업(시트)에서 ↑↓ 화살표로만 옮길 수 있었는데,
+   *   이제 대시보드 화면 위에서 바로 위젯을 눌러 끌면 다른 위젯들이
+   *   실시간으로 자리를 비켜주며 재배치된다(마우스·터치 공용, Pointer Events 사용).
+   *   압축형 위젯(오늘의 할 일·즐겨찾기)끼리는 좌/우 절반을 기준으로,
+   *   전체폭 위젯(일정표·교재현황)은 상/하 절반을 기준으로 삽입 위치를 판단한다.
    * ═══════════════════════════════════════════════════════════ */
-  let _reorderTmp = null;
-  function openReorder() {
-    _q('db-reorder-ov')?.remove();
-    _reorderTmp = _getSectionOrder().slice();
-    const ov = document.createElement('div');
-    ov.id = 'db-reorder-ov'; ov.className = 'ov';
-    ov.onclick = e => { if (e.target === ov) ov.remove(); };
-    ov.innerHTML = `<div class="sh">
-      <div class="sh-handle"></div>
-      <div class="sh-title">≡ 화면 구성 순서 변경</div>
-      <div class="sh-sub" style="color:var(--tx3);font-size:11.5px;line-height:1.5;margin-bottom:10px">
-        화살표로 순서를 바꾸면 홈 화면에 그 순서대로 표시됩니다. 이 기기에만 적용됩니다.
-      </div>
-      <div id="db-reorder-list"></div>
-      <div class="sh-acts">
-        <button class="btn-x" onclick="(()=>{localStorage.removeItem('${LS_ORDER}');localStorage.removeItem('${LS_HIDDEN}');localStorage.removeItem('${LS_TODO_ON_LEGACY}');DashboardApp.render();document.getElementById('db-reorder-ov')?.remove();App._toast&&App._toast('🔄 기본 상태로 초기화됨(순서·위젯 표시 모두)','success',2200);})()">초기화</button>
-        <button class="btn-ok" onclick="DashboardApp._saveReorder()">💾 순서 저장</button>
+  let _editMode = false;
+  function _toggleEditMode(on) {
+    _editMode = (on !== undefined) ? on : !_editMode;
+    render();
+  }
+  function _editToolbarHtml() {
+    const hidden = SECTION_DEFS.filter(d => d.optional && !_isSectionOn(d.key));
+    return `<div class="db-edit-bar">
+      <div class="db-edit-bar-msg">✋ 손잡이(⠿)를 눌러 끌면 위젯 위치를 자유롭게 옮길 수 있어요</div>
+      <div class="db-edit-bar-acts">
+        ${hidden.map(d => `<button class="db-edit-chip" onclick="DashboardApp._setSectionOn('${d.key}',true)">＋ ${_esc(d.lbl)}</button>`).join('')}
+        <button class="db-edit-chip ghost" onclick="DashboardApp._resetLayout()">🔄 기본 배치로</button>
       </div>
     </div>`;
-    document.body.appendChild(ov);
-
-    function renderList() {
-      const list = _q('db-reorder-list');
-      list.innerHTML = '';
-      _reorderTmp.forEach((key, idx) => {
-        const def = SECTION_DEFS.find(d => d.key === key); if (!def) return;
-        const row = document.createElement('div');
-        row.className = 'db-reorder-row';
-        const showToggle = !!def.optional; // ★ 일정표를 제외한 모든 위젯은 켬/끔 가능
-        const on = showToggle && _isSectionOn(def.key);
-        row.innerHTML = `
-          <span class="db-reorder-ico">${def.ico}</span>
-          <span class="db-reorder-lbl">${def.lbl}</span>
-          ${showToggle ? `<button class="db-reorder-toggle${on ? ' on' : ''}" data-toggle="1">${on ? '👁 표시' : '🚫 숨김'}</button>` : ''}
-          <div class="db-reorder-btns">
-            <button class="db-reorder-arrow" data-dir="up" ${idx === 0 ? 'disabled' : ''}>↑</button>
-            <button class="db-reorder-arrow" data-dir="dn" ${idx === _reorderTmp.length - 1 ? 'disabled' : ''}>↓</button>
-          </div>`;
-        row.querySelectorAll('button[data-dir]').forEach(btn => {
-          btn.onclick = () => {
-            const dir = btn.dataset.dir, j = dir === 'up' ? idx - 1 : idx + 1;
-            if (j < 0 || j >= _reorderTmp.length) return;
-            [_reorderTmp[idx], _reorderTmp[j]] = [_reorderTmp[j], _reorderTmp[idx]];
-            renderList();
-          };
-        });
-        if (showToggle) {
-          const tg = row.querySelector('[data-toggle]');
-          if (tg) tg.onclick = () => { _setSectionOn(def.key, !_isSectionOn(def.key)); renderList(); };
-        }
-        list.appendChild(row);
-      });
-    }
-    renderList();
   }
-  function _saveReorder() {
-    if (_reorderTmp) _saveSectionOrder(_reorderTmp);
-    _q('db-reorder-ov')?.remove();
+  function _resetLayout() {
+    try {
+      localStorage.removeItem(LS_ORDER);
+      localStorage.removeItem(LS_HIDDEN);
+      localStorage.removeItem(LS_TODO_ON_LEGACY);
+    } catch (e) {}
     render();
-    if (typeof App !== 'undefined' && App._toast) App._toast('✅ 순서가 저장되었습니다', 'success', 2000);
+    if (typeof App !== 'undefined' && App._toast) App._toast('🔄 기본 배치로 초기화됐어요', 'success', 2000);
+  }
+
+  let _dragKey = null, _dragOrder = null, _dragGhost = null, _lastAppliedOrderStr = null, _dragOffX = 0, _dragOffY = 0;
+  function _dragStart(e, key) {
+    if (!_editMode) return;
+    e.preventDefault();
+    const srcEl = document.querySelector(`.db-widget[data-key="${key}"]`);
+    if (!srcEl) return;
+    _dragKey = key;
+    _dragOrder = _getSectionOrder().slice();
+    _lastAppliedOrderStr = null;
+    const rect = srcEl.getBoundingClientRect();
+    _dragOffX = e.clientX - rect.left;
+    _dragOffY = e.clientY - rect.top;
+    const ghost = srcEl.cloneNode(true);
+    ghost.className = 'db-widget db-drag-ghost';
+    ghost.style.width = rect.width + 'px';
+    ghost.style.left = rect.left + 'px';
+    ghost.style.top = rect.top + 'px';
+    document.body.appendChild(ghost);
+    _dragGhost = ghost;
+
+    const onMove = ev => {
+      ev.preventDefault();
+      _dragGhost.style.left = (ev.clientX - _dragOffX) + 'px';
+      _dragGhost.style.top = (ev.clientY - _dragOffY) + 'px';
+      _updateDropTarget(ev.clientX, ev.clientY);
+    };
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+      _endDrag();
+    };
+    document.addEventListener('pointermove', onMove, { passive: false });
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
+  }
+  function _updateDropTarget(x, y) {
+    if (!_dragOrder || !_dragGhost) return;
+    _dragGhost.style.visibility = 'hidden'; // ★ 커서 바로 아래 깔린 고스트부터 걸리지 않게 잠깐 감춤
+    const el = document.elementFromPoint(x, y);
+    _dragGhost.style.visibility = 'visible';
+    const widgetEl = el && el.closest ? el.closest('.db-widget[data-key]') : null;
+    if (!widgetEl) return;
+    const targetKey = widgetEl.dataset.key;
+    if (targetKey === _dragKey) return;
+    const rect = widgetEl.getBoundingClientRect();
+    const inCompactRow = !!widgetEl.closest('.db-compact-row');
+    const before = inCompactRow ? (x < rect.left + rect.width / 2) : (y < rect.top + rect.height / 2);
+    const newOrder = _dragOrder.filter(k => k !== _dragKey);
+    let idx = newOrder.indexOf(targetKey);
+    if (idx < 0) return;
+    if (!before) idx += 1;
+    newOrder.splice(idx, 0, _dragKey);
+    const str = newOrder.join(',');
+    if (str === _lastAppliedOrderStr) return; // ★ 삽입 위치가 실제로 바뀔 때만 다시 그림(불필요한 리렌더 방지)
+    _lastAppliedOrderStr = str;
+    _dragOrder = newOrder;
+    const body = _q('db-body');
+    if (body) body.innerHTML = _editToolbarHtml() + _buildBodyHtml(_dragOrder, { draggingKey: _dragKey });
+  }
+  function _endDrag() {
+    if (_dragGhost) { _dragGhost.remove(); _dragGhost = null; }
+    if (_dragOrder) _saveSectionOrder(_dragOrder);
+    _dragKey = null; _dragOrder = null; _lastAppliedOrderStr = null;
+    render(); // ★ 편집모드는 유지한 채 최종 배치로 다시 그림(핸들 이벤트도 새로 붙음)
   }
 
   /* ★ 배경 이미지(BgTheme) 시너지 — 현재 적용 중인 무드를 대시보드 상단에 살짝 알려줌 */
@@ -889,5 +979,5 @@ const DashboardApp = (() => {
     if (typeof BooklibApp !== 'undefined' && BooklibApp.goToMatrix) BooklibApp.goToMatrix(clsId, bkId);
   }
 
-  return { init, render, goMatrix, goArchivePreview, goEduVideo, _filterFavorites, _refreshBadges, openReorder, _saveReorder, _selectBookDay, _requestBulkUpdate, _todayUpdateTargets, _refreshQuote, _dashStyle, _setTodoOn, _setSectionOn };
+  return { init, render, goMatrix, goArchivePreview, goEduVideo, _filterFavorites, _refreshBadges, _toggleEditMode, _dragStart, _resetLayout, _selectBookDay, _requestBulkUpdate, _todayUpdateTargets, _refreshQuote, _dashStyle, _setTodoOn, _setSectionOn };
 })();
