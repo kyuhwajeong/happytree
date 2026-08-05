@@ -279,6 +279,8 @@ const DevDiag = (() => {
   }
 
   function _makeFab() {
+    _css(); // ★ 버그 수정: 이전엔 패널을 열 때(_open)만 CSS가 주입돼서, 버튼 생성 시점엔
+            // 스타일이 하나도 없어(=position:fixed 미적용) 전체화면 레이어(#app) 뒤에 깔려 안 보였음
     if (document.getElementById('dd-fab')) return;
     const b = document.createElement('button');
     b.id = 'dd-fab'; b.title = '개발자 모드 — 코드/네트워크 점검 · 오류 로그';
