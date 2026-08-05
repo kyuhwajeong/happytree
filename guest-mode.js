@@ -230,6 +230,39 @@ const GuestMode = (() => {
           action: () => { if (typeof App !== 'undefined') App.mgTab('theme'); },
         },
         {
+          diagram: {
+            title: '홈 대시보드 3가지 스타일',
+            svg: `<svg viewBox="0 0 480 176" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:480px">
+<rect x="8" y="10" width="144" height="144" rx="12" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.6"/>
+<text x="80" y="28" text-anchor="middle" font-size="10" fill="#334155" font-weight="800">미니멀</text>
+<rect x="18" y="36" width="124" height="12" rx="3" fill="#e2e8f0"/>
+<rect x="18" y="54" width="124" height="26" rx="6" fill="#fff" stroke="#e2e8f0"/>
+<rect x="18" y="86" width="124" height="26" rx="6" fill="#fff" stroke="#e2e8f0"/>
+<rect x="18" y="118" width="124" height="26" rx="6" fill="#fff" stroke="#e2e8f0"/>
+<text x="80" y="164" text-anchor="middle" font-size="7" fill="#64748b">여백 넓은 세로 리스트</text>
+<rect x="168" y="10" width="144" height="144" rx="12" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.6"/>
+<text x="240" y="28" text-anchor="middle" font-size="10" fill="#334155" font-weight="800">컴팩트</text>
+<rect x="178" y="36" width="124" height="10" rx="3" fill="#e2e8f0"/>
+<rect x="178" y="50" width="59" height="42" rx="5" fill="#fff" stroke="#e2e8f0"/>
+<rect x="243" y="50" width="59" height="42" rx="5" fill="#fff" stroke="#e2e8f0"/>
+<rect x="178" y="96" width="59" height="42" rx="5" fill="#fff" stroke="#e2e8f0"/>
+<rect x="243" y="96" width="59" height="42" rx="5" fill="#fff" stroke="#e2e8f0"/>
+<text x="240" y="164" text-anchor="middle" font-size="7" fill="#64748b">2단 그리드, 밀도 높음</text>
+<rect x="328" y="10" width="144" height="144" rx="12" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.6"/>
+<text x="400" y="28" text-anchor="middle" font-size="10" fill="#334155" font-weight="800">히어로</text>
+<rect x="328" y="34" width="144" height="34" rx="0" fill="url(#hg)"/>
+<defs><linearGradient id="hg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4f46e5"/><stop offset="1" stop-color="#7c3aed"/></linearGradient></defs>
+<rect x="338" y="76" width="124" height="26" rx="8" fill="#fff" stroke="#e2e8f0"/>
+<rect x="338" y="108" width="124" height="26" rx="8" fill="#fff" stroke="#e2e8f0"/>
+<text x="400" y="164" text-anchor="middle" font-size="7" fill="#64748b">그라데이션 헤더, 카드 강조</text>
+</svg>`,
+          },
+          text: '🖼️ 테마 탭 안에는 <b>홈 대시보드 스타일</b> 선택도 있습니다.\n\n미니멀 / 컴팩트 / 히어로 3가지 레이아웃 중 골라 적용하면, <b>전체 사용자 화면에 즉시 반영</b>됩니다.\n\n배경 이미지 무드(도시·자연·미니멀 등)와 회전 주기·강도도 여기서 함께 조절할 수 있어요.',
+          highlight: '#mg-theme',
+          highlightLabel: '대시보드 스타일 선택',
+          action: () => { if (typeof App !== 'undefined') App.mgTab('theme'); },
+        },
+        {
           text: '📦 <b>백업 탭</b>에서 데이터를 안전하게 보관합니다.\n\n• <b>Excel 내보내기</b> — 반·교재·진도 전체를 .xlsx로 저장\n• <b>Excel 가져오기</b> — 이전 백업에서 데이터 복원\n\n🔗 <b>공유 탭</b>에서는 현재 주 진도를 링크로 생성합니다.\n학부모·원장님께 공유하면 실시간으로 확인 가능합니다.',
           highlight: '#mg-io',
           highlightLabel: '백업 & 가져오기',
@@ -926,11 +959,45 @@ const GuestMode = (() => {
       accent: '#f59e0b',
       steps: [
         {
+          diagram: {
+            title: '홈 대시보드 구성 — 위젯 조합 & 순서 변경',
+            svg: `<svg viewBox="0 0 460 196" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:460px">
+<text x="20" y="30" font-size="14" fill="#9ca3af">≡</text>
+<rect x="40" y="10" width="410" height="34" rx="9" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.6"/>
+<text x="52" y="31" font-size="9.5" fill="#92400e" font-weight="800">🗓️ 일정표 위젯 — 휴일·근무·급여·공지 통합</text>
+<text x="20" y="68" font-size="14" fill="#9ca3af">≡</text>
+<rect x="40" y="48" width="410" height="34" rx="9" fill="#eff6ff" stroke="#2563eb" stroke-width="1.6"/>
+<text x="52" y="69" font-size="9.5" fill="#1e40af" font-weight="800">📊 교재 학습 현황 — 반·교재별 미완료 카드</text>
+<text x="20" y="106" font-size="14" fill="#9ca3af">≡</text>
+<rect x="40" y="86" width="410" height="34" rx="9" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.6"/>
+<text x="52" y="107" font-size="9.5" fill="#166534" font-weight="800">⭐ 즐겨찾기 콘텐츠 — 자주 쓰는 자료 바로가기</text>
+<text x="20" y="144" font-size="14" fill="#9ca3af">≡</text>
+<rect x="40" y="124" width="410" height="34" rx="9" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.6"/>
+<text x="52" y="145" font-size="9.5" fill="#5b21b6" font-weight="800">💬 오늘의 명언 — 매일 자동 교체</text>
+<text x="230" y="180" text-anchor="middle" font-size="8.5" fill="#6b7280">≡ 버튼으로 순서를 자유롭게 바꾸고, 기기별로 저장됩니다</text>
+</svg>`,
+          },
           text: '🏠 <b>홈 대시보드</b> 화면입니다.\n\n로그인 후 가장 먼저 볼 수 있는 요약 화면으로, 오늘 챙겨야 할 일정과 교재 진도 현황을 한눈에 모아 보여줍니다.\n\n(운용자 계정은 관리자가 "홈" 메뉴 권한을 별도로 열어줘야 접근할 수 있어요.)',
           highlight: '#page-dashboard',
           highlightLabel: '홈 대시보드 화면',
         },
         {
+          diagram: {
+            title: '통합 일정 캘린더 — 5가지 정보를 한 화면에',
+            svg: `<svg viewBox="0 0 460 118" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:460px">
+<circle cx="26" cy="18" r="6" fill="#e11d48"/>
+<text x="40" y="22" font-size="9" fill="#374151">방학 · 공휴일 · 일반 일정</text>
+<circle cx="26" cy="42" r="6" fill="#2563eb"/>
+<text x="40" y="46" font-size="9" fill="#374151">직원 근무 기록</text>
+<circle cx="26" cy="66" r="6" fill="#16a34a"/>
+<text x="40" y="70" font-size="9" fill="#374151">급여일</text>
+<circle cx="256" cy="18" r="6" fill="#7c3aed"/>
+<text x="270" y="22" font-size="9" fill="#374151">예약된 공지 알림</text>
+<circle cx="256" cy="42" r="6" fill="#f59e0b"/>
+<text x="270" y="46" font-size="9" fill="#374151">🌤 그날의 날씨(배경)</text>
+<text x="230" y="98" text-anchor="middle" font-size="8.5" fill="#6b7280">날짜 탭 → 해당일 상세 내용으로 즉시 전환</text>
+</svg>`,
+          },
           text: '🗓️ <b>일정표 위젯</b>입니다.\n\n방학·공휴일·일반 일정은 물론, 직원 근무 기록과 급여일, 예약된 공지 알림까지 이 캘린더 하나에 통합되어 표시됩니다.\n\n오늘 날짜가 기본으로 선택되어 있고, 다른 날짜를 탭하면 그날의 상세 내용으로 바로 바뀝니다. 배경에는 그날의 <b>날씨</b>도 은은하게 표시돼요.',
           highlight: '#sch-mini-cal',
           highlightLabel: '통합 일정 캘린더',
@@ -959,6 +1026,38 @@ const GuestMode = (() => {
       accent: '#e11d48',
       steps: [
         {
+          diagram: {
+            title: '콘텐츠 화면 — 4개 도구 한눈에 보기',
+            svg: `<svg viewBox="0 0 500 172" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:500px">
+<rect x="17" y="10" width="112" height="140" rx="12" fill="#fdf2f8" stroke="#e11d48" stroke-width="1.8"/>
+<text x="73" y="34" text-anchor="middle" font-size="20">📁</text>
+<text x="73" y="54" text-anchor="middle" font-size="11" fill="#9f1239" font-weight="800">자료실</text>
+<text x="73" y="72" text-anchor="middle" font-size="7.5" fill="#831843">파일 업로드·검색</text>
+<text x="73" y="85" text-anchor="middle" font-size="7.5" fill="#831843">미리보기·zip 다운</text>
+<text x="73" y="98" text-anchor="middle" font-size="7.5" fill="#831843">비밀번호 보호</text>
+<rect x="73" y="126" width="0" height="0"/>
+<text x="73" y="136" text-anchor="middle" font-size="7" fill="#be123c" font-weight="700">기본 탭</text>
+<rect x="135" y="10" width="112" height="140" rx="12" fill="#eff6ff" stroke="#2563eb" stroke-width="1.8"/>
+<text x="191" y="34" text-anchor="middle" font-size="20">🎬</text>
+<text x="191" y="54" text-anchor="middle" font-size="11" fill="#1e40af" font-weight="800">영상 워크시트</text>
+<text x="191" y="72" text-anchor="middle" font-size="7.5" fill="#1e3a8a">유튜브 대본 추출</text>
+<text x="191" y="85" text-anchor="middle" font-size="7.5" fill="#1e3a8a">AI 단어·뜻·예문</text>
+<text x="191" y="98" text-anchor="middle" font-size="7.5" fill="#1e3a8a">학습지 PDF 생성</text>
+<rect x="253" y="10" width="112" height="140" rx="12" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.8"/>
+<text x="309" y="34" text-anchor="middle" font-size="20">📝</text>
+<text x="309" y="54" text-anchor="middle" font-size="11" fill="#166534" font-weight="800">PDF 워크시트</text>
+<text x="309" y="72" text-anchor="middle" font-size="7.5" fill="#14532d">PDF·이미지 병합</text>
+<text x="309" y="85" text-anchor="middle" font-size="7.5" fill="#14532d">자르기·합치기</text>
+<text x="309" y="98" text-anchor="middle" font-size="7.5" fill="#14532d">텍스트·이미지 편집</text>
+<rect x="371" y="10" width="112" height="140" rx="12" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.8"/>
+<text x="427" y="34" text-anchor="middle" font-size="20">🎮</text>
+<text x="427" y="54" text-anchor="middle" font-size="11" fill="#5b21b6" font-weight="800">학습 게임</text>
+<text x="427" y="72" text-anchor="middle" font-size="7.5" fill="#4c1d95">짝맞추기·스펠링</text>
+<text x="427" y="85" text-anchor="middle" font-size="7.5" fill="#4c1d95">퀴즈 3종</text>
+<text x="427" y="98" text-anchor="middle" font-size="7.5" fill="#4c1d95">대본·단어 재활용</text>
+<text x="250" y="164" text-anchor="middle" font-size="8.5" fill="#6b7280">▲ 화면 상단 탭 전환만으로 4가지 도구를 자유롭게 오갈 수 있어요</text>
+</svg>`,
+          },
           text: '🗂 <b>콘텐츠</b> 화면입니다.\n\n파일 <b>자료실</b>, 🎬 <b>영상 워크시트</b>, 📝 <b>PDF 워크시트 제작</b>, 🎮 <b>학습 게임</b> 4가지 도구가 탭 하나로 묶여 있습니다.\n\n먼저 기본 탭인 자료실부터 살펴볼게요.',
           highlight: '#page-archive .ar-tool-tabs',
           highlightLabel: '4개 도구 탭',
@@ -977,18 +1076,95 @@ const GuestMode = (() => {
           action: () => { if (typeof ArchiveApp !== 'undefined') ArchiveApp._selectTool('files'); },
         },
         {
+          diagram: {
+            title: '영상 워크시트 흐름 — URL 등록부터 학습지 완성까지',
+            svg: `<svg viewBox="0 0 500 140" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:500px">
+<defs><marker id="v1" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#2563eb"/></marker></defs>
+<rect x="6" y="14" width="104" height="86" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="1.6"/>
+<text x="58" y="38" text-anchor="middle" font-size="16">🔗</text>
+<text x="58" y="58" text-anchor="middle" font-size="8.5" fill="#1e40af" font-weight="800">유튜브 URL 등록</text>
+<text x="58" y="74" text-anchor="middle" font-size="7" fill="#1e3a8a">링크만 붙여넣기</text>
+<line x1="110" y1="57" x2="128" y2="57" stroke="#2563eb" stroke-width="1.6" marker-end="url(#v1)"/>
+<rect x="132" y="14" width="104" height="86" rx="10" fill="#ecfeff" stroke="#0891b2" stroke-width="1.6"/>
+<text x="184" y="38" text-anchor="middle" font-size="16">📜</text>
+<text x="184" y="58" text-anchor="middle" font-size="8.5" fill="#0e7490" font-weight="800">대본 자동 추출</text>
+<text x="184" y="74" text-anchor="middle" font-size="7" fill="#164e63">자막 텍스트화</text>
+<line x1="236" y1="57" x2="254" y2="57" stroke="#2563eb" stroke-width="1.6" marker-end="url(#v1)"/>
+<rect x="258" y="14" width="112" height="86" rx="10" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.6"/>
+<text x="314" y="38" text-anchor="middle" font-size="16">🤖</text>
+<text x="314" y="58" text-anchor="middle" font-size="8.5" fill="#5b21b6" font-weight="800">AI 자동 분석</text>
+<text x="314" y="74" text-anchor="middle" font-size="7" fill="#4c1d95">단어·뜻·예문 생성</text>
+<line x1="370" y1="57" x2="388" y2="57" stroke="#2563eb" stroke-width="1.6" marker-end="url(#v1)"/>
+<rect x="392" y="14" width="102" height="86" rx="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.6"/>
+<text x="443" y="38" text-anchor="middle" font-size="16">📄</text>
+<text x="443" y="58" text-anchor="middle" font-size="8.5" fill="#166534" font-weight="800">학습지 PDF</text>
+<text x="443" y="74" text-anchor="middle" font-size="7" fill="#14532d">이미지 포함 완성</text>
+<text x="250" y="122" text-anchor="middle" font-size="8.5" fill="#6b7280">🏷 주제별 분류: 여행 · 동물 · 음식 · 일상 등으로 영상을 정리해 관리</text>
+</svg>`,
+          },
           text: '🎬 <b>영상 워크시트</b> 탭입니다.\n\n유튜브 영상을 등록하면 대본에서 AI가 자동으로 단어·뜻·예문을 뽑아주고, 이미지가 포함된 학습지 PDF까지 바로 만들어줍니다.\n\n주제별(여행·동물·음식 등)로 영상을 분류해서 관리할 수 있어요.',
           highlight: '#page-archive .ev-cats-row',
           highlightLabel: '영상 워크시트',
           action: () => { if (typeof ArchiveApp !== 'undefined') ArchiveApp._selectTool('video-worksheet'); },
         },
         {
+          diagram: {
+            title: 'PDF 워크시트 제작 흐름 — 소스 모으기부터 자동 등록까지',
+            svg: `<svg viewBox="0 0 500 140" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:500px">
+<defs><marker id="p1" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#16a34a"/></marker></defs>
+<rect x="6" y="14" width="110" height="86" rx="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.6"/>
+<text x="61" y="38" text-anchor="middle" font-size="16">📄🖼</text>
+<text x="61" y="58" text-anchor="middle" font-size="8.5" fill="#166534" font-weight="800">소스 모으기</text>
+<text x="61" y="74" text-anchor="middle" font-size="7" fill="#14532d">PDF·이미지 여러 개</text>
+<line x1="116" y1="57" x2="134" y2="57" stroke="#16a34a" stroke-width="1.6" marker-end="url(#p1)"/>
+<rect x="138" y="14" width="110" height="86" rx="10" fill="#fefce8" stroke="#ca8a04" stroke-width="1.6"/>
+<text x="193" y="38" text-anchor="middle" font-size="16">✂️</text>
+<text x="193" y="58" text-anchor="middle" font-size="8.5" fill="#854d0e" font-weight="800">페이지 편집</text>
+<text x="193" y="74" text-anchor="middle" font-size="7" fill="#713f12">자르기·합치기</text>
+<line x1="248" y1="57" x2="266" y2="57" stroke="#16a34a" stroke-width="1.6" marker-end="url(#p1)"/>
+<rect x="270" y="14" width="110" height="86" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="1.6"/>
+<text x="325" y="38" text-anchor="middle" font-size="16">✍️</text>
+<text x="325" y="58" text-anchor="middle" font-size="8.5" fill="#1e40af" font-weight="800">요소 추가</text>
+<text x="325" y="74" text-anchor="middle" font-size="7" fill="#1e3a8a">텍스트·이미지 배치</text>
+<line x1="380" y1="57" x2="398" y2="57" stroke="#16a34a" stroke-width="1.6" marker-end="url(#p1)"/>
+<rect x="402" y="14" width="92" height="86" rx="10" fill="#fdf2f8" stroke="#e11d48" stroke-width="1.6"/>
+<text x="448" y="38" text-anchor="middle" font-size="16">💾</text>
+<text x="448" y="58" text-anchor="middle" font-size="8.5" fill="#9f1239" font-weight="800">완성</text>
+<text x="448" y="74" text-anchor="middle" font-size="7" fill="#831843">다운로드+자동등록</text>
+<text x="250" y="122" text-anchor="middle" font-size="8.5" fill="#6b7280">🗂 완성 즉시 자료실 파일 목록에도 자동으로 추가됩니다</text>
+</svg>`,
+          },
           text: '📝 <b>PDF 워크시트 제작</b> 탭입니다.\n\n여러 개의 PDF·이미지를 페이지 단위로 모아서 자르고 합친 뒤, 텍스트와 이미지를 자유롭게 얹어 나만의 학습지 PDF를 새로 만들 수 있어요.\n\n완성한 워크시트는 다운로드와 동시에 <b>자료실에도 자동 등록</b>됩니다.',
           highlight: '#page-archive .pe-toolbar',
           highlightLabel: 'PDF 워크시트 제작',
           action: () => { if (typeof ArchiveApp !== 'undefined') ArchiveApp._selectTool('pdf-editor'); },
         },
         {
+          diagram: {
+            title: '학습 게임 흐름 — 소스 선택부터 출력까지',
+            svg: `<svg viewBox="0 0 460 148" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:460px">
+<defs><marker id="g1" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#7c3aed"/></marker></defs>
+<rect x="6" y="16" width="118" height="94" rx="10" fill="#ecfeff" stroke="#0891b2" stroke-width="1.6"/>
+<text x="65" y="40" text-anchor="middle" font-size="16">🎬📝</text>
+<text x="65" y="60" text-anchor="middle" font-size="8.5" fill="#0e7490" font-weight="800">소스 선택</text>
+<text x="65" y="76" text-anchor="middle" font-size="7" fill="#164e63">영상 대본 또는</text>
+<text x="65" y="88" text-anchor="middle" font-size="7" fill="#164e63">직접 입력 단어</text>
+<line x1="124" y1="63" x2="142" y2="63" stroke="#7c3aed" stroke-width="1.6" marker-end="url(#g1)"/>
+<rect x="146" y="16" width="130" height="94" rx="10" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.6"/>
+<text x="211" y="40" text-anchor="middle" font-size="16">🎮</text>
+<text x="211" y="60" text-anchor="middle" font-size="8.5" fill="#5b21b6" font-weight="800">게임 타입 선택</text>
+<text x="211" y="76" text-anchor="middle" font-size="7" fill="#4c1d95">짝맞추기·스펠링</text>
+<text x="211" y="88" text-anchor="middle" font-size="7" fill="#4c1d95">퀴즈 (3종 중 선택)</text>
+<line x1="276" y1="63" x2="294" y2="63" stroke="#7c3aed" stroke-width="1.6" marker-end="url(#g1)"/>
+<rect x="298" y="16" width="156" height="94" rx="10" fill="#fdf2f8" stroke="#e11d48" stroke-width="1.6"/>
+<text x="376" y="38" text-anchor="middle" font-size="8.5" fill="#9f1239" font-weight="800">출력 방식 2가지</text>
+<text x="376" y="58" text-anchor="middle" font-size="7.5" fill="#831843">🖥️ 빔프로젝터 화면용</text>
+<text x="376" y="72" text-anchor="middle" font-size="7" fill="#9f1239">다 같이 하는 게임</text>
+<text x="376" y="90" text-anchor="middle" font-size="7.5" fill="#831843">🖨️ 인쇄용 워크시트</text>
+<text x="376" y="104" text-anchor="middle" font-size="7" fill="#9f1239">개별 학습·과제용</text>
+<text x="230" y="132" text-anchor="middle" font-size="8.5" fill="#6b7280">♻️ 이미 만든 대본·단어를 그대로 재활용하니 새로 준비할 필요가 없어요</text>
+</svg>`,
+          },
           text: '🎮 <b>학습 게임</b> 탭입니다.\n\n짝맞추기 · 스펠링 · 퀴즈 3종 게임을 만들 수 있어요. 영상 대본이나 직접 입력한 단어를 그대로 재활용하기 때문에 새로 준비할 필요가 없습니다.\n\n빔프로젝터로 다 같이 하는 화면 게임과, 인쇄용 워크시트를 둘 다 만들 수 있어요.',
           highlight: '#page-archive .gm-source-tabs',
           highlightLabel: '학습 게임 만들기',
