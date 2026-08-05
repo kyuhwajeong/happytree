@@ -215,6 +215,13 @@ const ContentSearchApp = (() => {
     return (typeof page === 'number') ? `${page}페이지` : _esc(page);
   }
 
+  // ★ page 값을 onclick 안에 그대로 끼워 넣으면, 숫자(PDF 페이지)는 괜찮지만
+  //   문자열(엑셀 시트명·"전체"·"슬라이드 3" 등)은 따옴표가 없어서 자바스크립트
+  //   문법 오류가 나고 클릭이 조용히 씹힌다 — 반드시 안전한 JS 리터럴로 변환해서 넣어야 함
+  function _jsLiteral(v) {
+    if (typeof v === 'number') return String(v);
+    return `'${String(v ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+  }
   function _resultsHtml() {
     if (_running && !_results.length) return '';
     if (!_running && _progress.total && !_results.length) {
@@ -227,7 +234,7 @@ const ContentSearchApp = (() => {
       <div class="cs-result-card">
         <div class="cs-result-name">📄 ${_esc(r.name)} <span class="cs-result-cat">${_esc(r.category)}</span></div>
         ${r.matches.map(m => `
-          <div class="cs-match-row" onclick="ArchiveApp.openPreviewAtPage('${r.postId}', ${m.fileIdx}, ${m.page}); ContentSearchApp.close()">
+          <div class="cs-match-row" onclick="ArchiveApp.openPreviewAtPage('${r.postId}', ${m.fileIdx}, ${_jsLiteral(m.page)}); ContentSearchApp.close()">
             <span class="cs-match-page">${r.fileCount > 1 ? _esc(m.fileName) + ' · ' : ''}${_pageLabel(m.page)}${m.ocr ? ' <span class="cs-ocr-badge">OCR</span>' : ''}${m.raw ? ' <span class="cs-raw-badge">⚠️ 비정형 스캔</span>' : ''}</span>
             <span class="cs-match-snippet">${_highlight(_snippetAround(m.text, words[0] || ''), words)}</span>
           </div>`).join('')}
@@ -279,5 +286,5 @@ const ContentSearchApp = (() => {
     _render();
   }
 
-  return { open, close, _setScope, _run, _toggleAdmin, _runBackfill };
+  return { open, close, _setScope, _run, _toggleAdmin, _runBackfill, _getScope: () => _scope };
 })();
