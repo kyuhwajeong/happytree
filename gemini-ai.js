@@ -6,9 +6,9 @@ const GeminiAI = (() => {
 
   /* ══ API 키 ════════════════════════════════════════════════ */
   const KEYS = [
-    'AIzaSyB9mhHcdftl13b3BvnvLgBkrjnsmqNKcSQ',   // KEY_1 (현재 키)  jkyuhwa
-    'AIzaSyDov3-1Ct7xNjqXDW4OA20koF15hzMhfVE',   // KEY_2 ← 두 번째 계정 키 입력 kuha0879
-    'AIzaSyD8zje-ZVKvuRCOsmOLbYrKQXruKH_xGd0',   // KEY_3 ← 세 번째 계정 키 입력 kuha7885
+    'AQ.Ab8RN6KHM0EEZWuR-0lnSGELLNZXXI9vjuDMU9llxQ3wMkkr8w',   // KEY_1 (현재 키)  jkyuhwa
+    'AQ.Ab8RN6JYj_2rbhDovFEHKv_QSsehZUcRndYw-l6ap_HVpfdsug',   // KEY_2 ← 두 번째 계정 키 입력 kuha0879
+    'AQ.Ab8RN6I9_N24VfuEIA1OIonEljV6xpkzJ7viIURrIgF9P-xIOQ',   // KEY_3 ← 세 번째 계정 키 입력 kuha7885
   ].map(k => k.trim()).filter(Boolean);
 
   const MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
