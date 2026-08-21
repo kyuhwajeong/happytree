@@ -194,14 +194,63 @@ const StudentDB = (() => {
    * WRITE
    * ════════════════════════════════════════════ */
 
+  /** 생일/연락처/닉네임 정보가 상충하면(둘 다 값이 있는데 다르면) 다른 사람으로 판단 */
+  function _identityConflicts(a, b) {
+    if (a.birthday && b.birthday && a.birthday !== b.birthday) return true;
+    if (a.nickname && b.nickname && _bpNorm(a.nickname) !== _bpNorm(b.nickname)) return true;
+    if (a.phone && b.phone && a.phone !== b.phone &&
+        a.parentPhone && b.parentPhone && a.parentPhone !== b.parentPhone) return true;
+    return false;
+  }
+  function _bpNorm(s) { return (s || '').toString().trim().toLowerCase(); }
+
+  /**
+   * 엑셀 재가져오기 시 기존 학생과 동일인인지 판단
+   * 우선순위: ① 원생고유번호 일치 → ② 이름 일치 후보 중 생일/닉네임/연락처가 상충하지 않는 유일 후보
+   *          → ③ 후보가 여럿이면 생일/닉네임/연락처가 실제 일치하는 사람 → ④ 그래도 구분 안 되면 반코드까지 일치해야 매칭
+   * ※ 퇴원 처리된 학생은 엑셀의 '수업' 값이 비거나 달라져 classCode가 변할 수 있어
+   *   반코드만으로 매칭하면 동일인을 놓쳐 중복 레코드가 생기는 문제가 있었음.
+   *   단, 생일/닉네임 등 상충하는 정보가 있으면(진짜 동명이인) 절대 합치지 않는다.
+   *   ※ 닉네임은 엑셀 원본에 항상 채워져 있는 값이라 생일/연락처가 비어있어도
+   *     동명이인을 구분하는 안전망 역할을 한다.
+   */
+  function _findMatchIndex(student) {
+    if (student.originalId) {
+      const i = _students.findIndex(s => s.originalId && s.originalId === student.originalId);
+      if (i >= 0) return i;
+    }
+
+    const nameMatches = _students
+      .map((s, i) => ({ s, i }))
+      .filter(({ s }) => s.name === student.name);
+    if (!nameMatches.length) return -1;
+
+    // 생일/닉네임/연락처가 상충하는 후보(=명백히 다른 사람)는 제외
+    const consistent = nameMatches.filter(({ s }) => !_identityConflicts(s, student));
+    if (!consistent.length) return -1; // 이름만 같고 신원 정보가 다 다름 → 별도 인물
+
+    if (consistent.length === 1) return consistent[0].i;
+
+    // 후보가 여러 명(동명이인 가능성) → 생일/닉네임/연락처가 실제로 일치하는 사람 우선
+    const strong = consistent.find(({ s }) =>
+      (student.birthday    && s.birthday    && s.birthday    === student.birthday) ||
+      (student.nickname    && s.nickname    && _bpNorm(s.nickname) === _bpNorm(student.nickname)) ||
+      (student.phone       && s.phone       && s.phone       === student.phone) ||
+      (student.parentPhone && s.parentPhone && s.parentPhone === student.parentPhone)
+    );
+    if (strong) return strong.i;
+
+    // 그래도 구분 안 되면(정보 부족) 기존 방식대로 반코드까지 일치해야 매칭 (안전한 기본 동작)
+    const exact = consistent.find(({ s }) => s.classCode === student.classCode);
+    return exact ? exact.i : -1;
+  }
+
   /**
    * 단건 upsert
-   * 반(classCode) + 이름이 같으면 덮어쓰기, 다르면 신규 추가
+   * ※ 매칭 기준은 _findMatchIndex 참고 (반+이름 단순매칭에서 개선됨)
    */
   async function upsert(student) {
-    const idx = _students.findIndex(s =>
-      s.name === student.name && s.classCode === student.classCode
-    );
+    const idx = _findMatchIndex(student);
 
     let rec;
     if (idx >= 0) {
@@ -225,25 +274,57 @@ const StudentDB = (() => {
 
   /**
    * 엑셀 전체 행 일괄 가져오기
-   * @returns {{ added:number, updated:number, skipped:number }}
+   * @returns {{ added:number, updated:number, skipped:number, total:number,
+   *             enrolledInExcel:number, enrolledInDb:number, possibleDuplicates:Array }}
    */
   async function importFromRows(rows) {
-    let added = 0, updated = 0, skipped = 0;
+    let added = 0, updated = 0, skipped = 0, enrolledInExcel = 0;
 
     for (const row of rows) {
       const student = parseRow(row);
       if (!student.name) { skipped++; continue; }
+      if (student.status === '재원') enrolledInExcel++;
 
-      const isUpdate = _students.some(
-        s => s.name === student.name && s.classCode === student.classCode
-      );
+      const isUpdate = _findMatchIndex(student) >= 0;
       await upsert(student);
       isUpdate ? updated++ : added++;
     }
 
     _ls(LS_KEY, _students);
     _fire('students');
-    return { added, updated, skipped, total: rows.length };
+
+    const enrolledInDb = _students.filter(s => s.status === '재원').length;
+    return {
+      added, updated, skipped, total: rows.length,
+      enrolledInExcel, enrolledInDb,
+      possibleDuplicates: findPossibleDuplicates(),
+    };
+  }
+
+  /**
+   * 이름은 같은데 생일/연락처로 서로 다른 사람인지 구분할 정보가 부족해
+   * (즉, 진짜 동일인인지 동명이인인지 판단 불가한) 잠재적 중복 레코드를 찾아 반환.
+   * 가져오기 직후 관리자가 눈으로 검토할 수 있도록 안내하는 용도.
+   * @returns {Array<{name:string, students:Array}>}
+   */
+  function findPossibleDuplicates() {
+    const byName = {};
+    _students.forEach(s => { if (s.name) (byName[s.name] = byName[s.name] || []).push(s); });
+
+    const suspects = [];
+    Object.entries(byName).forEach(([name, list]) => {
+      if (list.length < 2) return;
+      // 서로 상충하는 생일/연락처가 없는 쌍이 하나라도 있으면 "구분 불가"로 의심
+      for (let i = 0; i < list.length; i++) {
+        for (let j = i + 1; j < list.length; j++) {
+          if (!_identityConflicts(list[i], list[j])) {
+            suspects.push({ name, students: list });
+            return; // 이 이름은 한 번만 등록
+          }
+        }
+      }
+    });
+    return suspects;
   }
 
   /** 특정 학생 필드 업데이트 */
@@ -290,6 +371,6 @@ const StudentDB = (() => {
     getAll, getFiltered, getStats,
     getGrades, getSchools, getClasses,
     upsert, importFromRows, updateStudent, deleteStudent,
-    parseRow, courseToClass,
+    parseRow, courseToClass, findPossibleDuplicates,
   };
 })();

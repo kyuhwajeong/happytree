@@ -1134,6 +1134,7 @@ to{opacity:1;transform:none}}
             </div>
           </div>
           <button id="gr-eval-btn" title="선택 교재 평가 설정" style="display:none;padding:6px 14px;border-radius:8px;background:rgba(245,158,11,.1);border:1.5px solid rgba(245,158,11,.4);color:#d97706;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:var(--font)">⚙️ 평가 설정</button>
+          <button id="gr-bulkpaste-btn" title="닉네임 기반 성적 붙여넣기" onclick="GradeApp._openBulkPaste()" style="display:none;padding:6px 14px;border-radius:8px;background:rgba(16,185,129,.1);border:1.5px solid rgba(16,185,129,.4);color:#059669;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:var(--font)">📋 성적 붙여넣기</button>
           <button id="gr-col-reset-btn" class="gr-col-reset-btn" style="display:none" onclick="GradeApp._resetColWidths()" title="컬럼 너비 초기화">↩ 너비초기화</button>
           <div class="gr-view-toggle" id="gr-view-toggle">
             <button class="gr-vbtn ${_st.viewMode==='excel'?'on':''}"  data-mode="excel"  onclick="GradeApp._setView('excel')">🔲 엑셀</button>
@@ -5121,6 +5122,8 @@ to{opacity:1;transform:none}}
     if (_evalBtn) _evalBtn.style.display = _st.bookId ? 'inline-block' : 'none';
     const _bulkBtn = document.getElementById('gr-bulk-cmt-btn');
     if (_bulkBtn) _bulkBtn.style.display = _st.bookId ? '' : 'none';
+    const _bulkPasteBtn = document.getElementById('gr-bulkpaste-btn');
+    if (_bulkPasteBtn) _bulkPasteBtn.style.display = _st.bookId ? 'inline-block' : 'none';
   }
   function _onStu(sid, idx) {
     _st.studentId=sid||null; _st.slideIdx=idx??0;
@@ -5220,6 +5223,9 @@ to{opacity:1;transform:none}}
     /* 평가 설정 버튼 */
     const evalBtn = document.getElementById('gr-eval-btn');
     if(evalBtn) evalBtn.style.display = (_st.bookId) ? 'inline-block' : 'none';
+    /* 성적 붙여넣기 버튼 */
+    const bulkPasteBtn = document.getElementById('gr-bulkpaste-btn');
+    if(bulkPasteBtn) bulkPasteBtn.style.display = (_st.bookId) ? 'inline-block' : 'none';
     /* 컬럼 너비 초기화 버튼 */
     const colResetBtn = document.getElementById('gr-col-reset-btn');
     if(colResetBtn) colResetBtn.style.display = (isExcel && hasData) ? 'inline-block' : 'none';
@@ -6077,6 +6083,250 @@ to{opacity:1;transform:none}}
     // 성적관리 갱신
     _renderContent();
   }
+
+  /* ══════════════════════════════════════════════════════
+     📋 성적 일괄 붙여넣기 (닉네임 매칭)
+     - 반+교재 선택 후 "닉네임 숫자 숫자 ..." 형태의 텍스트를 붙여넣으면
+       평가 설정에서 활성화된 항목(단어→리딩 순서)에 맞춰 자동 반영.
+     - 단어: 재시험(오답) 개수, 리딩: 정답 개수를 입력받는다.
+     - 매칭은 기존 _st.data / _ensureData / saveAndSync 파이프라인을 그대로
+       재사용해서 저장 로직을 중복 구현하지 않는다 (회귀 위험 최소화).
+     ══════════════════════════════════════════════════════ */
+  let _bp = { activeCols: [], rows: [] }; // 붙여넣기 작업 상태 (모달 열려있는 동안만 유효)
+
+  function _openBulkPaste(){
+    if(!_st.bookId){ _toast?_toast('교재를 먼저 선택하세요','error'):alert('교재를 먼저 선택하세요'); return; }
+    document.getElementById('gr-bulkpaste-popup')?.remove();
+
+    const cfg = GradeDB.getReportConfig(_st.bookId);
+    const bkName = (typeof BookLibDB!=='undefined'?BookLibDB.getBookById(_st.bookId)?.name:'')||'교재';
+    const clsName = _st.classId ? (_getCls(_st.classId)?.name||'') : '';
+    const actRevs = GradeDB.getActiveReviews(_st.bookId);
+
+    // 붙여넣기 열 순서: 단어(활성 시) → 활성화된 리딩 리뷰 순서대로
+    const cols = [];
+    if (cfg.word?.enabled !== false) cols.push({ type:'word', label:'단어(재시험수)' });
+    actRevs.forEach((rv,i)=> cols.push({ type:'reading', key:`R${i}`, label:rv.name||`Review ${i+1}` }));
+    _bp.activeCols = cols;
+    _bp.rows = [];
+
+    if (!cols.length){
+      alert('먼저 ⚙️ 평가 설정에서 단어 또는 리딩 항목을 활성화하세요.');
+      return;
+    }
+    if (!_getStudents().length){
+      alert('현재 반/교재에 매칭할 학생이 없습니다. 반을 선택했는지 확인하세요.');
+      return;
+    }
+
+    const modal = document.createElement('div');
+    modal.id = 'gr-bulkpaste-popup';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;display:flex;align-items:flex-end;justify-content:center';
+    modal.onclick = e => { if(e.target===modal) modal.remove(); };
+
+    const sheet = document.createElement('div');
+    sheet.style.cssText = 'background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:560px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -4px 24px rgba(0,0,0,.18)';
+
+    const colOrderStr = cols.map((c,i)=>`${i+1}.${_e(c.label)}`).join(' → ');
+
+    sheet.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-shrink:0">
+        <div>
+          <div style="font-size:15px;font-weight:800">📋 성적 붙여넣기</div>
+          <div style="font-size:11px;color:var(--tx3);margin-top:2px">${_e(bkName)}${clsName?' · '+_e(clsName)+'반':''}</div>
+        </div>
+        <button onclick="document.getElementById('gr-bulkpaste-popup').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--tx3)">✕</button>
+      </div>
+      <div id="gr-bp-body" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:10px">
+        <div style="background:var(--surf2);border-radius:10px;padding:10px 12px;font-size:11.5px;color:var(--tx2);line-height:1.6">
+          한 줄에 <b>닉네임 [공백/탭/콤마] 숫자 숫자 ...</b> 형식으로 붙여넣으세요 (엑셀에서 복사한 데이터, "2,80 100"처럼 콤마·공백이 섞인 데이터도 그대로 붙여넣기 가능).<br>
+          입력 순서: <b>${colOrderStr}</b><br>
+          단어는 <b>재시험(오답) 개수</b>, 리딩은 각 항목의 <b>정답 개수</b>를 입력합니다. 닉네임은 대소문자 구분 없이 매칭됩니다.
+        </div>
+        <textarea id="gr-bp-input" placeholder="Lucky 15 16&#10;Min 15 16&#10;Lily 15 16&#10;Jun 15 16&#10;..." style="width:100%;min-height:150px;padding:10px;border:1.5px solid var(--bdr2);border-radius:10px;font-size:13px;font-family:ui-monospace,monospace;resize:vertical;background:var(--card);color:var(--tx1);box-sizing:border-box"></textarea>
+        <button id="gr-bp-parse-btn" style="padding:10px;border-radius:10px;background:var(--a10);border:1.5px solid var(--a40);color:var(--a);font-size:13px;font-weight:800;cursor:pointer">🔍 미리보기 / 학생 매칭</button>
+        <div id="gr-bp-preview"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-shrink:0">
+        <button onclick="document.getElementById('gr-bulkpaste-popup').remove()" style="flex:1;padding:11px;border-radius:10px;background:var(--surf2);border:1px solid var(--bdr2);font-size:13px;font-weight:700;cursor:pointer">취소</button>
+        <button id="gr-bp-apply-btn" onclick="GradeApp._bulkPasteApply()" disabled style="flex:2;padding:11px;border-radius:10px;background:var(--tx3);color:#fff;border:none;font-size:13px;font-weight:700;cursor:not-allowed;opacity:.6">💾 적용 (0명)</button>
+      </div>`;
+
+    sheet.querySelector('#gr-bp-parse-btn').addEventListener('click', _bulkPastePreview);
+    modal.appendChild(sheet);
+    document.body.appendChild(modal);
+    sheet.querySelector('#gr-bp-input')?.focus();
+  }
+
+  // 닉네임/이름을 대소문자 무시하고 정규화 (앞뒤 공백 제거)
+  function _bpNorm(s){ return (s||'').toString().trim().toLowerCase(); }
+
+  function _bulkPastePreview(){
+    const ta = document.getElementById('gr-bp-input');
+    const raw = (ta?.value||'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+    const students = _getStudents();
+    const cols = _bp.activeCols;
+
+    // 닉네임/이름 인덱스 구성 (중복 닉네임 감지를 위해 배열로 누적)
+    const byNick = {}, byName = {};
+    students.forEach(s=>{
+      const nick = _bpNorm(s.nickname);
+      const name = _bpNorm(s.name);
+      if (nick) (byNick[nick] = byNick[nick]||[]).push(s);
+      if (name) (byName[name] = byName[name]||[]).push(s);
+    });
+
+    const rows = raw.map((line, li) => {
+      const tokens = line.includes('\t')
+        ? line.split('\t').map(t=>t.trim()).filter(t=>t!=='')
+        : line.split(/\s+/).filter(t=>t!=='');
+      const rawNick = tokens[0] || '';
+      // 나머지 값들은 공백/콤마(또는 혼용, 예: "2,80", "5, 90")를 모두 구분자로 처리
+      const nums = tokens.slice(1).join(' ').split(/[\s,]+/).filter(t=>t!=='');
+      const key = _bpNorm(rawNick);
+
+      const candidates = (byNick[key] && byNick[key].length ? byNick[key] : byName[key]) || [];
+      let status = 'unmatched';
+      if (candidates.length === 1) status = 'matched';
+      else if (candidates.length > 1) status = 'ambiguous';
+
+      // 열 순서대로 숫자값 파싱 ('-' 또는 빈칸은 해당 항목 미입력으로 처리)
+      const values = cols.map((c,i)=>{
+        const v = nums[i];
+        if (v===undefined || v==='' || v==='-') return null;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : NaN;
+      });
+      const hasInvalid = values.some(v => Number.isNaN(v));
+      const countMismatch = nums.length !== cols.length;
+
+      return {
+        li, rawLine: line, rawNick, values, status, candidates,
+        selectedSid: candidates.length===1 ? candidates[0].id : '',
+        hasInvalid, countMismatch
+      };
+    });
+
+    _bp.rows = rows;
+    _renderBulkPastePreview(students);
+  }
+
+  function _bpApplyBtnState(){
+    const matchedCount = _bp.rows.filter(r=>r.selectedSid).length;
+    const applyBtn = document.getElementById('gr-bp-apply-btn');
+    if (!applyBtn) return matchedCount;
+    applyBtn.disabled = matchedCount===0;
+    applyBtn.style.opacity = matchedCount===0 ? '.6' : '1';
+    applyBtn.style.cursor = matchedCount===0 ? 'not-allowed' : 'pointer';
+    applyBtn.style.background = matchedCount===0 ? 'var(--tx3)' : 'var(--a)';
+    applyBtn.textContent = `💾 적용 (${matchedCount}명)`;
+    return matchedCount;
+  }
+
+  function _renderBulkPastePreview(students){
+    const wrap = document.getElementById('gr-bp-preview'); if(!wrap) return;
+    const cols = _bp.activeCols;
+
+    const optsHtml = (selSid)=>{
+      let html = `<option value="">— 제외 —</option>`;
+      students.forEach(s=>{
+        html += `<option value="${s.id}" ${s.id===selSid?'selected':''}>${_e(s.name)}${s.nickname?' ('+_e(s.nickname)+')':''}</option>`;
+      });
+      return html;
+    };
+
+    const rowsHtml = _bp.rows.map(r=>{
+      const badge = r.status==='matched'
+        ? '<span style="color:#059669;font-weight:800;font-size:10.5px">✅ 자동매칭</span>'
+        : r.status==='ambiguous'
+          ? '<span style="color:#d97706;font-weight:800;font-size:10.5px">⚠️ 후보 다수 · 선택 필요</span>'
+          : '<span style="color:#dc2626;font-weight:800;font-size:10.5px">❌ 매칭 안됨 · 직접 선택</span>';
+      const warn = (r.hasInvalid||r.countMismatch)
+        ? `<div style="color:#dc2626;font-size:10px;margin-top:2px">⚠ 숫자 형식/개수를 확인하세요 (원본: ${_e(r.rawLine)})</div>` : '';
+      const valsStr = cols.map((c,i)=>{
+        const v = r.values[i];
+        return `${_e(c.label)}=${(v===null||Number.isNaN(v))?'—':v}`;
+      }).join(' · ');
+      return `<div style="border:1px solid var(--bdr2);border-radius:9px;padding:8px 10px;margin-bottom:6px;background:var(--surf2)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap">
+          <span style="font-weight:800;font-size:12.5px">${_e(r.rawNick)}</span>${badge}
+        </div>
+        <div style="font-size:11px;color:var(--tx3);margin-bottom:6px">${valsStr}</div>
+        ${warn}
+        <select onchange="GradeApp._bulkPasteRowSelect(${r.li}, this.value)" style="width:100%;padding:6px 8px;border:1px solid var(--bdr2);border-radius:7px;font-size:12px;background:var(--card);color:var(--tx1)">
+          ${optsHtml(r.selectedSid)}
+        </select>
+      </div>`;
+    }).join('');
+
+    const matchedCount = _bp.rows.filter(r=>r.selectedSid).length;
+    const notInPaste = students.filter(s=> !_bp.rows.some(r=>r.selectedSid===s.id));
+    const notInPasteHtml = notInPaste.length
+      ? `<div style="font-size:10.5px;color:var(--tx3);margin-top:4px">📝 붙여넣기 목록에 없는 학생: ${notInPaste.map(s=>_e(s.name)).join(', ')}</div>` : '';
+
+    wrap.innerHTML = _bp.rows.length
+      ? `<div style="font-size:11.5px;font-weight:800;color:var(--tx2);margin:2px 0 4px">매칭 결과 (${_bp.rows.length}줄 중 ${matchedCount}명 저장 예정)</div>${rowsHtml}${notInPasteHtml}`
+      : `<div style="font-size:12px;color:var(--tx3);padding:8px 2px">붙여넣은 내용이 없습니다.</div>`;
+
+    _bpApplyBtnState();
+  }
+
+  function _bulkPasteRowSelect(li, sid){
+    const row = _bp.rows.find(r=>r.li===li);
+    if (row) row.selectedSid = sid;
+    _bpApplyBtnState();
+  }
+
+  async function _bulkPasteApply(){
+    const cols = _bp.activeCols;
+    const cfg = GradeDB.getReportConfig(_st.bookId);
+    const wq  = Number(cfg.word?.totalQ||0);
+    const rdq = Number(cfg.reading?.totalQ||0);
+
+    const targets = _bp.rows.filter(r=>r.selectedSid);
+    if (!targets.length) return;
+
+    // 같은 학생이 여러 줄에 매칭된 경우 확인
+    const dupCheck = {};
+    targets.forEach(r=>{ dupCheck[r.selectedSid] = (dupCheck[r.selectedSid]||0)+1; });
+    const hasDup = Object.values(dupCheck).some(n=>n>1);
+    if (hasDup && !confirm('같은 학생이 여러 줄에 중복 매칭되어 있습니다. 마지막 값으로 덮어써도 될까요?')) return;
+
+    const btn = document.getElementById('gr-bp-apply-btn');
+    if (btn){ btn.disabled = true; btn.textContent = '⏳ 적용 중...'; }
+
+    targets.forEach(r=>{
+      const sid = r.selectedSid;
+      _ensureData(sid); // 기존 레코드(코멘트 등) 보존하며 baseline 로드
+      cols.forEach((c,i)=>{
+        const v = r.values[i];
+        if (v===null || Number.isNaN(v)) return; // 해당 항목 값이 없으면 건드리지 않음
+        if (c.type==='word'){
+          const retake = Math.max(0, Math.min(wq, v));
+          const pass   = Math.max(0, wq - retake);
+          const next   = { totalQ: wq, retake, pass };
+          if (JSON.stringify(_st.data[sid].word||null) !== JSON.stringify(next)) _st.dirty.add(sid);
+          _st.data[sid].word = next;
+        } else {
+          const correct = Math.max(0, Math.min(rdq, v));
+          const score   = rdq>0 ? Math.round(correct/rdq*100*10)/10 : '';
+          if (!_st.data[sid].reading) _st.data[sid].reading = {};
+          const next = { correct, score };
+          if (JSON.stringify(_st.data[sid].reading[c.key]||null) !== JSON.stringify(next)) _st.dirty.add(sid);
+          _st.data[sid].reading[c.key] = next;
+        }
+      });
+    });
+
+    _refreshDirtyUI();
+    _renderStudents();
+    _renderContent();
+    _updateChart();
+    document.getElementById('gr-bulkpaste-popup')?.remove();
+
+    _toast?.(`📋 ${targets.length}명 반영 · 저장 중...`, 'info', 1500);
+    await saveAndSync(); // 기존 저장·동기화 파이프라인 재사용 (dirty 학생 전체 저장 + 서버 pull)
+  }
   
   // ════════════════════════════════════════
   // AI Comment Popover (엑셀뷰)
@@ -6904,6 +7154,7 @@ to{opacity:1;transform:none}}
   return {
     init, render,
     _onCls, _onBk, _openEvalFromGrade, _showEvalPopup, _openEvalPopupDirect, _grAddReview, _saveEvalCfg, _refreshAfterEvalUpdate, _onStu, _setView, _toggleSort,
+    _openBulkPaste, _bulkPasteApply, _bulkPasteRowSelect,
     _onStuSearch, _onTrendCard, _refreshTrendAi,
     _openCommentPop, _closeCommentPop, _cardAiGen, _cardAiProof,
     _openBulkComment, _bulkEditCell,

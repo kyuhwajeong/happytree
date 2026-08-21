@@ -578,11 +578,22 @@ const StudentApp = (() => {
       }
 
       const result = await StudentDB.importFromRows(rows);
-      _toast(
-        `✅ 완료: 신규 ${result.added}명 · 업데이트 ${result.updated}명` +
-        (result.skipped ? ` · 건너뜀 ${result.skipped}건` : ''),
-        'success'
-      );
+
+      // ★ 엑셀 재원 인원 vs 실제 DB 재원 인원 대조 — 숫자가 다르면 바로 알 수 있게
+      const mismatch = result.enrolledInExcel !== result.enrolledInDb;
+      const reconLine = `📊 재원 인원 확인: 엑셀 ${result.enrolledInExcel}명 · DB ${result.enrolledInDb}명` +
+        (mismatch ? ' ⚠️ 불일치' : ' ✅ 일치');
+
+      if (mismatch || (result.possibleDuplicates && result.possibleDuplicates.length)) {
+        _showImportReconcileModal(result);
+      } else {
+        _toast(
+          `✅ 완료: 신규 ${result.added}명 · 업데이트 ${result.updated}명` +
+          (result.skipped ? ` · 건너뜀 ${result.skipped}건` : '') +
+          ` · ${reconLine}`,
+          'success'
+        );
+      }
       render(); // 전체 리렌더
 
     } catch (e) {
@@ -591,6 +602,51 @@ const StudentApp = (() => {
     } finally {
       overlay.remove();
     }
+  }
+
+  /** 가져오기 후 인원수 불일치·중복 의심 학생을 보여주는 확인 모달 */
+  function _showImportReconcileModal(result) {
+    document.getElementById('st-recon-modal')?.remove();
+
+    const mismatch = result.enrolledInExcel !== result.enrolledInDb;
+    const dupList = result.possibleDuplicates || [];
+
+    const modal = document.createElement('div');
+    modal.id = 'st-recon-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:600;display:flex;align-items:flex-end;justify-content:center';
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+
+    const sheet = document.createElement('div');
+    sheet.style.cssText = 'background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:520px;max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -4px 24px rgba(0,0,0,.18)';
+
+    const dupHtml = dupList.length
+      ? dupList.map(d => `<div style="border:1px solid var(--bdr2);border-radius:9px;padding:8px 10px;margin-bottom:6px;background:var(--surf2)">
+          <div style="font-weight:800;font-size:12.5px;margin-bottom:4px">${_e(d.name)} — ${d.students.length}건</div>
+          ${d.students.map(s=>`<div style="font-size:11px;color:var(--tx3)">· 반 ${_e(s.classCode||'—')} · 상태 ${_e(s.status||'—')} · 생일 ${_e(s.birthday||'—')} · 연락처 ${_e(s.phone||'—')}</div>`).join('')}
+        </div>`).join('')
+      : '<div style="font-size:12px;color:var(--tx3)">없음</div>';
+
+    sheet.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-shrink:0">
+        <div style="font-size:15px;font-weight:800">📥 가져오기 결과 확인</div>
+        <button onclick="document.getElementById('st-recon-modal').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--tx3)">✕</button>
+      </div>
+      <div style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:10px">
+        <div style="background:${mismatch?'rgba(220,38,38,.08)':'rgba(5,150,105,.08)'};border:1px solid ${mismatch?'rgba(220,38,38,.3)':'rgba(5,150,105,.3)'};border-radius:10px;padding:12px">
+          <div style="font-size:12.5px;font-weight:800;margin-bottom:4px">${mismatch?'⚠️ 재원 인원 불일치':'✅ 재원 인원 일치'}</div>
+          <div style="font-size:12px;color:var(--tx2)">엑셀 재원: <b>${result.enrolledInExcel}명</b> · DB 재원: <b>${result.enrolledInDb}명</b></div>
+          <div style="font-size:11px;color:var(--tx3);margin-top:4px">신규 ${result.added}명 · 업데이트 ${result.updated}명${result.skipped?` · 건너뜀 ${result.skipped}건`:''}</div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:800;color:var(--tx2);margin-bottom:6px">🔍 이름은 같지만 생일/연락처로 구분이 안 되는 학생 (${dupList.length}건)</div>
+          ${dupHtml}
+          ${dupList.length? '<div style="font-size:10.5px;color:var(--tx3);margin-top:2px">※ 실제 동일인이면 문제 없음. 동명이인인데 정보가 비어 있어 구분이 안 되는 경우일 수 있으니, 학생탭에서 생일/연락처를 채워두면 다음부터 정확히 구분됩니다.</div>':''}
+        </div>
+      </div>
+      <button onclick="document.getElementById('st-recon-modal').remove()" style="margin-top:12px;padding:11px;border-radius:10px;background:var(--a);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0">확인</button>`;
+
+    modal.appendChild(sheet);
+    document.body.appendChild(modal);
   }
 
   /** 드래그 앤 드롭 바인딩 */
