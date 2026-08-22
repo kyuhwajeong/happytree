@@ -89,7 +89,13 @@ const DB = (() => {
 
   /* ═══ INIT ═══ */
   async function init() {
-    const fbOk = FireDB.init();
+    // ★ FireDB.init()은 익명 인증(firebase.auth().signInAnonymously())이 끝나야
+    //   완전히 준비되는 async 함수인데, 지금까지 await 없이 호출되고 있었다.
+    //   이전에는 초기화가 사실상 동기적으로 즉시 끝났기 때문에 문제가 안 됐지만,
+    //   보안규칙을 "auth != null"로 바꾸고 익명 인증을 추가한 뒤로는
+    //   _loadFB()(계정 목록 로드)가 인증 완료 전에 먼저 실행돼버려서
+    //   "로그인이 되다 안 되다" 하는 원인이 됐다. await로 순서를 보장한다.
+    const fbOk = await FireDB.init();
     if (fbOk) { await _loadFB(); _listenFB(); }
     else _loadLS();
     await _drainOutbox(); // ★ 이전 세션에서 강제종료 등으로 못 보낸 진도/메모가 있으면 지금 재전송 + 화면에 즉시 복구
