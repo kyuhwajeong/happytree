@@ -106,6 +106,23 @@ const FireDB = (() => {
     console.log('[FireDB] 🗑 사용자가 대기 항목을 삭제함(재시도 중단):', path);
   }
 
+  /* ★ 인증 토큰이 붙은 REST URL 생성 — RTDB 보안규칙이 auth != null 인 상태에서
+   *   REST(HTTPS) 우회 경로가 인증 없이 요청을 보내면 전부 permission_denied로
+   *   막힌다. 익명 인증으로 받은 ID 토큰을 ?auth= 쿼리에 실어 보내면 REST
+   *   요청도 WebSocket과 동일하게 인증된 상태로 취급된다. */
+  async function _authedUrl(path) {
+    const base = `${FIREBASE_CONFIG.databaseURL}/${path}.json`;
+    try {
+      const token = firebase.auth && firebase.auth().currentUser
+        ? await firebase.auth().currentUser.getIdToken()
+        : null;
+      return token ? `${base}?auth=${token}` : base;
+    } catch (e) {
+      console.warn('[FireDB] REST용 인증 토큰 발급 실패 — 토큰 없이 시도', e);
+      return base;
+    }
+  }
+
   let _flushing = false;
   /* ★ REST(HTTPS) 백업 전송 경로 — WebSocket이 막힌 환경 대비
    *   방금 사용자가 브라우저 주소창에 databaseURL + ".json"을 직접 쳐서
@@ -114,9 +131,11 @@ const FireDB = (() => {
    *   상태(보안 소프트웨어의 SSL 검사 등에서 흔한 패턴). 그렇다면
    *   실시간 연결이 영구히 안 되는 환경에서도, 저장만큼은 이 REST
    *   경로로 우회하면 된다. 사용자가 보안 프로그램을 직접 만질 필요가
-   *   없어진다. */
+   *   없어진다.
+   *   ※ 보안규칙을 auth != null 로 바꾼 뒤로는 이 REST 요청에도 인증
+   *      토큰이 실려야 한다 — _authedUrl() 참고. */
   async function _restWrite(op, path, val) {
-    const url = `${FIREBASE_CONFIG.databaseURL}/${path}.json`;
+    const url = await _authedUrl(path);
     const method = op === 'remove' ? 'DELETE' : (op === 'update' ? 'PATCH' : 'PUT');
     const res = await fetch(url, {
       method,
@@ -868,9 +887,10 @@ const FireDB = (() => {
       .then(r => ({ committed: r.committed, snapshot: r.snapshot ? r.snapshot.val() : null }))
       .catch(e => { console.error('transaction', path, e); return { committed:false, snapshot:null }; });
   }
-  /* ★ REST(HTTPS) 조회 — WebSocket 폴백용 */
+  /* ★ REST(HTTPS) 조회 — WebSocket 폴백용
+   *   ※ auth != null 규칙 대응 — _authedUrl()로 인증 토큰을 실어 보낸다. */
   async function _restGet(path) {
-    const url = `${FIREBASE_CONFIG.databaseURL}/${path}.json`;
+    const url = await _authedUrl(path);
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(`REST GET 실패: HTTP ${res.status}`);
     return res.json();
