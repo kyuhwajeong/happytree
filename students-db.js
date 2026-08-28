@@ -433,6 +433,72 @@ const StudentDB = (() => {
   }
 
   /* ════════════════════════════════════════════
+   * 💳 기 납부 내역 (미리 입금·납부 완료된 기록)
+   * 학생별 tuitionPayments 필드에 월(YYYY-MM) 키로 저장.
+   * 결석 차감(청구액 계산)과는 완전히 별개의 기록 — "얼마 받았는지"만 담는다.
+   * 같은 화면(수업료 현황 전체보기)에서 청구액과 나란히 비교해서 볼 수 있다.
+   * ════════════════════════════════════════════ */
+
+  /**
+   * 납부 기록 저장(덮어쓰기) — 한 학생의 특정 월에는 기록 1건만 유지(재저장 시 덮어씀).
+   * @param {string} studentId
+   * @param {string} monthKey  'YYYY-MM'
+   * @param {object} data  { amount, paidDate, method, note }
+   */
+  async function saveTuitionPayment(studentId, monthKey, data) {
+    const idx = _students.findIndex(s => s.id === studentId);
+    if (idx < 0) return null;
+
+    const rec = { ...data, monthKey, updatedAt: _now() };
+    const student = _students[idx];
+    student.tuitionPayments = { ...(student.tuitionPayments || {}), [monthKey]: rec };
+    student.updatedAt = _now();
+    _ls(LS_KEY, _students);
+
+    if (typeof FireDB !== 'undefined') {
+      await FireDB.update(`${FB_PATH}/${studentId}/tuitionPayments`, { [monthKey]: rec }).catch(e =>
+        console.warn('[StudentDB] saveTuitionPayment FB error', e)
+      );
+    }
+    _fire('students');
+    return rec;
+  }
+
+  /** 특정 월(monthKey) 납부 기록 삭제 */
+  async function deleteTuitionPayment(studentId, monthKey) {
+    const idx = _students.findIndex(s => s.id === studentId);
+    if (idx < 0) return false;
+    const student = _students[idx];
+    if (student.tuitionPayments) delete student.tuitionPayments[monthKey];
+    student.updatedAt = _now();
+    _ls(LS_KEY, _students);
+
+    if (typeof FireDB !== 'undefined') {
+      await FireDB.remove(`${FB_PATH}/${studentId}/tuitionPayments/${monthKey}`).catch(e =>
+        console.warn('[StudentDB] deleteTuitionPayment FB error', e)
+      );
+    }
+    _fire('students');
+    return true;
+  }
+
+  /** 특정 학생의 납부 기록 전체(월별) 조회 */
+  function getTuitionPayments(studentId) {
+    const s = _students.find(x => x.id === studentId);
+    return (s && s.tuitionPayments) || {};
+  }
+
+  /** 특정 월(monthKey)에 납부 기록이 있는 모든 학생 목록 */
+  function getTuitionPaymentsByMonth(monthKey) {
+    return _students
+      .filter(s => s.tuitionPayments && s.tuitionPayments[monthKey])
+      .map(s => ({
+        studentId: s.id, studentName: s.name, classCode: s.classCode, nickname: s.nickname,
+        ...s.tuitionPayments[monthKey],
+      }));
+  }
+
+  /* ════════════════════════════════════════════
    * PUBLIC API
    * ════════════════════════════════════════════ */
   return {
@@ -442,5 +508,6 @@ const StudentDB = (() => {
     upsert, importFromRows, updateStudent, deleteStudent,
     parseRow, courseToClass, findPossibleDuplicates,
     saveTuitionAbsence, deleteTuitionAbsence, getTuitionAbsences, getTuitionAbsencesByMonth,
+    saveTuitionPayment, deleteTuitionPayment, getTuitionPayments, getTuitionPaymentsByMonth,
   };
 })();

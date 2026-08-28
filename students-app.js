@@ -279,7 +279,7 @@ const StudentApp = (() => {
         </div>
         <div class="phr">
           <button class="ibtn" onclick="StudentApp.openTuitionCalc()" title="수업료 계산기">💰</button>
-          <button class="ibtn" onclick="StudentApp.openAbsenceOverview()" title="결석 차감 내역 전체보기">🏖</button>
+          <button class="ibtn" onclick="StudentApp.openTuitionOverview()" title="수업료 현황 (결석 차감·납부)">💳</button>
           <button class="ibtn" onclick="StudentApp.openImport()" title="엑셀 가져오기">📥</button>
           <button id="st-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>
         </div>
@@ -650,9 +650,11 @@ const StudentApp = (() => {
     document.body.appendChild(modal);
   }
 
-  /** 🏖 결석 차감 내역 전체보기 (월별, 전체 학생 대상) — 관리자/운영자용 */
-  function openAbsenceOverview(monthKey) {
+  /** 💳 수업료 현황 전체보기 (결석 차감 + 납부 기록을 월별로 합쳐서 표시) — 관리자/운영자용
+   *  mode: 'month'(기본, 월 단위 상세) | 'year'(연간 12개월 한눈에) */
+  function openTuitionOverview(monthKey, mode) {
     monthKey = monthKey || new Date().toISOString().slice(0, 7);
+    mode = mode || 'month';
     document.getElementById('st-abs-ov-modal')?.remove();
 
     const modal = document.createElement('div');
@@ -663,47 +665,173 @@ const StudentApp = (() => {
     const sheet = document.createElement('div');
     sheet.id = 'st-abs-ov-sheet';
     sheet.style.cssText = 'background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:520px;max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -4px 24px rgba(0,0,0,.18)';
-    sheet.innerHTML = _absOverviewHTML(monthKey);
+    sheet.innerHTML = mode === 'year' ? _tuitionYearHTML(monthKey.slice(0, 4)) : _tuitionOverviewHTML(monthKey);
 
     modal.appendChild(sheet);
     document.body.appendChild(modal);
   }
 
-  function _absOverviewHTML(monthKey) {
-    const list = (typeof StudentDB !== 'undefined' && StudentDB.getTuitionAbsencesByMonth)
-      ? StudentDB.getTuitionAbsencesByMonth(monthKey) : [];
-    const totalDeduct = list.reduce((sum, r) => sum + Number(r.deductAmount || 0), 0);
-
-    const rows = list.length
-      ? list.map(r => `<div style="border:1px solid var(--bdr2);border-radius:9px;padding:9px 11px;margin-bottom:6px;background:var(--surf2)">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <b style="font-size:12.5px">${_e(r.studentName)}${r.nickname?' ('+_e(r.nickname)+')':''} <span style="font-weight:400;color:var(--tx3);font-size:11px">${_e(r.classCode||'')}</span></b>
-            <span style="font-size:11px;color:#e85d04;font-weight:700">결석 ${r.absentCount}일</span>
-          </div>
-          <div style="font-size:11px;color:var(--tx3);margin-top:3px">${_e(r.absenceStart||'')} ~ ${_e(r.absenceEnd||'')} · 차감 ${Number(r.deductAmount||0).toLocaleString()}원 · 납부액 <b style="color:var(--tx1)">${Number(r.payAmount||0).toLocaleString()}원</b></div>
-        </div>`).join('')
-      : '<div style="font-size:12px;color:var(--tx3);padding:12px 2px">이 달에 저장된 결석 차감 내역이 없습니다.</div>';
-
+  /** 탭 전환용 상단 공통 헤더(월별⇄연간) */
+  function _tuitionOvTabsHTML(activeMode, monthKey, year) {
     return `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-shrink:0">
-        <div style="font-size:15px;font-weight:800">🏖 결석 차감 내역</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-shrink:0">
+        <div style="font-size:15px;font-weight:800">💳 수업료 현황</div>
         <button onclick="document.getElementById('st-abs-ov-modal').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--tx3)">✕</button>
       </div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;flex-shrink:0">
+        <button onclick="StudentApp.openTuitionOverview('${_e(monthKey)}','month')"
+          style="flex:1;padding:8px;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;
+          background:${activeMode==='month'?'var(--a)':'var(--surf2)'};color:${activeMode==='month'?'#fff':'var(--tx2)'};border:1px solid ${activeMode==='month'?'var(--a)':'var(--bdr2)'}">📅 월별</button>
+        <button onclick="StudentApp.openTuitionOverview('${_e(year)}-01','year')"
+          style="flex:1;padding:8px;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;
+          background:${activeMode==='year'?'var(--a)':'var(--surf2)'};color:${activeMode==='year'?'#fff':'var(--tx2)'};border:1px solid ${activeMode==='year'?'var(--a)':'var(--bdr2)'}">📆 연간</button>
+      </div>`;
+  }
+
+  /** 학생의 이 달 정상 청구 수업료(반 기준) 조회 — 결석 차감 기록 없을 때 참고용 */
+  function _tuitionNormalAmount(student) {
+    const cls = (typeof DB !== 'undefined' && student?.classCode)
+      ? DB.getActiveClasses().find(c => (c.name || '').trim() === (student.classCode || '').trim())
+      : null;
+    return Number(cls?.tuition || 0);
+  }
+
+  /** 특정 월의 결석 차감+납부 기록을 학생별로 병합·집계 (월별/연간 뷰 공용) */
+  function _tuitionMonthData(monthKey) {
+    const absList = (typeof StudentDB !== 'undefined' && StudentDB.getTuitionAbsencesByMonth) ? StudentDB.getTuitionAbsencesByMonth(monthKey) : [];
+    const payList = (typeof StudentDB !== 'undefined' && StudentDB.getTuitionPaymentsByMonth) ? StudentDB.getTuitionPaymentsByMonth(monthKey) : [];
+
+    const byId = {};
+    absList.forEach(r => { byId[r.studentId] = { ...(byId[r.studentId]||{}), studentId:r.studentId, studentName:r.studentName, classCode:r.classCode, nickname:r.nickname, absence:r }; });
+    payList.forEach(r => { byId[r.studentId] = { ...(byId[r.studentId]||{}), studentId:r.studentId, studentName:r.studentName, classCode:r.classCode, nickname:r.nickname, payment:r }; });
+
+    const allStudents = (typeof StudentDB !== 'undefined') ? StudentDB.getAll() : [];
+    const merged = Object.values(byId).map(m => {
+      const s = allStudents.find(x => x.id === m.studentId);
+      const billed = m.absence ? Number(m.absence.payAmount || 0) : _tuitionNormalAmount(s);
+      const paid = m.payment ? Number(m.payment.amount || 0) : null;
+      let status, statusColor;
+      if (paid === null)        { status = '미납';     statusColor = '#dc2626'; }
+      else if (paid >= billed)  { status = paid > billed ? '초과납부' : '완납'; statusColor = paid > billed ? '#0284c7' : '#059669'; }
+      else                      { status = '부족납부'; statusColor = '#d97706'; }
+      return { ...m, billed, paid, status, statusColor };
+    }).sort((a, b) => (a.studentName || '').localeCompare(b.studentName || ''));
+
+    const totalBilled = merged.reduce((sum, m) => sum + m.billed, 0);
+    const totalPaid    = merged.reduce((sum, m) => sum + (m.paid || 0), 0);
+
+    const byClass = {};
+    merged.forEach(m => {
+      const key = m.classCode || '(반 미지정)';
+      byClass[key] = byClass[key] || { classCode: key, count: 0, billed: 0, paid: 0 };
+      byClass[key].count  += 1;
+      byClass[key].billed += m.billed;
+      byClass[key].paid   += (m.paid || 0);
+    });
+    const classRows = Object.values(byClass).sort((a, b) => a.classCode.localeCompare(b.classCode));
+
+    return { monthKey, merged, totalBilled, totalPaid, classRows };
+  }
+
+  function _tuitionOverviewHTML(monthKey) {
+    const { merged, totalBilled, totalPaid, classRows } = _tuitionMonthData(monthKey);
+    const year = monthKey.slice(0, 4);
+
+    const classSummaryHTML = classRows.length ? `
+      <div style="border:1px solid var(--bdr2);border-radius:10px;padding:8px 10px;margin-bottom:10px;flex-shrink:0">
+        <div style="font-size:11px;font-weight:800;color:var(--tx2);margin-bottom:4px">📊 반별 합계</div>
+        ${classRows.map(c => `<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:2px 0">
+            <span style="color:var(--tx2)">${_e(c.classCode)} <span style="color:var(--tx3)">(${c.count}명)</span></span>
+            <span>청구 <b>${c.billed.toLocaleString()}</b> · 납부 <b>${c.paid.toLocaleString()}</b></span>
+          </div>`).join('')}
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;padding-top:5px;margin-top:4px;border-top:1px solid var(--bdr2);font-weight:800">
+          <span>전체 합계 (${merged.length}명)</span>
+          <span>청구 ${totalBilled.toLocaleString()}원 · 납부 ${totalPaid.toLocaleString()}원</span>
+        </div>
+      </div>` : '';
+
+    const rows = merged.length
+      ? merged.map(m => `<div style="border:1px solid var(--bdr2);border-radius:9px;padding:9px 11px;margin-bottom:6px;background:var(--surf2)">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <b style="font-size:12.5px">${_e(m.studentName)}${m.nickname?' ('+_e(m.nickname)+')':''} <span style="font-weight:400;color:var(--tx3);font-size:11px">${_e(m.classCode||'')}</span></b>
+            <span style="font-size:11px;color:${m.statusColor};font-weight:700">${m.status}</span>
+          </div>
+          ${m.absence ? `<div style="font-size:11px;color:#e85d04;margin-top:3px">🏖 결석 ${m.absence.absentCount}일 (${_e(m.absence.absenceStart||'')}~${_e(m.absence.absenceEnd||'')})</div>` : ''}
+          <div style="font-size:11px;color:var(--tx3);margin-top:3px">청구액 <b style="color:var(--tx1)">${m.billed.toLocaleString()}원</b> · 납부액 <b style="color:${m.paid===null?'#dc2626':'var(--tx1)'}">${m.paid===null?'미납':m.paid.toLocaleString()+'원'}</b>${m.payment?.paidDate ? ' · '+_e(m.payment.paidDate) : ''}</div>
+          <button onclick="StudentApp.openPaymentEntry('${m.studentId}','${monthKey}')" style="margin-top:6px;font-size:11px;padding:5px 10px;border-radius:7px;background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);color:#15803d;cursor:pointer">💳 납부 기록하기</button>
+        </div>`).join('')
+      : '<div style="font-size:12px;color:var(--tx3);padding:12px 2px">이 달에 결석 차감·납부 기록이 있는 학생이 없습니다.</div>';
+
+    return `
+      ${_tuitionOvTabsHTML('month', monthKey, year)}
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-shrink:0">
-        <input type="month" value="${_e(monthKey)}" onchange="StudentApp._absOvChangeMonth(this.value)"
+        <input type="month" value="${_e(monthKey)}" onchange="StudentApp._tuitionOvChangeMonth(this.value)"
           style="flex:1;padding:8px 10px;border:1.5px solid var(--bdr2);border-radius:9px;font-size:13px;background:var(--card);color:var(--tx1)">
       </div>
       <div style="background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.25);border-radius:10px;padding:10px 12px;margin-bottom:10px;flex-shrink:0">
-        <div style="font-size:12px;color:var(--tx2)">${_e(monthKey)} 기준 · 대상 <b>${list.length}명</b> · 총 차감액 <b>${totalDeduct.toLocaleString()}원</b></div>
-        <div style="font-size:10.5px;color:var(--tx3);margin-top:3px">※ 여기 나열된 학생만 이 달에 예외적으로 차감 적용됨 · 나머지 전체 학생은 정상 고정 수업료 청구</div>
+        <div style="font-size:12px;color:var(--tx2)">${_e(monthKey)} 기준 · 대상 <b>${merged.length}명</b> · 청구 합계 <b>${totalBilled.toLocaleString()}원</b> · 납부 합계 <b>${totalPaid.toLocaleString()}원</b></div>
+        <div style="font-size:10.5px;color:var(--tx3);margin-top:3px">※ 결석 차감·납부 기록이 있는 학생만 표시 · 나머지 전체 학생은 정상 고정 수업료 청구</div>
+      </div>
+      ${classSummaryHTML}
+      <div style="overflow-y:auto;flex:1">${rows}</div>
+      <button onclick="document.getElementById('st-abs-ov-modal').remove()" style="margin-top:12px;padding:11px;border-radius:10px;background:var(--a);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0">닫기</button>`;
+  }
+
+  function _tuitionOvChangeMonth(monthKey) {
+    const sheet = document.getElementById('st-abs-ov-sheet');
+    if (sheet) sheet.innerHTML = _tuitionOverviewHTML(monthKey);
+  }
+
+  /** 📆 연간 현황 — 12개월을 한 화면에서 한눈에, 클릭하면 해당 월 상세로 이동 */
+  function _tuitionYearHTML(year) {
+    year = String(year || new Date().getFullYear());
+    const months = [];
+    for (let m = 1; m <= 12; m++) {
+      const mk = `${year}-${String(m).padStart(2, '0')}`;
+      const { merged, totalBilled, totalPaid } = _tuitionMonthData(mk);
+      months.push({ monthKey: mk, month: m, count: merged.length, billed: totalBilled, paid: totalPaid });
+    }
+    const yearBilled = months.reduce((s, m) => s + m.billed, 0);
+    const yearPaid    = months.reduce((s, m) => s + m.paid, 0);
+    const yearCount   = months.reduce((s, m) => s + m.count, 0);
+
+    const rows = months.map(m => {
+      const empty = m.count === 0;
+      const unpaidGap = m.billed - m.paid;
+      const badge = empty ? '' :
+        unpaidGap <= 0 ? '<span style="font-size:10px;color:#059669;font-weight:700">✓ 완납</span>'
+                        : `<span style="font-size:10px;color:#dc2626;font-weight:700">미수금 ${unpaidGap.toLocaleString()}</span>`;
+      return `<div onclick="StudentApp.openTuitionOverview('${m.monthKey}','month')"
+          style="display:flex;align-items:center;justify-content:space-between;padding:9px 11px;margin-bottom:5px;border:1px solid var(--bdr2);border-radius:9px;cursor:pointer;background:${empty?'var(--card)':'var(--surf2)'}">
+        <div>
+          <b style="font-size:12.5px">${m.month}월</b>
+          <span style="font-size:10.5px;color:var(--tx3);margin-left:6px">${empty ? '기록 없음' : m.count+'명'}</span>
+        </div>
+        <div style="text-align:right">
+          ${empty ? '<span style="font-size:11px;color:var(--tx3)">-</span>' :
+            `<div style="font-size:11.5px">청구 ${m.billed.toLocaleString()} · 납부 ${m.paid.toLocaleString()}</div>${badge}`}
+        </div>
+      </div>`;
+    }).join('');
+
+    return `
+      ${_tuitionOvTabsHTML('year', `${year}-01`, year)}
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-shrink:0">
+        <button onclick="StudentApp._tuitionOvChangeYear(${Number(year)-1})" style="padding:8px 12px;border-radius:9px;border:1px solid var(--bdr2);background:var(--surf2);cursor:pointer;font-size:13px">◀</button>
+        <div style="flex:1;text-align:center;font-size:14px;font-weight:800">${year}년</div>
+        <button onclick="StudentApp._tuitionOvChangeYear(${Number(year)+1})" style="padding:8px 12px;border-radius:9px;border:1px solid var(--bdr2);background:var(--surf2);cursor:pointer;font-size:13px">▶</button>
+      </div>
+      <div style="background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.25);border-radius:10px;padding:10px 12px;margin-bottom:10px;flex-shrink:0">
+        <div style="font-size:12px;color:var(--tx2)">${year}년 연간 · 대상 연인원 <b>${yearCount}명</b> · 청구 합계 <b>${yearBilled.toLocaleString()}원</b> · 납부 합계 <b>${yearPaid.toLocaleString()}원</b></div>
+        <div style="font-size:10.5px;color:var(--tx3);margin-top:3px">※ 월을 탭하면 그 달 상세 내역으로 이동합니다</div>
       </div>
       <div style="overflow-y:auto;flex:1">${rows}</div>
       <button onclick="document.getElementById('st-abs-ov-modal').remove()" style="margin-top:12px;padding:11px;border-radius:10px;background:var(--a);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0">닫기</button>`;
   }
 
-  function _absOvChangeMonth(monthKey) {
+  function _tuitionOvChangeYear(year) {
     const sheet = document.getElementById('st-abs-ov-sheet');
-    if (sheet) sheet.innerHTML = _absOverviewHTML(monthKey);
+    if (sheet) sheet.innerHTML = _tuitionYearHTML(year);
   }
 
   /** 드래그 앤 드롭 바인딩 */
@@ -833,6 +961,7 @@ const StudentApp = (() => {
       <button class="tc-detail-btn" onclick="StudentApp.openTuitionCalc('${s.id}','enroll')">💰 입학 수업료 계산</button>
       <button class="tc-detail-btn" style="margin-top:6px;border-color:#e85d04;background:rgba(232,93,4,.07);color:#e85d04" onclick="StudentApp.openTuitionCalc('${s.id}','refund')">💸 퇴원 환불금 계산</button>
       <button class="tc-detail-btn" style="margin-top:6px;border-color:#0ea5e9;background:rgba(14,165,233,.07);color:#0284c7" onclick="StudentApp.openTuitionCalc('${s.id}','absence')">🏖 결석 차감 계산</button>
+      <button class="tc-detail-btn" style="margin-top:6px;border-color:#16a34a;background:rgba(22,163,74,.07);color:#15803d" onclick="StudentApp.openPaymentEntry('${s.id}')">💳 납부 기록</button>
 
       <div class="sh-acts" style="margin-top:10px;flex-wrap:wrap">
         <button class="btn-x" onclick="StudentApp.closeDetail()">닫기</button>
@@ -1110,7 +1239,7 @@ const StudentApp = (() => {
     const tuition = Number(cls.tuition) || 0;
     const perDay  = totalCount ? tuition / totalCount : 0;
     const amountExact   = Math.round(perDay * remainCount);
-    const amountRounded = Math.round(amountExact / 100) * 100;
+    const amountRounded = _money100(amountExact); // ★ 1,000원 단위 절삭(내림)
     return { year, month, day, allDays, remainDays, totalCount, remainCount, tuition, perDay, amountExact, amountRounded };
   }
 
@@ -1221,8 +1350,10 @@ const StudentApp = (() => {
         <div class="tc-row"><span>1회당 수업료</span><b>${Math.round(c.perDay).toLocaleString()}원</b></div>
         ${noAbsence
           ? `<div class="tc-warn" style="margin-top:8px">이 달에는 결석 기간과 겹치는 수업일이 없습니다.</div>`
-          : `<div class="tc-row tc-refund"><span>차감액</span><b>${c.deductExact.toLocaleString()}원</b></div>
-             <div class="tc-row tc-total"><span>실 납부액</span><b>${c.payAmount.toLocaleString()}원</b></div>`
+          : `<div class="tc-row tc-refund"><span>정확한 차감액</span><b>${c.deductRaw.toLocaleString()}원</b></div>
+             <div class="tc-row tc-sub"><span>1,000원 단위 차감 권장액</span><b>${c.deductExact.toLocaleString()}원</b></div>
+             <div class="tc-row"><span>정확한 실 납부액</span><b style="color:var(--tx2)">${c.payAmountRaw.toLocaleString()}원</b></div>
+             <div class="tc-row tc-total"><span>실 청구금액</span><b>${c.payAmount.toLocaleString()}원</b></div>`
         }
         ${studentId && !noAbsence ? `<button class="btn-ok" style="width:100%;margin-top:8px"
             onclick="StudentApp._tcSaveAbsence('${studentId}', ${i})">💾 ${c.year}-${String(c.month).padStart(2,'0')} 내역 DB 저장</button>` : ''}
@@ -1269,7 +1400,7 @@ const StudentApp = (() => {
           ${noRefund
             ? `<div class="tc-warn" style="margin-top:8px">이미 모든 수업을 완료하여 환불 대상 수업일이 없습니다.</div>`
             : `<div class="tc-row tc-refund"><span>환불금</span><b>${c.refundExact.toLocaleString()}원</b></div>
-               <div class="tc-row tc-sub"><span>100원 단위 환불 권장액</span><b>${c.refundRounded.toLocaleString()}원</b></div>`
+               <div class="tc-row tc-sub"><span>1,000원 단위 환불 권장액</span><b>${c.refundRounded.toLocaleString()}원</b></div>`
           }
         </div>`;
       if (applyBtn) applyBtn.style.display = noRefund ? 'none' : '';
@@ -1294,7 +1425,7 @@ const StudentApp = (() => {
         <div class="tc-row tc-dates"><span>수업 예정일자</span><span class="tc-dates-val">${_e(dateList)}</span></div>
         <div class="tc-row"><span>1회당 수업료</span><b>${Math.round(c.perDay).toLocaleString()}원</b></div>
         <div class="tc-row tc-total"><span>계산된 수업료</span><b>${c.amountExact.toLocaleString()}원</b></div>
-        <div class="tc-row tc-sub"><span>100원 단위 청구 권장액</span><b>${c.amountRounded.toLocaleString()}원</b></div>
+        <div class="tc-row tc-sub"><span>1,000원 단위 청구 권장액</span><b>${c.amountRounded.toLocaleString()}원</b></div>
       </div>`;
     if (applyBtn) applyBtn.style.display = '';
   }
@@ -1316,7 +1447,7 @@ const StudentApp = (() => {
     const perDay    = totalCount ? tuition / totalCount : 0;
     const paidAmount     = Math.round(perDay * attendedCount); // 이미 수업한 금액
     const refundExact    = Math.round(perDay * refundCount);   // 환불액
-    const refundRounded  = Math.round(refundExact / 100) * 100;
+    const refundRounded  = _money100(refundExact); // ★ 1,000원 단위 절삭(내림)
     return { year, month, lastDay, allDays, attendedDays, attendedCount,
              refundDays, refundCount, totalCount, tuition, perDay,
              paidAmount, refundExact, refundRounded };
@@ -1353,13 +1484,15 @@ const StudentApp = (() => {
 
       const absentDays  = allDays.filter(d => d >= rangeStartDay && d <= rangeEndDay);
       const absentCount = absentDays.length;
-      const deductExact = Math.round(perDay * absentCount);
-      const payAmount   = Math.max(0, tuition - deductExact);
+      const deductRaw     = Math.round(perDay * absentCount);           // 정확한 계산 차감액
+      const deductExact   = _money100(deductRaw);                       // ★ 1,000원 단위 절삭(내림) — 실 청구용
+      const payAmountRaw  = Math.max(0, tuition - deductRaw);           // 정확한 계산 실 납부액
+      const payAmount     = _money100(Math.max(0, tuition - deductExact)); // ★ 실 청구금액(절삭)
 
       months.push({
         year, month, monthKey: `${year}-${String(month).padStart(2,'0')}`,
         totalCount, allDays, absentDays, absentCount,
-        tuition, perDay, deductExact, payAmount,
+        tuition, perDay, deductRaw, deductExact, payAmountRaw, payAmount,
       });
       cursor = new Date(year, month, 1); // 다음 달 1일
     }
@@ -1492,8 +1625,10 @@ const StudentApp = (() => {
       absentDays:   c.absentDays,
       absentCount:  c.absentCount,
       perDay:       Math.round(c.perDay),
-      deductAmount: c.deductExact,
-      payAmount:    c.payAmount,
+      deductAmountExact: c.deductRaw,   // 정확한 계산 차감액(참고용)
+      deductAmount: c.deductExact,      // 1,000원 단위 절삭 — 실제 청구 기준
+      payAmountExact: c.payAmountRaw,   // 정확한 계산 실 납부액(참고용)
+      payAmount:    c.payAmount,        // 1,000원 단위 절삭 — 실제 청구금액
       absenceStart: _TC_ABS_CALC.start,
       absenceEnd:   _TC_ABS_CALC.end,
     };
@@ -1515,8 +1650,153 @@ const StudentApp = (() => {
   }
 
   /* ════════════════════════════════════════════
+   * 💳 기 납부 내역 (미리 입금·납부 완료된 기록)
+   * ════════════════════════════════════════════ */
+
+  /** 특정 학생·월의 "청구 참고금액" — 결석 차감 기록이 있으면 그 실 납부액,
+   *  없으면 반의 정상 월 수업료. 납부액 입력 시 참고용으로만 프리필한다. */
+  function _tpExpectedAmount(student, monthKey) {
+    const abs = student.tuitionAbsences && student.tuitionAbsences[monthKey];
+    if (abs) return Number(abs.payAmount || 0);
+    return _tuitionNormalAmount(student);
+  }
+
+  /** 납부 기록 입력 모달 HTML */
+  function _tpModalHTML(student, monthKey) {
+    const expected = _tpExpectedAmount(student, monthKey);
+    const existing = (student.tuitionPayments && student.tuitionPayments[monthKey]) || null;
+    const today = new Date().toISOString().slice(0, 10);
+    return `
+      <div class="sh-handle"></div>
+      <div class="sh-title">💳 납부 기록</div>
+      <div class="sh-sub">${_e(student.name)} 학생 · 미리 입금·납부된 내역을 기록합니다.</div>
+
+      <div class="f-grp">
+        <label class="f-lbl">대상 월</label>
+        <input class="f-inp" id="tp-month" type="month" value="${_e(monthKey)}" onchange="StudentApp._tpOnMonthChange('${student.id}')">
+      </div>
+      <div class="tc-warn" style="background:rgba(22,163,74,.08);border-color:rgba(22,163,74,.25);color:#15803d">
+        📌 이 달 청구 참고금액: <b>${expected.toLocaleString()}원</b>
+        ${student.tuitionAbsences && student.tuitionAbsences[monthKey] ? ' (결석 차감 반영됨)' : ' (정상 수업료)'}
+      </div>
+      <div class="f-grp">
+        <label class="f-lbl">납부액</label>
+        <input class="f-inp" id="tp-amount" type="number" step="100" value="${existing ? existing.amount : expected}">
+      </div>
+      <div class="f-grp">
+        <label class="f-lbl">납부일</label>
+        <input class="f-inp" id="tp-date" type="date" value="${existing ? existing.paidDate : today}">
+      </div>
+      <div class="f-grp">
+        <label class="f-lbl">납부 방법</label>
+        <select class="f-sel" id="tp-method">
+          ${['계좌이체','현금','카드','기타'].map(m =>
+            `<option value="${m}" ${existing?.method===m?'selected':''}>${m}</option>`).join('')}
+        </select>
+      </div>
+      <div class="f-grp">
+        <label class="f-lbl">메모 <span style="font-size:10px;font-weight:400;color:var(--tx3)">(선택)</span></label>
+        <input class="f-inp" id="tp-note" type="text" value="${_e(existing?.note || '')}" placeholder="예: 3개월치 선입금 중 1회분">
+      </div>
+
+      <div id="tp-history">${_tpHistoryHTML(student.id)}</div>
+
+      <div class="sh-acts">
+        <button class="btn-x" onclick="StudentApp.closePaymentEntry()">닫기</button>
+        <button class="btn-ok" onclick="StudentApp._tpSave('${student.id}')">💾 저장</button>
+      </div>
+    `;
+  }
+
+  /** 학생의 저장된 납부 내역(월별)을 카드 목록 HTML로 렌더 */
+  function _tpHistoryHTML(studentId) {
+    const map = (typeof StudentDB !== 'undefined' && StudentDB.getTuitionPayments)
+      ? StudentDB.getTuitionPayments(studentId) : {};
+    const keys = Object.keys(map).sort().reverse();
+    if (!keys.length) return '';
+    const rows = keys.map(mk => {
+      const r = map[mk];
+      return `<div class="tc-hist-row">
+        <div class="tc-hist-main"><b>${_e(mk)}</b> · ${Number(r.amount||0).toLocaleString()}원 · ${_e(r.method||'')}</div>
+        <div class="tc-hist-sub">${_e(r.paidDate||'')}${r.note ? ' · ' + _e(r.note) : ''}</div>
+        <button class="tc-hist-del" onclick="StudentApp._tpDelete('${studentId}','${mk}')" title="삭제">🗑</button>
+      </div>`;
+    }).join('');
+    return `<div class="tc-hist-wrap">
+      <div class="tc-hist-title">📋 저장된 납부 내역</div>
+      ${rows}
+    </div>`;
+  }
+
+  /** 납부 기록 모달 열기 (studentId, 기본은 이번 달) */
+  function openPaymentEntry(studentId, monthKey) {
+    const s = StudentDB.getAll().find(x => x.id === studentId);
+    if (!s) return;
+    monthKey = monthKey || new Date().toISOString().slice(0, 7);
+    document.getElementById('st-tp-modal')?.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'st-tp-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:600;display:flex;align-items:flex-end;justify-content:center';
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+
+    const sheet = document.createElement('div');
+    sheet.id = 'st-tp-sheet';
+    sheet.style.cssText = 'background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:520px;max-height:88vh;overflow-y:auto;box-shadow:0 -4px 24px rgba(0,0,0,.18)';
+    sheet.innerHTML = _tpModalHTML(s, monthKey);
+
+    modal.appendChild(sheet);
+    document.body.appendChild(modal);
+  }
+
+  function closePaymentEntry() {
+    document.getElementById('st-tp-modal')?.remove();
+  }
+
+  /** 대상 월 변경 시 참고금액/기존기록 다시 반영 */
+  function _tpOnMonthChange(studentId) {
+    const s = StudentDB.getAll().find(x => x.id === studentId);
+    const monthKey = document.getElementById('tp-month')?.value;
+    if (!s || !monthKey) return;
+    const sheet = document.getElementById('st-tp-sheet');
+    if (sheet) sheet.innerHTML = _tpModalHTML(s, monthKey);
+  }
+
+  /** 납부 기록 저장 */
+  async function _tpSave(studentId) {
+    const monthKey = document.getElementById('tp-month')?.value;
+    const amount   = Number(document.getElementById('tp-amount')?.value || 0);
+    const paidDate = document.getElementById('tp-date')?.value || '';
+    const method   = document.getElementById('tp-method')?.value || '';
+    const note     = document.getElementById('tp-note')?.value || '';
+    if (!monthKey || !paidDate) { _toast('⚠️ 대상 월과 납부일을 입력하세요'); return; }
+
+    const result = await StudentDB.saveTuitionPayment(studentId, monthKey, { amount, paidDate, method, note });
+    _toast(result ? `✅ ${monthKey} 납부 기록 저장됨` : '❌ 저장 실패', result ? 'success' : undefined);
+
+    const histEl = document.getElementById('tp-history');
+    if (histEl) histEl.innerHTML = _tpHistoryHTML(studentId);
+  }
+
+  /** 저장된 납부 기록 삭제 */
+  async function _tpDelete(studentId, monthKey) {
+    if (!confirm(`${monthKey} 납부 기록을 삭제할까요?`)) return;
+    await StudentDB.deleteTuitionPayment(studentId, monthKey);
+    const histEl = document.getElementById('tp-history');
+    if (histEl) histEl.innerHTML = _tpHistoryHTML(studentId);
+    _toast('🗑 삭제되었습니다');
+  }
+
+  /* ════════════════════════════════════════════
    * 유틸
    * ════════════════════════════════════════════ */
+
+  /** 금액을 1,000원 단위로 절삭(내림) — 청구/차감 금액이 어중간한 숫자로 나오지 않도록.
+   *  ※ 반올림이 아니라 절삭이라 학원 쪽이 손해 보는 방향으로만 떨어진다(안전한 기본값).
+   *     반올림으로 바꾸려면 Math.floor를 Math.round로만 교체하면 된다. */
+  function _money100(n) {
+    return Math.floor(Number(n || 0) / 1000) * 1000;
+  }
 
   /** HTML 이스케이프 */
   function _e(v) {
@@ -1555,6 +1835,7 @@ const StudentApp = (() => {
     openEditForm, saveEdit, _cancelEdit, _onEditStatusChange,
     _onSearch, _onFilter, _onDetailOvClick,
     openTuitionCalc, closeTuitionCalc, _onTcOvClick, _tcOnChange, _tcApplyMemo, _tcSwitchMode,
-    _tcSaveAbsence, _tcDeleteAbsence, openAbsenceOverview, _absOvChangeMonth,
+    _tcSaveAbsence, _tcDeleteAbsence, openTuitionOverview, _tuitionOvChangeMonth, _tuitionOvChangeYear,
+    openPaymentEntry, closePaymentEntry, _tpOnMonthChange, _tpSave, _tpDelete,
   };
 })();
