@@ -279,6 +279,7 @@ const StudentApp = (() => {
         </div>
         <div class="phr">
           <button class="ibtn" onclick="StudentApp.openTuitionCalc()" title="수업료 계산기">💰</button>
+          <button class="ibtn" onclick="StudentApp.openAbsenceOverview()" title="결석 차감 내역 전체보기">🏖</button>
           <button class="ibtn" onclick="StudentApp.openImport()" title="엑셀 가져오기">📥</button>
           <button id="st-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>
         </div>
@@ -649,6 +650,62 @@ const StudentApp = (() => {
     document.body.appendChild(modal);
   }
 
+  /** 🏖 결석 차감 내역 전체보기 (월별, 전체 학생 대상) — 관리자/운영자용 */
+  function openAbsenceOverview(monthKey) {
+    monthKey = monthKey || new Date().toISOString().slice(0, 7);
+    document.getElementById('st-abs-ov-modal')?.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'st-abs-ov-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:600;display:flex;align-items:flex-end;justify-content:center';
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+
+    const sheet = document.createElement('div');
+    sheet.id = 'st-abs-ov-sheet';
+    sheet.style.cssText = 'background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:520px;max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -4px 24px rgba(0,0,0,.18)';
+    sheet.innerHTML = _absOverviewHTML(monthKey);
+
+    modal.appendChild(sheet);
+    document.body.appendChild(modal);
+  }
+
+  function _absOverviewHTML(monthKey) {
+    const list = (typeof StudentDB !== 'undefined' && StudentDB.getTuitionAbsencesByMonth)
+      ? StudentDB.getTuitionAbsencesByMonth(monthKey) : [];
+    const totalDeduct = list.reduce((sum, r) => sum + Number(r.deductAmount || 0), 0);
+
+    const rows = list.length
+      ? list.map(r => `<div style="border:1px solid var(--bdr2);border-radius:9px;padding:9px 11px;margin-bottom:6px;background:var(--surf2)">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <b style="font-size:12.5px">${_e(r.studentName)}${r.nickname?' ('+_e(r.nickname)+')':''} <span style="font-weight:400;color:var(--tx3);font-size:11px">${_e(r.classCode||'')}</span></b>
+            <span style="font-size:11px;color:#e85d04;font-weight:700">결석 ${r.absentCount}일</span>
+          </div>
+          <div style="font-size:11px;color:var(--tx3);margin-top:3px">${_e(r.absenceStart||'')} ~ ${_e(r.absenceEnd||'')} · 차감 ${Number(r.deductAmount||0).toLocaleString()}원 · 납부액 <b style="color:var(--tx1)">${Number(r.payAmount||0).toLocaleString()}원</b></div>
+        </div>`).join('')
+      : '<div style="font-size:12px;color:var(--tx3);padding:12px 2px">이 달에 저장된 결석 차감 내역이 없습니다.</div>';
+
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-shrink:0">
+        <div style="font-size:15px;font-weight:800">🏖 결석 차감 내역</div>
+        <button onclick="document.getElementById('st-abs-ov-modal').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--tx3)">✕</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-shrink:0">
+        <input type="month" value="${_e(monthKey)}" onchange="StudentApp._absOvChangeMonth(this.value)"
+          style="flex:1;padding:8px 10px;border:1.5px solid var(--bdr2);border-radius:9px;font-size:13px;background:var(--card);color:var(--tx1)">
+      </div>
+      <div style="background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.25);border-radius:10px;padding:10px 12px;margin-bottom:10px;flex-shrink:0">
+        <div style="font-size:12px;color:var(--tx2)">${_e(monthKey)} 기준 · 대상 <b>${list.length}명</b> · 총 차감액 <b>${totalDeduct.toLocaleString()}원</b></div>
+        <div style="font-size:10.5px;color:var(--tx3);margin-top:3px">※ 여기 나열된 학생만 이 달에 예외적으로 차감 적용됨 · 나머지 전체 학생은 정상 고정 수업료 청구</div>
+      </div>
+      <div style="overflow-y:auto;flex:1">${rows}</div>
+      <button onclick="document.getElementById('st-abs-ov-modal').remove()" style="margin-top:12px;padding:11px;border-radius:10px;background:var(--a);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0">닫기</button>`;
+  }
+
+  function _absOvChangeMonth(monthKey) {
+    const sheet = document.getElementById('st-abs-ov-sheet');
+    if (sheet) sheet.innerHTML = _absOverviewHTML(monthKey);
+  }
+
   /** 드래그 앤 드롭 바인딩 */
   function _bindDrop() {
     const pg = document.getElementById('page-students');
@@ -775,6 +832,7 @@ const StudentApp = (() => {
 
       <button class="tc-detail-btn" onclick="StudentApp.openTuitionCalc('${s.id}','enroll')">💰 입학 수업료 계산</button>
       <button class="tc-detail-btn" style="margin-top:6px;border-color:#e85d04;background:rgba(232,93,4,.07);color:#e85d04" onclick="StudentApp.openTuitionCalc('${s.id}','refund')">💸 퇴원 환불금 계산</button>
+      <button class="tc-detail-btn" style="margin-top:6px;border-color:#0ea5e9;background:rgba(14,165,233,.07);color:#0284c7" onclick="StudentApp.openTuitionCalc('${s.id}','absence')">🏖 결석 차감 계산</button>
 
       <div class="sh-acts" style="margin-top:10px;flex-wrap:wrap">
         <button class="btn-x" onclick="StudentApp.closeDetail()">닫기</button>
@@ -1062,23 +1120,28 @@ const StudentApp = (() => {
     return [...new Set(DB.getActiveClasses().map(c => c.name))].filter(Boolean).sort();
   }
 
-  /** 계산기 모달 내부 HTML — mode: 'enroll'(입학) | 'refund'(퇴원 환불) */
+  /** 계산기 모달 내부 HTML — mode: 'enroll'(입학) | 'refund'(퇴원 환불) | 'absence'(결석 차감) */
   function _tcModalHTML(prefill, mode='enroll') {
     const names = _tcClassOptions();
     const today = new Date().toISOString().slice(0, 10);
     const selClass   = prefill.classCode || '';
     const enrollDate = prefill.enrollDate || today;
-    const isRefund = mode === 'refund';
+    const isRefund  = mode === 'refund';
+    const isAbsence = mode === 'absence';
+    // 🏖 결석 차감 탭은 특정 학생 컨텍스트(prefill.studentId)에서만 의미가 있음
+    const showAbsenceTab = !!prefill.studentId;
     return `
       <div class="sh-handle"></div>
       <div class="sh-title">💰 수업료 계산기</div>
       <div class="sh-sub">${prefill.studentName ? _e(prefill.studentName) + ' 학생 · ' : ''}반 수업일 기준으로 수업료를 계산합니다.</div>
 
       <div class="tc-tabs">
-        <button class="tc-tab ${!isRefund?'active':''}"
+        <button class="tc-tab ${!isRefund && !isAbsence?'active':''}"
           onclick="StudentApp._tcSwitchMode('enroll')">📥 입학 수업료</button>
         <button class="tc-tab ${isRefund?'active':''}"
           onclick="StudentApp._tcSwitchMode('refund')">💸 퇴원 환불금</button>
+        ${showAbsenceTab ? `<button class="tc-tab ${isAbsence?'active':''}"
+          onclick="StudentApp._tcSwitchMode('absence')">🏖 결석 차감</button>` : ''}
       </div>
 
       <div class="f-grp">
@@ -1090,7 +1153,20 @@ const StudentApp = (() => {
         ${!names.length ? '<div class="tc-warn">⚠️ 운용 중인 반이 없습니다. 관리 &gt; 반 관리에서 반을 먼저 등록해주세요.</div>' : ''}
       </div>
 
-      ${isRefund ? `
+      ${isAbsence ? `
+      <div class="tc-warn" style="background:rgba(14,165,233,.08);border-color:rgba(14,165,233,.25);color:#0284c7;margin-bottom:8px">
+        ℹ️ 여기서 저장하는 건 <b>이 학생의 이 기간에 한정된 예외 차감</b>입니다. 다른 달·다른 학생에는 전혀 영향이 없고, 저장하지 않은 달은 자동으로 원래 고정 수업료가 그대로 적용됩니다.
+      </div>
+      <div class="f-grp" style="display:flex;gap:8px">
+        <div style="flex:1">
+          <label class="f-lbl">결석 시작일</label>
+          <input class="f-inp" id="tc-abs-start" type="date" value="${_e(today)}" onchange="StudentApp._tcOnChange()">
+        </div>
+        <div style="flex:1">
+          <label class="f-lbl">결석 종료일 <span style="font-size:10px;font-weight:400;color:var(--tx3)">(포함)</span></label>
+          <input class="f-inp" id="tc-abs-end" type="date" value="${_e(today)}" onchange="StudentApp._tcOnChange()">
+        </div>
+      </div>` : isRefund ? `
       <div class="f-grp">
         <label class="f-lbl">마지막 출석일 <span style="font-size:10px;font-weight:400;color:var(--tx3)">(이 날까지 수업함)</span></label>
         <input class="f-inp" id="tc-date" type="date" value="${_e(today)}" onchange="StudentApp._tcOnChange()">
@@ -1101,9 +1177,10 @@ const StudentApp = (() => {
       </div>`}
 
       <div id="tc-result"></div>
+      ${isAbsence && prefill.studentId ? `<div id="tc-abs-history">${_tcAbsenceHistoryHTML(prefill.studentId)}</div>` : ''}
       <div class="sh-acts">
         <button class="btn-x" onclick="StudentApp.closeTuitionCalc()">닫기</button>
-        ${prefill.studentId ? `<button class="btn-ok" id="tc-apply-btn" style="display:none"
+        ${prefill.studentId && !isAbsence ? `<button class="btn-ok" id="tc-apply-btn" style="display:none"
           onclick="StudentApp._tcApplyMemo('${prefill.studentId}')">📝 메모에 저장</button>` : ''}
       </div>
     `;
@@ -1118,6 +1195,41 @@ const StudentApp = (() => {
     _tcOnChange();
   }
   let _TC_PREFILL = null; // 현재 열린 계산기의 prefill 저장
+
+  /** 🏖 결석 차감 결과 렌더 (월별 카드, 각 카드에 저장 버튼) */
+  function _tcRenderAbsenceResult(cls, absCalc, studentId) {
+    const el = document.getElementById('tc-result');
+    if (!el) return;
+    if (!cls) { el.innerHTML = ''; return; }
+    if (!cls.tuition) {
+      el.innerHTML = `<div class="tc-warn">⚠️ "${_e(cls.name)}" 반에 수업료가 설정되어 있지 않습니다.<br>관리 &gt; 반 관리 💸 버튼에서 월 수업료를 먼저 입력해주세요.</div>`;
+      return;
+    }
+    if (!absCalc || !absCalc.months.length) { el.innerHTML = '<div class="tc-warn">⚠️ 결석 시작일이 종료일보다 늦습니다.</div>'; return; }
+
+    _TC_ABS_CALC = absCalc; // 저장 버튼에서 참조
+
+    el.innerHTML = absCalc.months.map((c, i) => {
+      const dateList = c.absentDays.map(d => `${c.month}/${d}`).join(', ') || '없음';
+      const noAbsence = c.absentCount === 0;
+      return `<div class="tc-card" style="margin-bottom:8px">
+        <div class="tc-row"><span>${c.year}년 ${c.month}월</span><b>${_e((cls.days||[]).join(', '))}요일 수업</b></div>
+        <div class="tc-row"><span>월 수업료</span><b>${c.tuition.toLocaleString()}원</b></div>
+        <div class="tc-row"><span>${c.month}월 전체 수업일</span><b>${c.totalCount}일</b></div>
+        <div class="tc-row"><span>결석 수업일</span><b style="color:#e85d04">${c.absentCount}일</b></div>
+        ${c.absentCount ? `<div class="tc-row tc-dates"><span>결석 일자</span><span class="tc-dates-val">${_e(dateList)}</span></div>` : ''}
+        <div class="tc-row"><span>1회당 수업료</span><b>${Math.round(c.perDay).toLocaleString()}원</b></div>
+        ${noAbsence
+          ? `<div class="tc-warn" style="margin-top:8px">이 달에는 결석 기간과 겹치는 수업일이 없습니다.</div>`
+          : `<div class="tc-row tc-refund"><span>차감액</span><b>${c.deductExact.toLocaleString()}원</b></div>
+             <div class="tc-row tc-total"><span>실 납부액</span><b>${c.payAmount.toLocaleString()}원</b></div>`
+        }
+        ${studentId && !noAbsence ? `<button class="btn-ok" style="width:100%;margin-top:8px"
+            onclick="StudentApp._tcSaveAbsence('${studentId}', ${i})">💾 ${c.year}-${String(c.month).padStart(2,'0')} 내역 DB 저장</button>` : ''}
+      </div>`;
+    }).join('');
+  }
+  let _TC_ABS_CALC = null; // 마지막 결석 계산 결과 (저장 버튼용)
 
   /** 계산 결과 렌더 — enrollCalc(입학) 또는 refundCalc(퇴원 환불) 중 하나만 전달 */
   function _tcRenderResult(cls, enrollCalc, refundCalc) {
@@ -1210,14 +1322,93 @@ const StudentApp = (() => {
              paidAmount, refundExact, refundRounded };
   }
 
+  /**
+   * 🏖 결석 기간 수업료 차감 계산
+   * 결석 시작일~종료일(포함) 사이에 반 수업요일과 겹치는 날짜 수만큼
+   * 그 달 수업료에서 차감한다. 기간이 월 경계를 넘으면 달마다 나눠 계산한다.
+   * @returns {{start, end, months:Array}} months[i] = 한 달치 계산 결과
+   */
+  function _tcCalcAbsence(cls, startStr, endStr) {
+    const ms = /^(\d{4})-(\d{2})-(\d{2})$/.exec(startStr || '');
+    const me = /^(\d{4})-(\d{2})-(\d{2})$/.exec(endStr || '');
+    if (!cls || !ms || !me) return null;
+    const start = new Date(+ms[1], +ms[2] - 1, +ms[3]);
+    const end   = new Date(+me[1], +me[2] - 1, +me[3]);
+    if (end < start) return null;
+
+    const tuition = Number(cls.tuition) || 0;
+    const months = [];
+    let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+    const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+    let guard = 0;
+    while (cursor <= endMonth && guard++ < 24) { // 안전장치: 최대 24개월
+      const year = cursor.getFullYear(), month = cursor.getMonth() + 1;
+      const allDays    = _tcMeetDays(cls.days, year, month);
+      const totalCount = allDays.length;
+      const perDay     = totalCount ? tuition / totalCount : 0;
+
+      const lastDayOfMonth = new Date(year, month, 0).getDate();
+      const rangeStartDay = (year === start.getFullYear() && month === start.getMonth() + 1) ? start.getDate() : 1;
+      const rangeEndDay   = (year === end.getFullYear()   && month === end.getMonth() + 1)   ? end.getDate()   : lastDayOfMonth;
+
+      const absentDays  = allDays.filter(d => d >= rangeStartDay && d <= rangeEndDay);
+      const absentCount = absentDays.length;
+      const deductExact = Math.round(perDay * absentCount);
+      const payAmount   = Math.max(0, tuition - deductExact);
+
+      months.push({
+        year, month, monthKey: `${year}-${String(month).padStart(2,'0')}`,
+        totalCount, allDays, absentDays, absentCount,
+        tuition, perDay, deductExact, payAmount,
+      });
+      cursor = new Date(year, month, 1); // 다음 달 1일
+    }
+    return { start: startStr, end: endStr, months };
+  }
+
+  /** 학생의 저장된 결석 차감 내역(월별)을 카드 목록 HTML로 렌더 */
+  function _tcAbsenceHistoryHTML(studentId) {
+    const map = (typeof StudentDB !== 'undefined' && StudentDB.getTuitionAbsences)
+      ? StudentDB.getTuitionAbsences(studentId) : {};
+    const keys = Object.keys(map).sort().reverse();
+    if (!keys.length) return '';
+    const rows = keys.map(mk => {
+      const r = map[mk];
+      return `<div class="tc-hist-row">
+        <div class="tc-hist-main">
+          <b>${_e(mk)}</b> · 결석 ${r.absentCount ?? 0}일
+          (${_e(r.absenceStart||'')} ~ ${_e(r.absenceEnd||'')})
+        </div>
+        <div class="tc-hist-sub">차감 ${Number(r.deductAmount||0).toLocaleString()}원 · 납부액 ${Number(r.payAmount||0).toLocaleString()}원</div>
+        <button class="tc-hist-del" onclick="StudentApp._tcDeleteAbsence('${studentId}','${mk}')" title="삭제">🗑</button>
+      </div>`;
+    }).join('');
+    return `<div class="tc-hist-wrap">
+      <div class="tc-hist-title">📋 저장된 결석 차감 내역</div>
+      ${rows}
+    </div>`;
+  }
+
   /** 반/날짜 입력 변경 시 재계산 */
   function _tcOnChange() {
     const clsName  = document.getElementById('tc-cls')?.value || '';
-    const dateVal  = document.getElementById('tc-date')?.value || '';
-    if (!clsName || !dateVal) { _tcRenderResult(null, null, null); return; }
     // 현재 탭 모드 감지
     const activeTab = document.querySelector('.tc-tab.active');
-    const isRefund = activeTab && activeTab.textContent.includes('퇴원');
+    const isRefund  = activeTab && activeTab.textContent.includes('퇴원');
+    const isAbsence = activeTab && activeTab.textContent.includes('결석');
+
+    if (isAbsence) {
+      const startVal = document.getElementById('tc-abs-start')?.value || '';
+      const endVal   = document.getElementById('tc-abs-end')?.value || '';
+      if (!clsName || !startVal || !endVal) { _tcRenderAbsenceResult(null, null, null); return; }
+      const cls = _tcFindClass(clsName, startVal);
+      const calc = cls ? _tcCalcAbsence(cls, startVal, endVal) : null;
+      _tcRenderAbsenceResult(cls, calc, _TC_PREFILL?.studentId || null);
+      return;
+    }
+
+    const dateVal  = document.getElementById('tc-date')?.value || '';
+    if (!clsName || !dateVal) { _tcRenderResult(null, null, null); return; }
     const cls  = _tcFindClass(clsName, dateVal);
     if (isRefund) {
       const calc = cls ? _tcCalcRefund(cls, dateVal) : null;
@@ -1288,6 +1479,41 @@ const StudentApp = (() => {
     }
   }
 
+  /** 🏖 결석 차감 계산 결과를 DB에 저장 (월별 카드의 저장 버튼에서 호출) */
+  async function _tcSaveAbsence(studentId, monthIdx) {
+    const c = _TC_ABS_CALC?.months?.[monthIdx];
+    const clsName = document.getElementById('tc-cls')?.value || '';
+    if (!c || !clsName) { _toast('⚠️ 저장할 계산 결과가 없습니다'); return; }
+
+    const data = {
+      classCode:    clsName,
+      tuition:      c.tuition,
+      totalCount:   c.totalCount,
+      absentDays:   c.absentDays,
+      absentCount:  c.absentCount,
+      perDay:       Math.round(c.perDay),
+      deductAmount: c.deductExact,
+      payAmount:    c.payAmount,
+      absenceStart: _TC_ABS_CALC.start,
+      absenceEnd:   _TC_ABS_CALC.end,
+    };
+    const result = await StudentDB.saveTuitionAbsence(studentId, c.monthKey, data);
+    _toast(result ? `✅ ${c.monthKey} 결석 차감 내역 저장됨` : '❌ 저장 실패', result ? 'success' : undefined);
+
+    // 히스토리 영역 갱신
+    const histEl = document.getElementById('tc-abs-history');
+    if (histEl) histEl.innerHTML = _tcAbsenceHistoryHTML(studentId);
+  }
+
+  /** 🏖 저장된 결석 차감 내역 삭제 */
+  async function _tcDeleteAbsence(studentId, monthKey) {
+    if (!confirm(`${monthKey} 결석 차감 내역을 삭제할까요?`)) return;
+    await StudentDB.deleteTuitionAbsence(studentId, monthKey);
+    const histEl = document.getElementById('tc-abs-history');
+    if (histEl) histEl.innerHTML = _tcAbsenceHistoryHTML(studentId);
+    _toast('🗑 삭제되었습니다');
+  }
+
   /* ════════════════════════════════════════════
    * 유틸
    * ════════════════════════════════════════════ */
@@ -1329,5 +1555,6 @@ const StudentApp = (() => {
     openEditForm, saveEdit, _cancelEdit, _onEditStatusChange,
     _onSearch, _onFilter, _onDetailOvClick,
     openTuitionCalc, closeTuitionCalc, _onTcOvClick, _tcOnChange, _tcApplyMemo, _tcSwitchMode,
+    _tcSaveAbsence, _tcDeleteAbsence, openAbsenceOverview, _absOvChangeMonth,
   };
 })();

@@ -364,6 +364,75 @@ const StudentDB = (() => {
   }
 
   /* ════════════════════════════════════════════
+   * 🏖 결석 기간 수업료 차감 내역
+   * 학생별 tuitionAbsences 필드에 월(YYYY-MM) 키로 저장.
+   * students-app.js의 수업료 계산기(💰) "결석 차감" 탭에서 계산한 결과를
+   * 여기 저장해두면, 관리자/운영자가 언제든지 학생별·월별로 조회할 수 있다.
+   * ════════════════════════════════════════════ */
+
+  /**
+   * 결석 차감 계산 결과를 학생의 특정 월(monthKey) 기록으로 저장(덮어쓰기).
+   * @param {string} studentId
+   * @param {string} monthKey  'YYYY-MM'
+   * @param {object} data  { classCode, tuition, totalCount, absentDays:[], absentCount,
+   *                          perDay, deductAmount, payAmount, absenceStart, absenceEnd, note }
+   */
+  async function saveTuitionAbsence(studentId, monthKey, data) {
+    const idx = _students.findIndex(s => s.id === studentId);
+    if (idx < 0) return null;
+
+    const rec = { ...data, monthKey, updatedAt: _now() };
+    const student = _students[idx];
+    student.tuitionAbsences = { ...(student.tuitionAbsences || {}), [monthKey]: rec };
+    student.updatedAt = _now();
+    _ls(LS_KEY, _students);
+
+    // ★ 연결 여부와 무관하게 항상 저장 시도 — 오프라인이면 FireDB.update가 자체 큐잉.
+    //   update()는 지정한 monthKey만 병합해서 다른 달 기록을 건드리지 않는다.
+    if (typeof FireDB !== 'undefined') {
+      await FireDB.update(`${FB_PATH}/${studentId}/tuitionAbsences`, { [monthKey]: rec }).catch(e =>
+        console.warn('[StudentDB] saveTuitionAbsence FB error', e)
+      );
+    }
+    _fire('students');
+    return rec;
+  }
+
+  /** 특정 월(monthKey) 결석 차감 기록 삭제 */
+  async function deleteTuitionAbsence(studentId, monthKey) {
+    const idx = _students.findIndex(s => s.id === studentId);
+    if (idx < 0) return false;
+    const student = _students[idx];
+    if (student.tuitionAbsences) delete student.tuitionAbsences[monthKey];
+    student.updatedAt = _now();
+    _ls(LS_KEY, _students);
+
+    if (typeof FireDB !== 'undefined') {
+      await FireDB.remove(`${FB_PATH}/${studentId}/tuitionAbsences/${monthKey}`).catch(e =>
+        console.warn('[StudentDB] deleteTuitionAbsence FB error', e)
+      );
+    }
+    _fire('students');
+    return true;
+  }
+
+  /** 특정 학생의 결석 차감 기록 전체(월별) 조회 */
+  function getTuitionAbsences(studentId) {
+    const s = _students.find(x => x.id === studentId);
+    return (s && s.tuitionAbsences) || {};
+  }
+
+  /** 특정 월(monthKey)에 결석 차감 기록이 있는 모든 학생 목록 (관리자 전체 조회용) */
+  function getTuitionAbsencesByMonth(monthKey) {
+    return _students
+      .filter(s => s.tuitionAbsences && s.tuitionAbsences[monthKey])
+      .map(s => ({
+        studentId: s.id, studentName: s.name, classCode: s.classCode, nickname: s.nickname,
+        ...s.tuitionAbsences[monthKey],
+      }));
+  }
+
+  /* ════════════════════════════════════════════
    * PUBLIC API
    * ════════════════════════════════════════════ */
   return {
@@ -372,5 +441,6 @@ const StudentDB = (() => {
     getGrades, getSchools, getClasses,
     upsert, importFromRows, updateStudent, deleteStudent,
     parseRow, courseToClass, findPossibleDuplicates,
+    saveTuitionAbsence, deleteTuitionAbsence, getTuitionAbsences, getTuitionAbsencesByMonth,
   };
 })();
