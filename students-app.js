@@ -280,6 +280,7 @@ const StudentApp = (() => {
         <div class="phr">
           <button class="ibtn" onclick="StudentApp.openTuitionCalc()" title="수업료 계산기">💰</button>
           <button class="ibtn" onclick="StudentApp.openTuitionOverview()" title="수업료 현황 (결석 차감·납부)">💳</button>
+          <button class="ibtn" onclick="StudentApp.openReceiptImport()" title="수납내역 엑셀 가져오기">🧾</button>
           <button class="ibtn" onclick="StudentApp.openImport()" title="엑셀 가져오기">📥</button>
           <button id="st-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>
         </div>
@@ -665,7 +666,7 @@ const StudentApp = (() => {
     const sheet = document.createElement('div');
     sheet.id = 'st-abs-ov-sheet';
     sheet.style.cssText = 'background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:520px;max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -4px 24px rgba(0,0,0,.18)';
-    sheet.innerHTML = mode === 'year' ? _tuitionYearHTML(monthKey.slice(0, 4)) : _tuitionOverviewHTML(monthKey);
+    sheet.innerHTML = mode === 'year' ? _tuitionYearHTML(monthKey.slice(0, 4)) : _renderTuitionOvSheet(monthKey);
 
     modal.appendChild(sheet);
     document.body.appendChild(modal);
@@ -711,14 +712,18 @@ const StudentApp = (() => {
   }
 
   /** 특정 월의 재원생 전체 청구 현황(정상 고정 수업료 + 결석 차감 예외 + 납부 기록)을 집계.
+   *  실제 수납내역(🧾 가져오기)에 '수업' 항목이 있으면 그 실제 데이터가 최우선이고,
+   *  없는 달은 기존처럼 반 정상 수업료(결석 있으면 차감) + 수동 납부기록으로 보완한다.
    *  classFilter를 주면 그 반만 걸러서 반환(반별 총액 확인용). (월별/연간 뷰 공용) */
   function _tuitionMonthData(monthKey, classFilter) {
     const allStudents = (typeof StudentDB !== 'undefined') ? StudentDB.getAll() : [];
-    const absMap = {}, payMap = {};
+    const absMap = {}, payMap = {}, receiptMap = {};
     ((typeof StudentDB !== 'undefined' && StudentDB.getTuitionAbsencesByMonth) ? StudentDB.getTuitionAbsencesByMonth(monthKey) : [])
       .forEach(r => { absMap[r.studentId] = r; });
     ((typeof StudentDB !== 'undefined' && StudentDB.getTuitionPaymentsByMonth) ? StudentDB.getTuitionPaymentsByMonth(monthKey) : [])
       .forEach(r => { payMap[r.studentId] = r; });
+    ((typeof StudentDB !== 'undefined' && StudentDB.getReceiptsByMonth) ? StudentDB.getReceiptsByMonth(monthKey, '수업') : [])
+      .forEach(r => { receiptMap[r.studentId] = r; }); // 같은 학생 같은 달에 여러 건이면 마지막 것 사용
 
     const billable = allStudents.filter(s => _tuitionIsBillable(s, monthKey)
       && (!classFilter || (s.classCode || '').trim() === classFilter.trim()));
@@ -726,14 +731,19 @@ const StudentApp = (() => {
     const merged = billable.map(s => {
       const absence = absMap[s.id] || null;
       const payment = payMap[s.id] || null;
-      const billed = absence ? Number(absence.payAmount || 0) : _tuitionNormalAmount(s);
-      const paid = payment ? Number(payment.amount || 0) : null;
+      const receipt = receiptMap[s.id] || null;
+      const billed = receipt ? Number(receipt.billedAmount || 0)
+                    : absence ? Number(absence.payAmount || 0)
+                    : _tuitionNormalAmount(s);
+      const paid = receipt ? Number(receipt.paidAmount || 0)
+                  : payment ? Number(payment.amount || 0)
+                  : null;
       let status, statusColor;
-      if (paid === null)        { status = '미납';     statusColor = '#dc2626'; }
+      if (paid === null)        { status = '미확인';   statusColor = '#6b7280'; } // 외부 결제사이트로 납부할 수 있어 "미납"이 아니라 중립적으로 표기
       else if (paid >= billed)  { status = paid > billed ? '초과납부' : '완납'; statusColor = paid > billed ? '#0284c7' : '#059669'; }
       else                      { status = '부족납부'; statusColor = '#d97706'; }
       return { studentId: s.id, studentName: s.name, classCode: s.classCode, nickname: s.nickname,
-               absence, payment, billed, paid, status, statusColor };
+               absence, payment, receipt, billed, paid, status, statusColor };
     }).sort((a, b) => (a.classCode || '').localeCompare(b.classCode || '') || (a.studentName || '').localeCompare(b.studentName || ''));
 
     const totalBilled = merged.reduce((sum, m) => sum + m.billed, 0);
@@ -752,7 +762,31 @@ const StudentApp = (() => {
     return { monthKey, merged, totalBilled, totalPaid, classRows };
   }
 
-  let _TUITION_OV_FILTER = { classCode: '', unpaidOnly: false };
+  let _TUITION_OV_FILTER = { classCode: '', unpaidOnly: false, category: '수업' };
+
+  /** 현재 필터 상태에 맞춰 시트 내용을 다시 그리는 공용 디스패처 */
+  function _renderTuitionOvSheet(monthKey) {
+    return _TUITION_OV_FILTER.category === '수업'
+      ? _tuitionOverviewHTML(monthKey)
+      : _receiptsCategoryHTML(monthKey, _TUITION_OV_FILTER.category);
+  }
+
+  function _tuitionOvSetCategory(cat) {
+    _TUITION_OV_FILTER.category = cat;
+    const sheet = document.getElementById('st-abs-ov-sheet');
+    const monthKey = document.querySelector('#st-abs-ov-sheet input[type="month"]')?.value || new Date().toISOString().slice(0,7);
+    if (sheet) sheet.innerHTML = _renderTuitionOvSheet(monthKey);
+  }
+
+  /** 기간(월별/연간) + 구분(수업/교재/기타) 탭 공통 헤더 */
+  function _tuitionOvCategoryTabsHTML() {
+    const cats = ['수업', '교재', '기타'];
+    return `<div style="display:flex;gap:6px;margin-bottom:10px;flex-shrink:0">
+      ${cats.map(c => `<button onclick="StudentApp._tuitionOvSetCategory('${c}')"
+        style="flex:1;padding:7px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;
+        background:${_TUITION_OV_FILTER.category===c?'var(--a)':'var(--surf2)'};color:${_TUITION_OV_FILTER.category===c?'#fff':'var(--tx2)'};border:1px solid ${_TUITION_OV_FILTER.category===c?'var(--a)':'var(--bdr2)'}">${c}</button>`).join('')}
+    </div>`;
+  }
 
   function _tuitionOverviewHTML(monthKey) {
     const classFilter = _TUITION_OV_FILTER.classCode || null;
@@ -782,14 +816,19 @@ const StudentApp = (() => {
             <b style="font-size:12.5px">${_e(m.studentName)}${m.nickname?' ('+_e(m.nickname)+')':''} <span style="font-weight:400;color:var(--tx3);font-size:11px">${_e(m.classCode||'')}</span></b>
             <span style="font-size:11px;color:${m.statusColor};font-weight:700">${m.status}</span>
           </div>
-          ${m.absence ? `<div style="font-size:11px;color:#e85d04;margin-top:3px">🏖 결석 ${m.absence.absentCount}일 (${_e(m.absence.absenceStart||'')}~${_e(m.absence.absenceEnd||'')})</div>` : ''}
-          <div style="font-size:11px;color:var(--tx3);margin-top:3px">청구액 <b style="color:var(--tx1)">${m.billed.toLocaleString()}원</b> · 납부액 <b style="color:${m.paid===null?'#dc2626':'var(--tx1)'}">${m.paid===null?'미납':m.paid.toLocaleString()+'원'}</b>${m.payment?.paidDate ? ' · '+_e(m.payment.paidDate) : ''}</div>
-          <button onclick="StudentApp.openPaymentEntry('${m.studentId}','${monthKey}')" style="margin-top:6px;font-size:11px;padding:5px 10px;border-radius:7px;background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);color:#15803d;cursor:pointer">💳 납부 기록하기</button>
+          ${m.absence && !m.receipt ? `<div style="font-size:11px;color:#e85d04;margin-top:3px">🏖 결석 ${m.absence.absentCount}일 (${_e(m.absence.absenceStart||'')}~${_e(m.absence.absenceEnd||'')})</div>` : ''}
+          ${m.receipt ? `<div style="font-size:11px;color:#0284c7;margin-top:3px">🧾 실제 수납내역 반영됨 (${_e(m.receipt.itemName||'')})</div>` : ''}
+          <div style="font-size:11px;color:var(--tx3);margin-top:3px">청구액 <b style="color:var(--tx1)">${m.billed.toLocaleString()}원</b> · 납부액 <b style="color:${m.paid===null?'var(--tx3)':'var(--tx1)'}">${m.paid===null?'미확인':m.paid.toLocaleString()+'원'}</b>${m.payment?.paidDate ? ' · '+_e(m.payment.paidDate) : ''}${m.receipt?.paidDate ? ' · '+_e(m.receipt.paidDate) : ''}</div>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            ${(!m.receipt && m.paid < m.billed) ? `<button onclick="StudentApp._tuitionQuickMarkPaid('${m.studentId}','${monthKey}',${m.billed})" style="font-size:11px;padding:5px 10px;border-radius:7px;background:rgba(5,150,105,.1);border:1px solid rgba(5,150,105,.3);color:#059669;cursor:pointer">✅ 납부 처리</button>` : ''}
+            ${!m.receipt ? `<button onclick="StudentApp.openPaymentEntry('${m.studentId}','${monthKey}')" style="font-size:11px;padding:5px 10px;border-radius:7px;background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);color:#15803d;cursor:pointer">💳 직접 입력</button>` : ''}
+          </div>
         </div>`).join('')
-      : `<div style="font-size:12px;color:var(--tx3);padding:12px 2px">${_TUITION_OV_FILTER.unpaidOnly ? '미납/부족납부 학생이 없습니다.' : '해당 조건의 재원생이 없습니다.'}</div>`;
+      : `<div style="font-size:12px;color:var(--tx3);padding:12px 2px">${_TUITION_OV_FILTER.unpaidOnly ? '미확인/부족납부 학생이 없습니다.' : '해당 조건의 재원생이 없습니다.'}</div>`;
 
     return `
       ${_tuitionOvTabsHTML('month', monthKey, year)}
+      ${_tuitionOvCategoryTabsHTML()}
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-shrink:0">
         <input type="month" value="${_e(monthKey)}" onchange="StudentApp._tuitionOvChangeMonth(this.value)"
           style="flex:1;padding:8px 10px;border:1.5px solid var(--bdr2);border-radius:9px;font-size:13px;background:var(--card);color:var(--tx1)">
@@ -800,11 +839,11 @@ const StudentApp = (() => {
         </select>
       </div>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--tx2);margin-bottom:10px;flex-shrink:0;cursor:pointer">
-        <input type="checkbox" ${_TUITION_OV_FILTER.unpaidOnly?'checked':''} onchange="StudentApp._tuitionOvToggleUnpaid(this.checked)"> 미납/부족납부만 보기
+        <input type="checkbox" ${_TUITION_OV_FILTER.unpaidOnly?'checked':''} onchange="StudentApp._tuitionOvToggleUnpaid(this.checked)"> 미확인/부족납부만 보기
       </label>
       <div style="background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.25);border-radius:10px;padding:10px 12px;margin-bottom:10px;flex-shrink:0">
         <div style="font-size:12px;color:var(--tx2)">${_e(monthKey)} 기준${classFilter?' · '+_e(classFilter):''} · 대상 <b>${allMerged.length}명</b> · 청구 합계 <b>${totalBilled.toLocaleString()}원</b> · 납부 합계 <b>${totalPaid.toLocaleString()}원</b></div>
-        <div style="font-size:10.5px;color:var(--tx3);margin-top:3px">※ 재원생 전체 자동 계산(반 정상 수업료 기준) · 결석 있으면 차감 반영 · 입학 당월은 별도 입학수업료 계산기 사용</div>
+        <div style="font-size:10.5px;color:var(--tx3);margin-top:3px">※ 🧾 수납내역을 가져온 항목은 실제 데이터 우선 · 없으면 반 정상 수업료(결석 차감 반영)로 자동 계산 · 입학 당월 제외</div>
       </div>
       ${classSummaryHTML}
       <div style="overflow-y:auto;flex:1">${rows}</div>
@@ -814,32 +853,51 @@ const StudentApp = (() => {
   function _tuitionOvSetClass(classCode) {
     _TUITION_OV_FILTER.classCode = classCode || '';
     const sheet = document.getElementById('st-abs-ov-sheet');
-    if (sheet) sheet.innerHTML = _tuitionOverviewHTML(document.querySelector('#st-abs-ov-sheet input[type="month"]')?.value || new Date().toISOString().slice(0,7));
+    if (sheet) sheet.innerHTML = _renderTuitionOvSheet(document.querySelector('#st-abs-ov-sheet input[type="month"]')?.value || new Date().toISOString().slice(0,7));
   }
 
   function _tuitionOvToggleUnpaid(checked) {
     _TUITION_OV_FILTER.unpaidOnly = !!checked;
     const sheet = document.getElementById('st-abs-ov-sheet');
-    if (sheet) sheet.innerHTML = _tuitionOverviewHTML(document.querySelector('#st-abs-ov-sheet input[type="month"]')?.value || new Date().toISOString().slice(0,7));
+    if (sheet) sheet.innerHTML = _renderTuitionOvSheet(document.querySelector('#st-abs-ov-sheet input[type="month"]')?.value || new Date().toISOString().slice(0,7));
+  }
+
+  /** ✅ 원클릭 납부 처리 — 외부 결제사이트 등에서 실제로 입금된 걸 관리자가 확인했을 때,
+   *  청구액 그대로 "납부 완료"로 빠르게 전환. 금액을 직접 다르게 입력하고 싶으면
+   *  "💳 직접 입력" 버튼으로 기존 폼을 쓰면 된다. */
+  async function _tuitionQuickMarkPaid(studentId, monthKey, billedAmount) {
+    const today = new Date().toISOString().slice(0, 10);
+    await StudentDB.saveTuitionPayment(studentId, monthKey, {
+      amount: Number(billedAmount) || 0,
+      paidDate: today,
+      method: '확인 처리',
+      note: '관리자가 직접 확인 후 납부 처리',
+    });
+    _toast('✅ 납부 처리되었습니다');
+    const sheet = document.getElementById('st-abs-ov-sheet');
+    if (sheet) sheet.innerHTML = _renderTuitionOvSheet(monthKey);
   }
 
   function _tuitionOvChangeMonth(monthKey) {
     const sheet = document.getElementById('st-abs-ov-sheet');
-    if (sheet) sheet.innerHTML = _tuitionOverviewHTML(monthKey);
+    if (sheet) sheet.innerHTML = _renderTuitionOvSheet(monthKey);
   }
 
   /** 📆 연간 현황 — 12개월을 한 화면에서 한눈에, 클릭하면 해당 월 상세로 이동 */
   function _tuitionYearHTML(year) {
     year = String(year || new Date().getFullYear());
     const months = [];
+    const uniqueStudentIds = new Set(); // 같은 학생이 여러 달에 걸쳐 나와도 1명으로만 집계
     for (let m = 1; m <= 12; m++) {
       const mk = `${year}-${String(m).padStart(2, '0')}`;
       const { merged, totalBilled, totalPaid } = _tuitionMonthData(mk);
+      merged.forEach(x => uniqueStudentIds.add(x.studentId));
       months.push({ monthKey: mk, month: m, count: merged.length, billed: totalBilled, paid: totalPaid });
     }
     const yearBilled = months.reduce((s, m) => s + m.billed, 0);
     const yearPaid    = months.reduce((s, m) => s + m.paid, 0);
-    const yearCount   = months.reduce((s, m) => s + m.count, 0);
+    const yearCount   = uniqueStudentIds.size; // 중복 제거된 실제 학생 수
+    const yearPersonMonths = months.reduce((s, m) => s + m.count, 0); // 참고용: 연인원(달마다 중복 합산)
 
     const rows = months.map(m => {
       const empty = m.count === 0;
@@ -868,7 +926,7 @@ const StudentApp = (() => {
         <button onclick="StudentApp._tuitionOvChangeYear(${Number(year)+1})" style="padding:8px 12px;border-radius:9px;border:1px solid var(--bdr2);background:var(--surf2);cursor:pointer;font-size:13px">▶</button>
       </div>
       <div style="background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.25);border-radius:10px;padding:10px 12px;margin-bottom:10px;flex-shrink:0">
-        <div style="font-size:12px;color:var(--tx2)">${year}년 연간 · 대상 연인원 <b>${yearCount}명</b> · 청구 합계 <b>${yearBilled.toLocaleString()}원</b> · 납부 합계 <b>${yearPaid.toLocaleString()}원</b></div>
+        <div style="font-size:12px;color:var(--tx2)">${year}년 연간 · 대상 학생 <b>${yearCount}명</b> <span style="color:var(--tx3);font-weight:400">(연인원 ${yearPersonMonths}명)</span> · 청구 합계 <b>${yearBilled.toLocaleString()}원</b> · 납부 합계 <b>${yearPaid.toLocaleString()}원</b></div>
         <div style="font-size:10.5px;color:var(--tx3);margin-top:3px">※ 월을 탭하면 그 달 상세 내역으로 이동합니다</div>
       </div>
       <div style="overflow-y:auto;flex:1">${rows}</div>
@@ -878,6 +936,142 @@ const StudentApp = (() => {
   function _tuitionOvChangeYear(year) {
     const sheet = document.getElementById('st-abs-ov-sheet');
     if (sheet) sheet.innerHTML = _tuitionYearHTML(year);
+  }
+
+  /* ════════════════════════════════════════════
+   * 📥 수납내역 가져오기 (외부 결제사이트 엑셀)
+   * 컬럼 예: 원생고유번호, 이름, 학년, 학교, 학부모연락처, 원생연락처, 구분(수업/교재/기타),
+   *   청구월(YYYYMM), 청구일, 수납명, 수납여부(납부완료/미납), 청구액, 할인액, 적립금사용,
+   *   실제낸금액, 미납금액, 결제수단, 결제수단(상세), 카드사, 수납일(YYYYMMDD), 현금영수증, 메모
+   * ════════════════════════════════════════════ */
+
+  function openReceiptImport() {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = '.xlsx,.xls';
+    inp.onchange = e => _handleReceiptFile(e.target.files[0]);
+    inp.click();
+  }
+
+  /** 'YYYYMM' → 'YYYY-MM', 'YYYYMMDD' → 'YYYY-MM-DD'. 형식이 안 맞으면 원본 그대로 반환 */
+  function _ymToKey(v) {
+    const s = String(v ?? '').trim();
+    return /^\d{6}$/.test(s) ? `${s.slice(0,4)}-${s.slice(4,6)}` : s;
+  }
+  function _ymdToKey(v) {
+    const s = String(v ?? '').trim();
+    return /^\d{8}$/.test(s) ? `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}` : s;
+  }
+
+  /** 수납내역 엑셀 한 행을 정규화 */
+  function _parseReceiptRow(row) {
+    return {
+      originalId:   String(row['원생고유번호'] ?? '').trim(),
+      name:         String(row['이름'] ?? '').trim(),
+      phone:        String(row['원생연락처'] ?? '').trim(),
+      parentPhone:  String(row['학부모연락처'] ?? '').trim(),
+      category:     String(row['구분'] ?? '기타').trim(), // 수업 / 교재 / 기타
+      billMonth:    _ymToKey(row['청구월']),
+      billDay:      String(row['청구일'] ?? '').trim(),
+      itemName:     String(row['수납명'] ?? '').trim(),
+      status:       String(row['수납여부'] ?? '').trim(), // 납부완료 / 미납
+      billedAmount: Number(row['청구액'] || 0),
+      discount:     Number(row['할인액'] || 0),
+      pointsUsed:   Number(row['적립금사용'] || 0),
+      paidAmount:   Number(row['실제낸금액'] || 0),
+      unpaidAmount: Number(row['미납금액'] || 0),
+      method:       String(row['결제수단'] ?? '').trim(),
+      methodDetail: String(row['결제수단(상세)'] ?? '').trim(),
+      cardCompany:  String(row['카드사'] ?? '').trim(),
+      paidDate:     _ymdToKey(row['수납일']),
+      cashReceipt:  String(row['현금영수증'] ?? '').trim(),
+      note:         String(row['메모'] ?? '').trim(),
+    };
+  }
+
+  async function _handleReceiptFile(file) {
+    if (!file) return;
+    if (typeof XLSX === 'undefined') { _toast('❌ XLSX 라이브러리가 로드되지 않았습니다'); return; }
+
+    const pg = document.getElementById('page-students');
+    const overlay = document.createElement('div');
+    overlay.className = 'st-importing-overlay';
+    overlay.innerHTML = '<div class="st-importing-box">🧾 수납내역 가져오는 중…</div>';
+    if (pg) { pg.style.position = 'relative'; pg.appendChild(overlay); }
+
+    try {
+      const buf  = await file.arrayBuffer();
+      const wb   = XLSX.read(buf, { type: 'array' });
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+      if (!rows.length) { _toast('⚠️ 데이터가 없습니다'); return; }
+
+      const cols    = Object.keys(rows[0]);
+      const missing = ['이름', '구분', '청구월', '청구액'].filter(c => !cols.includes(c));
+      if (missing.length) { _toast(`⚠️ 필수 컬럼 없음: ${missing.join(', ')}`); return; }
+
+      const normalized = rows.map(_parseReceiptRow).filter(r => r.name && r.billMonth);
+      const result = await StudentDB.importReceipts(normalized);
+      _showReceiptImportResultModal(result);
+      // 현재 열려있는 수업료 현황 모달이 있으면 최신 데이터로 갱신
+      const sheet = document.getElementById('st-abs-ov-sheet');
+      if (sheet) sheet.innerHTML = _renderTuitionOvSheet(document.querySelector('#st-abs-ov-sheet input[type="month"]')?.value || new Date().toISOString().slice(0,7));
+
+    } catch (e) {
+      console.error('[StudentApp] receipt import error', e);
+      _toast('❌ 수납내역 가져오기 실패: ' + e.message);
+    } finally {
+      overlay.remove();
+    }
+  }
+
+  function _showReceiptImportResultModal(result) {
+    document.getElementById('st-recpt-modal')?.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'st-recpt-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:650;display:flex;align-items:flex-end;justify-content:center';
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+
+    const sheet = document.createElement('div');
+    sheet.style.cssText = 'background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:520px;max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -4px 24px rgba(0,0,0,.18)';
+
+    const catRows = Object.entries(result.byCategory || {}).map(([cat, v]) =>
+      `<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0">
+        <span>${_e(cat)} (${v.count}건)</span>
+        <span>청구 <b>${v.billed.toLocaleString()}</b> · 납부 <b>${v.paid.toLocaleString()}</b></span>
+      </div>`).join('');
+
+    const unmatchedHTML = result.unmatchedList.length ? `
+      <div style="margin-top:10px">
+        <div style="font-size:12px;font-weight:800;color:var(--tx2);margin-bottom:6px">⚠️ 매칭 안 된 항목 (${result.unmatched}건)</div>
+        <div style="max-height:160px;overflow-y:auto">
+          ${result.unmatchedList.slice(0, 50).map(u => `<div style="font-size:11px;color:var(--tx3);padding:2px 0">${_e(u.name||'(이름없음)')} · ${_e(u.originalId||'-')} · ${_e(u.itemName||'')} (${_e(u.billMonth||'')})</div>`).join('')}
+          ${result.unmatchedList.length > 50 ? `<div style="font-size:11px;color:var(--tx3);padding:2px 0">... 외 ${result.unmatchedList.length-50}건</div>` : ''}
+        </div>
+        <div style="font-size:10.5px;color:var(--tx3);margin-top:4px">※ 원생고유번호나 이름이 학생탭 명단과 다르면 매칭이 안 됩니다. 학생탭에서 이름·원생번호를 확인해보세요.</div>
+      </div>` : '';
+
+    sheet.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-shrink:0">
+        <div style="font-size:15px;font-weight:800">🧾 수납내역 가져오기 결과</div>
+        <button onclick="document.getElementById('st-recpt-modal').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--tx3)">✕</button>
+      </div>
+      <div style="overflow-y:auto;flex:1">
+        <div style="background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.25);border-radius:10px;padding:10px 12px;margin-bottom:10px">
+          <div style="font-size:12.5px;color:var(--tx2)">총 ${result.total}건 중 <b style="color:#059669">매칭 ${result.matched}건</b>${result.unmatched?` · <b style="color:#dc2626">매칭 안됨 ${result.unmatched}건</b>`:''}</div>
+        </div>
+        <div style="border:1px solid var(--bdr2);border-radius:10px;padding:8px 10px">
+          <div style="font-size:11px;font-weight:800;color:var(--tx2);margin-bottom:4px">📊 구분별 합계</div>
+          ${catRows}
+        </div>
+        ${unmatchedHTML}
+      </div>
+      <button onclick="document.getElementById('st-recpt-modal').remove()" style="margin-top:12px;padding:11px;border-radius:10px;background:var(--a);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0">확인</button>`;
+
+    modal.appendChild(sheet);
+    document.body.appendChild(modal);
   }
 
   /** 드래그 앤 드롭 바인딩 */
@@ -1882,7 +2076,7 @@ const StudentApp = (() => {
     _onSearch, _onFilter, _onDetailOvClick,
     openTuitionCalc, closeTuitionCalc, _onTcOvClick, _tcOnChange, _tcApplyMemo, _tcSwitchMode,
     _tcSaveAbsence, _tcDeleteAbsence, openTuitionOverview, _tuitionOvChangeMonth, _tuitionOvChangeYear,
-    _tuitionOvSetClass, _tuitionOvToggleUnpaid,
+    _tuitionOvSetClass, _tuitionOvToggleUnpaid, _tuitionQuickMarkPaid,
     openPaymentEntry, closePaymentEntry, _tpOnMonthChange, _tpSave, _tpDelete,
   };
 })();

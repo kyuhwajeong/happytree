@@ -36,6 +36,14 @@ const StudentDB = (() => {
     return (s === 'NaN' || s === 'undefined' || s === 'null') ? '' : s;
   }
 
+  /** 원생고유번호 비교용 정규화 — 엑셀 셀 서식(텍스트/숫자)에 따라 "0061" vs "61"처럼
+   *  앞자리 0 유무가 갈릴 수 있어, 숫자로만 된 값은 선행 0을 제거해서 비교한다.
+   *  (숫자가 아닌 ID 체계를 쓰는 경우엔 원본 그대로 비교) */
+  function _normId(v) {
+    const s = _str(v);
+    return /^\d+$/.test(s) ? String(Number(s)) : s;
+  }
+
   /* ══ 이벤트 에미터 ══ */
   const _ev = {};
   function _fire(t) { (_ev[t] || []).forEach(f => { try { f(); } catch {} }); }
@@ -216,7 +224,7 @@ const StudentDB = (() => {
    */
   function _findMatchIndex(student) {
     if (student.originalId) {
-      const i = _students.findIndex(s => s.originalId && s.originalId === student.originalId);
+      const i = _students.findIndex(s => s.originalId && _normId(s.originalId) === _normId(student.originalId));
       if (i >= 0) return i;
     }
 
@@ -499,6 +507,108 @@ const StudentDB = (() => {
   }
 
   /* ════════════════════════════════════════════
+   * 📥 수납 내역 가져오기 (외부 결제사이트 엑셀)
+   * 학생별 receipts 필드에 항목 단위로 저장. 수업/교재/기타 구분을 그대로 보존한다.
+   * 같은 항목(월+구분+수납명+청구액)을 다시 가져오면 새로 만들지 않고 덮어쓴다
+   * (결제사이트에서 상태가 바뀐 최신본을 다시 뽑아도 중복이 안 쌓이게).
+   * ════════════════════════════════════════════ */
+
+  /** 문자열을 짧은 결정적 키로 해시 (Firebase 키 금지문자 없이) */
+  function _hashKey(str) {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+    return 'r' + Math.abs(h).toString(36);
+  }
+
+  /** 영수 항목 하나의 안정적 키 — 월+구분+항목명+청구액 조합 (재가져오기 시 덮어쓰기 위함) */
+  function _receiptKey(r) {
+    return _hashKey(`${r.billMonth}|${r.category}|${r.itemName}|${r.billedAmount}|${r.billDay || ''}`);
+  }
+
+  /**
+   * 수납내역 엑셀 행 배열을 일괄 가져오기.
+   * 매칭 우선순위: ① 원생고유번호(originalId) 일치 → ② 이름 유일 매칭
+   *   → ③ 이름 다중 후보 시 연락처(원생/보호자)로 구분 → ④ 그래도 안 되면 매칭 실패로 건너뜀.
+   * @param {Array<object>} rows  _parseReceiptRow()로 정규화된 행 배열
+   */
+  async function importReceipts(rows) {
+    let matched = 0, unmatched = 0;
+    const unmatchedList = [];
+    const byCategory = {}; // { 수업: {count,billed,paid}, 교재: {...}, 기타: {...} }
+    const touchedIds = new Set();
+
+    for (const r of rows) {
+      let student = null;
+      if (r.originalId) student = _students.find(s => s.originalId && _normId(s.originalId) === _normId(r.originalId));
+      if (!student && r.name) {
+        const cands = _students.filter(s => s.name === r.name);
+        if (cands.length === 1) student = cands[0];
+        else if (cands.length > 1) {
+          student = cands.find(s =>
+            (r.phone && s.phone && s.phone === r.phone) ||
+            (r.parentPhone && s.parentPhone && s.parentPhone === r.parentPhone)
+          ) || null;
+        }
+      }
+
+      const cat = r.category || '기타';
+      byCategory[cat] = byCategory[cat] || { count: 0, billed: 0, paid: 0 };
+
+      if (!student) {
+        unmatched++;
+        unmatchedList.push({ name: r.name, originalId: r.originalId, itemName: r.itemName, billMonth: r.billMonth });
+        continue;
+      }
+
+      matched++;
+      touchedIds.add(student.id);
+      byCategory[cat].count  += 1;
+      byCategory[cat].billed += Number(r.billedAmount || 0);
+      byCategory[cat].paid   += Number(r.paidAmount || 0);
+
+      const key = _receiptKey(r);
+      const rec = { ...r, updatedAt: _now() };
+      student.receipts = { ...(student.receipts || {}), [key]: rec };
+      student.updatedAt = _now();
+    }
+
+    _ls(LS_KEY, _students);
+
+    if (typeof FireDB !== 'undefined' && touchedIds.size) {
+      for (const sid of touchedIds) {
+        const student = _students.find(s => s.id === sid);
+        if (student) {
+          await FireDB.update(`${FB_PATH}/${sid}/receipts`, student.receipts).catch(e =>
+            console.warn('[StudentDB] importReceipts FB error', e)
+          );
+        }
+      }
+    }
+    _fire('students');
+    return { total: rows.length, matched, unmatched, unmatchedList, byCategory };
+  }
+
+  /** 특정 학생의 수납 내역 전체 조회 */
+  function getReceipts(studentId) {
+    const s = _students.find(x => x.id === studentId);
+    return (s && s.receipts) || {};
+  }
+
+  /** 특정 월(billMonth 'YYYY-MM') · 구분(category, 생략 시 전체)의 수납 내역을 학생 조인해서 반환 */
+  function getReceiptsByMonth(billMonth, category) {
+    const out = [];
+    _students.forEach(s => {
+      if (!s.receipts) return;
+      Object.values(s.receipts).forEach(r => {
+        if (r.billMonth !== billMonth) return;
+        if (category && r.category !== category) return;
+        out.push({ studentId: s.id, studentName: s.name, classCode: s.classCode, nickname: s.nickname, ...r });
+      });
+    });
+    return out;
+  }
+
+  /* ════════════════════════════════════════════
    * PUBLIC API
    * ════════════════════════════════════════════ */
   return {
@@ -509,5 +619,6 @@ const StudentDB = (() => {
     parseRow, courseToClass, findPossibleDuplicates,
     saveTuitionAbsence, deleteTuitionAbsence, getTuitionAbsences, getTuitionAbsencesByMonth,
     saveTuitionPayment, deleteTuitionPayment, getTuitionPayments, getTuitionPaymentsByMonth,
+    importReceipts, getReceipts, getReceiptsByMonth,
   };
 })();
