@@ -717,13 +717,18 @@ const StudentApp = (() => {
    *  classFilter를 주면 그 반만 걸러서 반환(반별 총액 확인용). (월별/연간 뷰 공용) */
   function _tuitionMonthData(monthKey, classFilter) {
     const allStudents = (typeof StudentDB !== 'undefined') ? StudentDB.getAll() : [];
-    const absMap = {}, payMap = {}, receiptMap = {};
+    const absMap = {}, payMap = {}, receiptsAllMap = {}; // receiptsAllMap: studentId -> {수업:[...], 교재:[...], 기타:[...]}
     ((typeof StudentDB !== 'undefined' && StudentDB.getTuitionAbsencesByMonth) ? StudentDB.getTuitionAbsencesByMonth(monthKey) : [])
       .forEach(r => { absMap[r.studentId] = r; });
     ((typeof StudentDB !== 'undefined' && StudentDB.getTuitionPaymentsByMonth) ? StudentDB.getTuitionPaymentsByMonth(monthKey) : [])
       .forEach(r => { payMap[r.studentId] = r; });
-    ((typeof StudentDB !== 'undefined' && StudentDB.getReceiptsByMonth) ? StudentDB.getReceiptsByMonth(monthKey, '수업') : [])
-      .forEach(r => { receiptMap[r.studentId] = r; }); // 같은 학생 같은 달에 여러 건이면 마지막 것 사용
+    // 카테고리 구분 없이 그 달의 수납내역 전부를 가져와서 학생별·카테고리별로 묶는다
+    ((typeof StudentDB !== 'undefined' && StudentDB.getReceiptsByMonth) ? StudentDB.getReceiptsByMonth(monthKey) : [])
+      .forEach(r => {
+        const bucket = (receiptsAllMap[r.studentId] = receiptsAllMap[r.studentId] || { 수업: [], 교재: [], 기타: [] });
+        const cat = bucket[r.category] ? r.category : '기타'; // 알 수 없는 구분값은 기타로 편입
+        bucket[cat].push(r);
+      });
 
     const billable = allStudents.filter(s => _tuitionIsBillable(s, monthKey)
       && (!classFilter || (s.classCode || '').trim() === classFilter.trim()));
@@ -731,7 +736,10 @@ const StudentApp = (() => {
     const merged = billable.map(s => {
       const absence = absMap[s.id] || null;
       const payment = payMap[s.id] || null;
-      const receipt = receiptMap[s.id] || null;
+      const receiptBucket = receiptsAllMap[s.id] || null;
+      // 수업료 청구/납부 판단은 "수업" 카테고리 수납내역을 최우선으로 사용 (같은 달 여러 건이면 마지막 것)
+      const tuitionReceipts = receiptBucket?.수업 || [];
+      const receipt = tuitionReceipts.length ? tuitionReceipts[tuitionReceipts.length - 1] : null;
       const billed = receipt ? Number(receipt.billedAmount || 0)
                     : absence ? Number(absence.payAmount || 0)
                     : _tuitionNormalAmount(s);
@@ -742,8 +750,10 @@ const StudentApp = (() => {
       if (paid === null)        { status = '미확인';   statusColor = '#6b7280'; } // 외부 결제사이트로 납부할 수 있어 "미납"이 아니라 중립적으로 표기
       else if (paid >= billed)  { status = paid > billed ? '초과납부' : '완납'; statusColor = paid > billed ? '#0284c7' : '#059669'; }
       else                      { status = '부족납부'; statusColor = '#d97706'; }
+
       return { studentId: s.id, studentName: s.name, classCode: s.classCode, nickname: s.nickname,
-               absence, payment, receipt, billed, paid, status, statusColor };
+               absence, payment, receipt, hasAnyReceipt: !!receiptBucket,
+               billed, paid, status, statusColor };
     }).sort((a, b) => (a.classCode || '').localeCompare(b.classCode || '') || (a.studentName || '').localeCompare(b.studentName || ''));
 
     const totalBilled = merged.reduce((sum, m) => sum + m.billed, 0);
@@ -818,6 +828,7 @@ const StudentApp = (() => {
           </div>
           ${m.absence && !m.receipt ? `<div style="font-size:11px;color:#e85d04;margin-top:3px">🏖 결석 ${m.absence.absentCount}일 (${_e(m.absence.absenceStart||'')}~${_e(m.absence.absenceEnd||'')})</div>` : ''}
           ${m.receipt ? `<div style="font-size:11px;color:#0284c7;margin-top:3px">🧾 실제 수납내역 반영됨 (${_e(m.receipt.itemName||'')})</div>` : ''}
+          ${!m.receipt && !m.hasAnyReceipt ? `<div style="font-size:10.5px;color:var(--tx3);margin-top:3px">※ 이 학생은 수납내역 가져오기에서 매칭된 기록이 전혀 없습니다 (원생고유번호·이름 확인 필요)</div>` : ''}
           <div style="font-size:11px;color:var(--tx3);margin-top:3px">청구액 <b style="color:var(--tx1)">${m.billed.toLocaleString()}원</b> · 납부액 <b style="color:${m.paid===null?'var(--tx3)':'var(--tx1)'}">${m.paid===null?'미확인':m.paid.toLocaleString()+'원'}</b>${m.payment?.paidDate ? ' · '+_e(m.payment.paidDate) : ''}${m.receipt?.paidDate ? ' · '+_e(m.receipt.paidDate) : ''}</div>
           <div style="display:flex;gap:6px;margin-top:6px">
             ${(!m.receipt && m.paid < m.billed) ? `<button onclick="StudentApp._tuitionQuickMarkPaid('${m.studentId}','${monthKey}',${m.billed})" style="font-size:11px;padding:5px 10px;border-radius:7px;background:rgba(5,150,105,.1);border:1px solid rgba(5,150,105,.3);color:#059669;cursor:pointer">✅ 납부 처리</button>` : ''}
@@ -854,6 +865,45 @@ const StudentApp = (() => {
     _TUITION_OV_FILTER.classCode = classCode || '';
     const sheet = document.getElementById('st-abs-ov-sheet');
     if (sheet) sheet.innerHTML = _renderTuitionOvSheet(document.querySelector('#st-abs-ov-sheet input[type="month"]')?.value || new Date().toISOString().slice(0,7));
+  }
+
+  /** 📚 교재 / 📦 기타 탭 — 실제 수납내역을 카테고리별로 그대로 나열 (계산/추정 없음, 원본 데이터만) */
+  function _receiptsCategoryHTML(monthKey, category) {
+    const year = monthKey.slice(0, 4);
+    const list = (typeof StudentDB !== 'undefined' && StudentDB.getReceiptsByMonth)
+      ? StudentDB.getReceiptsByMonth(monthKey, category) : [];
+
+    const totalBilled = list.reduce((s, r) => s + Number(r.billedAmount || 0), 0);
+    const totalPaid    = list.reduce((s, r) => s + Number(r.paidAmount || 0), 0);
+    const unpaidCount  = list.filter(r => r.status !== '납부완료').length;
+
+    const rows = list.length
+      ? list.slice().sort((a, b) => (a.studentName || '').localeCompare(b.studentName || '')).map(r => {
+          const paid = r.status === '납부완료';
+          return `<div style="border:1px solid var(--bdr2);border-radius:9px;padding:9px 11px;margin-bottom:6px;background:var(--surf2)">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <b style="font-size:12.5px">${_e(r.studentName)}${r.nickname?' ('+_e(r.nickname)+')':''} <span style="font-weight:400;color:var(--tx3);font-size:11px">${_e(r.classCode||'')}</span></b>
+              <span style="font-size:11px;color:${paid?'#059669':'#d97706'};font-weight:700">${_e(r.status||'-')}</span>
+            </div>
+            <div style="font-size:11.5px;color:var(--tx2);margin-top:3px">${_e(r.itemName||'')}</div>
+            <div style="font-size:11px;color:var(--tx3);margin-top:2px">청구 <b style="color:var(--tx1)">${Number(r.billedAmount||0).toLocaleString()}원</b> · 납부 <b style="color:${paid?'var(--tx1)':'#d97706'}">${Number(r.paidAmount||0).toLocaleString()}원</b>${r.paidDate?' · '+_e(r.paidDate):''}</div>
+          </div>`;
+        }).join('')
+      : `<div style="font-size:12px;color:var(--tx3);padding:12px 2px">이 달에 "${_e(category)}" 수납내역이 없습니다.</div>`;
+
+    return `
+      ${_tuitionOvTabsHTML('month', monthKey, year)}
+      ${_tuitionOvCategoryTabsHTML()}
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-shrink:0">
+        <input type="month" value="${_e(monthKey)}" onchange="StudentApp._tuitionOvChangeMonth(this.value)"
+          style="flex:1;padding:8px 10px;border:1.5px solid var(--bdr2);border-radius:9px;font-size:13px;background:var(--card);color:var(--tx1)">
+      </div>
+      <div style="background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.25);border-radius:10px;padding:10px 12px;margin-bottom:10px;flex-shrink:0">
+        <div style="font-size:12px;color:var(--tx2)">${_e(monthKey)} · ${_e(category)} <b>${list.length}건</b>${unpaidCount?` · 미납 <b style="color:#d97706">${unpaidCount}건</b>`:''} · 청구 합계 <b>${totalBilled.toLocaleString()}원</b> · 납부 합계 <b>${totalPaid.toLocaleString()}원</b></div>
+        <div style="font-size:10.5px;color:var(--tx3);margin-top:3px">※ 🧾 수납내역 가져오기로 등록된 실제 데이터만 표시됩니다 (계산·추정 없음)</div>
+      </div>
+      <div style="overflow-y:auto;flex:1">${rows}</div>
+      <button onclick="document.getElementById('st-abs-ov-modal').remove()" style="margin-top:12px;padding:11px;border-radius:10px;background:var(--a);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0">닫기</button>`;
   }
 
   function _tuitionOvToggleUnpaid(checked) {
@@ -2076,7 +2126,8 @@ const StudentApp = (() => {
     _onSearch, _onFilter, _onDetailOvClick,
     openTuitionCalc, closeTuitionCalc, _onTcOvClick, _tcOnChange, _tcApplyMemo, _tcSwitchMode,
     _tcSaveAbsence, _tcDeleteAbsence, openTuitionOverview, _tuitionOvChangeMonth, _tuitionOvChangeYear,
-    _tuitionOvSetClass, _tuitionOvToggleUnpaid, _tuitionQuickMarkPaid,
+    _tuitionOvSetClass, _tuitionOvSetCategory, _tuitionOvToggleUnpaid, _tuitionQuickMarkPaid,
     openPaymentEntry, closePaymentEntry, _tpOnMonthChange, _tpSave, _tpDelete,
+    openReceiptImport,
   };
 })();
