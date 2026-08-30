@@ -535,7 +535,10 @@ const StudentDB = (() => {
     let matched = 0, unmatched = 0;
     const unmatchedList = [];
     const byCategory = {}; // { 수업: {count,billed,paid}, 교재: {...}, 기타: {...} }
-    const touchedIds = new Set();
+    // ★ sid -> {key: rec, ...} 로컬 스냅샷. 이 값을 그대로 Firebase에 보낸다.
+    //   student.receipts를 나중에 다시 읽어서 보내면, 그 사이 실시간 리스너가
+    //   _students를 새로고침해서 값이 비거나 달라질 수 있어(경합) 반드시 이렇게 스냅샷을 떠야 한다.
+    const receiptsDeltaByStudent = {};
 
     for (const r of rows) {
       let student = null;
@@ -561,7 +564,6 @@ const StudentDB = (() => {
       }
 
       matched++;
-      touchedIds.add(student.id);
       byCategory[cat].count  += 1;
       byCategory[cat].billed += Number(r.billedAmount || 0);
       byCategory[cat].paid   += Number(r.paidAmount || 0);
@@ -570,17 +572,21 @@ const StudentDB = (() => {
       const rec = { ...r, updatedAt: _now() };
       student.receipts = { ...(student.receipts || {}), [key]: rec };
       student.updatedAt = _now();
+
+      (receiptsDeltaByStudent[student.id] = receiptsDeltaByStudent[student.id] || {})[key] = rec;
     }
 
     _ls(LS_KEY, _students);
 
-    if (typeof FireDB !== 'undefined' && touchedIds.size) {
-      for (const sid of touchedIds) {
-        const student = _students.find(s => s.id === sid);
-        if (student) {
-          await FireDB.update(`${FB_PATH}/${sid}/receipts`, student.receipts).catch(e =>
-            console.warn('[StudentDB] importReceipts FB error', e)
-          );
+    if (typeof FireDB !== 'undefined') {
+      for (const sid of Object.keys(receiptsDeltaByStudent)) {
+        const delta = receiptsDeltaByStudent[sid];
+        if (!delta || !Object.keys(delta).length) continue; // 방어적 스킵 (빈 값이면 애초에 호출 안 함)
+        try {
+          // ★ 학생 단위로 try/catch — 한 명에서 문제가 생겨도 나머지 학생 저장은 계속 진행된다
+          await FireDB.update(`${FB_PATH}/${sid}/receipts`, delta);
+        } catch (e) {
+          console.warn('[StudentDB] importReceipts FB error (건너뛰고 계속 진행)', sid, e);
         }
       }
     }

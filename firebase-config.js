@@ -733,6 +733,42 @@ const FireDB = (() => {
     try {
       if (!firebase?.database) throw new Error('no sdk');
       if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+
+      /* ★ 익명 인증 — RTDB 보안규칙 {".read": "auth != null", ".write": "auth != null"} 을
+       *   만족시키기 위한 최소 인증 단계.
+       *   기존 admin/hajyun/abc 로그인(hakwon10/accounts 자체 대조 방식, db.js login())은
+       *   그대로 유지되며, 이 익명 인증과는 완전히 별개로 동작한다.
+       *   이 단계가 없으면 규칙이 auth != null 인 순간 모든 읽기/쓰기가 permission_denied.
+       *   ※ Firebase 콘솔 → Authentication → Sign-in method → 익명(Anonymous) 이
+       *      활성화되어 있어야 정상 동작한다. 비활성화 상태면 아래 catch에서 안내만
+       *      하고 앱은 계속 진행한다(오프라인 큐로 자연 복구되지만 서버 반영은 안 됨).
+       */
+      if (firebase.auth) {
+        try {
+          if (!firebase.auth().currentUser) {
+            await firebase.auth().signInAnonymously();
+          }
+          console.log('[FireDB] 🔐 익명 인증 완료 uid=', firebase.auth().currentUser?.uid);
+        } catch (authErr) {
+          console.error(
+            '[FireDB] ⚠️ 익명 인증 실패 — Firebase 콘솔에서 Authentication > Sign-in method > ' +
+            '익명(Anonymous) 제공업체를 활성화했는지 확인하세요. 활성화 전까지는 보안규칙이 ' +
+            '"auth != null"인 경우 모든 읽기/쓰기가 거부됩니다.', authErr
+          );
+        }
+        // ★ 세션이 예기치 않게 끊기면(토큰 만료·수동 초기화 등) 자동으로 재인증
+        firebase.auth().onAuthStateChanged(user => {
+          if (!user) {
+            console.log('[FireDB] 🔐 익명 세션 끊김 감지 — 재인증 시도');
+            firebase.auth().signInAnonymously().catch(e =>
+              console.error('[FireDB] 재인증 실패', e)
+            );
+          }
+        });
+      } else {
+        console.warn('[FireDB] firebase-auth-compat.js 미로딩 — index.html 스크립트 태그 확인 필요');
+      }
+
       _db = firebase.database();
       _ok = true;
       console.log('[FireDB] ✅ connected');
@@ -832,10 +868,24 @@ const FireDB = (() => {
   }
   function update(path, v) {
     v = _stripUndefined(v);
+    // ★ Firebase SDK의 update()는 값이 유효한 객체가 아니면 "동기적으로 즉시" 예외를 던진다
+    //   (Promise reject가 아니라 진짜 throw라 .catch()로 못 잡음). 여기서 미리 걸러내면
+    //   호출부 어디서든 이 오류로 전체 흐름이 죽는 걸 막을 수 있다.
+    if (!v || typeof v !== 'object' || Array.isArray(v) || !Object.keys(v).length) {
+      console.warn('[FireDB] update() 값이 비어있거나 유효하지 않아 건너뜀 →', path, v);
+      return Promise.resolve(false);
+    }
     if (!ready() || !_connected) { _enqueue('update', path, v); return Promise.resolve(false); }
-    return _db.ref(path).update(v)
-      .then(() => true)
-      .catch(e => { console.error('update', path, e); _enqueue('update', path, v); return false; });
+    try {
+      return _db.ref(path).update(v)
+        .then(() => true)
+        .catch(e => { console.error('update', path, e); _enqueue('update', path, v); return false; });
+    } catch (e) {
+      // ★ 위 가드를 뚫고도 Firebase가 동기적으로 던지는 경우에 대한 최후 방어선
+      console.error('[FireDB] update() 동기 예외 — 큐에 저장 후 계속 진행', path, e);
+      _enqueue('update', path, v);
+      return Promise.resolve(false);
+    }
   }
   function remove(path) {
     if (!ready() || !_connected) { _enqueue('remove', path, null); return Promise.resolve(); }
