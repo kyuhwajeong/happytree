@@ -281,6 +281,7 @@ const StudentApp = (() => {
           <button class="ibtn" onclick="StudentApp.openTuitionCalc()" title="수업료 계산기">💰</button>
           <button class="ibtn" onclick="StudentApp.openTuitionOverview()" title="수업료 현황 (결석 차감·납부)">💳</button>
           <button class="ibtn" onclick="StudentApp.openReceiptImport()" title="수납내역 엑셀 가져오기">🧾</button>
+          <button class="ibtn" onclick="StudentApp.openTuitionDiagnostics()" title="수업료 데이터 품질 진단">🔍</button>
           <button class="ibtn" onclick="StudentApp.openImport()" title="엑셀 가져오기">📥</button>
           <button id="st-logout-btn" class="ibtn red hidden" onclick="App.logout()" title="로그아웃">🚪</button>
         </div>
@@ -651,6 +652,97 @@ const StudentApp = (() => {
     document.body.appendChild(modal);
   }
 
+  /** 🔍 수업료 데이터 품질 진단 — 한 명씩 확인하는 대신 전체를 한 번에 훑어서
+   *  "왜 미확인/미납으로 많이 보이는지"의 진짜 원인(데이터 품질 vs 매칭 실패)을
+   *  구분해서 보여준다. */
+  function openTuitionDiagnostics(monthKey) {
+    monthKey = monthKey || new Date().toISOString().slice(0, 7);
+    document.getElementById('st-diag-modal')?.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'st-diag-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:600;display:flex;align-items:flex-end;justify-content:center';
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+
+    const sheet = document.createElement('div');
+    sheet.id = 'st-diag-sheet';
+    sheet.style.cssText = 'background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:520px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -4px 24px rgba(0,0,0,.18)';
+    sheet.innerHTML = _diagnosticsHTML(monthKey);
+
+    modal.appendChild(sheet);
+    document.body.appendChild(modal);
+  }
+
+  function _diagOvChangeMonth(monthKey) {
+    const sheet = document.getElementById('st-diag-sheet');
+    if (sheet) sheet.innerHTML = _diagnosticsHTML(monthKey);
+  }
+
+  function _diagnosticsHTML(monthKey) {
+    const students = (typeof StudentDB !== 'undefined') ? StudentDB.getAll() : [];
+    const activeOrLeft = students.filter(s => s.status === '재원' || s.status === '퇴원');
+
+    // ① 입학일/퇴원일 데이터 품질 문제 — 형식이 이상하거나 비어있어서 청구 대상 판정이 틀어질 수 있는 학생
+    const missingEnroll = activeOrLeft.filter(s => s.status === '재원' && !s.enrollDate);
+    const badEnroll     = activeOrLeft.filter(s => s.status === '재원' && s.enrollDate && !_parseYearMonth(s.enrollDate));
+    const missingLeave  = students.filter(s => s.status === '퇴원' && !s.leaveDate);
+    const badLeave      = students.filter(s => s.status === '퇴원' && s.leaveDate && !_parseYearMonth(s.leaveDate));
+
+    // ② 원생고유번호 없음 — 수납내역 가져오기 매칭 시 이름으로만 매칭해야 해서 실패 위험이 큼
+    const missingOriginalId = activeOrLeft.filter(s => !s.originalId);
+
+    // ③ 이 달 기준, 청구 대상인데 수납내역이 "단 하나도" 매칭 안 된 학생 (진짜 매칭 실패 후보)
+    const { merged } = _tuitionMonthData(monthKey);
+    const noReceiptAtAll = merged.filter(m => !m.hasAnyReceipt);
+
+    const listHTML = (arr, render, emptyMsg, limit = 30) => {
+      if (!arr.length) return `<div style="font-size:11.5px;color:var(--tx3);padding:4px 2px">${emptyMsg}</div>`;
+      const shown = arr.slice(0, limit);
+      return `<div style="font-size:11.5px;color:var(--tx2);line-height:1.9">${shown.map(render).join(', ')}${arr.length > limit ? ` 외 ${arr.length - limit}명` : ''}</div>`;
+    };
+
+    const section = (icon, title, count, color, bodyHTML) => `
+      <div style="border:1px solid var(--bdr2);border-radius:10px;padding:10px 12px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <b style="font-size:12.5px">${icon} ${title}</b>
+          <span style="font-size:11px;font-weight:800;color:${count>0?color:'#059669'}">${count>0?count+'명':'✓ 문제없음'}</span>
+        </div>
+        ${bodyHTML}
+      </div>`;
+
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-shrink:0">
+        <div style="font-size:15px;font-weight:800">🔍 수업료 데이터 품질 진단</div>
+        <button onclick="document.getElementById('st-diag-modal').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--tx3)">✕</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-shrink:0">
+        <input type="month" value="${_e(monthKey)}" onchange="StudentApp._diagOvChangeMonth(this.value)"
+          style="flex:1;padding:8px 10px;border:1.5px solid var(--bdr2);border-radius:9px;font-size:13px;background:var(--card);color:var(--tx1)">
+      </div>
+      <div style="overflow-y:auto;flex:1">
+        <div style="font-size:11px;color:var(--tx3);margin-bottom:8px">전체 재원+퇴원 학생 ${activeOrLeft.length}명 기준 점검 결과입니다.</div>
+
+        ${section('📅', '입학일 없음 (재원생)', missingEnroll.length, '#d97706',
+          listHTML(missingEnroll, s => `${_e(s.name)}(${_e(s.classCode||'-')})`, '입학일이 비어있으면 항상 청구 대상에 포함되어, 실제로는 아직 입학 전인 달에도 잘못 청구될 수 있습니다.'))}
+
+        ${section('⚠️', '입학일 형식 이상 (재원생)', badEnroll.length, '#dc2626',
+          listHTML(badEnroll, s => `${_e(s.name)}(${_e(s.enrollDate)})`, '형식이 이상하면 이번 수정으로 대시·점·슬래시는 인식되지만, 그 외 형식은 여전히 문제가 될 수 있습니다.'))}
+
+        ${section('📅', '퇴원일 없음 (퇴원생)', missingLeave.length, '#dc2626',
+          listHTML(missingLeave, s => `${_e(s.name)}`, '퇴원일이 없으면 안전하게 모든 달에서 제외됩니다 — 실제로 재원했던 달까지 빠질 수 있어 데이터 확인이 필요합니다.'))}
+
+        ${section('⚠️', '퇴원일 형식 이상 (퇴원생)', badLeave.length, '#dc2626',
+          listHTML(badLeave, s => `${_e(s.name)}(${_e(s.leaveDate)})`, ''))}
+
+        ${section('🆔', '원생고유번호 없음', missingOriginalId.length, '#d97706',
+          listHTML(missingOriginalId, s => `${_e(s.name)}(${_e(s.classCode||'-')})`, '수납내역 가져오기 시 이름으로만 매칭을 시도하게 되어, 동명이인·이름 표기 차이가 있으면 매칭이 실패할 수 있습니다.'))}
+
+        ${section('🧾', `${_e(monthKey)} 수납내역 전혀 매칭 안 된 학생`, noReceiptAtAll.length, '#dc2626',
+          listHTML(noReceiptAtAll, m => `${_e(m.studentName)}(${_e(m.classCode||'-')})`, '이 달에 수납내역을 가져왔다면, 이 학생들은 원생고유번호·이름이 엑셀과 다를 가능성이 높습니다.'))}
+      </div>
+      <button onclick="document.getElementById('st-diag-modal').remove()" style="margin-top:12px;padding:11px;border-radius:10px;background:var(--a);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0">닫기</button>`;
+  }
+
   /** 💳 수업료 현황 전체보기 (결석 차감 + 납부 기록을 월별로 합쳐서 표시) — 관리자/운영자용
    *  mode: 'month'(기본, 월 단위 상세) | 'year'(연간 12개월 한눈에) */
   function openTuitionOverview(monthKey, mode) {
@@ -703,30 +795,34 @@ const StudentApp = (() => {
    *  ※ 퇴원생은 "현재" 상태만 보고 판단하면 안 된다 — 8월에 퇴원했어도 1~7월은
    *     실제로 재원했던 기간이라 그 달들의 청구 대상에서 빠지면 안 된다.
    *     퇴원월까지는 포함하고, 퇴원 다음 달부터 제외한다. */
+  /** 'YYYY-MM-DD' 뿐 아니라 'YYYY.MM.DD', 'YYYY/MM/DD'처럼 구분자가 다르게 입력된 경우도
+   *  인식한다. 입학일/퇴원일 수기 입력 시 형식이 어긋나면 조용히 무시되던 문제를 방지. */
+  function _parseYearMonth(dateStr) {
+    const s = String(dateStr || '').trim();
+    const m = /^(\d{4})[-./](\d{1,2})/.exec(s);
+    if (!m) return null;
+    return { y: +m[1], m: +m[2] };
+  }
+
   function _tuitionIsBillable(student, monthKey) {
     const [y, m] = monthKey.split('-').map(Number);
 
     if (student.status === '재원') {
       if (!student.enrollDate) return true;
-      const em = /^(\d{4})-(\d{2})/.exec(student.enrollDate);
+      const em = _parseYearMonth(student.enrollDate);
       if (!em) return true;
-      const enrollY = +em[1], enrollM = +em[2];
-      if (y < enrollY || (y === enrollY && m <= enrollM)) return false; // 입학 당월까지는 제외
+      if (y < em.y || (y === em.y && m <= em.m)) return false; // 입학 당월까지는 제외
       return true;
     }
 
     if (student.status === '퇴원') {
       if (!student.leaveDate) return false; // 퇴원일 정보가 없으면 안전하게 제외
-      const lm = /^(\d{4})-(\d{2})/.exec(student.leaveDate);
+      const lm = _parseYearMonth(student.leaveDate);
       if (!lm) return false;
-      const leaveY = +lm[1], leaveM = +lm[2];
-      if (y > leaveY || (y === leaveY && m > leaveM)) return false; // 퇴원 다음 달부터 제외 (퇴원월까지는 포함)
+      if (y > lm.y || (y === lm.y && m > lm.m)) return false; // 퇴원 다음 달부터 제외 (퇴원월까지는 포함)
       if (student.enrollDate) {
-        const em = /^(\d{4})-(\d{2})/.exec(student.enrollDate);
-        if (em) {
-          const enrollY = +em[1], enrollM = +em[2];
-          if (y < enrollY || (y === enrollY && m <= enrollM)) return false; // 입학 전이거나 입학 당월이면 제외
-        }
+        const em = _parseYearMonth(student.enrollDate);
+        if (em && (y < em.y || (y === em.y && m <= em.m))) return false; // 입학 전이거나 입학 당월이면 제외
       }
       return true;
     }
@@ -2179,5 +2275,6 @@ const StudentApp = (() => {
     _tuitionOvSetClass, _tuitionOvSetCategory, _tuitionOvToggleUnpaid, _tuitionQuickMarkPaid,
     openPaymentEntry, closePaymentEntry, _tpOnMonthChange, _tpSave, _tpDelete,
     openReceiptImport,
+    openTuitionDiagnostics, _diagOvChangeMonth,
   };
 })();
