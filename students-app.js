@@ -795,13 +795,18 @@ const StudentApp = (() => {
    *  ※ 퇴원생은 "현재" 상태만 보고 판단하면 안 된다 — 8월에 퇴원했어도 1~7월은
    *     실제로 재원했던 기간이라 그 달들의 청구 대상에서 빠지면 안 된다.
    *     퇴원월까지는 포함하고, 퇴원 다음 달부터 제외한다. */
-  /** 'YYYY-MM-DD' 뿐 아니라 'YYYY.MM.DD', 'YYYY/MM/DD'처럼 구분자가 다르게 입력된 경우도
-   *  인식한다. 입학일/퇴원일 수기 입력 시 형식이 어긋나면 조용히 무시되던 문제를 방지. */
+  /** 'YYYY-MM-DD' 뿐 아니라 'YYYY.MM.DD', 'YYYY/MM/DD',
+   *  그리고 구분자가 아예 없는 'YYYYMMDD'/'YYYYMM'(엑셀에서 흔한 원본 형식)까지 인식한다.
+   *  입학일/퇴원일이 형식이 어긋나면 조용히 무시되던 문제를 방지. */
   function _parseYearMonth(dateStr) {
     const s = String(dateStr || '').trim();
-    const m = /^(\d{4})[-./](\d{1,2})/.exec(s);
-    if (!m) return null;
-    return { y: +m[1], m: +m[2] };
+    // 1) 구분자가 있는 경우: 2026-01-01, 2026.1.1, 2026/01/01 등
+    let m = /^(\d{4})[-./](\d{1,2})/.exec(s);
+    if (m) return { y: +m[1], m: +m[2] };
+    // 2) 구분자가 없는 경우: 20260101(8자리, YYYYMMDD) 또는 202601(6자리, YYYYMM)
+    m = /^(\d{4})(\d{2})(\d{2})?$/.exec(s);
+    if (m) return { y: +m[1], m: +m[2] };
+    return null;
   }
 
   function _tuitionIsBillable(student, monthKey) {
