@@ -699,16 +699,39 @@ const StudentApp = (() => {
 
   /** 이 학생이 해당 월(monthKey)에 정상 고정 수업료 청구 대상인지 판단.
    *  ※ 입학한 달은 프로레이트 "입학 수업료 계산기"로 별도 처리하므로, 정상 청구는
-   *     입학한 달의 다음 달부터 시작한다(입학일 정보가 없으면 그냥 대상에 포함). */
+   *     입학한 달의 다음 달부터 시작한다(입학일 정보가 없으면 그냥 대상에 포함).
+   *  ※ 퇴원생은 "현재" 상태만 보고 판단하면 안 된다 — 8월에 퇴원했어도 1~7월은
+   *     실제로 재원했던 기간이라 그 달들의 청구 대상에서 빠지면 안 된다.
+   *     퇴원월까지는 포함하고, 퇴원 다음 달부터 제외한다. */
   function _tuitionIsBillable(student, monthKey) {
-    if (student.status !== '재원') return false;
-    if (!student.enrollDate) return true;
-    const em = /^(\d{4})-(\d{2})/.exec(student.enrollDate);
-    if (!em) return true;
     const [y, m] = monthKey.split('-').map(Number);
-    const enrollY = +em[1], enrollM = +em[2];
-    if (y < enrollY || (y === enrollY && m <= enrollM)) return false; // 입학 당월까지는 제외
-    return true;
+
+    if (student.status === '재원') {
+      if (!student.enrollDate) return true;
+      const em = /^(\d{4})-(\d{2})/.exec(student.enrollDate);
+      if (!em) return true;
+      const enrollY = +em[1], enrollM = +em[2];
+      if (y < enrollY || (y === enrollY && m <= enrollM)) return false; // 입학 당월까지는 제외
+      return true;
+    }
+
+    if (student.status === '퇴원') {
+      if (!student.leaveDate) return false; // 퇴원일 정보가 없으면 안전하게 제외
+      const lm = /^(\d{4})-(\d{2})/.exec(student.leaveDate);
+      if (!lm) return false;
+      const leaveY = +lm[1], leaveM = +lm[2];
+      if (y > leaveY || (y === leaveY && m > leaveM)) return false; // 퇴원 다음 달부터 제외 (퇴원월까지는 포함)
+      if (student.enrollDate) {
+        const em = /^(\d{4})-(\d{2})/.exec(student.enrollDate);
+        if (em) {
+          const enrollY = +em[1], enrollM = +em[2];
+          if (y < enrollY || (y === enrollY && m <= enrollM)) return false; // 입학 전이거나 입학 당월이면 제외
+        }
+      }
+      return true;
+    }
+
+    return false; // 휴원 등 그 외 상태는 청구 대상에서 제외 (정보 부족 시 안전한 기본값)
   }
 
   /** 특정 월의 재원생 전체 청구 현황(정상 고정 수업료 + 결석 차감 예외 + 납부 기록)을 집계.
@@ -747,9 +770,18 @@ const StudentApp = (() => {
                   : payment ? Number(payment.amount || 0)
                   : null;
       let status, statusColor;
-      if (paid === null)        { status = '미확인';   statusColor = '#6b7280'; } // 외부 결제사이트로 납부할 수 있어 "미납"이 아니라 중립적으로 표기
-      else if (paid >= billed)  { status = paid > billed ? '초과납부' : '완납'; statusColor = paid > billed ? '#0284c7' : '#059669'; }
-      else                      { status = '부족납부'; statusColor = '#d97706'; }
+      if (receipt) {
+        // ★ 실제 수납내역이 있으면 그 안의 수납여부(status)를 그대로 신뢰한다 — 금액으로
+        //   역산해서 "부족납부" 등으로 뭉뚱그리지 않고, 진짜 미납은 명확히 "미납"으로 구분.
+        if (receipt.status === '납부완료') { status = '완납'; statusColor = '#059669'; }
+        else                               { status = '미납'; statusColor = '#dc2626'; }
+      } else if (payment) {
+        // 앱에서 수동으로 직접 입력한 납부 기록
+        if (paid >= billed) { status = paid > billed ? '초과납부' : '완납'; statusColor = paid > billed ? '#0284c7' : '#059669'; }
+        else                { status = '부족납부'; statusColor = '#d97706'; }
+      } else {
+        status = '미확인'; statusColor = '#6b7280'; // 아무 기록도 없음 — 확정 아님(외부 사이트에서 냈을 수도 있음)
+      }
 
       return { studentId: s.id, studentName: s.name, classCode: s.classCode, nickname: s.nickname,
                absence, payment, receipt, hasAnyReceipt: !!receiptBucket,
@@ -801,7 +833,7 @@ const StudentApp = (() => {
   function _tuitionOverviewHTML(monthKey) {
     const classFilter = _TUITION_OV_FILTER.classCode || null;
     const { merged: allMerged, classRows } = _tuitionMonthData(monthKey, classFilter);
-    const merged = _TUITION_OV_FILTER.unpaidOnly ? allMerged.filter(m => m.paid === null || m.paid < m.billed) : allMerged;
+    const merged = _TUITION_OV_FILTER.unpaidOnly ? allMerged.filter(m => m.status !== '완납' && m.status !== '초과납부') : allMerged;
     const totalBilled = allMerged.reduce((s, m) => s + m.billed, 0);
     const totalPaid    = allMerged.reduce((s, m) => s + (m.paid || 0), 0);
     const year = monthKey.slice(0, 4);
@@ -820,8 +852,8 @@ const StudentApp = (() => {
         </div>
       </div>` : '';
 
-    const rows = merged.length
-      ? merged.map(m => `<div style="border:1px solid var(--bdr2);border-radius:9px;padding:9px 11px;margin-bottom:6px;background:var(--surf2)">
+    /** 개별 학생 행 HTML (그룹 렌더링에서 재사용) */
+    const _rowHTML = (m) => `<div style="border:1px solid ${m.paid===null||m.paid<m.billed?'rgba(220,38,38,.25)':'var(--bdr2)'};border-left:3px solid ${m.statusColor};border-radius:9px;padding:9px 11px;margin-bottom:6px;background:var(--surf2)">
           <div style="display:flex;justify-content:space-between;align-items:center">
             <b style="font-size:12.5px">${_e(m.studentName)}${m.nickname?' ('+_e(m.nickname)+')':''} <span style="font-weight:400;color:var(--tx3);font-size:11px">${_e(m.classCode||'')}</span></b>
             <span style="font-size:11px;color:${m.statusColor};font-weight:700">${m.status}</span>
@@ -834,8 +866,26 @@ const StudentApp = (() => {
             ${(!m.receipt && m.paid < m.billed) ? `<button onclick="StudentApp._tuitionQuickMarkPaid('${m.studentId}','${monthKey}',${m.billed})" style="font-size:11px;padding:5px 10px;border-radius:7px;background:rgba(5,150,105,.1);border:1px solid rgba(5,150,105,.3);color:#059669;cursor:pointer">✅ 납부 처리</button>` : ''}
             ${!m.receipt ? `<button onclick="StudentApp.openPaymentEntry('${m.studentId}','${monthKey}')" style="font-size:11px;padding:5px 10px;border-radius:7px;background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);color:#15803d;cursor:pointer">💳 직접 입력</button>` : ''}
           </div>
-        </div>`).join('')
-      : `<div style="font-size:12px;color:var(--tx3);padding:12px 2px">${_TUITION_OV_FILTER.unpaidOnly ? '미확인/부족납부 학생이 없습니다.' : '해당 조건의 재원생이 없습니다.'}</div>`;
+        </div>`;
+
+    // 👀 한눈에 구분되도록 "확인 필요"(미확인·부족납부) / "정상 처리됨"(완납·초과납부) 두 그룹으로 분리
+    const needsAttention = merged.filter(m => m.paid === null || m.paid < m.billed);
+    const resolved       = merged.filter(m => m.paid !== null && m.paid >= m.billed);
+
+    const rows = merged.length ? `
+      ${needsAttention.length ? `
+        <div style="font-size:11.5px;font-weight:800;color:#dc2626;margin:4px 0 6px;display:flex;align-items:center;gap:5px">
+          ⚠️ 확인 필요 (${needsAttention.length}명)
+        </div>
+        ${needsAttention.map(_rowHTML).join('')}
+      ` : ''}
+      ${resolved.length ? `
+        <div style="font-size:11.5px;font-weight:800;color:#059669;margin:${needsAttention.length?'14px':'4px'} 0 6px;display:flex;align-items:center;gap:5px">
+          ✅ 정상 처리됨 (${resolved.length}명)
+        </div>
+        ${resolved.map(_rowHTML).join('')}
+      ` : ''}
+    ` : `<div style="font-size:12px;color:var(--tx3);padding:12px 2px">${_TUITION_OV_FILTER.unpaidOnly ? '미납/미확인/부족납부 학생이 없습니다.' : '해당 조건의 재원생이 없습니다.'}</div>`;
 
     return `
       ${_tuitionOvTabsHTML('month', monthKey, year)}
@@ -850,7 +900,7 @@ const StudentApp = (() => {
         </select>
       </div>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--tx2);margin-bottom:10px;flex-shrink:0;cursor:pointer">
-        <input type="checkbox" ${_TUITION_OV_FILTER.unpaidOnly?'checked':''} onchange="StudentApp._tuitionOvToggleUnpaid(this.checked)"> 미확인/부족납부만 보기
+        <input type="checkbox" ${_TUITION_OV_FILTER.unpaidOnly?'checked':''} onchange="StudentApp._tuitionOvToggleUnpaid(this.checked)"> 미납·미확인·부족납부만 보기
       </label>
       <div style="background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.25);border-radius:10px;padding:10px 12px;margin-bottom:10px;flex-shrink:0">
         <div style="font-size:12px;color:var(--tx2)">${_e(monthKey)} 기준${classFilter?' · '+_e(classFilter):''} · 대상 <b>${allMerged.length}명</b> · 청구 합계 <b>${totalBilled.toLocaleString()}원</b> · 납부 합계 <b>${totalPaid.toLocaleString()}원</b></div>
