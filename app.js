@@ -1696,7 +1696,11 @@ const App = (() => {
         const prevDt=dayTimes||cls?.dayTimes||null;
         const prevTuition=tuition!=null?tuition:(cls?.tuition??null);
         const prevBookFee=bookFee!=null?bookFee:(cls?.bookFee??null);
-        await DB.terminateClass(S.editClsId);
+        const termOk=await DB.terminateClass(S.editClsId);
+        if(!termOk){
+          _toast('⚠️ 기존 반 종료 처리가 서버에 반영되지 않았습니다. 네트워크 확인 후 다시 시도해주세요 (중복 반 생성 방지)','error');
+          return;
+        }
         const r=await DB.addClassNew({name,days,termStart,dayTimes:prevDt,tuition:prevTuition,bookFee:prevBookFee});
         if(!r){_toast('⚠️ 재편성 실패','error');return;}
         S.selCls=r; _toast(`✅ ${name}반 재편성 완료`,'success');

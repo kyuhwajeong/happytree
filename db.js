@@ -443,9 +443,11 @@ const DB = (() => {
 
   async function terminateClass(id) {
     // 반 편성 종료 (termEnd 설정)
-    const cls = getClassById(id); if(!cls)return;
+    const cls = getClassById(id); if(!cls) return false;
     cls.termEnd = prevMonthKey(monthKey(new Date()));
-    await _syncClsQuiet(cls); _fire('classes');
+    const ok = await _syncClsQuiet(cls);
+    _fire('classes');
+    return ok; // ★ 서버 저장이 실제로 성공했는지 호출부가 확인할 수 있도록 반환
   }
 
   async function updateClass(id,data) {
@@ -556,23 +558,20 @@ const DB = (() => {
       ls(LS.classes, C.classes);
       const path = `${FireDB.P.classes}/${cls.id}`;
       FireDB.set(path, cls).catch(e => console.error('syncCls(offline-queue)', e));
-      return;
+      return true; // ★ 큐에는 확실히 들어갔으므로 "저장 시도 자체는 성공"으로 간주
     }
     const path = `${FireDB.P.classes}/${cls.id}`;
     let server = null;
     try { server = await FireDB.get(path); } catch(e) {}
-    const baseline  = _classBaseRev[cls.id] || 0;
-    const serverRev = server?._rev || 0;
 
-    if (!server || serverRev === baseline) {
+    if (!server || server?._rev === (_classBaseRev[cls.id] || 0)) {
       // ★ 충돌 없음 — 안전하게 저장
-      cls._rev = serverRev + 1;
+      cls._rev = (server?._rev || 0) + 1;
       cls._updatedAt = now();
       if (idx!==-1) C.classes[idx] = cls; else C.classes.push(cls);
       ls(LS.classes, C.classes);
-      try { await FireDB.set(path, cls); _trackRev(cls); }
-      catch(e) { console.error('syncCls', e); }
-      return;
+      try { await FireDB.set(path, cls); _trackRev(cls); return true; }
+      catch(e) { console.error('syncCls', e); return false; } // ★ 호출부가 실패를 알 수 있도록 false 반환
     }
 
     // ★ 충돌 발생 — 다른 기기가 그 사이 먼저 저장함. 무조건 덮어쓰지 않고 사용자에게 묻는다.
@@ -585,21 +584,21 @@ const DB = (() => {
           ls(LS.classes, C.classes);
           _trackRev(server);
           _fire('classes');
+          resolve(false); // ★ 내가 저장하려던 값(예: termEnd)은 결국 반영 안 됐으므로 실패로 취급
         } else {
           // 내 값을 최종으로 채택 — 서버를 내 값으로 덮어씀
-          cls._rev = serverRev + 1;
+          cls._rev = (server?._rev || 0) + 1;
           cls._updatedAt = now();
           if (idx!==-1) C.classes[idx] = cls; else C.classes.push(cls);
           ls(LS.classes, C.classes);
-          try { await FireDB.set(path, cls); _trackRev(cls); }
-          catch(e) { console.error('syncCls(conflict-mine)', e); }
+          try { await FireDB.set(path, cls); _trackRev(cls); resolve(true); }
+          catch(e) { console.error('syncCls(conflict-mine)', e); resolve(false); }
           _fire('classes');
         }
-        resolve();
       };
       if (_conflictCb) {
         try { _conflictCb({ classId: cls.id, mine: cls, server }); }
-        catch(e) { console.error('conflictCb', e); }
+        catch(e) { console.error('conflictCb', e); resolve(false); }
       } else {
         // UI가 핸들러를 등록 안 했으면(구버전 등) 안전한 기본값: 서버값 우선 채택
         console.warn('[DB] 충돌 핸들러 미등록 — 서버 값 우선 적용');
@@ -608,7 +607,7 @@ const DB = (() => {
     });
   }
 
-  async function _syncCls(cls) { await _syncClsQuiet(cls); _fire('classes'); }
+  async function _syncCls(cls) { const ok = await _syncClsQuiet(cls); _fire('classes'); return ok; }
 
   async function addToPool(classId, mk, name) {
     const cls = getClassById(classId); if(!cls)return null;
