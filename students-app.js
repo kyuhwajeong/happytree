@@ -745,9 +745,12 @@ const StudentApp = (() => {
 
   /** 💳 수업료 현황 전체보기 (결석 차감 + 납부 기록을 월별로 합쳐서 표시) — 관리자/운영자용
    *  mode: 'month'(기본, 월 단위 상세) | 'year'(연간 12개월 한눈에) */
+  let _TC_OV_STATE = { monthKey: null, mode: 'month' }; // 정책 저장 후 같은 화면으로 재진입하기 위한 기억
+
   function openTuitionOverview(monthKey, mode) {
     monthKey = monthKey || new Date().toISOString().slice(0, 7);
     mode = mode || 'month';
+    _TC_OV_STATE = { monthKey, mode };
     document.getElementById('st-abs-ov-modal')?.remove();
 
     const modal = document.createElement('div');
@@ -769,7 +772,10 @@ const StudentApp = (() => {
     return `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-shrink:0">
         <div style="font-size:15px;font-weight:800">💳 수업료 현황</div>
-        <button onclick="document.getElementById('st-abs-ov-modal').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--tx3)">✕</button>
+        <div style="display:flex;align-items:center;gap:4px">
+          <button onclick="StudentApp.openTuitionPolicySettings()" title="퇴원월 청구 정책 설정" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--tx3);padding:4px">⚙️</button>
+          <button onclick="document.getElementById('st-abs-ov-modal').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--tx3)">✕</button>
+        </div>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:10px;flex-shrink:0">
         <button onclick="StudentApp.openTuitionOverview('${_e(monthKey)}','month')"
@@ -779,6 +785,85 @@ const StudentApp = (() => {
           style="flex:1;padding:8px;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;
           background:${activeMode==='year'?'var(--a)':'var(--surf2)'};color:${activeMode==='year'?'#fff':'var(--tx2)'};border:1px solid ${activeMode==='year'?'var(--a)':'var(--bdr2)'}">📆 연간</button>
       </div>`;
+  }
+
+  /** ⚙️ 퇴원월 청구 정책 설정 모달 */
+  function openTuitionPolicySettings() {
+    document.getElementById('st-policy-modal')?.remove();
+    const policy = (typeof StudentDB !== 'undefined' && StudentDB.getTuitionPolicy) ? StudentDB.getTuitionPolicy() : { mode: 'always', cutoffDay: 15 };
+
+    const modal = document.createElement('div');
+    modal.id = 'st-policy-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:700;display:flex;align-items:flex-end;justify-content:center';
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+
+    const sheet = document.createElement('div');
+    sheet.style.cssText = 'background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:480px;box-shadow:0 -4px 24px rgba(0,0,0,.18)';
+    sheet.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:15px;font-weight:800">⚙️ 퇴원월 청구 정책</div>
+        <button onclick="document.getElementById('st-policy-modal').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--tx3)">✕</button>
+      </div>
+      <div style="font-size:11.5px;color:var(--tx3);margin-bottom:14px;line-height:1.5">월 중간에 퇴원한 학생을, 퇴원한 바로 그 달의 수업료 청구 대상에 어떻게 포함할지 정합니다. 다음 달부터는 항상 청구 대상에서 제외됩니다(이 설정과 무관).</div>
+
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:10px;border:1.5px solid ${policy.mode==='always'?'var(--a)':'var(--bdr2)'};border-radius:10px;margin-bottom:8px;cursor:pointer;background:${policy.mode==='always'?'var(--a10)':'transparent'}">
+        <input type="radio" name="tp-mode" value="always" ${policy.mode==='always'?'checked':''} style="margin-top:2px" onchange="StudentApp._tpPolicyModeChange('always')">
+        <div>
+          <div style="font-size:13px;font-weight:700">퇴원월 전액 청구 (기본값)</div>
+          <div style="font-size:11px;color:var(--tx3);margin-top:2px">퇴원일과 상관없이 퇴원한 달은 항상 전액 청구 대상에 포함</div>
+        </div>
+      </label>
+
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:10px;border:1.5px solid ${policy.mode==='cutoffDay'?'var(--a)':'var(--bdr2)'};border-radius:10px;margin-bottom:8px;cursor:pointer;background:${policy.mode==='cutoffDay'?'var(--a10)':'transparent'}">
+        <input type="radio" name="tp-mode" value="cutoffDay" ${policy.mode==='cutoffDay'?'checked':''} style="margin-top:2px" onchange="StudentApp._tpPolicyModeChange('cutoffDay')">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700">기준일 이전 퇴원이면 그 달 제외</div>
+          <div style="font-size:11px;color:var(--tx3);margin-top:2px">예: 기준일 15일 → 15일 이전 퇴원은 그 달 청구 제외, 16일 이후 퇴원은 전액 청구</div>
+          <div id="tp-cutoff-wrap" style="margin-top:8px;${policy.mode==='cutoffDay'?'':'display:none'}">
+            <input id="tp-cutoff-day" type="number" min="1" max="31" value="${policy.cutoffDay || 15}"
+              style="width:70px;padding:6px 8px;border:1px solid var(--bdr2);border-radius:7px;font-size:13px;background:var(--card);color:var(--tx1)"> 일 이전 퇴원이면 제외
+          </div>
+        </div>
+      </label>
+
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:10px;border:1.5px solid ${policy.mode==='never'?'var(--a)':'var(--bdr2)'};border-radius:10px;margin-bottom:16px;cursor:pointer;background:${policy.mode==='never'?'var(--a10)':'transparent'}">
+        <input type="radio" name="tp-mode" value="never" ${policy.mode==='never'?'checked':''} style="margin-top:2px" onchange="StudentApp._tpPolicyModeChange('never')">
+        <div>
+          <div style="font-size:13px;font-weight:700">퇴원월은 항상 청구 대상에서 제외</div>
+          <div style="font-size:11px;color:var(--tx3);margin-top:2px">입학월 제외 규칙과 대칭 — 퇴원한 달은 하루만 다녔어도 청구하지 않음</div>
+        </div>
+      </label>
+
+      <div style="display:flex;gap:8px">
+        <button onclick="document.getElementById('st-policy-modal').remove()" style="flex:1;padding:11px;border-radius:10px;background:var(--surf2);border:1px solid var(--bdr2);font-size:13px;font-weight:700;cursor:pointer">취소</button>
+        <button onclick="StudentApp._tpPolicySave()" style="flex:2;padding:11px;border-radius:10px;background:var(--a);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer">💾 저장</button>
+      </div>`;
+
+    modal.appendChild(sheet);
+    document.body.appendChild(modal);
+  }
+
+  function _tpPolicyModeChange(mode) {
+    document.querySelectorAll('#st-policy-modal label').forEach(l => {
+      const input = l.querySelector('input[type="radio"]');
+      const isSel = input && input.value === mode;
+      l.style.borderColor = isSel ? 'var(--a)' : 'var(--bdr2)';
+      l.style.background  = isSel ? 'var(--a10)' : 'transparent';
+    });
+    const wrap = document.getElementById('tp-cutoff-wrap');
+    if (wrap) wrap.style.display = mode === 'cutoffDay' ? '' : 'none';
+  }
+
+  async function _tpPolicySave() {
+    const mode = document.querySelector('#st-policy-modal input[name="tp-mode"]:checked')?.value || 'always';
+    const cutoffDay = Number(document.getElementById('tp-cutoff-day')?.value) || 15;
+    await StudentDB.saveTuitionPolicy({ mode, cutoffDay });
+    _toast('✅ 퇴원월 청구 정책이 저장됐습니다', 'success');
+    document.getElementById('st-policy-modal')?.remove();
+    // 열려있던 수업료 현황 화면(월별/연간 무관)을 새 정책으로 다시 계산해서 재진입
+    if (document.getElementById('st-abs-ov-modal')) {
+      openTuitionOverview(_TC_OV_STATE.monthKey, _TC_OV_STATE.mode);
+    }
   }
 
   /** 학생의 이 달 정상 청구 수업료(반 기준) 조회 — 결석 차감 기록 없을 때 참고용 */
@@ -797,15 +882,16 @@ const StudentApp = (() => {
    *     퇴원월까지는 포함하고, 퇴원 다음 달부터 제외한다. */
   /** 'YYYY-MM-DD' 뿐 아니라 'YYYY.MM.DD', 'YYYY/MM/DD',
    *  그리고 구분자가 아예 없는 'YYYYMMDD'/'YYYYMM'(엑셀에서 흔한 원본 형식)까지 인식한다.
-   *  입학일/퇴원일이 형식이 어긋나면 조용히 무시되던 문제를 방지. */
+   *  입학일/퇴원일이 형식이 어긋나면 조용히 무시되던 문제를 방지.
+   *  @returns {{y:number, m:number, d:number|null}|null} d는 일자 정보가 없으면 null */
   function _parseYearMonth(dateStr) {
     const s = String(dateStr || '').trim();
     // 1) 구분자가 있는 경우: 2026-01-01, 2026.1.1, 2026/01/01 등
-    let m = /^(\d{4})[-./](\d{1,2})/.exec(s);
-    if (m) return { y: +m[1], m: +m[2] };
+    let m = /^(\d{4})[-./](\d{1,2})(?:[-./](\d{1,2}))?/.exec(s);
+    if (m) return { y: +m[1], m: +m[2], d: m[3] ? +m[3] : null };
     // 2) 구분자가 없는 경우: 20260101(8자리, YYYYMMDD) 또는 202601(6자리, YYYYMM)
     m = /^(\d{4})(\d{2})(\d{2})?$/.exec(s);
-    if (m) return { y: +m[1], m: +m[2] };
+    if (m) return { y: +m[1], m: +m[2], d: m[3] ? +m[3] : null };
     return null;
   }
 
@@ -824,7 +910,24 @@ const StudentApp = (() => {
       if (!student.leaveDate) return false; // 퇴원일 정보가 없으면 안전하게 제외
       const lm = _parseYearMonth(student.leaveDate);
       if (!lm) return false;
-      if (y > lm.y || (y === lm.y && m > lm.m)) return false; // 퇴원 다음 달부터 제외 (퇴원월까지는 포함)
+      if (y > lm.y || (y === lm.y && m > lm.m)) return false; // 퇴원 다음 달부터는 항상 제외
+      if (y === lm.y && m === lm.m) {
+        // ★ 학생별 개별 조정(🔧)이 있으면 정책 계산보다 최우선 — 있으면 정책과 무관하게 포함
+        const override = (typeof StudentDB !== 'undefined' && StudentDB.getTuitionOverrides)
+          ? (StudentDB.getTuitionOverrides(student.id) || {})[monthKey] : null;
+        if (!override) {
+          // 개별 조정이 없을 때만 관리자가 설정한 전역 정책을 따른다
+          // (⚙️ 수업료 현황 → 퇴원월 청구 정책, 기본값은 기존 동작과 동일한 '전액 청구')
+          const policy = (typeof StudentDB !== 'undefined' && StudentDB.getTuitionPolicy)
+            ? StudentDB.getTuitionPolicy() : { mode: 'always' };
+          if (policy.mode === 'never') return false;
+          if (policy.mode === 'cutoffDay') {
+            const cutoff = Number(policy.cutoffDay) || 15;
+            if (lm.d !== null && lm.d <= cutoff) return false; // 기준일 이전(이하) 퇴원이면 그 달 제외
+          }
+          // 'always'거나, cutoffDay인데 일자 정보가 없거나 기준일 이후 퇴원이면 → 포함
+        }
+      }
       if (student.enrollDate) {
         const em = _parseYearMonth(student.enrollDate);
         if (em && (y < em.y || (y === em.y && m <= em.m))) return false; // 입학 전이거나 입학 당월이면 제외
@@ -864,14 +967,22 @@ const StudentApp = (() => {
       // 수업료 청구/납부 판단은 "수업" 카테고리 수납내역을 최우선으로 사용 (같은 달 여러 건이면 마지막 것)
       const tuitionReceipts = receiptBucket?.수업 || [];
       const receipt = tuitionReceipts.length ? tuitionReceipts[tuitionReceipts.length - 1] : null;
-      const billed = receipt ? Number(receipt.billedAmount || 0)
+      // ★ 학생별 개별 조정(🔧, 주로 퇴원월용)이 있으면 다른 어떤 계산보다도 최우선
+      const override = (typeof StudentDB !== 'undefined' && StudentDB.getTuitionOverrides)
+        ? (StudentDB.getTuitionOverrides(s.id) || {})[monthKey] : null;
+      const billed = override ? (override.mode === 'none' ? 0 : override.mode === 'full' ? _tuitionNormalAmount(s) : Number(override.amount || 0))
+                    : receipt ? Number(receipt.billedAmount || 0)
                     : absence ? Number(absence.payAmount || 0)
                     : _tuitionNormalAmount(s);
       const paid = receipt ? Number(receipt.paidAmount || 0)
                   : payment ? Number(payment.amount || 0)
                   : null;
       let status, statusColor;
-      if (receipt) {
+      if (override) {
+        // 관리자가 직접 확정한 값이니 "이대로 확정"으로 표시 — 완납/미납 판정 대상이 아님
+        status = override.mode === 'none' ? '조정(청구없음)' : override.mode === 'full' ? '조정(전액)' : '조정(직접입력)';
+        statusColor = '#7c3aed';
+      } else if (receipt) {
         // ★ 실제 수납내역이 있으면 그 안의 수납여부(status)를 그대로 신뢰한다 — 금액으로
         //   역산해서 "부족납부" 등으로 뭉뚱그리지 않고, 진짜 미납은 명확히 "미납"으로 구분.
         if (receipt.status === '납부완료') { status = '완납'; statusColor = '#059669'; }
@@ -884,8 +995,12 @@ const StudentApp = (() => {
         status = '미확인'; statusColor = '#6b7280'; // 아무 기록도 없음 — 확정 아님(외부 사이트에서 냈을 수도 있음)
       }
 
+      // 이 학생이 "퇴원한 바로 그 달"인지 — 개별 조정(🔧) 버튼을 보여줄지 판단
+      const lm = s.status === '퇴원' ? _parseYearMonth(s.leaveDate) : null;
+      const isWithdrawalMonth = !!(lm && lm.y === Number(monthKey.slice(0,4)) && lm.m === Number(monthKey.slice(5,7)));
+
       return { studentId: s.id, studentName: s.name, classCode: s.classCode, nickname: s.nickname,
-               absence, payment, receipt, hasAnyReceipt: !!receiptBucket,
+               absence, payment, receipt, override, isWithdrawalMonth, hasAnyReceipt: !!receiptBucket,
                billed, paid, status, statusColor };
     }).sort((a, b) => (a.classCode || '').localeCompare(b.classCode || '') || (a.studentName || '').localeCompare(b.studentName || ''));
 
@@ -954,24 +1069,26 @@ const StudentApp = (() => {
       </div>` : '';
 
     /** 개별 학생 행 HTML (그룹 렌더링에서 재사용) */
-    const _rowHTML = (m) => `<div style="border:1px solid ${m.paid===null||m.paid<m.billed?'rgba(220,38,38,.25)':'var(--bdr2)'};border-left:3px solid ${m.statusColor};border-radius:9px;padding:9px 11px;margin-bottom:6px;background:var(--surf2)">
+    const _rowHTML = (m) => `<div style="border:1px solid ${m.override?'rgba(124,58,237,.3)':(m.paid===null||m.paid<m.billed)?'rgba(220,38,38,.25)':'var(--bdr2)'};border-left:3px solid ${m.statusColor};border-radius:9px;padding:9px 11px;margin-bottom:6px;background:var(--surf2)">
           <div style="display:flex;justify-content:space-between;align-items:center">
             <b style="font-size:12.5px">${_e(m.studentName)}${m.nickname?' ('+_e(m.nickname)+')':''} <span style="font-weight:400;color:var(--tx3);font-size:11px">${_e(m.classCode||'')}</span></b>
             <span style="font-size:11px;color:${m.statusColor};font-weight:700">${m.status}</span>
           </div>
           ${m.absence && !m.receipt ? `<div style="font-size:11px;color:#e85d04;margin-top:3px">🏖 결석 ${m.absence.absentCount}일 (${_e(m.absence.absenceStart||'')}~${_e(m.absence.absenceEnd||'')})</div>` : ''}
           ${m.receipt ? `<div style="font-size:11px;color:#0284c7;margin-top:3px">🧾 실제 수납내역 반영됨 (${_e(m.receipt.itemName||'')})</div>` : ''}
-          ${!m.receipt && !m.hasAnyReceipt ? `<div style="font-size:10.5px;color:var(--tx3);margin-top:3px">※ 이 학생은 수납내역 가져오기에서 매칭된 기록이 전혀 없습니다 (원생고유번호·이름 확인 필요)</div>` : ''}
+          ${m.override ? `<div style="font-size:11px;color:#7c3aed;margin-top:3px">🔧 관리자 개별 조정됨${m.override.note?' — '+_e(m.override.note):''}</div>` : ''}
+          ${!m.receipt && !m.override && !m.hasAnyReceipt ? `<div style="font-size:10.5px;color:var(--tx3);margin-top:3px">※ 이 학생은 수납내역 가져오기에서 매칭된 기록이 전혀 없습니다 (원생고유번호·이름 확인 필요)</div>` : ''}
           <div style="font-size:11px;color:var(--tx3);margin-top:3px">청구액 <b style="color:var(--tx1)">${m.billed.toLocaleString()}원</b> · 납부액 <b style="color:${m.paid===null?'var(--tx3)':'var(--tx1)'}">${m.paid===null?'미확인':m.paid.toLocaleString()+'원'}</b>${m.payment?.paidDate ? ' · '+_e(m.payment.paidDate) : ''}${m.receipt?.paidDate ? ' · '+_e(m.receipt.paidDate) : ''}</div>
-          <div style="display:flex;gap:6px;margin-top:6px">
-            ${(!m.receipt && m.paid < m.billed) ? `<button onclick="StudentApp._tuitionQuickMarkPaid('${m.studentId}','${monthKey}',${m.billed})" style="font-size:11px;padding:5px 10px;border-radius:7px;background:rgba(5,150,105,.1);border:1px solid rgba(5,150,105,.3);color:#059669;cursor:pointer">✅ 납부 처리</button>` : ''}
-            ${!m.receipt ? `<button onclick="StudentApp.openPaymentEntry('${m.studentId}','${monthKey}')" style="font-size:11px;padding:5px 10px;border-radius:7px;background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);color:#15803d;cursor:pointer">💳 직접 입력</button>` : ''}
+          <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+            ${(!m.receipt && !m.override && m.paid < m.billed) ? `<button onclick="StudentApp._tuitionQuickMarkPaid('${m.studentId}','${monthKey}',${m.billed})" style="font-size:11px;padding:5px 10px;border-radius:7px;background:rgba(5,150,105,.1);border:1px solid rgba(5,150,105,.3);color:#059669;cursor:pointer">✅ 납부 처리</button>` : ''}
+            ${(!m.receipt && !m.override) ? `<button onclick="StudentApp.openPaymentEntry('${m.studentId}','${monthKey}')" style="font-size:11px;padding:5px 10px;border-radius:7px;background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);color:#15803d;cursor:pointer">💳 직접 입력</button>` : ''}
+            ${m.isWithdrawalMonth ? `<button onclick="StudentApp.openTuitionOverrideEditor('${m.studentId}','${monthKey}')" style="font-size:11px;padding:5px 10px;border-radius:7px;background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.3);color:#7c3aed;cursor:pointer">🔧 ${m.override?'조정 변경':'퇴원월 조정'}</button>` : ''}
           </div>
         </div>`;
 
-    // 👀 한눈에 구분되도록 "확인 필요"(미확인·부족납부) / "정상 처리됨"(완납·초과납부) 두 그룹으로 분리
-    const needsAttention = merged.filter(m => m.paid === null || m.paid < m.billed);
-    const resolved       = merged.filter(m => m.paid !== null && m.paid >= m.billed);
+    // 👀 한눈에 구분되도록 "확인 필요"(미확인·부족납부) / "정상 처리됨"(완납·초과납부·관리자 조정 확정) 두 그룹으로 분리
+    const needsAttention = merged.filter(m => !m.override && (m.paid === null || m.paid < m.billed));
+    const resolved       = merged.filter(m => m.override || (m.paid !== null && m.paid >= m.billed));
 
     const rows = merged.length ? `
       ${needsAttention.length ? `
@@ -1080,6 +1197,7 @@ const StudentApp = (() => {
   }
 
   function _tuitionOvChangeMonth(monthKey) {
+    _TC_OV_STATE = { monthKey, mode: 'month' };
     const sheet = document.getElementById('st-abs-ov-sheet');
     if (sheet) sheet.innerHTML = _renderTuitionOvSheet(monthKey);
   }
@@ -1135,6 +1253,7 @@ const StudentApp = (() => {
   }
 
   function _tuitionOvChangeYear(year) {
+    _TC_OV_STATE = { monthKey: `${year}-01`, mode: 'year' };
     const sheet = document.getElementById('st-abs-ov-sheet');
     if (sheet) sheet.innerHTML = _tuitionYearHTML(year);
   }
@@ -2194,6 +2313,151 @@ const StudentApp = (() => {
     document.getElementById('st-tp-modal')?.remove();
   }
 
+  /* ════════════════════════════════════════════
+   * 🔧 학생별 퇴원월 수업료 개별 조정
+   * 전역 정책(⚙️)은 규칙 기반 기본값이고, 이건 "이 학생, 이 달"만 예외적으로
+   * 확정하는 관리자 판단 — 있으면 정책 계산을 건너뛰고 이 값이 그대로 쓰인다.
+   * ════════════════════════════════════════════ */
+
+  function openTuitionOverrideEditor(studentId, monthKey) {
+    const s = StudentDB.getAll().find(x => x.id === studentId);
+    if (!s) return;
+    document.getElementById('st-tov-modal')?.remove();
+
+    const existing = (StudentDB.getTuitionOverrides(studentId) || {})[monthKey] || null;
+    const normalAmount = _tuitionNormalAmount(s);
+
+    const modal = document.createElement('div');
+    modal.id = 'st-tov-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:700;display:flex;align-items:flex-end;justify-content:center';
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+
+    const sheet = document.createElement('div');
+    sheet.id = 'st-tov-sheet';
+    sheet.style.cssText = 'background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:480px;max-height:88vh;overflow-y:auto;box-shadow:0 -4px 24px rgba(0,0,0,.18)';
+    sheet.dataset.studentId = studentId;
+    sheet.dataset.monthKey = monthKey;
+    sheet.dataset.normalAmount = normalAmount;
+    sheet.innerHTML = _tovModalBodyHTML(s, monthKey, existing, normalAmount);
+
+    modal.appendChild(sheet);
+    document.body.appendChild(modal);
+  }
+
+  function _tovModalBodyHTML(s, monthKey, existing, normalAmount) {
+    const mode = existing?.mode || 'full';
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="font-size:15px;font-weight:800">🔧 퇴원월 수업료 조정</div>
+        <button onclick="document.getElementById('st-tov-modal').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--tx3)">✕</button>
+      </div>
+      <div style="font-size:11.5px;color:var(--tx3);margin-bottom:14px">${_e(s.name)} 학생 · ${_e(monthKey)} · 퇴원일 ${_e(s.leaveDate||'-')}</div>
+
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:10px;border:1.5px solid ${mode==='none'?'var(--a)':'var(--bdr2)'};border-radius:10px;margin-bottom:8px;cursor:pointer;background:${mode==='none'?'var(--a10)':'transparent'}">
+        <input type="radio" name="tov-mode" value="none" ${mode==='none'?'checked':''} style="margin-top:2px" onchange="StudentApp._tovModeChange('none')">
+        <div style="font-size:13px;font-weight:700">청구하지 않음 (0원)</div>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:10px;border:1.5px solid ${mode==='full'?'var(--a)':'var(--bdr2)'};border-radius:10px;margin-bottom:8px;cursor:pointer;background:${mode==='full'?'var(--a10)':'transparent'}">
+        <input type="radio" name="tov-mode" value="full" ${mode==='full'?'checked':''} style="margin-top:2px" onchange="StudentApp._tovModeChange('full')">
+        <div>
+          <div style="font-size:13px;font-weight:700">전액 청구</div>
+          <div style="font-size:11px;color:var(--tx3);margin-top:2px">${normalAmount.toLocaleString()}원 (반 정상 수업료)</div>
+        </div>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:10px;border:1.5px solid ${mode==='custom'?'var(--a)':'var(--bdr2)'};border-radius:10px;margin-bottom:14px;cursor:pointer;background:${mode==='custom'?'var(--a10)':'transparent'}">
+        <input type="radio" name="tov-mode" value="custom" ${mode==='custom'?'checked':''} style="margin-top:2px" onchange="StudentApp._tovModeChange('custom')">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700">직접 금액 입력 (일부 기간 계산 등)</div>
+          <div id="tov-custom-wrap" style="margin-top:8px;${mode==='custom'?'':'display:none'}">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+              <label style="font-size:11px;color:var(--tx3)">마지막 출석일로 자동 계산</label>
+              <input id="tov-lastday" type="date" value="${_e(s.leaveDate||'')}" onchange="StudentApp._tovCalcFromDate()"
+                style="padding:5px 8px;border:1px solid var(--bdr2);border-radius:7px;font-size:12px;background:var(--card);color:var(--tx1)">
+            </div>
+            <input id="tov-amount" type="number" step="100" value="${existing?.mode==='custom' ? existing.amount : ''}" placeholder="금액 직접 입력"
+              style="width:100%;padding:8px 10px;border:1.5px solid var(--bdr2);border-radius:9px;font-size:13px;background:var(--card);color:var(--tx1)">
+            <div id="tov-calc-hint" style="font-size:10.5px;color:var(--tx3);margin-top:4px"></div>
+          </div>
+        </div>
+      </label>
+
+      <div class="f-grp">
+        <label class="f-lbl">메모 <span style="font-size:10px;font-weight:400;color:var(--tx3)">(선택)</span></label>
+        <input class="f-inp" id="tov-note" type="text" value="${_e(existing?.note || '')}" placeholder="예: 8/5 퇴원, 이틀만 출석해서 청구 제외">
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:10px">
+        ${existing ? `<button onclick="StudentApp._tovDelete()" style="padding:11px 14px;border-radius:10px;background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.3);color:#dc2626;font-size:13px;font-weight:700;cursor:pointer">🗑 조정 해제</button>` : ''}
+        <button onclick="document.getElementById('st-tov-modal').remove()" style="flex:1;padding:11px;border-radius:10px;background:var(--surf2);border:1px solid var(--bdr2);font-size:13px;font-weight:700;cursor:pointer">취소</button>
+        <button onclick="StudentApp._tovSave()" style="flex:2;padding:11px;border-radius:10px;background:var(--a);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer">💾 저장</button>
+      </div>`;
+  }
+
+  function _tovModeChange(mode) {
+    document.querySelectorAll('#st-tov-modal label').forEach(l => {
+      const input = l.querySelector('input[type="radio"]');
+      const isSel = input && input.value === mode;
+      l.style.borderColor = isSel ? 'var(--a)' : 'var(--bdr2)';
+      l.style.background  = isSel ? 'var(--a10)' : 'transparent';
+    });
+    const wrap = document.getElementById('tov-custom-wrap');
+    if (wrap) wrap.style.display = mode === 'custom' ? '' : 'none';
+  }
+
+  /** "마지막 출석일" 입력 시 기존 💸 퇴원 환불금 계산기와 동일한 프로레이트 로직으로 자동 금액 산출 */
+  function _tovCalcFromDate() {
+    const sheet = document.getElementById('st-tov-sheet');
+    const studentId = sheet?.dataset.studentId;
+    const s = studentId ? StudentDB.getAll().find(x => x.id === studentId) : null;
+    const lastDay = document.getElementById('tov-lastday')?.value;
+    const hint = document.getElementById('tov-calc-hint');
+    if (!s || !lastDay) return;
+
+    const cls = _tcFindClass(s.classCode, lastDay);
+    if (!cls) { if (hint) hint.textContent = '⚠️ 반 정보를 찾을 수 없어 자동 계산이 안 됩니다. 직접 입력해주세요.'; return; }
+    const calc = _tcCalcRefund(cls, lastDay);
+    if (!calc) return;
+
+    const amountInp = document.getElementById('tov-amount');
+    if (amountInp) amountInp.value = calc.paidAmount;
+    if (hint) hint.textContent = `${_e(lastDay)}까지 출석 기준 · 이 달 수업일 ${calc.totalCount}일 중 ${calc.attendedCount}일 출석 → ${calc.paidAmount.toLocaleString()}원 (반 정상 수업료 기준 계산)`;
+  }
+
+  async function _tovSave() {
+    const sheet = document.getElementById('st-tov-sheet');
+    const studentId = sheet?.dataset.studentId;
+    const monthKey  = sheet?.dataset.monthKey;
+    if (!studentId || !monthKey) return;
+
+    const mode = document.querySelector('#st-tov-modal input[name="tov-mode"]:checked')?.value || 'full';
+    const amount = mode === 'custom' ? Number(document.getElementById('tov-amount')?.value || 0) : 0;
+    const note = document.getElementById('tov-note')?.value || '';
+
+    if (mode === 'custom' && !amount && amount !== 0) { _toast('⚠️ 금액을 입력하세요'); return; }
+
+    await StudentDB.saveTuitionOverride(studentId, monthKey, { mode, amount, note });
+    _toast('✅ 개별 조정이 저장됐습니다', 'success');
+    document.getElementById('st-tov-modal')?.remove();
+    if (document.getElementById('st-abs-ov-modal')) {
+      openTuitionOverview(_TC_OV_STATE.monthKey, _TC_OV_STATE.mode);
+    }
+  }
+
+  async function _tovDelete() {
+    const sheet = document.getElementById('st-tov-sheet');
+    const studentId = sheet?.dataset.studentId;
+    const monthKey  = sheet?.dataset.monthKey;
+    if (!studentId || !monthKey) return;
+    if (!confirm('개별 조정을 해제하고 전역 정책 기준으로 되돌릴까요?')) return;
+
+    await StudentDB.deleteTuitionOverride(studentId, monthKey);
+    _toast('🗑 조정이 해제됐습니다');
+    document.getElementById('st-tov-modal')?.remove();
+    if (document.getElementById('st-abs-ov-modal')) {
+      openTuitionOverview(_TC_OV_STATE.monthKey, _TC_OV_STATE.mode);
+    }
+  }
+
   /** 대상 월 변경 시 참고금액/기존기록 다시 반영 */
   function _tpOnMonthChange(studentId) {
     const s = StudentDB.getAll().find(x => x.id === studentId);
@@ -2277,9 +2541,11 @@ const StudentApp = (() => {
     _onSearch, _onFilter, _onDetailOvClick,
     openTuitionCalc, closeTuitionCalc, _onTcOvClick, _tcOnChange, _tcApplyMemo, _tcSwitchMode,
     _tcSaveAbsence, _tcDeleteAbsence, openTuitionOverview, _tuitionOvChangeMonth, _tuitionOvChangeYear,
+    openTuitionPolicySettings, _tpPolicyModeChange, _tpPolicySave,
     _tuitionOvSetClass, _tuitionOvSetCategory, _tuitionOvToggleUnpaid, _tuitionQuickMarkPaid,
     openPaymentEntry, closePaymentEntry, _tpOnMonthChange, _tpSave, _tpDelete,
     openReceiptImport,
     openTuitionDiagnostics, _diagOvChangeMonth,
+    openTuitionOverrideEditor, _tovModeChange, _tovCalcFromDate, _tovSave, _tovDelete,
   };
 })();

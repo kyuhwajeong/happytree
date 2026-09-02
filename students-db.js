@@ -23,6 +23,8 @@ const StudentDB = (() => {
   /* ══ 상수 ══ */
   const LS_KEY  = 'hk10b_students';
   const FB_PATH = 'hakwon10/students';
+  const POLICY_LS_KEY  = 'hk10b_tuitionPolicy';
+  const POLICY_FB_PATH = 'hakwon10/settings/tuitionWithdrawalPolicy';
 
   /* ══ 내부 유틸 ══ */
   const _lg  = k      => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
@@ -110,6 +112,7 @@ const StudentDB = (() => {
    * ════════════════════════════════════════════ */
   async function init() {
     _students = _lg(LS_KEY) || [];
+    _loadPolicyLS();
 
     if (typeof FireDB === 'undefined' || !FireDB.ready()) {
       console.log('[StudentDB] offline mode – LocalStorage only');
@@ -135,6 +138,21 @@ const StudentDB = (() => {
         _students = nd;
         _ls(LS_KEY, _students);
         _fire('students');
+      }
+    });
+
+    // 퇴원월 청구 정책 — 초기 로드 + 실시간 리스너 (여러 관리자가 쓰므로 다른 기기에서 바꾼 설정도 즉시 반영)
+    try {
+      const psnap = await FireDB.get(POLICY_FB_PATH);
+      if (psnap) { _tuitionPolicy = { ..._tuitionPolicy, ...psnap }; _ls(POLICY_LS_KEY, _tuitionPolicy); }
+    } catch (e) {
+      console.warn('[StudentDB] tuitionPolicy init FB error', e);
+    }
+    FireDB.listen(POLICY_FB_PATH, v => {
+      if (v && JSON.stringify(v) !== JSON.stringify(_tuitionPolicy)) {
+        _tuitionPolicy = { ..._tuitionPolicy, ...v };
+        _ls(POLICY_LS_KEY, _tuitionPolicy);
+        _fire('students'); // 정책이 바뀌면 수업료 현황도 다시 계산해야 하므로 같이 통지
       }
     });
 
@@ -615,6 +633,90 @@ const StudentDB = (() => {
   }
 
   /* ════════════════════════════════════════════
+   * ⚙️ 퇴원월 수업료 청구 정책 (관리자가 조정 가능)
+   * mode: 'always'    — 퇴원한 달은 항상 전액 청구 대상 (기본값, 기존 동작과 동일)
+   *       'never'     — 퇴원한 달은 항상 청구 대상에서 제외
+   *       'cutoffDay' — 퇴원일이 cutoffDay일 이전(이하)이면 그 달 제외, 이후면 포함
+   * ════════════════════════════════════════════ */
+  let _tuitionPolicy = { mode: 'always', cutoffDay: 15 };
+
+  function _loadPolicyLS() {
+    try {
+      const raw = localStorage.getItem(POLICY_LS_KEY);
+      if (raw) _tuitionPolicy = { ..._tuitionPolicy, ...JSON.parse(raw) };
+    } catch (e) { /* 무시 — 기본값 사용 */ }
+  }
+
+  function getTuitionPolicy() {
+    return { ..._tuitionPolicy };
+  }
+
+  async function saveTuitionPolicy(policy) {
+    _tuitionPolicy = { ..._tuitionPolicy, ...policy };
+    _ls(POLICY_LS_KEY, _tuitionPolicy);
+    if (typeof FireDB !== 'undefined') {
+      await FireDB.set(POLICY_FB_PATH, _tuitionPolicy).catch(e =>
+        console.warn('[StudentDB] saveTuitionPolicy FB error', e)
+      );
+    }
+    _fire('students'); // 정책 변경 시 수업료 현황 화면이 다시 계산되도록 통지
+    return { ..._tuitionPolicy };
+  }
+
+  /* ════════════════════════════════════════════
+   * 🔧 학생별 퇴원월 청구 예외 조정
+   * 전역 정책(⚙️ 퇴원월 청구 정책)은 규칙 기반 기본값이고, 이건 그 규칙과 무관하게
+   * "이 학생, 이 달"만 관리자가 직접 확정한 값 — 있으면 항상 최우선으로 적용된다.
+   * mode: 'none'(청구 안 함, 0원) | 'full'(전액 청구) | 'custom'(직접 금액 지정 — 일부 기간 계산 등)
+   * ════════════════════════════════════════════ */
+
+  /**
+   * @param {string} studentId
+   * @param {string} monthKey  'YYYY-MM'
+   * @param {object} data  { mode:'none'|'full'|'custom', amount:number, note:string }
+   */
+  async function saveTuitionOverride(studentId, monthKey, data) {
+    const idx = _students.findIndex(s => s.id === studentId);
+    if (idx < 0) return null;
+
+    const rec = { ...data, monthKey, updatedAt: _now() };
+    const student = _students[idx];
+    student.tuitionOverrides = { ...(student.tuitionOverrides || {}), [monthKey]: rec };
+    student.updatedAt = _now();
+    _ls(LS_KEY, _students);
+
+    if (typeof FireDB !== 'undefined') {
+      await FireDB.update(`${FB_PATH}/${studentId}/tuitionOverrides`, { [monthKey]: rec }).catch(e =>
+        console.warn('[StudentDB] saveTuitionOverride FB error', e)
+      );
+    }
+    _fire('students');
+    return rec;
+  }
+
+  async function deleteTuitionOverride(studentId, monthKey) {
+    const idx = _students.findIndex(s => s.id === studentId);
+    if (idx < 0) return false;
+    const student = _students[idx];
+    if (student.tuitionOverrides) delete student.tuitionOverrides[monthKey];
+    student.updatedAt = _now();
+    _ls(LS_KEY, _students);
+
+    if (typeof FireDB !== 'undefined') {
+      await FireDB.remove(`${FB_PATH}/${studentId}/tuitionOverrides/${monthKey}`).catch(e =>
+        console.warn('[StudentDB] deleteTuitionOverride FB error', e)
+      );
+    }
+    _fire('students');
+    return true;
+  }
+
+  function getTuitionOverrides(studentId) {
+    const s = _students.find(x => x.id === studentId);
+    return (s && s.tuitionOverrides) || {};
+  }
+
+  /* ════════════════════════════════════════════
    * PUBLIC API
    * ════════════════════════════════════════════ */
   return {
@@ -626,5 +728,7 @@ const StudentDB = (() => {
     saveTuitionAbsence, deleteTuitionAbsence, getTuitionAbsences, getTuitionAbsencesByMonth,
     saveTuitionPayment, deleteTuitionPayment, getTuitionPayments, getTuitionPaymentsByMonth,
     importReceipts, getReceipts, getReceiptsByMonth,
+    getTuitionPolicy, saveTuitionPolicy,
+    saveTuitionOverride, deleteTuitionOverride, getTuitionOverrides,
   };
 })();
