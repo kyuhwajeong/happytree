@@ -1425,7 +1425,7 @@ const StaffApp = (() => {
   /* ══════════════════════════════════════════
    * 근무 입력 모달 (단일 날짜)
    * ══════════════════════════════════════════ */
-  function openWork(date) { _st.workDate = date; _st.workType = null; _st.editingEntryId = null; _drawWork(); document.getElementById('sf-work-ov')?.classList.remove('hidden'); history.pushState({ pg:'staff', modal:'work' }, ''); }
+  function openWork(date) { _st.workDate = date; _st.workType = null; _st.editingEntryId = null; _st.editingOriginalRate = null; _drawWork(); document.getElementById('sf-work-ov')?.classList.remove('hidden'); history.pushState({ pg:'staff', modal:'work' }, ''); }
   function closeWork() {
     document.getElementById('sf-work-ov')?.classList.add('hidden');
     _st.editingEntryId = null;
@@ -1520,6 +1520,7 @@ const StaffApp = (() => {
     const e  = es.find(x => x.id === id); if (!e) return;
     _st.editingEntryId = id;
     _st.workType = e.type;
+    _st.editingOriginalRate = Number(e.appliedRate) || 0; // ★ 타입을 바꿀 때 이 값과 비교해서 자동으로 초기화하기 위함
     _drawWork();
     // 입력값 채우기 (drawWork 직후 DOM 갱신됨)
     setTimeout(() => {
@@ -1535,6 +1536,7 @@ const StaffApp = (() => {
 
   function _cancelEditEntry() {
     _st.editingEntryId = null;
+    _st.editingOriginalRate = null;
     _drawWork();
   }
 
@@ -1588,6 +1590,19 @@ const StaffApp = (() => {
     const autoRate = StaffDB.resolveRate(_st.calStaffId, 0, new Date().getFullYear(), wt);
     const rateInp  = document.getElementById('sf-wrate');
     const rateLbl  = document.getElementById('sf-wrate-lbl');
+
+    // ★ 수정 모드에서 타입을 바꾸는 순간, 시급란에 남아있는 값이 "예전 타입으로 고정됐던 옛 시급"
+    //   그대로라면(사용자가 직접 건드리지 않았다면) 0(자동)으로 되돌린다.
+    //   그대로 두면 resolveRate()의 우선순위(수동시급 > 타입별 시급) 때문에,
+    //   타입 배지만 바뀌고 실제 금액은 예전 시급으로 계산되는 문제가 있었다.
+    //   사용자가 이번 수정 중에 직접 입력한 값이면(= 원래 값과 다르면) 건드리지 않는다.
+    if (rateInp && _st.editingEntryId != null) {
+      const cur = Number(rateInp.value) || 0;
+      if (cur === Number(_st.editingOriginalRate || 0)) {
+        rateInp.value = 0;
+      }
+    }
+
     if (rateInp) rateInp.placeholder = autoRate;
     if (rateLbl) rateLbl.textContent = wt
       ? `시급 (0=자동: ${wt==='class'?'수업':'일반'} ${_fmt(autoRate)}원)`
