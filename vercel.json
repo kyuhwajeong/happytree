@@ -1,4 +1,10 @@
 {
+  "crons": [
+    {
+      "path": "/api/payroll-reminder",
+      "schedule": "0 0 * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

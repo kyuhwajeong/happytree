@@ -461,6 +461,12 @@ const App = (() => {
       // ★ 12시간 자동 로그아웃 후 재로그인 등, 세션이 새로 시작되는 시점엔 날씨 캐시가 신선해도
       //   무조건 최신으로 다시 받아온다(달력 자체는 페이지 새로고침 없이는 재초기화되지 않으므로).
       if (typeof ScheduleApp !== 'undefined' && ScheduleApp.refreshWeather) ScheduleApp.refreshWeather();
+      // ★ 관리자는 모니터링 화면을 안 열어도 급여일 등 서버발 푸시 알림을 받을 수 있도록
+      //   로그인 시점에 FCM 토큰을 미리 등록해둔다 (실패해도 로그인 흐름엔 영향 없음).
+      //   ※ 이 학원에서는 운용자(operator)가 원장 역할이라, 급여 알림 대상에 운용자도 포함한다.
+      if ((DB.isAdmin() || role === 'operator') && typeof MonitorFCM !== 'undefined' && MonitorFCM.register) {
+        MonitorFCM.register().catch(e => console.warn('[App] 관리자 FCM 자동등록 실패', e));
+      }
     } else {_q('li-err').textContent='⚠️ 아이디 또는 비밀번호가 올바르지 않습니다';_q('li-pw').value='';}
   }
   async function logout(){
