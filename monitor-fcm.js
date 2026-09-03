@@ -88,10 +88,13 @@ const MonitorFCM = (() => {
         return false;
       }
 
-      /* Firebase에 토큰 저장 */
+      /* Firebase에 토큰 저장 (★ role도 함께 저장 — 급여일 알림처럼 관리자에게만 보내야 하는
+       * 푸시를 서버(크론) 쪽에서 필터링할 수 있어야 하기 때문) */
+      const _role = (typeof DB !== 'undefined' && DB.getRole) ? DB.getRole() : '';
       await FireDB.set(`${TOKENS_PATH}/${_deviceId}`, {
         token:     _myToken,
         deviceId:  _deviceId,
+        role:      _role,
         savedAt:   new Date().toISOString(),
         expireAt:  Date.now() + TOKEN_TTL_MS,
         ua:        navigator.userAgent.slice(0, 80),
