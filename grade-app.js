@@ -5359,7 +5359,7 @@ to{opacity:1;transform:none}}
 
     const tblTitle = document.createElement('div');
     tblTitle.style.cssText = `display:flex;align-items:center;justify-content:space-between;padding:12px 16px 10px;border-bottom:1px solid var(--bdr);font-size:${cfg.titleSize}px;font-weight:800;color:var(--tx)`;
-    tblTitle.innerHTML = `<span>📚 교재별 성취율 현황</span><span style="font-size:10px;color:var(--tx3);font-weight:400">${_e(cls?.name||'')}반 · 완결 포함</span>`;
+    tblTitle.innerHTML = `<span>📚 교재별 성취율 현황</span><span style="font-size:10px;color:var(--tx3);font-weight:400">${_e(cls?.name||'')}반 · 완결 포함 · 📝단어 📖리딩</span>`;
     tblSec.appendChild(tblTitle);
 
     const tblWrap = document.createElement('div');
@@ -5388,8 +5388,8 @@ to{opacity:1;transform:none}}
         const rdClr= rd==null?'var(--tx3)':rd>=80?'#16a34a':'#f97316';
         const isSel = sid===s.id;
         return `<td style="padding:6px 10px;text-align:center;border-bottom:${border};${isSel?'background:var(--a10);':''}">
-          ${word!=null?`<div style="font-weight:800;color:${wClr};font-size:${cfg.bodySize+1}px">${word}%</div>`:'<div style="color:var(--tx3);font-size:10px">—</div>'}
-          ${hasRd&&rd!=null?`<div style="font-size:9px;color:${rdClr}">R:${Math.round(rd)}%</div>`:''}
+          ${word!=null?`<div style="font-weight:800;color:${wClr};font-size:${cfg.bodySize+1}px">📝${word}%</div>`:'<div style="color:var(--tx3);font-size:10px">—</div>'}
+          ${hasRd&&rd!=null?`<div style="font-size:9px;color:${rdClr}">📖${Math.round(rd)}%</div>`:''}
         </td>`;
       }).join('');
 
@@ -5399,8 +5399,8 @@ to{opacity:1;transform:none}}
         </td>
         ${stuCells}
         <td style="padding:6px 10px;text-align:center;border-bottom:${border};background:rgba(99,102,241,.04)">
-          ${avgW!=null?`<div style="font-weight:800;color:#6366f1;font-size:${cfg.bodySize+1}px">${avgW}%</div>`:'<div style="color:var(--tx3);font-size:10px">—</div>'}
-          ${hasRd&&avgRd!=null?`<div style="font-size:9px;color:#8b5cf6">R:${Math.round(avgRd)}%</div>`:''}
+          ${avgW!=null?`<div style="font-weight:800;color:#6366f1;font-size:${cfg.bodySize+1}px">📝${avgW}%</div>`:'<div style="color:var(--tx3);font-size:10px">—</div>'}
+          ${hasRd&&avgRd!=null?`<div style="font-size:9px;color:#8b5cf6">📖${Math.round(avgRd)}%</div>`:''}
         </td>
       </tr>`;
     });
@@ -5417,9 +5417,14 @@ to{opacity:1;transform:none}}
         const graphSec = document.createElement('div');
         graphSec.style.cssText = 'background:var(--card);border:1px solid var(--bdr);border-radius:14px;padding:14px 16px';
         const graphTitle = document.createElement('div');
-        graphTitle.style.cssText = `font-size:${cfg.titleSize}px;font-weight:800;color:var(--tx);margin-bottom:12px;display:flex;align-items:center;justify-content:space-between`;
-        graphTitle.innerHTML = `<span>📊 ${_e(stu.name)}${stu.nickname?` (${_e(stu.nickname)})`:''} 교재별 성취 추이</span><span style="font-size:10px;font-weight:400;color:var(--tx3)">교재 클릭 시 하이라이트</span>`;
+        graphTitle.style.cssText = `font-size:${cfg.titleSize}px;font-weight:800;color:var(--tx);margin-bottom:2px;display:flex;align-items:center;justify-content:space-between`;
+        graphTitle.innerHTML = `<span>📊 ${_e(stu.name)}${stu.nickname?` (${_e(stu.nickname)})`:''} 단어·리딩 성장 추이</span><span style="font-size:10px;font-weight:400;color:var(--tx3)">교재 클릭 시 하이라이트</span>`;
         graphSec.appendChild(graphTitle);
+
+        const graphSub = document.createElement('div');
+        graphSub.style.cssText = 'font-size:10px;color:var(--tx3);margin-bottom:10px';
+        graphSub.textContent = '가로축 = 학습한 교재 순서(왼쪽이 먼저 배운 교재) · 굵은 막대(📝단어) + 작은 막대(📖리딩)가 오른쪽으로 갈수록 어떻게 변하는지가 곧 성장 추이입니다';
+        graphSec.appendChild(graphSub);
 
         const canvas = document.createElement('canvas');
         canvas.id = 'gr-ov-chart';
@@ -5458,8 +5463,8 @@ to{opacity:1;transform:none}}
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
               <div style="font-size:12px;font-weight:700;color:${isSelBk?'var(--a)':'var(--tx)'};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${bk.archived?'🔒 ':''} ${_e(bk.name)}</div>
               <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;font-size:11px">
-                ${word!=null?`<span style="font-weight:800;color:${wClr}">${word}%</span><span style="color:var(--tx3)">반평균 ${avgW!=null?avgW+'%':'—'}</span>`:''}
-                ${hasRd2&&rd!=null?`<span style="color:#8b5cf6;font-weight:700">R:${Math.round(rd)}% <span style="color:var(--tx3);font-weight:400">/ ${avgRd2!=null?Math.round(avgRd2)+'%':'—'}</span></span>`:''}
+                ${word!=null?`<span style="font-weight:800;color:${wClr}">📝 단어 ${word}%</span><span style="color:var(--tx3)">반평균 ${avgW!=null?avgW+'%':'—'}</span>`:''}
+                ${hasRd2&&rd!=null?`<span style="color:#8b5cf6;font-weight:700">📖 리딩 ${Math.round(rd)}% <span style="color:var(--tx3);font-weight:400">/ 반평균 ${avgRd2!=null?Math.round(avgRd2)+'%':'—'}</span></span>`:''}
               </div>
             </div>
             ${word!=null?`<div style="height:6px;background:var(--surf2);border-radius:3px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${wClr};border-radius:3px;transition:width .4s"></div></div>`:''}
@@ -5589,7 +5594,7 @@ to{opacity:1;transform:none}}
     }
 
     // 범례
-    const LEG=[['단어 성취율','rgba(22,163,74,.7)','rect'],['반 평균','#6366f1','line'],['리딩','rgba(139,92,246,.6)','rect']];
+    const LEG=[['📝 단어 성취율','rgba(22,163,74,.7)','rect'],['⚪ 반 평균','#6366f1','line'],['📖 리딩','rgba(139,92,246,.6)','rect']];
     let lx = PAD.left;
     LEG.forEach(([lbl,clr,type])=>{
       ctx.fillStyle=clr;
