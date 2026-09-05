@@ -5372,7 +5372,16 @@ to{opacity:1;transform:none}}
         <th style="padding:6px 10px;text-align:center;border-bottom:2px solid var(--bdr);font-size:11px;color:var(--tx3);font-weight:800;background:rgba(99,102,241,.06)">반평균</th>
       </tr></thead><tbody>`;
 
-    books.forEach((bk, bi) => {
+    // ★ 아무도 성적이 없는 교재(전부 "—")는 행 자체를 숨긴다 — 의미 없는 빈 줄이 헷갈린다는 피드백 반영
+    const booksWithData = books.filter(bk =>
+      students.some(s => { const {word, rd} = _getBkAch(s.id, bk.id, cid); return word != null || rd != null; })
+    );
+
+    if (!booksWithData.length) {
+      tblSec.style.display = 'none'; // 표시할 데이터가 하나도 없으면 표 섹션 자체를 숨김
+    }
+
+    booksWithData.forEach((bk, bi) => {
       const isSelBk = selBkId === bk.id;
       const avgW = _getClsAvg(students, bk.id, cid, 'word');
       const config  = GradeDB.getReportConfig(bk.id);
@@ -5404,6 +5413,39 @@ to{opacity:1;transform:none}}
         </td>
       </tr>`;
     });
+
+    // ★ 종합 향상도 — 학생이 완료한 교재(데이터 있는 것) 중 가장 먼저 배운 것 대비
+    //   가장 최근 것까지 단어/리딩이 얼마나 올랐는지(또는 내렸는지) 한 줄로 요약.
+    //   교재가 1권뿐이면 비교 대상이 없으므로 "—" 처리.
+    if (booksWithData.length >= 2) {
+      const growthCells = students.map(s => {
+        const pts = booksWithData
+          .map(bk => ({ bk, ..._getBkAch(s.id, bk.id, cid) }))
+          .filter(d => d.word != null || d.rd != null);
+        if (pts.length < 2) {
+          return `<td style="padding:6px 10px;text-align:center;border-top:2px solid var(--bdr)"><div style="color:var(--tx3);font-size:10px">— (${pts.length}권)</div></td>`;
+        }
+        const first = pts[0], last = pts[pts.length - 1];
+        const wDelta = (first.word != null && last.word != null) ? last.word - first.word : null;
+        const rDelta = (first.rd   != null && last.rd   != null) ? last.rd   - first.rd   : null;
+        const fmtDelta = (d) => d == null ? null : `${d > 0 ? '▲+' : d < 0 ? '▼' : '－'}${Math.abs(d)}%p`;
+        const wStr = fmtDelta(wDelta), rStr = fmtDelta(rDelta);
+        const wClr = wDelta == null ? 'var(--tx3)' : wDelta > 0 ? '#16a34a' : wDelta < 0 ? '#dc2626' : 'var(--tx3)';
+        const rClr = rDelta == null ? 'var(--tx3)' : rDelta > 0 ? '#16a34a' : rDelta < 0 ? '#dc2626' : 'var(--tx3)';
+        return `<td style="padding:6px 10px;text-align:center;border-top:2px solid var(--bdr)" title="${_e(first.bk.name)} → ${_e(last.bk.name)} (${pts.length}권)">
+          ${wStr?`<div style="font-weight:800;color:${wClr};font-size:${cfg.bodySize+1}px">📝${wStr}</div>`:''}
+          ${rStr?`<div style="font-size:9px;color:${rClr}">📖${rStr}</div>`:''}
+        </td>`;
+      }).join('');
+
+      tblHtml += `<tr style="background:rgba(99,102,241,.03)">
+        <td style="padding:7px 12px;border-top:2px solid var(--bdr);font-weight:800;color:var(--tx);white-space:nowrap;position:sticky;left:0;background:var(--card);z-index:1">
+          📈 종합 향상도
+        </td>
+        ${growthCells}
+        <td style="padding:6px 10px;text-align:center;border-top:2px solid var(--bdr);background:rgba(99,102,241,.06)"></td>
+      </tr>`;
+    }
     tblHtml += '</tbody></table>';
     tblWrap.innerHTML = tblHtml;
     tblSec.appendChild(tblWrap);
