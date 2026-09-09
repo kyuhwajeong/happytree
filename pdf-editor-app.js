@@ -211,6 +211,24 @@ const PdfEditorApp = (() => {
   let _textSelectMode = false;  // 본문 텍스트 블록 선택 모드
   let _pendingSelectedText = ''; // 방금 블록 선택한 텍스트(복사/텍스트상자 추가 대기중)
 
+  /* ══════════════════ 📎 다른 PDF에서 부분 캡처해서 삽입 ══════════════════
+   * 편집 중인 페이지 위에, 참고용으로 연 "다른" PDF의 특정 영역을 화면 확대와
+   * 무관하게 항상 고해상도로 다시 렌더링해서 잘라낸 뒤 이미지 어노테이션으로 끼워 넣는다.
+   * (화면 확대 배율(_refZoom)은 "자세히 보기"용일 뿐, 실제 캡처 품질과는 분리되어 있다 —
+   *  캡처 시엔 항상 REF_CAPTURE_SCALE로 다시 렌더링하므로 아무리 화면을 축소해서 봐도 흐려지지 않는다.)
+   */
+  const REF_CAPTURE_SCALE = 4; // pdf 1pt당 px — 인쇄해도 깨지지 않는 고해상도 캡처용
+  let _refPdfOpen = false;
+  let _refPdfDoc = null;   // pdfjsLib 문서(참고용 PDF)
+  let _refPdfName = '';
+  let _refPage = 1;
+  let _refNumPages = 0;
+  let _refZoom = 1.5;      // 화면 표시 배율(자세히 보기용 확대/축소, 캡처 해상도와 무관)
+  let _refViewport = null; // 현재 화면에 렌더링된 pdf.js viewport(좌표 환산용)
+  let _refDragging = false;
+  let _refCropStart = null; // {x,y} 캔버스 px (마우스다운 지점)
+  let _refCropRect  = null; // {x,y,w,h} 캔버스 px (드래그로 확정된 선택 영역)
+
   /* ══════════════════ CSS ══════════════════ */
   function _css() {
     if (_cssInjected) return; _cssInjected = true;
@@ -1140,6 +1158,7 @@ const PdfEditorApp = (() => {
         <button class="pe-btn" ${_textSelectMode ? 'disabled' : ''} onclick="PdfEditorApp._editorAddShape('highlight')" title="반투명 색으로 강조">🖍 형광펜</button>
         <button class="pe-btn" ${_textSelectMode ? 'disabled' : ''} onclick="PdfEditorApp._openShapePicker()" title="사각형·원·별·화살표·캐릭터 스탬프 등 다양한 도형 고르기">🔷 도형</button>
         ${page.kind === 'pdf' ? `<button class="pe-btn${_textSelectMode ? ' primary' : ''}" onclick="PdfEditorApp._toggleTextSelect()" title="본문 텍스트를 마우스로 블록 선택해 복사하거나 텍스트 상자로 추출">🔤 텍스트 선택</button>` : ''}
+        <button class="pe-btn" ${_textSelectMode ? 'disabled' : ''} onclick="PdfEditorApp.openRefPdfPanel()" title="다른 PDF를 열어서 필요한 부분만 고해상도로 잘라 이 페이지에 삽입">📎 다른 PDF 캡처</button>
         <button class="pe-btn danger" ${sel ? '' : 'disabled'} onclick="PdfEditorApp._editorDeleteAnnot()">🗑 선택 삭제</button>
         <div class="pe-spacer"></div>
         <span class="pe-editor-hint">바깥을 클릭하거나 Esc를 누르면 닫혀요</span>
@@ -1553,6 +1572,180 @@ const PdfEditorApp = (() => {
     _clearBusy();
   }
 
+  /* ══════════════════ 📎 다른 PDF에서 부분 캡처 ══════════════════ */
+  function openRefPdfPanel() {
+    if (!_editingId) { _toast('⚠️ 먼저 삽입할 페이지를 편집 화면에서 열어주세요'); return; }
+    _refPdfOpen = true;
+    _rerender();
+  }
+  function closeRefPdfPanel() {
+    _refPdfOpen = false; _refPdfDoc = null; _refPdfName = ''; _refPage = 1; _refNumPages = 0;
+    _refCropStart = null; _refCropRect = null; _refDragging = false;
+    _rerender();
+  }
+  async function _onPickRefPdf(fileList) {
+    const file = (fileList || [])[0]; if (!file) return;
+    _ensurePdfjsWorker();
+    if (typeof pdfjsLib === 'undefined') { _toast('⚠️ PDF 보기 라이브러리를 불러오지 못했습니다'); return; }
+    _setBusy('참고 PDF 불러오는 중...');
+    try {
+      const buf = await file.arrayBuffer();
+      _refPdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+      _refPdfName = file.name;
+      _refNumPages = _refPdfDoc.numPages;
+      _refPage = 1;
+      _refCropStart = null; _refCropRect = null;
+    } catch (e) {
+      _toast('⚠️ "' + file.name + '" 파일을 열 수 없습니다 (손상되었거나 암호로 보호됨)');
+      _refPdfDoc = null; _refPdfName = ''; _refNumPages = 0;
+    }
+    _clearBusy();
+  }
+  function _refPrevPage() { if (_refPage > 1) { _refPage--; _refCropStart = null; _refCropRect = null; _rerender(); } }
+  function _refNextPage() { if (_refPage < _refNumPages) { _refPage++; _refCropStart = null; _refCropRect = null; _rerender(); } }
+  function _refZoomIn()  { _refZoom = Math.min(4,   Math.round((_refZoom + 0.25) * 100) / 100); _rerender(); }
+  function _refZoomOut() { _refZoom = Math.max(0.5, Math.round((_refZoom - 0.25) * 100) / 100); _rerender(); }
+
+  /** 참고 PDF의 현재 페이지를 화면용 배율(_refZoom)로 캔버스에 그린다 — "자세히 보기" 전용,
+   *  실제 캡처 해상도는 이 배율과 무관하게 REF_CAPTURE_SCALE로 별도 렌더링한다. */
+  async function _refRenderCanvas() {
+    const cv = _q('pe-ref-cv'); if (!cv || !_refPdfDoc) return;
+    const page = await _refPdfDoc.getPage(_refPage);
+    const viewport = page.getViewport({ scale: _refZoom });
+    _refViewport = viewport;
+    cv.width = viewport.width; cv.height = viewport.height;
+    cv.style.width = viewport.width + 'px'; cv.style.height = viewport.height + 'px';
+    await page.render({ canvasContext: cv.getContext('2d'), viewport }).promise;
+  }
+
+  function _refCropMouseDown(e) {
+    if (!_refPdfDoc) return;
+    const cv = _q('pe-ref-cv'); if (!cv) return;
+    const rect = cv.getBoundingClientRect();
+    _refDragging = true;
+    _refCropStart = { x: Math.max(0, Math.min(cv.width,  e.clientX - rect.left)), y: Math.max(0, Math.min(cv.height, e.clientY - rect.top)) };
+    _refCropRect = { x: _refCropStart.x, y: _refCropStart.y, w: 0, h: 0 };
+    _rerender();
+  }
+  function _refCropMouseMove(e) {
+    if (!_refDragging || !_refCropStart) return;
+    const cv = _q('pe-ref-cv'); if (!cv) return;
+    const rect = cv.getBoundingClientRect();
+    const x = Math.max(0, Math.min(cv.width,  e.clientX - rect.left));
+    const y = Math.max(0, Math.min(cv.height, e.clientY - rect.top));
+    _refCropRect = {
+      x: Math.min(x, _refCropStart.x), y: Math.min(y, _refCropStart.y),
+      w: Math.abs(x - _refCropStart.x), h: Math.abs(y - _refCropStart.y),
+    };
+    // 선택 박스만 다시 그리면 되므로 캔버스 리렌더 없이 오버레이 div만 갱신(가벼운 리렌더)
+    const box = _q('pe-ref-cropbox');
+    if (box) {
+      box.style.left = _refCropRect.x + 'px'; box.style.top = _refCropRect.y + 'px';
+      box.style.width = _refCropRect.w + 'px'; box.style.height = _refCropRect.h + 'px';
+      box.style.display = 'block';
+    }
+  }
+  function _refCropMouseUp() {
+    _refDragging = false;
+    // 너무 작은 선택(실수로 클릭만 한 경우)은 무효화
+    if (_refCropRect && (_refCropRect.w < 6 || _refCropRect.h < 6)) { _refCropRect = null; }
+    _rerender();
+  }
+
+  /** 선택 영역을 항상 REF_CAPTURE_SCALE(고정 고해상도)로 다시 렌더링해서 잘라낸 뒤,
+   *  현재 편집 중인 페이지에 이미지 어노테이션으로 삽입한다. */
+  async function _refConfirmCrop() {
+    if (!_refPdfDoc || !_refCropRect || !_refViewport) { _toast('⚠️ 먼저 캡처할 영역을 드래그로 선택해주세요'); return; }
+    const page = _pages.find(p => p.id === _editingId);
+    if (!page) { _toast('⚠️ 삽입할 페이지를 찾을 수 없습니다'); return; }
+
+    _setBusy('선택 영역 고해상도로 캡처하는 중...');
+    try {
+      // 화면 표시 좌표(px, _refZoom 배율) → PDF 포인트 좌표로 환산 (화면 확대 배율과 무관하게)
+      const ptRect = {
+        x: _refCropRect.x / _refZoom, y: _refCropRect.y / _refZoom,
+        w: _refCropRect.w / _refZoom, h: _refCropRect.h / _refZoom,
+      };
+
+      // 같은 페이지를 화면 확대와 무관하게 항상 고정된 고해상도(REF_CAPTURE_SCALE)로 다시 렌더링
+      const srcPage = await _refPdfDoc.getPage(_refPage);
+      const hiViewport = srcPage.getViewport({ scale: REF_CAPTURE_SCALE });
+      const hiCv = document.createElement('canvas');
+      hiCv.width = hiViewport.width; hiCv.height = hiViewport.height;
+      await srcPage.render({ canvasContext: hiCv.getContext('2d'), viewport: hiViewport }).promise;
+
+      // 고해상도 캔버스에서 선택 영역만 잘라낸다 (pt 좌표 × REF_CAPTURE_SCALE = 고해상도 px 좌표)
+      const sx = Math.round(ptRect.x * REF_CAPTURE_SCALE), sy = Math.round(ptRect.y * REF_CAPTURE_SCALE);
+      const sw = Math.max(1, Math.round(ptRect.w * REF_CAPTURE_SCALE)), sh = Math.max(1, Math.round(ptRect.h * REF_CAPTURE_SCALE));
+      const cropCv = document.createElement('canvas');
+      cropCv.width = sw; cropCv.height = sh;
+      cropCv.getContext('2d').drawImage(hiCv, sx, sy, sw, sh, 0, 0, sw, sh);
+      const dataUrl = cropCv.toDataURL('image/png'); // PNG(무손실)로 저장 — 화질 저하 없음
+
+      const img = await _loadImgEl(dataUrl);
+      // 삽입 크기: 원본 pt 크기 그대로가 페이지에 다 들어가면 1:1(실제 인쇄 크기)로, 안 들어가면 페이지 폭에 맞춰 축소
+      const natW = ptRect.w, natH = ptRect.h;
+      const fitScale = Math.min(1, (page.width * 0.9) / natW, (page.height * 0.9) / natH);
+      const w = natW * fitScale, h = natH * fitScale;
+      const a = {
+        id: _nid(), type: 'image',
+        x: Math.max(0, (page.width - w) / 2), y: Math.max(0, (page.height - h) / 2),
+        w, h, dataUrl, _imgEl: img,
+      };
+      _pushUndo();
+      page.annots.push(a);
+      _selAnnotId = a.id;
+      page._thumbUrl = null;
+
+      // 계속해서 같은 참고 PDF에서 다른 영역도 캡처할 수 있도록 선택만 초기화(패널은 열어둠)
+      _refCropStart = null; _refCropRect = null;
+      _toast('✅ 선택 영역을 삽입했습니다 (고해상도)');
+    } catch (e) {
+      _toast('⚠️ 캡처에 실패했습니다: ' + (e.message || ''));
+    }
+    _clearBusy();
+  }
+
+  function _refPdfPanelHtml() {
+    const hasDoc = !!_refPdfDoc;
+    return `<div class="pe-modal-ov" onmousedown="if(event.target===this)PdfEditorApp.closeRefPdfPanel()">
+      <div class="pe-modal" style="max-width:820px;width:96vw">
+        <div class="pe-modal-hd">
+          <span>📎 다른 PDF에서 캡처해서 삽입</span>
+          <button onclick="PdfEditorApp.closeRefPdfPanel()">✕</button>
+        </div>
+        <div class="pe-modal-body" style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <label class="pe-btn" style="justify-content:flex-start">📄 참고 PDF 열기<input type="file" accept="application/pdf" style="display:none" onchange="PdfEditorApp._onPickRefPdf(this.files);this.value=''"></label>
+            ${hasDoc ? `<span style="font-size:12px;color:var(--tx3);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_esc(_refPdfName)}">${_esc(_refPdfName)}</span>` : ''}
+            ${hasDoc ? `
+              <div class="pe-spacer"></div>
+              <button class="pe-btn" ${_refPage<=1?'disabled':''} onclick="PdfEditorApp._refPrevPage()">◀</button>
+              <span style="font-size:12px;color:var(--tx2);min-width:56px;text-align:center">${_refPage} / ${_refNumPages}쪽</span>
+              <button class="pe-btn" ${_refPage>=_refNumPages?'disabled':''} onclick="PdfEditorApp._refNextPage()">▶</button>
+              <button class="pe-btn" onclick="PdfEditorApp._refZoomOut()" title="자세히 보기 축소">－</button>
+              <span style="font-size:12px;color:var(--tx3);min-width:44px;text-align:center">${Math.round(_refZoom*100)}%</span>
+              <button class="pe-btn" onclick="PdfEditorApp._refZoomIn()" title="자세히 보기 확대">＋</button>
+            ` : ''}
+          </div>
+          ${hasDoc ? `
+            <div style="font-size:11px;color:var(--tx3)">🖱 원하는 영역을 마우스로 드래그해서 선택한 뒤 "캡처하여 삽입"을 누르세요. 화면 확대/축소는 보기용일 뿐, 삽입되는 이미지는 항상 고해상도로 캡처됩니다.</div>
+            <div style="overflow:auto;max-height:56vh;border:1px solid var(--bdr2);border-radius:10px;background:#525659;padding:12px;display:flex;justify-content:center">
+              <div style="position:relative;line-height:0" onmousedown="PdfEditorApp._refCropMouseDown(event)" onmousemove="PdfEditorApp._refCropMouseMove(event)" onmouseup="PdfEditorApp._refCropMouseUp(event)" onmouseleave="PdfEditorApp._refCropMouseUp(event)">
+                <canvas id="pe-ref-cv" style="display:block;cursor:crosshair;box-shadow:0 2px 10px rgba(0,0,0,.3)"></canvas>
+                <div id="pe-ref-cropbox" style="position:absolute;border:2px dashed #6366f1;background:rgba(99,102,241,.15);pointer-events:none;display:${_refCropRect?'block':'none'};left:${_refCropRect?.x||0}px;top:${_refCropRect?.y||0}px;width:${_refCropRect?.w||0}px;height:${_refCropRect?.h||0}px"></div>
+              </div>
+            </div>
+          ` : `<div class="pe-side-empty" style="padding:40px 0">📄 참고할 PDF 파일을 먼저 열어주세요.<br>지금 편집 중인 페이지와 별개로, 내용을 확인하며<br>필요한 부분만 잘라서 가져올 수 있습니다.</div>`}
+        </div>
+        <div class="pe-modal-ft">
+          <button class="pe-btn" onclick="PdfEditorApp.closeRefPdfPanel()">닫기</button>
+          <button class="pe-btn primary" ${_refCropRect ? '' : 'disabled'} onclick="PdfEditorApp._refConfirmCrop()">✂️ 캡처하여 삽입</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
   /* ══════════════════ 내보내기(병합/분리) ══════════════════ */
   function _canvasToPngBytes(cv) {
     const dataUrl = cv.toDataURL('image/png');
@@ -1827,5 +2020,9 @@ const PdfEditorApp = (() => {
     _saveTitleInput, _saveCatInput, _saveVisInput, _cancelSave, _confirmSave,
     _doRestore, _discardRestore,
     _undo, _redo, _duplicatePage, _rotatePage,
+    // ★ 📎 다른 PDF 캡처 패널 — HTML onclick에서 호출되는데 export 목록에서 누락돼 있던 것을 추가
+    openRefPdfPanel, closeRefPdfPanel, _onPickRefPdf,
+    _refPrevPage, _refNextPage, _refZoomIn, _refZoomOut,
+    _refCropMouseDown, _refCropMouseMove, _refCropMouseUp, _refConfirmCrop,
   };
 })();
