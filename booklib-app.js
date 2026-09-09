@@ -328,31 +328,44 @@ const BooklibApp = (() => {
       bulk.appendChild(mkB('전체선택',()=>modal.querySelectorAll('.arc-ck').forEach(c=>c.checked=true)));
       bulk.appendChild(mkB('전체해제',()=>modal.querySelectorAll('.arc-ck').forEach(c=>c.checked=false)));
       bulk.appendChild(mkB('🗑 선택삭제',async()=>{
-        const cks=[...modal.querySelectorAll('.arc-ck:checked')];
+        // ★ 반별로 묶어서 보여줄 때 같은 교재(공유교재)가 여러 반 섹션에 중복 표시될 수 있으므로,
+        //   체크박스는 bookId 기준으로 한 번씩만 처리(같은 bid의 다른 섹션 체크박스는 자동 해제)한다.
+        const seen=new Set();
+        const cks=[...modal.querySelectorAll('.arc-ck:checked')].filter(ck=>{
+          if(seen.has(ck.dataset.bid)) return false;
+          seen.add(ck.dataset.bid); return true;
+        });
         if(!cks.length){_toast('삭제할 교재를 선택하세요','error');return;}
         if(!confirm(cks.length+'개를 삭제하시겠습니까?'))return;
         for(const ck of cks){
           const bName=BookLibDB.getBookById(ck.dataset.bid)?.name||ck.dataset.bid;
           const arcMsg=['"'+bName+'" 완결 교재를 완전히 삭제하시겠습니까?','','⚠️ 아래 데이터가 모두 삭제됩니다:','  · 챕터 목록','  · 학습 현황','  · 플로팅 메모','  · 성적 평가/리포트 데이터','','정말 삭제하시겠습니까? 되돌릴 수 없습니다.'].join('\n');
           if(!confirm(arcMsg)) continue;
-          await BookLibDB.deleteBook(ck.dataset.bid);ck.closest('.arc-row')?.remove();
+          await BookLibDB.deleteBook(ck.dataset.bid);
+          // ★ 같은 교재가 여러 반 섹션에 중복 표시돼 있으므로, 그 bookId를 가진 모든 행을 지운다
+          modal.querySelectorAll('.arc-row[data-bid="'+ck.dataset.bid+'"]').forEach(r=>r.remove());
         }
-        titleEl.textContent='📦 완결 교재 목록 ('+modal.querySelectorAll('.arc-row').length+'개)';
+        _refreshArcCount();
         _renderLibrary();
       },true));
       sheet.appendChild(bulk);
     }
-    const listEl=document.createElement('div'); listEl.style.cssText='overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:6px';
-    if(!arcBooks.length){listEl.innerHTML='<p style="text-align:center;color:var(--tx3);padding:24px">완결된 교재가 없습니다</p>';}
-    else{arcBooks.forEach(b=>{
-      const row=document.createElement('div'); row.className='arc-row';
+    const listEl=document.createElement('div'); listEl.style.cssText='overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:14px';
+
+    // ★ 고유 bookId 기준 카운트 갱신(중복 표시된 반 섹션 개수가 아니라 실제 교재 개수를 보여줘야 함)
+    function _refreshArcCount(){
+      const uniq=new Set([...modal.querySelectorAll('.arc-row')].map(r=>r.dataset.bid));
+      titleEl.textContent='📦 완결 교재 목록 ('+uniq.size+'개)';
+    }
+
+    /** 완결 교재 한 줄(row) DOM 생성 — 반별 그룹 렌더링에서 재사용 */
+    function _buildArcRow(b){
+      const row=document.createElement('div'); row.className='arc-row'; row.dataset.bid=b.id;
       row.style.cssText='display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--surf2);border-radius:10px;border:1px solid var(--bdr)';
       if(isAdm){const ck=document.createElement('input');ck.type='checkbox';ck.className='arc-ck';ck.dataset.bid=b.id;ck.style.cssText='width:16px;height:16px;accent-color:var(--a);flex-shrink:0';row.appendChild(ck);}
       const info=document.createElement('div'); info.style.cssText='flex:1;min-width:0';
-      const _arcAllCls=typeof DB!=='undefined'?DB.getActiveClasses():[];
-      const _arcClsNames=(b.classIds||[]).map(cid=>{const c=_arcAllCls.find(x=>x.id===cid);return c?c.name:'?';}).filter(Boolean);
-      const _arcStuNames=(b.studentIds||[]).length&&typeof StudentDB!=='undefined'?StudentDB.getAll().filter(s=>(b.studentIds||[]).includes(s.id)).map(s=>s.name).slice(0,3):[]; 
-      const _arcBadge=_arcClsNames.length?'<span style="background:var(--a10);color:var(--a);border:1px solid var(--a40);border-radius:10px;padding:1px 8px;font-size:10px;font-weight:700">'+_arcClsNames.join('·')+'반</span>':(_arcStuNames.length?'<span style="background:rgba(99,102,241,.1);color:#6366f1;border:1px solid rgba(99,102,241,.3);border-radius:10px;padding:1px 8px;font-size:10px;font-weight:700">🐱 '+_arcStuNames.join('·')+(((b.studentIds||[]).length>3)?' 외':'')+' </span>':'');
+      const _arcStuNames=(b.studentIds||[]).length&&typeof StudentDB!=='undefined'?StudentDB.getAll().filter(s=>(b.studentIds||[]).includes(s.id)).map(s=>s.name).slice(0,3):[];
+      const _arcBadge=_arcStuNames.length?'<span style="background:rgba(99,102,241,.1);color:#6366f1;border:1px solid rgba(99,102,241,.3);border-radius:10px;padding:1px 8px;font-size:10px;font-weight:700">🐱 '+_arcStuNames.join('·')+(((b.studentIds||[]).length>3)?' 외':'')+' </span>':'';
       info.innerHTML='<div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_e(b.name)+'</div><div style="display:flex;align-items:center;gap:6px;margin-top:3px">'+_arcBadge+'<span style="font-size:11px;color:var(--tx3)">'+(b.archivedAt?b.archivedAt.slice(0,10):'')+'</span></div>';
       row.appendChild(info);
       if(isAdm){
@@ -361,11 +374,61 @@ const BooklibApp = (() => {
         rBtn.onclick=()=>BooklibApp._unarchiveBook(b.id);
         const dBtn=document.createElement('button'); dBtn.textContent='🗑';
         dBtn.style.cssText='padding:4px 10px;border-radius:7px;background:rgba(239,68,68,.1);border:1.5px solid rgba(239,68,68,.3);color:#dc2626;font-size:11px;font-weight:700;cursor:pointer';
-        dBtn.onclick=async()=>{if(!confirm('"'+b.name+'" 을 삭제하시겠습니까?'))return;await BookLibDB.deleteBook(b.id);row.remove();titleEl.textContent='📦 완결 교재 목록 ('+modal.querySelectorAll('.arc-row').length+'개)';_renderLibrary();};
+        dBtn.onclick=async()=>{
+          if(!confirm('"'+b.name+'" 을 삭제하시겠습니까?'))return;
+          await BookLibDB.deleteBook(b.id);
+          // ★ 공유 교재라 다른 반 섹션에도 같은 bookId 행이 있을 수 있으므로 전부 제거
+          modal.querySelectorAll('.arc-row[data-bid="'+b.id+'"]').forEach(r=>r.remove());
+          _refreshArcCount(); _renderLibrary();
+        };
         row.appendChild(rBtn); row.appendChild(dBtn);
       }
-      listEl.appendChild(row);
-    });}
+      return row;
+    }
+
+    if(!arcBooks.length){
+      listEl.innerHTML='<p style="text-align:center;color:var(--tx3);padding:24px">완결된 교재가 없습니다</p>';
+    } else {
+      // ★ 반별로 그룹핑 — 한 교재가 여러 반에 걸쳐있으면(공유교재) 해당하는 반 섹션마다 표시.
+      //   반이 하나도 지정 안 된 교재(학생 개인 배정 or 미지정)는 별도 섹션으로 모음.
+      const allCls=typeof DB!=='undefined'?DB.getActiveClasses():[];
+      const byClass=new Map(); // classId -> books[]
+      const unassigned=[];
+      arcBooks.forEach(b=>{
+        const ids=(b.classIds||[]).filter(cid=>allCls.some(c=>c.id===cid));
+        if(!ids.length){ unassigned.push(b); return; }
+        ids.forEach(cid=>{
+          if(!byClass.has(cid)) byClass.set(cid,[]);
+          byClass.get(cid).push(b);
+        });
+      });
+
+      // 반 이름 가나다순 정렬
+      const sortedClsIds=[...byClass.keys()].sort((a,b2)=>{
+        const na=allCls.find(c=>c.id===a)?.name||''; const nb=allCls.find(c=>c.id===b2)?.name||'';
+        return na.localeCompare(nb);
+      });
+
+      const _section=(title,badgeColor,books)=>{
+        const sec=document.createElement('div');
+        const secHdr=document.createElement('div');
+        secHdr.style.cssText='display:flex;align-items:center;gap:6px;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--bdr)';
+        secHdr.innerHTML='<span style="font-size:12.5px;font-weight:800;color:'+badgeColor+'">'+_e(title)+'</span><span style="font-size:10.5px;color:var(--tx3);background:var(--surf2);padding:1px 7px;border-radius:10px">'+books.length+'개</span>';
+        sec.appendChild(secHdr);
+        const rowsWrap=document.createElement('div'); rowsWrap.style.cssText='display:flex;flex-direction:column;gap:6px';
+        books.forEach(b=>rowsWrap.appendChild(_buildArcRow(b)));
+        sec.appendChild(rowsWrap);
+        return sec;
+      };
+
+      sortedClsIds.forEach(cid=>{
+        const clsName=allCls.find(c=>c.id===cid)?.name||'?';
+        listEl.appendChild(_section(clsName+'반',(typeof getComputedStyle!=='undefined'?'var(--a)':'#6366f1'),byClass.get(cid)));
+      });
+      if(unassigned.length){
+        listEl.appendChild(_section('🗂 반 미지정 (학생 개인배정 등)','var(--tx3)',unassigned));
+      }
+    }
     sheet.appendChild(listEl); modal.appendChild(sheet); document.body.appendChild(modal);
   }
 
