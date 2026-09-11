@@ -290,6 +290,7 @@ const PdfEditorApp = (() => {
 .pe-annot-input:focus{cursor:text}
 .pe-annot-input::placeholder{color:rgba(120,120,140,.55)}
 .pe-side{width:270px;flex-shrink:0;background:var(--surf);border-left:1px solid var(--bdr);padding:16px;overflow-y:auto}
+.pe-side.ref-mode{width:min(480px,42vw);padding:14px}
 .pe-side h4{margin:0 0 12px;font-size:13px;color:var(--tx)}
 .pe-field{margin-bottom:12px}
 .pe-field label{display:block;font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:5px}
@@ -835,6 +836,10 @@ const PdfEditorApp = (() => {
     _renderGridThumbs();
     if (_editingId) _renderEditorCanvas();
     if (_editingId && _textSelectMode) _renderTextLayer();
+    // ★ 참조 PDF 패널이 열려있으면, 방금 새로 그려진 <canvas id="pe-ref-cv">에
+    //   실제 페이지 내용을 그린다(비동기). 이 훅이 빠져 있으면 패널만 뜨고
+    //   캔버스는 계속 빈 채로 남는다.
+    if (_editingId && _refPdfOpen && _refPdfDoc) _refRenderCanvas();
   }
   function _rerender() { if (_cid) render(_cid); _scheduleAutosave(); }
 
@@ -865,7 +870,8 @@ const PdfEditorApp = (() => {
           oninput="PdfEditorApp._onGridSizeInput(this.value)" onchange="PdfEditorApp._onGridSizeChange(this.value)">
       </div>
       <button class="pe-btn${_selectMode ? ' primary' : ''}" onclick="PdfEditorApp._toggleSelectMode()">${_selectMode ? '✕ 선택 취소' : '☑️ 선택'}</button>
-      ${_selectMode ? `<button class="pe-btn danger" ${_selected.size ? '' : 'disabled'} onclick="PdfEditorApp._deleteSelected()">🗑 선택 삭제</button>
+      ${_selectMode ? `<button class="pe-btn" ${_pages.length ? '' : 'disabled'} onclick="PdfEditorApp._selectAllPages()">${_selected.size === _pages.length && _pages.length ? '☐ 전체 해제' : '☑️ 전체 선택'}</button>
+        <button class="pe-btn danger" ${_selected.size ? '' : 'disabled'} onclick="PdfEditorApp._deleteSelected()">🗑 선택 삭제</button>
         <button class="pe-btn" ${_selected.size ? '' : 'disabled'} onclick="PdfEditorApp._exportSelected()">✂️ 선택만 내보내기</button>` : ''}
       <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:#666;white-space:nowrap;cursor:pointer" title="한 장에 두 쪽씩 모아서 인쇄하기 좋은 레이아웃으로 내보냅니다">
         <input type="checkbox" ${_nUpEnabled ? 'checked' : ''} onchange="PdfEditorApp._toggleNUp(this.checked)"> 🖨 2쪽씩 모아 내보내기
@@ -1121,6 +1127,13 @@ const PdfEditorApp = (() => {
     _rerender();
   }
   function _toggleSelectMode() { _selectMode = !_selectMode; if (!_selectMode) _selected.clear(); _rerender(); }
+  /** 전체 선택 ⇄ 전체 해제 토글 — 이미 전체가 선택된 상태면 한 번에 해제, 아니면 현재 화면의 모든 페이지를 선택.
+   *  "로드한 PDF(페이지)를 한꺼번에 다 지우고 싶다"는 요청에 대응 — 이 버튼으로 전체선택 후 "🗑 선택 삭제"만 누르면 된다. */
+  function _selectAllPages() {
+    if (_selected.size === _pages.length && _pages.length) { _selected.clear(); }
+    else { _pages.forEach(p => _selected.add(p.id)); }
+    _rerender();
+  }
   function _toggleSelect(id) { _selectAnchorId = id; if (_selected.has(id)) _selected.delete(id); else _selected.add(id); _rerender(); }
   function _deleteSelected() {
     if (!_selected.size) return;
@@ -1173,7 +1186,7 @@ const PdfEditorApp = (() => {
             ${page.annots.map(a => _annotOverlayHtml(a, page)).join('')}
           </div>
         </div>
-        <div class="pe-side">${sel ? _annotPanelHtml(sel) : `<div class="pe-side-empty">페이지를 클릭한 뒤<br>"＋ 텍스트" 또는 "＋ 이미지"로<br>내용을 추가해보세요.<br><br>박스를 드래그해 위치를,<br>모서리 점을 드래그해 크기를<br>바꿀 수 있어요.</div>`}</div>
+        <div class="pe-side${_refPdfOpen ? ' ref-mode' : ''}">${_refPdfOpen ? _refPdfPanelHtml() : (sel ? _annotPanelHtml(sel) : `<div class="pe-side-empty">페이지를 클릭한 뒤<br>"＋ 텍스트" 또는 "＋ 이미지"로<br>내용을 추가해보세요.<br><br>박스를 드래그해 위치를,<br>모서리 점을 드래그해 크기를<br>바꿀 수 있어요.</div>`)}</div>
       </div>
     </div>`;
   }
@@ -1264,7 +1277,7 @@ const PdfEditorApp = (() => {
     const side = document.querySelector('.pe-side');
     const page = _pages.find(p => p.id === _editingId);
     const sel = page ? page.annots.find(a => a.id === _selAnnotId) : null;
-    if (side) side.innerHTML = sel ? _annotPanelHtml(sel) : `<div class="pe-side-empty">페이지를 클릭한 뒤<br>"＋ 텍스트" 또는 "＋ 이미지"로<br>내용을 추가해보세요.<br><br>박스를 드래그해 위치를,<br>모서리 점을 드래그해 크기를<br>바꿀 수 있어요.</div>`;
+    if (side && !_refPdfOpen) side.innerHTML = sel ? _annotPanelHtml(sel) : `<div class="pe-side-empty">페이지를 클릭한 뒤<br>"＋ 텍스트" 또는 "＋ 이미지"로<br>내용을 추가해보세요.<br><br>박스를 드래그해 위치를,<br>모서리 점을 드래그해 크기를<br>바꿀 수 있어요.</div>`;
     const delBtn = document.querySelector('.pe-editor-top .pe-btn.danger');
     if (delBtn) delBtn.disabled = !_selAnnotId;
   }
@@ -1706,44 +1719,42 @@ const PdfEditorApp = (() => {
     _clearBusy();
   }
 
+  /** 사이드바(.pe-side) 안에 들어가는 참조 PDF 패널 — 편집 중인 페이지와 나란히 보면서
+   *  드래그로 캡처할 수 있도록 세로형 컴팩트 레이아웃으로 구성. */
   function _refPdfPanelHtml() {
     const hasDoc = !!_refPdfDoc;
-    return `<div class="pe-modal-ov" onmousedown="if(event.target===this)PdfEditorApp.closeRefPdfPanel()">
-      <div class="pe-modal" style="max-width:820px;width:96vw">
-        <div class="pe-modal-hd">
-          <span>📎 다른 PDF에서 캡처해서 삽입</span>
-          <button onclick="PdfEditorApp.closeRefPdfPanel()">✕</button>
-        </div>
-        <div class="pe-modal-body" style="display:flex;flex-direction:column;gap:10px">
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <label class="pe-btn" style="justify-content:flex-start">📄 참고 PDF 열기<input type="file" accept="application/pdf" style="display:none" onchange="PdfEditorApp._onPickRefPdf(this.files);this.value=''"></label>
-            ${hasDoc ? `<span style="font-size:12px;color:var(--tx3);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_esc(_refPdfName)}">${_esc(_refPdfName)}</span>` : ''}
-            ${hasDoc ? `
-              <div class="pe-spacer"></div>
-              <button class="pe-btn" ${_refPage<=1?'disabled':''} onclick="PdfEditorApp._refPrevPage()">◀</button>
-              <span style="font-size:12px;color:var(--tx2);min-width:56px;text-align:center">${_refPage} / ${_refNumPages}쪽</span>
-              <button class="pe-btn" ${_refPage>=_refNumPages?'disabled':''} onclick="PdfEditorApp._refNextPage()">▶</button>
-              <button class="pe-btn" onclick="PdfEditorApp._refZoomOut()" title="자세히 보기 축소">－</button>
-              <span style="font-size:12px;color:var(--tx3);min-width:44px;text-align:center">${Math.round(_refZoom*100)}%</span>
-              <button class="pe-btn" onclick="PdfEditorApp._refZoomIn()" title="자세히 보기 확대">＋</button>
-            ` : ''}
-          </div>
-          ${hasDoc ? `
-            <div style="font-size:11px;color:var(--tx3)">🖱 원하는 영역을 마우스로 드래그해서 선택한 뒤 "캡처하여 삽입"을 누르세요. 화면 확대/축소는 보기용일 뿐, 삽입되는 이미지는 항상 고해상도로 캡처됩니다.</div>
-            <div style="overflow:auto;max-height:56vh;border:1px solid var(--bdr2);border-radius:10px;background:#525659;padding:12px;display:flex;justify-content:center">
-              <div style="position:relative;line-height:0" onmousedown="PdfEditorApp._refCropMouseDown(event)" onmousemove="PdfEditorApp._refCropMouseMove(event)" onmouseup="PdfEditorApp._refCropMouseUp(event)" onmouseleave="PdfEditorApp._refCropMouseUp(event)">
-                <canvas id="pe-ref-cv" style="display:block;cursor:crosshair;box-shadow:0 2px 10px rgba(0,0,0,.3)"></canvas>
-                <div id="pe-ref-cropbox" style="position:absolute;border:2px dashed #6366f1;background:rgba(99,102,241,.15);pointer-events:none;display:${_refCropRect?'block':'none'};left:${_refCropRect?.x||0}px;top:${_refCropRect?.y||0}px;width:${_refCropRect?.w||0}px;height:${_refCropRect?.h||0}px"></div>
-              </div>
-            </div>
-          ` : `<div class="pe-side-empty" style="padding:40px 0">📄 참고할 PDF 파일을 먼저 열어주세요.<br>지금 편집 중인 페이지와 별개로, 내용을 확인하며<br>필요한 부분만 잘라서 가져올 수 있습니다.</div>`}
-        </div>
-        <div class="pe-modal-ft">
-          <button class="pe-btn" onclick="PdfEditorApp.closeRefPdfPanel()">닫기</button>
-          <button class="pe-btn primary" ${_refCropRect ? '' : 'disabled'} onclick="PdfEditorApp._refConfirmCrop()">✂️ 캡처하여 삽입</button>
-        </div>
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <h4 style="margin:0">📎 다른 PDF 캡처</h4>
+        <button class="pe-btn" onclick="PdfEditorApp.closeRefPdfPanel()" title="닫기">✕</button>
       </div>
-    </div>`;
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px">
+        <label class="pe-btn" style="justify-content:center">📄 ${hasDoc ? '다른 파일로 교체' : '참고 PDF 열기'}<input type="file" accept="application/pdf" style="display:none" onchange="PdfEditorApp._onPickRefPdf(this.files);this.value=''"></label>
+        ${hasDoc ? `<div style="font-size:11px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_esc(_refPdfName)}">${_esc(_refPdfName)}</div>` : ''}
+        ${hasDoc ? `
+          <div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap">
+            <button class="pe-btn" ${_refPage<=1?'disabled':''} onclick="PdfEditorApp._refPrevPage()">◀</button>
+            <span style="font-size:12px;color:var(--tx2);min-width:52px;text-align:center">${_refPage} / ${_refNumPages}쪽</span>
+            <button class="pe-btn" ${_refPage>=_refNumPages?'disabled':''} onclick="PdfEditorApp._refNextPage()">▶</button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:center;gap:6px">
+            <button class="pe-btn" onclick="PdfEditorApp._refZoomOut()" title="자세히 보기 축소">－</button>
+            <span style="font-size:12px;color:var(--tx3);min-width:44px;text-align:center">${Math.round(_refZoom*100)}%</span>
+            <button class="pe-btn" onclick="PdfEditorApp._refZoomIn()" title="자세히 보기 확대">＋</button>
+          </div>
+        ` : ''}
+      </div>
+      ${hasDoc ? `
+        <div style="font-size:10.5px;color:var(--tx3);margin-bottom:8px;line-height:1.5">🖱 원하는 영역을 드래그로 선택한 뒤 아래 "캡처하여 삽입"을 누르세요. 화면 확대/축소는 보기용일 뿐, 삽입 이미지는 항상 고해상도로 캡처됩니다.</div>
+        <div style="overflow:auto;max-height:calc(100vh - 340px);border:1px solid var(--bdr2);border-radius:10px;background:#525659;padding:10px;display:flex;justify-content:center;margin-bottom:8px">
+          <div style="position:relative;line-height:0" onmousedown="PdfEditorApp._refCropMouseDown(event)" onmousemove="PdfEditorApp._refCropMouseMove(event)" onmouseup="PdfEditorApp._refCropMouseUp(event)" onmouseleave="PdfEditorApp._refCropMouseUp(event)">
+            <canvas id="pe-ref-cv" style="display:block;cursor:crosshair;box-shadow:0 2px 10px rgba(0,0,0,.3);max-width:100%"></canvas>
+            <div id="pe-ref-cropbox" style="position:absolute;border:2px dashed #6366f1;background:rgba(99,102,241,.15);pointer-events:none;display:${_refCropRect?'block':'none'};left:${_refCropRect?.x||0}px;top:${_refCropRect?.y||0}px;width:${_refCropRect?.w||0}px;height:${_refCropRect?.h||0}px"></div>
+          </div>
+        </div>
+        <button class="pe-btn primary" style="width:100%" ${_refCropRect ? '' : 'disabled'} onclick="PdfEditorApp._refConfirmCrop()">✂️ 캡처하여 삽입</button>
+      ` : `<div class="pe-side-empty" style="padding:30px 0">📄 참고할 PDF 파일을 먼저 열어주세요.<br>지금 편집 중인 페이지와 나란히 보면서<br>필요한 부분만 잘라서 가져올 수 있습니다.</div>`}
+    `;
   }
 
   /* ══════════════════ 내보내기(병합/분리) ══════════════════ */
@@ -2005,7 +2016,7 @@ const PdfEditorApp = (() => {
     _onPickPdf, _onPickImage, _addBlankPage,
     _openInsertMenu, _closeInsertMenu, _insertMenuOpenArchive,
     _openArchivePicker, _closeArchivePicker, _pickerToggle, _pickerConfirm,
-    _toggleSelectMode, _toggleSelect, _deleteSelected, _deletePage,
+    _toggleSelectMode, _toggleSelect, _selectAllPages, _deleteSelected, _deletePage,
     _onGridSizeInput, _onGridSizeChange,
     _exportAll, _exportSelected, _toggleNUp,
     _onDragStart, _onDragOver, _onDrop, _onDragEnd, _onCardClick, _onGridBackgroundClick,
