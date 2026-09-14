@@ -228,6 +228,8 @@ const PdfEditorApp = (() => {
   let _refDragging = false;
   let _refCropStart = null; // {x,y} 캔버스 px (마우스다운 지점)
   let _refCropRect  = null; // {x,y,w,h} 캔버스 px (드래그로 확정된 선택 영역)
+  let _refPanelW = null;    // 사용자가 드래그로 조절한 우측 패널 폭(px). null이면 CSS 기본값(min(480px,42vw)) 사용
+  let _resizeDragging = false;
 
   /* ══════════════════ CSS ══════════════════ */
   function _css() {
@@ -280,6 +282,9 @@ const PdfEditorApp = (() => {
 .pe-editor-title{font-weight:800;font-size:13.5px;color:var(--tx);flex:1}
 .pe-editor-hint{font-size:10.5px;color:var(--tx3);white-space:nowrap}
 .pe-editor-main{flex:1;display:flex;overflow:hidden}
+.pe-resize-handle{width:6px;flex-shrink:0;cursor:col-resize;background:transparent;position:relative;z-index:5}
+.pe-resize-handle:hover,.pe-resize-handle.dragging{background:rgba(99,102,241,.25)}
+.pe-resize-handle::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:3px;height:36px;border-radius:3px;background:var(--bdr2)}
 .pe-editor-canvas-wrap{flex:1;overflow:auto;display:flex;align-items:flex-start;justify-content:center;padding:24px;background:#3a3a4a}
 .pe-page-stage{position:relative;box-shadow:0 4px 26px rgba(0,0,0,.4);flex-shrink:0}
 .pe-page-stage canvas{display:block;background:#fff}
@@ -403,7 +408,19 @@ const PdfEditorApp = (() => {
     try {
       pdfDoc = await PDFLib.PDFDocument.load(bytes1, { ignoreEncryption: true });
     } catch (e) { throw new Error(`"${name}" 파일을 열 수 없습니다 (손상되었거나 암호로 보호됨)`); }
-    pdfjsDoc = await pdfjsLib.getDocument({ data: bytes2 }).promise;
+    // ★ pdf.js는 내부적으로 별도 워커(worker-src CSP 필요)를 띄우는데, 보안정책 등으로
+    //   워커 생성이 막히면 이 Promise가 영원히 안 끝날 수 있어 "눌러도 반응 없음"처럼 보인다.
+    //   15초 넘게 안 끝나면 타임아웃으로 명확한 에러를 띄운다.
+    const withTimeout = (p, ms, msg) => Promise.race([
+      p,
+      new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms)),
+    ]);
+    try {
+      pdfjsDoc = await withTimeout(
+        pdfjsLib.getDocument({ data: bytes2 }).promise, 15000,
+        `"${name}" 처리 중 응답이 없습니다 (보안정책으로 PDF 처리 도구 로딩이 막혔을 수 있어요 — 새로고침 후 다시 시도해보세요)`
+      );
+    } catch (e) { throw new Error(e.message || `"${name}" 파일을 읽는 중 오류가 발생했습니다`); }
     const srcId = _nid();
     _sources.push({ id: srcId, name, kind: 'pdf', pdfDoc, pdfjsDoc, rawBytes: bytes3.buffer });
     const n = pdfDoc.getPageCount();
@@ -424,6 +441,25 @@ const PdfEditorApp = (() => {
     _sources.push({ id: srcId, name: file.name, kind: 'image', img, dataUrl });
     _insertPages([{ id: _nid(), kind: 'image', srcId, width: fit.w, height: fit.h, annots: [] }]);
   }
+
+  /* ── 안전한 파일 선택 트리거 ──
+   *   <label><input type=file>을 innerHTML로 매번 새로 그리면, 파일 선택 창이 떠있는
+   *   동안(Firebase 실시간 갱신·자동저장 등으로) 화면이 다시 그려질 때 그 input 요소
+   *   자체가 통째로 교체돼서 onchange가 안 터지는 문제가 있었다(파일을 골라도
+   *   "PDF 추가"가 반응 없는 원인). DOM에 붙이지 않고 메모리에서만 input을 만들어
+   *   클릭을 트리거하면 렌더링 사이클과 완전히 무관해져서 이 문제가 원천 차단된다. */
+  function _pickFiles(accept, multiple, onPick) {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = accept;
+    if (multiple) inp.multiple = true;
+    inp.onchange = () => { onPick(inp.files); };
+    inp.click();
+  }
+  function _pickPdfFiles()   { _pickFiles('application/pdf', true, files => _onPickPdf(files)); }
+  function _pickImageFiles() { _pickFiles('image/*', true, files => _onPickImage(files)); }
+  function _pickEditorImage(){ _pickFiles('image/*', false, files => _editorAddImage(files)); }
+  function _pickRefPdfFile() { _pickFiles('application/pdf', false, files => _onPickRefPdf(files)); }
 
   async function _onPickPdf(fileList) {
     const files = Array.from(fileList || []); if (!files.length) { _insertAt = null; return; }
@@ -855,8 +891,8 @@ const PdfEditorApp = (() => {
   }
   function _toolbarHtml() {
     return `<div class="pe-toolbar">
-      <label class="pe-btn primary">📄 PDF 추가<input type="file" accept="application/pdf" multiple onchange="PdfEditorApp._onPickPdf(this.files);this.value=''"></label>
-      <label class="pe-btn">🖼 이미지 추가<input type="file" accept="image/*" multiple onchange="PdfEditorApp._onPickImage(this.files);this.value=''"></label>
+      <button class="pe-btn primary" onclick="PdfEditorApp._pickPdfFiles()">📄 PDF 추가</button>
+      <button class="pe-btn" onclick="PdfEditorApp._pickImageFiles()">🖼 이미지 추가</button>
       <button class="pe-btn" onclick="PdfEditorApp._openArchivePicker()">📚 자료실에서 가져오기</button>
       <button class="pe-btn" onclick="PdfEditorApp._addBlankPage()">＋ 빈 페이지</button>
       <button class="pe-btn" title="실행 취소 (Ctrl+Z)" ${_undoStack.length ? '' : 'disabled'} onclick="PdfEditorApp._undo()">↶ 실행취소</button>
@@ -1166,7 +1202,7 @@ const PdfEditorApp = (() => {
         <button class="pe-btn pe-back-btn" onclick="PdfEditorApp._closeEditor()" title="목록으로 돌아가기">← 목록</button>
         <div class="pe-editor-title">✏️ ${idx + 1}쪽 편집</div>
         <button class="pe-btn" ${_textSelectMode ? 'disabled' : ''} onclick="PdfEditorApp._editorAddText()">＋ 텍스트</button>
-        <label class="pe-btn${_textSelectMode ? ' disabled' : ''}">＋ 이미지<input type="file" accept="image/*" style="display:none" ${_textSelectMode ? 'disabled' : ''} onchange="PdfEditorApp._editorAddImage(this.files);this.value=''"></label>
+        <button class="pe-btn${_textSelectMode ? ' disabled' : ''}" ${_textSelectMode ? 'disabled' : ''} onclick="PdfEditorApp._pickEditorImage()">＋ 이미지</button>
         <button class="pe-btn" ${_textSelectMode ? 'disabled' : ''} onclick="PdfEditorApp._editorAddErase()" title="원본 내용을 흰 박스로 덮어 지웁니다">🧽 지우개</button>
         <button class="pe-btn" ${_textSelectMode ? 'disabled' : ''} onclick="PdfEditorApp._editorAddShape('highlight')" title="반투명 색으로 강조">🖍 형광펜</button>
         <button class="pe-btn" ${_textSelectMode ? 'disabled' : ''} onclick="PdfEditorApp._openShapePicker()" title="사각형·원·별·화살표·캐릭터 스탬프 등 다양한 도형 고르기">🔷 도형</button>
@@ -1186,7 +1222,8 @@ const PdfEditorApp = (() => {
             ${page.annots.map(a => _annotOverlayHtml(a, page)).join('')}
           </div>
         </div>
-        <div class="pe-side${_refPdfOpen ? ' ref-mode' : ''}">${_refPdfOpen ? _refPdfPanelHtml() : (sel ? _annotPanelHtml(sel) : `<div class="pe-side-empty">페이지를 클릭한 뒤<br>"＋ 텍스트" 또는 "＋ 이미지"로<br>내용을 추가해보세요.<br><br>박스를 드래그해 위치를,<br>모서리 점을 드래그해 크기를<br>바꿀 수 있어요.</div>`)}</div>
+        ${_refPdfOpen ? '<div class="pe-resize-handle" onmousedown="PdfEditorApp._resizeMouseDown(event)" title="드래그해서 폭 조절"></div>' : ''}
+        <div class="pe-side${_refPdfOpen ? ' ref-mode' : ''}"${_refPdfOpen && _refPanelW ? ` style="width:${_refPanelW}px"` : ''}>${_refPdfOpen ? _refPdfPanelHtml() : (sel ? _annotPanelHtml(sel) : `<div class="pe-side-empty">페이지를 클릭한 뒤<br>"＋ 텍스트" 또는 "＋ 이미지"로<br>내용을 추가해보세요.<br><br>박스를 드래그해 위치를,<br>모서리 점을 드래그해 크기를<br>바꿀 수 있어요.</div>`)}</div>
       </div>
     </div>`;
   }
@@ -1515,8 +1552,8 @@ const PdfEditorApp = (() => {
       <div class="pe-modal">
         <div class="pe-modal-hd"><span>➕ ${(_insertAt || 0) + 1}쪽 위치에 삽입</span><button onclick="PdfEditorApp._closeInsertMenu()">✕</button></div>
         <div class="pe-modal-body" style="display:flex;flex-direction:column;gap:8px">
-          <label class="pe-btn" style="justify-content:flex-start">📄 PDF 파일<input type="file" accept="application/pdf" multiple style="display:none" onchange="PdfEditorApp._onPickPdf(this.files);this.value=''"></label>
-          <label class="pe-btn" style="justify-content:flex-start">🖼 이미지 파일<input type="file" accept="image/*" multiple style="display:none" onchange="PdfEditorApp._onPickImage(this.files);this.value=''"></label>
+          <button class="pe-btn" style="justify-content:flex-start" onclick="PdfEditorApp._pickPdfFiles()">📄 PDF 파일</button>
+          <button class="pe-btn" style="justify-content:flex-start" onclick="PdfEditorApp._pickImageFiles()">🖼 이미지 파일</button>
           <button class="pe-btn" style="justify-content:flex-start" onclick="PdfEditorApp._insertMenuOpenArchive()">📚 자료실에서 가져오기</button>
           <button class="pe-btn" style="justify-content:flex-start" onclick="PdfEditorApp._addBlankPage()">＋ 빈 페이지</button>
         </div>
@@ -1617,6 +1654,39 @@ const PdfEditorApp = (() => {
   function _refPrevPage() { if (_refPage > 1) { _refPage--; _refCropStart = null; _refCropRect = null; _rerender(); } }
   function _refNextPage() { if (_refPage < _refNumPages) { _refPage++; _refCropStart = null; _refCropRect = null; _rerender(); } }
   function _refZoomIn()  { _refZoom = Math.min(4,   Math.round((_refZoom + 0.25) * 100) / 100); _rerender(); }
+
+  /* ── 좌(편집 캔버스) / 우(참조 PDF) 패널 폭 드래그 조절 ──
+   *   "참조 PDF를 크게, 편집 캔버스는 작게" 같은 요청에 대응 — 우측 패널 폭을
+   *   최소 320px ~ 최대 화면의 80%까지 자유롭게 드래그로 조절할 수 있다. */
+  function _resizeMouseDown(e) {
+    e.preventDefault();
+    _resizeDragging = true;
+    document.querySelector('.pe-resize-handle')?.classList.add('dragging');
+    const onMove = (ev) => {
+      if (!_resizeDragging) return;
+      const stage = document.querySelector('.pe-editor-main');
+      if (!stage) return;
+      const rect = stage.getBoundingClientRect();
+      const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+      let w = rect.right - clientX; // 마우스~우측끝 거리 = 새 패널 폭
+      w = Math.max(320, Math.min(Math.round(rect.width * 0.8), w));
+      _refPanelW = Math.round(w);
+      const side = document.querySelector('.pe-side.ref-mode');
+      if (side) side.style.width = _refPanelW + 'px'; // ★ 매 프레임 전체 재렌더 대신 직접 DOM만 갱신(부드러운 드래그)
+    };
+    const onUp = () => {
+      _resizeDragging = false;
+      document.querySelector('.pe-resize-handle')?.classList.remove('dragging');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onUp);
+  }
   function _refZoomOut() { _refZoom = Math.max(0.5, Math.round((_refZoom - 0.25) * 100) / 100); _rerender(); }
 
   /** 참고 PDF의 현재 페이지를 화면용 배율(_refZoom)로 캔버스에 그린다 — "자세히 보기" 전용,
@@ -1667,6 +1737,87 @@ const PdfEditorApp = (() => {
 
   /** 선택 영역을 항상 REF_CAPTURE_SCALE(고정 고해상도)로 다시 렌더링해서 잘라낸 뒤,
    *  현재 편집 중인 페이지에 이미지 어노테이션으로 삽입한다. */
+  /** 페이지 안에서 기존 어노테이션 + 원본 페이지 콘텐츠(하단 로고·인쇄된 문구 등)와
+   *  겹치지 않는 가장 큰 빈 사각형을 찾는다(그리드로 나눈 뒤
+   *  "히스토그램에서 최대 사각형 찾기" 알고리즘 적용).
+   *  "하단 로고나 글자 영역에 겹치지 않게" 요청 반영 — 어노테이션뿐 아니라
+   *  원본 페이지를 실제 픽셀 단위로 분석해서 글자/로고/선이 있는 칸도 "점유"로 표시한다.
+   *  @returns {{x,y,w,h}|null} pt 좌표. 충분히 큰 빈 공간이 없으면 null. */
+  async function _findEmptyRect(page) {
+    const GX = 30, GY = 42; // 그리드 해상도(칸이 촘촘할수록 정확하지만 계산량 증가)
+    const cw = page.width / GX, ch = page.height / GY;
+    const occ = Array.from({ length: GY }, () => new Array(GX).fill(false));
+
+    // ① 사용자가 얹은 텍스트/이미지/도형 어노테이션 — 바운딩 박스 기준으로 점유 표시
+    (page.annots || []).forEach(a => {
+      const x0 = Math.max(0, Math.floor(a.x / cw)), x1 = Math.min(GX, Math.ceil((a.x + a.w) / cw));
+      const y0 = Math.max(0, Math.floor(a.y / ch)), y1 = Math.min(GY, Math.ceil((a.y + a.h) / ch));
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) occ[y][x] = true;
+    });
+
+    // ② 원본 페이지 콘텐츠(워크시트 템플릿에 이미 인쇄된 하단 로고·문구·줄 등)를
+    //    실제 픽셀로 분석해서 점유 표시 — 이게 없으면 로고 위에 캡처 이미지가 겹쳐 올라갈 수 있었음.
+    try {
+      const baseCv = await _getBaseCanvas(page);
+      const SAMPLE = 8; // 그리드 한 칸을 8×8px로 샘플링(작은 글자·얇은 선도 놓치지 않도록)
+      const sw = GX * SAMPLE, sh = GY * SAMPLE;
+      const sampleCv = document.createElement('canvas');
+      sampleCv.width = sw; sampleCv.height = sh;
+      const sctx = sampleCv.getContext('2d');
+      sctx.drawImage(baseCv, 0, 0, sw, sh);
+      const data = sctx.getImageData(0, 0, sw, sh).data;
+      for (let gy = 0; gy < GY; gy++) {
+        for (let gx = 0; gx < GX; gx++) {
+          let darkCount = 0;
+          for (let py = 0; py < SAMPLE; py++) {
+            for (let px = 0; px < SAMPLE; px++) {
+              const i = ((gy * SAMPLE + py) * sw + (gx * SAMPLE + px)) * 4;
+              const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+              if (data[i + 3] > 10 && brightness < 240) darkCount++; // 흰색에 가깝지 않으면 "내용 있음"
+            }
+          }
+          if (darkCount / (SAMPLE * SAMPLE) > 0.03) occ[gy][gx] = true; // 한 칸의 3% 이상이 어두우면 점유(로고·작은 글자 포함)
+        }
+      }
+    } catch (e) {
+      console.warn('[PdfEditorApp] 원본 페이지 픽셀 분석 실패 — 어노테이션 기준으로만 빈공간 판단', e);
+    }
+
+    const heights = new Array(GX).fill(0);
+    let best = { area: 0, x: 0, y: 0, w: 0, h: 0 };
+    for (let y = 0; y < GY; y++) {
+      for (let x = 0; x < GX; x++) heights[x] = occ[y][x] ? 0 : heights[x] + 1;
+      const stack = [];
+      for (let x = 0; x <= GX; x++) {
+        const h = x === GX ? 0 : heights[x];
+        while (stack.length && heights[stack[stack.length - 1]] >= h) {
+          const top = stack.pop();
+          const height = heights[top];
+          const width = stack.length ? x - stack[stack.length - 1] - 1 : x;
+          const area = height * width;
+          if (area > best.area) {
+            const x0 = stack.length ? stack[stack.length - 1] + 1 : 0;
+            best = { area, x: x0, y: y - height + 1, w: width, h: height };
+          }
+        }
+        stack.push(x);
+      }
+    }
+    if (best.area < 6) return null; // 너무 작은 공간이면 "못 찾음" 처리(기존 중앙배치로 폴백)
+
+    // ★ 찾은 빈 사각형의 위/아래/좌/우 바로 바깥쪽 칸에 기존 콘텐츠(로고·글자 등)가 있는지 확인.
+    //   있는 쪽이 있으면 그쪽에 "바짝 붙여서" 배치하기 위한 정보 — 없으면 전부 false(→ 중앙 배치).
+    const occAt = (x, y) => x >= 0 && x < GX && y >= 0 && y < GY && occ[y][x];
+    const rowOccupied = (y, x0, x1) => { for (let x = x0; x < x1; x++) if (occAt(x, y)) return true; return false; };
+    const colOccupied = (x, y0, y1) => { for (let y = y0; y < y1; y++) if (occAt(x, y)) return true; return false; };
+    const nearTop    = rowOccupied(best.y - 1, best.x, best.x + best.w);
+    const nearBottom = rowOccupied(best.y + best.h, best.x, best.x + best.w);
+    const nearLeft   = colOccupied(best.x - 1, best.y, best.y + best.h);
+    const nearRight  = colOccupied(best.x + best.w, best.y, best.y + best.h);
+
+    return { x: best.x * cw, y: best.y * ch, w: best.w * cw, h: best.h * ch, nearTop, nearBottom, nearLeft, nearRight };
+  }
+
   async function _refConfirmCrop() {
     if (!_refPdfDoc || !_refCropRect || !_refViewport) { _toast('⚠️ 먼저 캡처할 영역을 드래그로 선택해주세요'); return; }
     const page = _pages.find(p => p.id === _editingId);
@@ -1696,14 +1847,43 @@ const PdfEditorApp = (() => {
       const dataUrl = cropCv.toDataURL('image/png'); // PNG(무손실)로 저장 — 화질 저하 없음
 
       const img = await _loadImgEl(dataUrl);
-      // 삽입 크기: 원본 pt 크기 그대로가 페이지에 다 들어가면 1:1(실제 인쇄 크기)로, 안 들어가면 페이지 폭에 맞춰 축소
+      // ★ 여백(기존 어노테이션 + 원본 페이지에 이미 있는 로고·글자와 안 겹치는 빈 공간)을
+      //   자동으로 찾아서 그 안에 원본 비율 유지하며 맞춰 배치.
+      //   기존 콘텐츠가 있는 쪽이 있으면(예: 하단 로고) 그 옆에 바짝 붙여서 배치하고,
+      //   콘텐츠가 없으면(완전히 빈 페이지 등) 찾은 공간(=페이지 대부분)을 최대한 채우도록 확대한다.
+      //   빈 공간이 캡처한 원본보다 크면 그 공간을 꽉 채우도록 확대도 한다.
+      //   ※ 상한을 REF_CAPTURE_SCALE(캡처 시 배율, 4)과 맞춰서 최소 72dpi(화면·일반 인쇄 기준
+      //     무난한 수준)는 항상 보장되도록 한다 — 그 이상 확대하면 눈에 띄게 흐려지기 시작한다.
+      //   빈 공간을 못 찾으면(페이지가 이미 꽉 찼으면) 기존처럼 페이지 중앙에 축소 배치.
+      const MAX_UPSCALE = REF_CAPTURE_SCALE; // = 4
       const natW = ptRect.w, natH = ptRect.h;
-      const fitScale = Math.min(1, (page.width * 0.9) / natW, (page.height * 0.9) / natH);
-      const w = natW * fitScale, h = natH * fitScale;
+      const emptyRect = await _findEmptyRect(page); // ★ async 함수라 await 필수(빠지면 배치가 깨짐)
+      let x, y, w, h;
+      if (emptyRect) {
+        // ★ "로고·글자에 최대한 근접하게" 요청 반영 — 여백을 최소화(기존 6% → 1.5%, 최대 6pt)해서
+        //   빈 공간을 거의 꽉 채우도록 하고, 아래 nearLeft/Right/Top/Bottom 로직으로 실제 콘텐츠가
+        //   있는 방향에 바짝 붙인다. 콘텐츠가 없는 페이지라면(emptyRect가 페이지 전체) 이 여백은
+        //   페이지 가장자리 여백 역할만 하므로 그대로 둬도 자연스럽다.
+        const pad = Math.min(6, Math.min(emptyRect.w, emptyRect.h) * 0.015);
+        const availW = Math.max(1, emptyRect.w - pad * 2), availH = Math.max(1, emptyRect.h - pad * 2);
+        const scale = Math.min(availW / natW, availH / natH, MAX_UPSCALE); // 빈 공간에 맞춰 확대·축소 모두 허용(단, 확대는 최대 3배까지)
+        w = natW * scale; h = natH * scale;
+        // 가로: 왼쪽에 콘텐츠 있으면 왼쪽에 붙이고, 오른쪽에 있으면 오른쪽에 붙임. 둘 다(또는 둘 다 아님)면 중앙.
+        if (emptyRect.nearLeft && !emptyRect.nearRight)      x = emptyRect.x + pad;
+        else if (emptyRect.nearRight && !emptyRect.nearLeft) x = emptyRect.x + emptyRect.w - w - pad;
+        else                                                  x = emptyRect.x + (emptyRect.w - w) / 2;
+        // 세로: 위에 콘텐츠 있으면 위쪽에 붙이고, 아래(예: 하단 로고)에 있으면 아래쪽에 붙임.
+        if (emptyRect.nearTop && !emptyRect.nearBottom)      y = emptyRect.y + pad;
+        else if (emptyRect.nearBottom && !emptyRect.nearTop) y = emptyRect.y + emptyRect.h - h - pad;
+        else                                                  y = emptyRect.y + (emptyRect.h - h) / 2;
+      } else {
+        const fitScale = Math.min(1, (page.width * 0.9) / natW, (page.height * 0.9) / natH);
+        w = natW * fitScale; h = natH * fitScale;
+        x = Math.max(0, (page.width - w) / 2); y = Math.max(0, (page.height - h) / 2);
+      }
       const a = {
         id: _nid(), type: 'image',
-        x: Math.max(0, (page.width - w) / 2), y: Math.max(0, (page.height - h) / 2),
-        w, h, dataUrl, _imgEl: img,
+        x, y, w, h, dataUrl, _imgEl: img,
       };
       _pushUndo();
       page.annots.push(a);
@@ -1729,7 +1909,7 @@ const PdfEditorApp = (() => {
         <button class="pe-btn" onclick="PdfEditorApp.closeRefPdfPanel()" title="닫기">✕</button>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px">
-        <label class="pe-btn" style="justify-content:center">📄 ${hasDoc ? '다른 파일로 교체' : '참고 PDF 열기'}<input type="file" accept="application/pdf" style="display:none" onchange="PdfEditorApp._onPickRefPdf(this.files);this.value=''"></label>
+        <button class="pe-btn" style="justify-content:center" onclick="PdfEditorApp._pickRefPdfFile()">📄 ${hasDoc ? '다른 파일로 교체' : '참고 PDF 열기'}</button>
         ${hasDoc ? `<div style="font-size:11px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_esc(_refPdfName)}">${_esc(_refPdfName)}</div>` : ''}
         ${hasDoc ? `
           <div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap">
@@ -2014,6 +2194,7 @@ const PdfEditorApp = (() => {
   return {
     render,
     _onPickPdf, _onPickImage, _addBlankPage,
+    _pickPdfFiles, _pickImageFiles, _pickEditorImage, _pickRefPdfFile,
     _openInsertMenu, _closeInsertMenu, _insertMenuOpenArchive,
     _openArchivePicker, _closeArchivePicker, _pickerToggle, _pickerConfirm,
     _toggleSelectMode, _toggleSelect, _selectAllPages, _deleteSelected, _deletePage,
@@ -2033,7 +2214,7 @@ const PdfEditorApp = (() => {
     _undo, _redo, _duplicatePage, _rotatePage,
     // ★ 📎 다른 PDF 캡처 패널 — HTML onclick에서 호출되는데 export 목록에서 누락돼 있던 것을 추가
     openRefPdfPanel, closeRefPdfPanel, _onPickRefPdf,
-    _refPrevPage, _refNextPage, _refZoomIn, _refZoomOut,
+    _refPrevPage, _refNextPage, _refZoomIn, _refZoomOut, _resizeMouseDown,
     _refCropMouseDown, _refCropMouseMove, _refCropMouseUp, _refConfirmCrop,
   };
 })();
