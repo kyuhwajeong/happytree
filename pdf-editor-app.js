@@ -1190,6 +1190,23 @@ const PdfEditorApp = (() => {
   function _editorH(page) { return Math.round(EDITOR_MAX_W * page.height / page.width); }
 
   function _openEditor(id) { _editingId = id; _selAnnotId = null; _shapePickerOpen = false; _textSelectMode = false; _pendingSelectedText = ''; _rerender(); }
+  /** 편집 화면을 안 나가고 바로 이전/다음/특정 쪽으로 전환 — "목록으로 돌아갔다가 다시
+   *  고르는" 번거로움 없이 헤더의 ◀▶·쪽번호 입력으로 바로 이동한다. */
+  function _editorPrevPage() {
+    const idx = _pages.findIndex(p => p.id === _editingId);
+    if (idx <= 0) return;
+    _openEditor(_pages[idx - 1].id);
+  }
+  function _editorNextPage() {
+    const idx = _pages.findIndex(p => p.id === _editingId);
+    if (idx < 0 || idx >= _pages.length - 1) return;
+    _openEditor(_pages[idx + 1].id);
+  }
+  function _editorJumpToPage(val) {
+    const n = Math.round(Number(val));
+    if (!n || n < 1 || n > _pages.length) { _rerender(); return; } // 잘못된 값이면 입력창만 원래대로 되돌림
+    _openEditor(_pages[n - 1].id);
+  }
   function _closeEditor() { _editingId = null; _selAnnotId = null; _drag = null; _shapePickerOpen = false; _textSelectMode = false; _pendingSelectedText = ''; _rerender(); }
 
   function _editorOverlayHtml() {
@@ -1200,7 +1217,12 @@ const PdfEditorApp = (() => {
     return `<div class="pe-editor-ov">
       <div class="pe-editor-top">
         <button class="pe-btn pe-back-btn" onclick="PdfEditorApp._closeEditor()" title="목록으로 돌아가기">← 목록</button>
-        <div class="pe-editor-title">✏️ ${idx + 1}쪽 편집</div>
+        <div class="pe-editor-title">
+          <button class="pe-btn pe-mini-nav" ${idx<=0?'disabled':''} onclick="PdfEditorApp._editorPrevPage()" title="이전 쪽">◀</button>
+          <span>✏️ <input type="number" class="pe-page-jump" value="${idx+1}" min="1" max="${_pages.length}"
+            onchange="PdfEditorApp._editorJumpToPage(this.value)" onclick="this.select()" title="페이지 번호를 입력하면 바로 이동">쪽 / ${_pages.length} 편집</span>
+          <button class="pe-btn pe-mini-nav" ${idx>=_pages.length-1?'disabled':''} onclick="PdfEditorApp._editorNextPage()" title="다음 쪽">▶</button>
+        </div>
         <button class="pe-btn" ${_textSelectMode ? 'disabled' : ''} onclick="PdfEditorApp._editorAddText()">＋ 텍스트</button>
         <button class="pe-btn${_textSelectMode ? ' disabled' : ''}" ${_textSelectMode ? 'disabled' : ''} onclick="PdfEditorApp._pickEditorImage()">＋ 이미지</button>
         <button class="pe-btn" ${_textSelectMode ? 'disabled' : ''} onclick="PdfEditorApp._editorAddErase()" title="원본 내용을 흰 박스로 덮어 지웁니다">🧽 지우개</button>
@@ -1210,12 +1232,12 @@ const PdfEditorApp = (() => {
         <button class="pe-btn" ${_textSelectMode ? 'disabled' : ''} onclick="PdfEditorApp.openRefPdfPanel()" title="다른 PDF를 열어서 필요한 부분만 고해상도로 잘라 이 페이지에 삽입">📎 다른 PDF 캡처</button>
         <button class="pe-btn danger" ${sel ? '' : 'disabled'} onclick="PdfEditorApp._editorDeleteAnnot()">🗑 선택 삭제</button>
         <div class="pe-spacer"></div>
-        <span class="pe-editor-hint">바깥을 클릭하거나 Esc를 누르면 닫혀요</span>
+        <span class="pe-editor-hint">Esc를 누르면 닫혀요</span>
         <button class="pe-btn primary" onclick="PdfEditorApp._closeEditor()">✓ 완료</button>
       </div>
       ${_textSelectMode ? _textSelectBarHtml() : ''}
       <div class="pe-editor-main">
-        <div class="pe-editor-canvas-wrap" onmousedown="PdfEditorApp._backdropMouseDown(event)">
+        <div class="pe-editor-canvas-wrap"><!-- ★ 의도적으로 클릭 핸들러 없음 — 페이지 주변 여백을 클릭해도 목록으로 안 돌아가게(요청 반영) -->
           <div class="pe-page-stage${_textSelectMode ? ' pe-text-select-mode' : ''}" id="pe-stage" style="width:${_editorW()}px;height:${_editorH(page)}px" onmousedown="PdfEditorApp._stageMouseDown(event)" ondragover="PdfEditorApp._stageDragOver(event)" ondrop="PdfEditorApp._stageDrop(event)">
             <canvas id="pe-stage-cv"></canvas>
             ${_textSelectMode && page.kind === 'pdf' ? `<div class="pe-textlayer" id="pe-textlayer"></div>` : ''}
@@ -1324,11 +1346,9 @@ const PdfEditorApp = (() => {
     _editingTextId = null;
     _updateSelectionUI();
   }
-  // ★ 표준 모달 관례 — 편집 화면 바깥(어두운 배경)을 클릭하면 목록으로 돌아간다.
-  //   (실제로 클릭한 요소가 배경 자신일 때만 닫는다 — 안쪽 자식 클릭은 무시)
-  function _backdropMouseDown(e) {
-    if (e.target === e.currentTarget) _closeEditor();
-  }
+  // (참고) 예전에는 "여백(어두운 배경) 클릭 시 목록으로 돌아가기" 핸들러가 있었으나,
+  //   사용자가 페이지 편집 중 실수로 여백을 스치기만 해도 화면이 닫혀버리는 불편함이 있어
+  //   요청에 따라 완전히 제거했다. 목록으로 돌아가려면 "← 목록" 또는 "✓ 완료" 버튼만 쓴다.
   // ★ 더블클릭 — 실제로 박스 안에 캐럿을 놓고 타이핑할 수 있는 "입력 모드"로 들어간다.
   //   (한 번 클릭은 선택/이동만, 더블클릭해야 입력 — PowerPoint·구글슬라이드 등과 같은 방식)
   function _annotEnterEditMode(e, id) {
@@ -2207,7 +2227,8 @@ const PdfEditorApp = (() => {
     _openEditor, _closeEditor, _editorAddText, _editorAddImage, _editorAddErase, _editorAddShape, _editorDeleteAnnot,
     _openShapePicker, _closeShapePicker, _editorAddShapeKind,
     _toggleTextSelect, _copySelectedText, _addSelectedTextAsBox,
-    _annotMouseDown, _annotResizeStart, _annotUpdate, _stageMouseDown, _backdropMouseDown,
+    _annotMouseDown, _annotResizeStart, _annotUpdate, _stageMouseDown,
+    _editorPrevPage, _editorNextPage, _editorJumpToPage,
     _annotEnterEditMode, _annotExitEditMode, _annotTextInput,
     _saveTitleInput, _saveCatInput, _saveVisInput, _cancelSave, _confirmSave,
     _doRestore, _discardRestore,
